@@ -23,6 +23,11 @@ pub enum Command {
         #[command(subcommand)]
         action: SiteCommand,
     },
+    /// Database (MySQL) management commands.
+    Database {
+        #[command(subcommand)]
+        action: DatabaseCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -74,6 +79,29 @@ pub enum SiteCommand {
         id: String,
     },
     Disable {
+        #[arg(long)]
+        id: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum DatabaseCommand {
+    /// Provision a new MySQL database + DB user.
+    Create {
+        #[arg(long)]
+        owner: String,
+        #[arg(long)]
+        suffix: String,
+        #[arg(long)]
+        charset: Option<String>,
+    },
+    List,
+    Delete {
+        #[arg(long)]
+        id: String,
+    },
+    /// Rotate the DB user's password. Prints the new password to stdout.
+    ChangePassword {
         #[arg(long)]
         id: String,
     },

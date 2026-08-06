@@ -87,6 +87,9 @@ notify = "6.1"
 # Regex (used for hostname validation in sites domain)
 regex = "1.10"
 
+# AES-GCM (used by databases module for password encryption at rest)
+aes-gcm = "0.10"
+
 # openpanel workspace crates
 openpanel-core = { path = "crates/openpanel-core", version = "0.1.0" }
 openpanel-domain = { path = "crates/openpanel-domain", version = "0.1.0" }

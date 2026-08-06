@@ -3,11 +3,14 @@
 //! `Module` trait from `openpanel-core` and registers its services,
 //! routes, CLI, and migrations.
 
+pub mod databases;
 pub mod identity;
 pub mod migrations;
 pub mod prelude;
 pub mod sites;
 
+pub use databases::DatabasesModule;
+pub use databases::service::DatabasesService;
 pub use identity::IdentityModule;
 pub use identity::service::IdentityService;
 pub use sites::SitesModule;

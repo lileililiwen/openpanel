@@ -47,6 +47,8 @@ pub enum AuditAction {
     SiteOwnerChanged,
     SslIssued,
     DatabaseCreated,
+    DatabaseDeleted,
+    DatabasePasswordChanged,
     FileUploaded,
     FileDeleted,
 }
@@ -69,6 +71,8 @@ impl AuditAction {
             AuditAction::SiteOwnerChanged => "site_owner_changed",
             AuditAction::SslIssued => "ssl_issued",
             AuditAction::DatabaseCreated => "database_created",
+            AuditAction::DatabaseDeleted => "database_deleted",
+            AuditAction::DatabasePasswordChanged => "database_password_changed",
             AuditAction::FileUploaded => "file_uploaded",
             AuditAction::FileDeleted => "file_deleted",
         }
@@ -222,6 +226,8 @@ impl AuditService for SqliteAuditService {
                 "site_owner_changed" => AuditAction::SiteOwnerChanged,
                 "ssl_issued" => AuditAction::SslIssued,
                 "database_created" => AuditAction::DatabaseCreated,
+                "database_deleted" => AuditAction::DatabaseDeleted,
+                "database_password_changed" => AuditAction::DatabasePasswordChanged,
                 "file_uploaded" => AuditAction::FileUploaded,
                 "file_deleted" => AuditAction::FileDeleted,
                 other => {

@@ -48,8 +48,13 @@ impl SqliteDriver {
             .busy_timeout(std::time::Duration::from_secs(5))
             .foreign_keys(true);
 
-        if let Some(stripped) = self.url.strip_prefix("sqlite://").or(self.url.strip_prefix("sqlite:")) {
-            if let Some(parent) = Path::new(stripped).parent() {
+        let path_str = self
+            .url
+            .strip_prefix("sqlite://")
+            .or_else(|| self.url.strip_prefix("sqlite:"))
+            .unwrap_or(&self.url);
+        if path_str != ":memory:" && !path_str.is_empty() {
+            if let Some(parent) = Path::new(path_str).parent() {
                 if !parent.as_os_str().is_empty() && !parent.exists() {
                     std::fs::create_dir_all(parent)?;
                 }
