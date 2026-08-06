@@ -18,11 +18,15 @@ pub enum Command {
         #[command(subcommand)]
         action: UserCommand,
     },
+    /// Site management commands.
+    Site {
+        #[command(subcommand)]
+        action: SiteCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
 pub enum UserCommand {
-    /// Create a new user.
     Create {
         #[arg(long)]
         username: String,
@@ -33,15 +37,43 @@ pub enum UserCommand {
         #[arg(long, value_parser = clap::value_parser!(openpanel_domain::Role))]
         role: openpanel_domain::Role,
     },
-    /// List users (id, username, email, role).
     List,
-    /// Disable a user.
     Disable {
         #[arg(long)]
         id: String,
     },
-    /// Delete a user.
     Delete {
+        #[arg(long)]
+        id: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum SiteCommand {
+    Create {
+        #[arg(long)]
+        domain: String,
+        #[arg(long)]
+        owner: String,
+        #[arg(long, value_delimiter = ',', default_values_t = Vec::<String>::new())]
+        aliases: Vec<String>,
+        #[arg(long, default_value_t = false)]
+        php: bool,
+        #[arg(long)]
+        php_version: Option<String>,
+        #[arg(long)]
+        document_root: Option<String>,
+    },
+    List,
+    Delete {
+        #[arg(long)]
+        id: String,
+    },
+    Enable {
+        #[arg(long)]
+        id: String,
+    },
+    Disable {
         #[arg(long)]
         id: String,
     },

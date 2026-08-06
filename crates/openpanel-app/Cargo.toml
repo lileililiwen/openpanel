@@ -21,6 +21,8 @@ rand = { workspace = true }
 axum = { workspace = true }
 clap = { workspace = true }
 figment = { workspace = true }
+regex = { workspace = true }
+libc = "0.2"
 
 openpanel-core = { workspace = true }
 openpanel-domain = { workspace = true }

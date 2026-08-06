@@ -4,6 +4,7 @@
 
 pub mod common;
 pub mod identity;
+pub mod sites;
 
 pub use common::error::{DomainError, RepoError};
 pub use common::{Email, Password, PasswordError, Username, UsernameError};
@@ -12,3 +13,7 @@ pub use identity::repository::{SessionRepository, UserRepository};
 pub use identity::role::Role;
 pub use identity::session::{Session, SessionBuilder, SessionToken, SessionTokenError};
 pub use identity::user::User;
+pub use sites::error::SiteError;
+pub use sites::repository::SiteRepository;
+pub use sites::site::Site;
+pub use sites::status::SiteStatus;

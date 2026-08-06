@@ -5,15 +5,19 @@ use std::sync::Arc;
 use axum::middleware::from_fn_with_state;
 use axum::routing::get;
 use axum::{Json, Router};
-use openpanel_app::IdentityService;
+use openpanel_app::{IdentityService, SitesService};
 
 use crate::middleware::session::session_middleware;
 use crate::routes::identity::router as identity_router;
+use crate::routes::sites::router as sites_router;
 
-pub fn build_router(identity: Arc<IdentityService>) -> Router {
+pub fn build_router(identity: Arc<IdentityService>, sites: Arc<SitesService>) -> Router {
+    let identity_for_layer = identity.clone();
+
     let api = Router::new()
-        .nest("/identity", identity_router(identity.clone()))
-        .layer(from_fn_with_state(identity.clone(), session_middleware));
+        .nest("/identity", identity_router(identity))
+        .nest("/sites", sites_router(sites))
+        .layer(from_fn_with_state(identity_for_layer, session_middleware));
 
     Router::new()
         .nest("/api/v1", api)

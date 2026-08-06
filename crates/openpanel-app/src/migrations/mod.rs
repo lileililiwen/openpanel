@@ -4,3 +4,4 @@
 
 pub const AUDIT_V001: &str = include_str!("000_audit.sql");
 pub const IDENTITY_V001: &str = include_str!("identity/V001__init.sql");
+pub const SITES_V001: &str = include_str!("sites/V001__init.sql");

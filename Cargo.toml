@@ -84,6 +84,9 @@ walkdir = "2.5"
 # File watching (used later by sites module)
 notify = "6.1"
 
+# Regex (used for hostname validation in sites domain)
+regex = "1.10"
+
 # openpanel workspace crates
 openpanel-core = { path = "crates/openpanel-core", version = "0.1.0" }
 openpanel-domain = { path = "crates/openpanel-domain", version = "0.1.0" }

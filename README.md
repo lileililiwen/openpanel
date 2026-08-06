@@ -106,15 +106,20 @@ failing path.
 - **Identity / auth** — argon2id password hashing (OWASP 2024
   parameters), server-side sessions with opaque tokens (256-bit, hashed
   in DB), RBAC (Owner / Admin / User), append-only audit log.
+- **Sites / nginx vhost provisioning** — `Site` aggregate with per-site
+  RBAC, automatic `/etc/nginx/conf.d/openpanel/<domain>.conf` generation,
+  `nginx -t && nginx -s reload` with rollback, document root
+  provisioning under `/var/www/<domain>/public_html`.
 - **HTTP API** — `/api/v1/identity/login`, `/logout`, `/me`, `/users`,
   `/users/{id}`, `/users/{id}/disable`, `/users/{id}/password`,
+  `/api/v1/sites` (CRUD + `/enable`, `/disable`),
   `/health`. Bearer + cookie auth.
-- **CLI** — `openpanel serve`, `openpanel migrate`, `openpanel user
-  {create,list,disable,delete}`.
+- **CLI** — `openpanel serve`, `openpanel migrate`,
+  `openpanel user {create,list,disable,delete}`,
+  `openpanel site {create,list,delete,enable,disable}`.
 
 ## What's coming next (each as its own OpenSpec change)
 
-- `add-sites-management` — nginx vhost provisioning, PHP-FPM pool mgmt
 - `add-ssl-management` — Let's Encrypt via ACME
 - `add-databases-management` — MySQL / Postgres provisioning
 - `add-files-management` — chrooted file manager

@@ -1,7 +1,7 @@
 //! openpanel — CLI entry point.
 
 use clap::Parser;
-use openpanel_cli::commands::{Cli, Command, UserCommand};
+use openpanel_cli::commands::{Cli, Command, SiteCommand, UserCommand};
 use openpanel_cli::handlers;
 use openpanel_core::{init_tracing, Config};
 
@@ -24,6 +24,20 @@ async fn main() -> anyhow::Result<()> {
             UserCommand::List => handlers::list_users(config).await,
             UserCommand::Disable { id } => handlers::disable_user(config, id).await,
             UserCommand::Delete { id } => handlers::delete_user(config, id).await,
+        },
+        Command::Site { action } => match action {
+            SiteCommand::Create {
+                domain,
+                owner,
+                aliases,
+                php,
+                php_version,
+                document_root,
+            } => handlers::create_site(config, domain, owner, aliases, php, php_version, document_root).await,
+            SiteCommand::List => handlers::list_sites(config).await,
+            SiteCommand::Delete { id } => handlers::delete_site(config, id).await,
+            SiteCommand::Enable { id } => handlers::enable_site(config, id).await,
+            SiteCommand::Disable { id } => handlers::disable_site(config, id).await,
         },
     }
 }
