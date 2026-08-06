@@ -1,0 +1,99 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/openpanel-core",
+    "crates/openpanel-api",
+    "crates/openpanel-agent",
+    "crates/openpanel-cli",
+    "crates/openpanel-domain",
+    "crates/openpanel-app",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+repository = "https://github.com/openpanel/openpanel"
+authors = ["OpenPanel Contributors"]
+description = "A memory-safe open-source server management panel written in Rust"
+
+[workspace.dependencies]
+# Core async runtime + web
+tokio = { version = "1.40", features = ["full"] }
+axum = { version = "0.8", features = ["macros", "ws"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["trace", "cors", "fs", "limit", "auth"] }
+hyper = { version = "1.5", features = ["full"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# Database
+sqlx = { version = "0.8", default-features = false, features = [
+    "runtime-tokio-rustls",
+    "sqlite",
+    "macros",
+    "chrono",
+    "uuid",
+    "migrate",
+] }
+
+# Time + IDs
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.10", features = ["v4", "serde"] }
+
+# Errors + logging
+thiserror = "1.0"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+
+# Auth + crypto
+argon2 = "0.5"
+rand = "0.8"
+base64 = "0.22"
+sha2 = "0.10"
+hex = "0.4"
+
+# CLI
+clap = { version = "4.5", features = ["derive", "env"] }
+
+# Config layering (defaults + file + env + CLI)
+figment = { version = "0.10", features = ["toml", "env", "yaml"] }
+jsonschema = { version = "0.28", default-features = false }
+
+# HTTP client (for Let's Encrypt, OAuth, etc.)
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "stream"] }
+
+# System info (for metrics)
+sysinfo = "0.32"
+
+# TLS
+rustls = { version = "0.23", default-features = false, features = ["std", "aws_lc_rs"] }
+rustls-acme = { version = "0.13", features = ["axum"] }
+
+# Async traits
+async-trait = "0.1"
+
+# Filesystem walking (migration discovery)
+walkdir = "2.5"
+
+# File watching (used later by sites module)
+notify = "6.1"
+
+# openpanel workspace crates
+openpanel-core = { path = "crates/openpanel-core", version = "0.1.0" }
+openpanel-domain = { path = "crates/openpanel-domain", version = "0.1.0" }
+openpanel-app = { path = "crates/openpanel-app", version = "0.1.0" }
+openpanel-api = { path = "crates/openpanel-api", version = "0.1.0" }
+openpanel-cli = { path = "crates/openpanel-cli", version = "0.1.0" }
+openpanel-agent = { path = "crates/openpanel-agent", version = "0.1.0" }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = "symbols"
+opt-level = 3

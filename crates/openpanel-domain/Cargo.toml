@@ -1,0 +1,16 @@
+[package]
+name = "openpanel-domain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Domain layer: entities, value objects, aggregates, repository traits. Zero I/O."
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+argon2 = { workspace = true }
+rand = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+async-trait = { workspace = true }

@@ -1,0 +1,29 @@
+[package]
+name = "openpanel-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CLI adapter: clap commands for serve, migrate, user."
+
+[[bin]]
+name = "openpanel"
+path = "src/main.rs"
+
+[dependencies]
+tokio = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+uuid = { workspace = true }
+sqlx = { workspace = true }
+axum = { workspace = true }
+
+openpanel-core = { workspace = true }
+openpanel-domain = { workspace = true }
+openpanel-app = { workspace = true }
+openpanel-api = { workspace = true }
