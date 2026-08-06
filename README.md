@@ -110,18 +110,21 @@ failing path.
   RBAC, automatic `/etc/nginx/conf.d/openpanel/<domain>.conf` generation,
   `nginx -t && nginx -s reload` with rollback, document root
   provisioning under `/var/www/<domain>/public_html`.
-- **HTTP API** — `/api/v1/identity/login`, `/logout`, `/me`, `/users`,
-  `/users/{id}`, `/users/{id}/disable`, `/users/{id}/password`,
-  `/api/v1/sites` (CRUD + `/enable`, `/disable`),
-  `/health`. Bearer + cookie auth.
+- **Databases / MySQL provisioning** — `Database` aggregate with
+  auto-prefixed names (`{owner}_{suffix}`), AES-256-GCM password
+  encryption at rest (master key from `OPENPANEL__DATABASE__MASTER_KEY`),
+  MySQL CLI shell-out for `CREATE DATABASE` / `CREATE USER` / `GRANT` /
+  `DROP`, per-user RBAC, password rotation returns plaintext once.
+- **HTTP API** — `/api/v1/identity/*`, `/api/v1/sites/*`,
+  `/api/v1/databases/*`, `/health`. Bearer + cookie auth.
 - **CLI** — `openpanel serve`, `openpanel migrate`,
   `openpanel user {create,list,disable,delete}`,
-  `openpanel site {create,list,delete,enable,disable}`.
+  `openpanel site {create,list,delete,enable,disable}`,
+  `openpanel database {create,list,delete,change-password}`.
 
 ## What's coming next (each as its own OpenSpec change)
 
 - `add-ssl-management` — Let's Encrypt via ACME
-- `add-databases-management` — MySQL / Postgres provisioning
 - `add-files-management` — chrooted file manager
 - `add-monitoring` — CPU / RAM / disk / network metrics
 - `add-cron-scheduling` — recurring job runner
