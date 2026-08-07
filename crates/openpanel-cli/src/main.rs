@@ -1,8 +1,8 @@
 //! openpanel — CLI entry point.
 
 use clap::Parser;
-use openpanel_cli::commands::{Cli, Command, DatabaseCommand, SiteCommand, UserCommand};
 use openpanel_cli::handlers;
+use openpanel_cli::{Cli, Command, DatabaseCommand, FileCommand, SiteCommand, UserCommand};
 use openpanel_core::{init_tracing, Config};
 
 #[tokio::main]
@@ -49,6 +49,27 @@ async fn main() -> anyhow::Result<()> {
             DatabaseCommand::Delete { id } => handlers::delete_database(config, id).await,
             DatabaseCommand::ChangePassword { id } => {
                 handlers::change_database_password(config, id).await
+            }
+        },
+        Command::File { action } => match action {
+            FileCommand::List { site, path } => handlers::file_list(config, site, path).await,
+            FileCommand::Read { site, path } => handlers::file_read(config, site, path).await,
+            FileCommand::Write {
+                site,
+                path,
+                content,
+            } => handlers::file_write(config, site, path, content).await,
+            FileCommand::Mkdir { site, path } => handlers::file_mkdir(config, site, path).await,
+            FileCommand::Rm {
+                site,
+                path,
+                recursive,
+            } => handlers::file_rm(config, site, path, recursive).await,
+            FileCommand::Rename { site, from, to } => {
+                handlers::file_rename(config, site, from, to).await
+            }
+            FileCommand::Chmod { site, path, mode } => {
+                handlers::file_chmod(config, site, path, mode).await
             }
         },
     }

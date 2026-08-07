@@ -21,7 +21,7 @@ description = "A memory-safe open-source server management panel written in Rust
 [workspace.dependencies]
 # Core async runtime + web
 tokio = { version = "1.40", features = ["full"] }
-axum = { version = "0.8", features = ["macros", "ws"] }
+axum = { version = "0.8", features = ["macros", "ws", "multipart"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["trace", "cors", "fs", "limit", "auth"] }
 hyper = { version = "1.5", features = ["full"] }
@@ -89,6 +89,9 @@ regex = "1.10"
 
 # AES-GCM (used by databases module for password encryption at rest)
 aes-gcm = "0.10"
+
+# MIME type guessing for the files module
+mime_guess = "2"
 
 # openpanel workspace crates
 openpanel-core = { path = "crates/openpanel-core", version = "0.1.0" }

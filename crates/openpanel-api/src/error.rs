@@ -30,6 +30,9 @@ pub enum ApiError {
     #[error("conflict: {0}")]
     Conflict(String),
 
+    #[error("payload too large: {0} bytes")]
+    PayloadTooLarge(u64),
+
     #[error("internal error: {0}")]
     Internal(String),
 }
@@ -55,6 +58,7 @@ impl IntoResponse for ApiError {
             ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             ApiError::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
+            ApiError::PayloadTooLarge(_) => (StatusCode::PAYLOAD_TOO_LARGE, "payload_too_large"),
             ApiError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal"),
         };
         let body = Json(ErrorBody::new(code));

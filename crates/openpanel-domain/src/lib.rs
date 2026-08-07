@@ -4,6 +4,7 @@
 
 pub mod common;
 pub mod databases;
+pub mod files;
 pub mod identity;
 pub mod sites;
 
@@ -14,6 +15,10 @@ pub use databases::engine::DatabaseEngine;
 pub use databases::error::DatabaseError;
 pub use databases::repository::DatabaseRepository;
 pub use databases::status::DatabaseStatus;
+pub use files::error::FileError;
+pub use files::file_info::FileInfo;
+pub use files::path::Path;
+pub use files::repository::{FileRepository, MAX_READ_BYTES};
 pub use identity::error::IdentityError;
 pub use identity::repository::{SessionRepository, UserRepository};
 pub use identity::role::Role;

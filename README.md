@@ -115,17 +115,22 @@ failing path.
   encryption at rest (master key from `OPENPANEL__DATABASE__MASTER_KEY`),
   MySQL CLI shell-out for `CREATE DATABASE` / `CREATE USER` / `GRANT` /
   `DROP`, per-user RBAC, password rotation returns plaintext once.
+- **Files / chrooted file manager** — list / read / write / mkdir /
+  rename / chmod / remove per site; canonicalize-once-per-request
+  chroot check (no path traversal); multipart upload; 50 MB read cap;
+  RBAC mirroring the sites module.
 - **HTTP API** — `/api/v1/identity/*`, `/api/v1/sites/*`,
-  `/api/v1/databases/*`, `/health`. Bearer + cookie auth.
+  `/api/v1/databases/*`, `/api/v1/files/*`, `/health`. Bearer +
+  cookie auth.
 - **CLI** — `openpanel serve`, `openpanel migrate`,
   `openpanel user {create,list,disable,delete}`,
   `openpanel site {create,list,delete,enable,disable}`,
-  `openpanel database {create,list,delete,change-password}`.
+  `openpanel database {create,list,delete,change-password}`,
+  `openpanel file {list,read,write,mkdir,rm,rename,chmod}`.
 
 ## What's coming next (each as its own OpenSpec change)
 
 - `add-ssl-management` — Let's Encrypt via ACME
-- `add-files-management` — chrooted file manager
 - `add-monitoring` — CPU / RAM / disk / network metrics
 - `add-cron-scheduling` — recurring job runner
 

@@ -28,6 +28,11 @@ pub enum Command {
         #[command(subcommand)]
         action: DatabaseCommand,
     },
+    /// File manager commands (operate on a site's document root).
+    File {
+        #[command(subcommand)]
+        action: FileCommand,
+    },
 }
 
 #[derive(Debug, Subcommand)]
@@ -104,5 +109,59 @@ pub enum DatabaseCommand {
     ChangePassword {
         #[arg(long)]
         id: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
+pub enum FileCommand {
+    List {
+        #[arg(long)]
+        site: String,
+        #[arg(long, default_value_t = String::new())]
+        path: String,
+    },
+    Read {
+        #[arg(long)]
+        site: String,
+        #[arg(long, default_value_t = String::new())]
+        path: String,
+    },
+    Write {
+        #[arg(long)]
+        site: String,
+        #[arg(long, default_value_t = String::new())]
+        path: String,
+        #[arg(long)]
+        content: String,
+    },
+    Mkdir {
+        #[arg(long)]
+        site: String,
+        #[arg(long)]
+        path: String,
+    },
+    Rm {
+        #[arg(long)]
+        site: String,
+        #[arg(long)]
+        path: String,
+        #[arg(long, default_value_t = false)]
+        recursive: bool,
+    },
+    Rename {
+        #[arg(long)]
+        site: String,
+        #[arg(long)]
+        from: String,
+        #[arg(long)]
+        to: String,
+    },
+    Chmod {
+        #[arg(long)]
+        site: String,
+        #[arg(long)]
+        path: String,
+        #[arg(long)]
+        mode: String,
     },
 }

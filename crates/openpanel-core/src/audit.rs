@@ -50,6 +50,9 @@ pub enum AuditAction {
     DatabaseDeleted,
     DatabasePasswordChanged,
     FileUploaded,
+    FileUpdated,
+    FileRenamed,
+    FileModeChanged,
     FileDeleted,
 }
 
@@ -74,6 +77,9 @@ impl AuditAction {
             AuditAction::DatabaseDeleted => "database_deleted",
             AuditAction::DatabasePasswordChanged => "database_password_changed",
             AuditAction::FileUploaded => "file_uploaded",
+            AuditAction::FileUpdated => "file_updated",
+            AuditAction::FileRenamed => "file_renamed",
+            AuditAction::FileModeChanged => "file_mode_changed",
             AuditAction::FileDeleted => "file_deleted",
         }
     }
@@ -229,6 +235,9 @@ impl AuditService for SqliteAuditService {
                 "database_deleted" => AuditAction::DatabaseDeleted,
                 "database_password_changed" => AuditAction::DatabasePasswordChanged,
                 "file_uploaded" => AuditAction::FileUploaded,
+                "file_updated" => AuditAction::FileUpdated,
+                "file_renamed" => AuditAction::FileRenamed,
+                "file_mode_changed" => AuditAction::FileModeChanged,
                 "file_deleted" => AuditAction::FileDeleted,
                 other => {
                     tracing::warn!(other, "unknown audit action");

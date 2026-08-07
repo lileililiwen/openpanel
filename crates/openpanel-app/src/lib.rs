@@ -4,6 +4,7 @@
 //! routes, CLI, and migrations.
 
 pub mod databases;
+pub mod files;
 pub mod identity;
 pub mod migrations;
 pub mod prelude;
@@ -11,6 +12,8 @@ pub mod sites;
 
 pub use databases::DatabasesModule;
 pub use databases::service::DatabasesService;
+pub use files::FilesModule;
+pub use files::service::FilesService;
 pub use identity::IdentityModule;
 pub use identity::service::IdentityService;
 pub use sites::SitesModule;

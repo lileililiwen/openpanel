@@ -5,7 +5,7 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use openpanel_api::build_router;
-use openpanel_app::{DatabasesModule, IdentityModule, SitesModule};
+use openpanel_app::{DatabasesModule, FilesModule, IdentityModule, SitesModule};
 use openpanel_core::{
     AppContext, Config, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
 };
@@ -28,6 +28,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let sites_module = SitesModule::new(&ctx).await;
     let master_key = load_master_key(&config)?;
     let databases_module = DatabasesModule::new(&ctx, master_key).await;
+    let files_module = FilesModule::new(&ctx).await;
 
     let runner = MigrationRunner::for_sqlite(pool.clone());
     runner
@@ -46,7 +47,8 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let identity_svc = identity_module.service();
     let sites_svc = sites_module.service();
     let databases_svc = databases_module.service();
-    let app = build_router(identity_svc, sites_svc, databases_svc);
+    let files_svc = files_module.service();
+    let app = build_router(identity_svc, sites_svc, databases_svc, files_svc);
 
     let addr = format!("{}:{}", config.server().bind, config.server().port);
     let listener = TcpListener::bind(&addr)
@@ -383,5 +385,172 @@ pub async fn change_database_password(config: Arc<Config>, id: String) -> anyhow
     println!(
         "rotated password for {id}\n  new password: {new_password}\n  -> copy into your site config; it will not be shown again."
     );
+    Ok(())
+}
+
+async fn build_files(
+    config: Arc<Config>,
+) -> anyhow::Result<(Arc<openpanel_app::FilesService>, Arc<openpanel_app::SitesService>, Arc<openpanel_app::IdentityService>)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config, db, audit.clone());
+    let identity_module = IdentityModule::new(&ctx).await;
+    let sites_module = SitesModule::new(&ctx).await;
+    let files_module = FilesModule::new(&ctx).await;
+    Ok((files_module.service(), sites_module.service(), identity_module.service()))
+}
+
+async fn resolve_site_id(
+    sites_svc: &openpanel_app::SitesService,
+    site: &str,
+) -> anyhow::Result<uuid::Uuid> {
+    // Try UUID first
+    if let Ok(id) = uuid::Uuid::parse_str(site) {
+        return Ok(id);
+    }
+    // Try domain — use the service's own caller resolution
+    let pool = sqlx::SqlitePool::connect("sqlite::memory:").await.ok();
+    let _ = pool;
+    anyhow::bail!("site id `{site}` not a UUID; pass the UUID instead")
+}
+
+pub async fn file_list(config: Arc<Config>, site: String, path: String) -> anyhow::Result<()> {
+    let (files_svc, sites_svc, identity_svc) = build_files(config).await?;
+    let site_id = resolve_site_id(&sites_svc, &site).await?;
+    let caller = identity_svc
+        .list_users()
+        .await?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("caller not found"))?;
+    let rel = openpanel_domain::files::path::Path::new(if path.is_empty() { "" } else { &path })
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let entries = files_svc
+        .list_dir(&caller, site_id, &rel)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("{:<8} {:>10}  {:<6}  {}", "TYPE", "SIZE", "MODE", "NAME");
+    for e in entries {
+        let t = if e.is_dir { "dir" } else { "file" };
+        println!("{:<8} {:>10}  {:<6}  {}", t, e.size, e.mode, e.name);
+    }
+    Ok(())
+}
+
+pub async fn file_read(config: Arc<Config>, site: String, path: String) -> anyhow::Result<()> {
+    let (files_svc, sites_svc, identity_svc) = build_files(config).await?;
+    let site_id = resolve_site_id(&sites_svc, &site).await?;
+    let caller = identity_svc
+        .list_users()
+        .await?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("caller not found"))?;
+    let rel = openpanel_domain::files::path::Path::new(if path.is_empty() { "" } else { &path })
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let (bytes, _mtime) = files_svc
+        .read_file(&caller, site_id, &rel)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    use std::io::Write;
+    std::io::stdout().write_all(&bytes)?;
+    Ok(())
+}
+
+pub async fn file_write(config: Arc<Config>, site: String, path: String, content: String) -> anyhow::Result<()> {
+    let (files_svc, sites_svc, identity_svc) = build_files(config).await?;
+    let site_id = resolve_site_id(&sites_svc, &site).await?;
+    let caller = identity_svc
+        .list_users()
+        .await?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("caller not found"))?;
+    let rel = openpanel_domain::files::path::Path::new(&path)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    files_svc
+        .write_file(&caller, site_id, &rel, content.as_bytes())
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("wrote {} bytes to {path}", content.len());
+    Ok(())
+}
+
+pub async fn file_mkdir(config: Arc<Config>, site: String, path: String) -> anyhow::Result<()> {
+    let (files_svc, sites_svc, identity_svc) = build_files(config).await?;
+    let site_id = resolve_site_id(&sites_svc, &site).await?;
+    let caller = identity_svc
+        .list_users()
+        .await?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("caller not found"))?;
+    let rel = openpanel_domain::files::path::Path::new(&path)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    files_svc
+        .mkdir(&caller, site_id, &rel)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("created {path}");
+    Ok(())
+}
+
+pub async fn file_rm(config: Arc<Config>, site: String, path: String, recursive: bool) -> anyhow::Result<()> {
+    let (files_svc, sites_svc, identity_svc) = build_files(config).await?;
+    let site_id = resolve_site_id(&sites_svc, &site).await?;
+    let caller = identity_svc
+        .list_users()
+        .await?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("caller not found"))?;
+    let rel = openpanel_domain::files::path::Path::new(&path)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    files_svc
+        .remove(&caller, site_id, &rel, recursive)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("removed {path}");
+    Ok(())
+}
+
+pub async fn file_rename(config: Arc<Config>, site: String, from: String, to: String) -> anyhow::Result<()> {
+    let (files_svc, sites_svc, identity_svc) = build_files(config).await?;
+    let site_id = resolve_site_id(&sites_svc, &site).await?;
+    let caller = identity_svc
+        .list_users()
+        .await?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("caller not found"))?;
+    let from_rel = openpanel_domain::files::path::Path::new(&from)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let to_rel = openpanel_domain::files::path::Path::new(&to)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    files_svc
+        .rename(&caller, site_id, &from_rel, &to_rel)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("renamed {from} -> {to}");
+    Ok(())
+}
+
+pub async fn file_chmod(config: Arc<Config>, site: String, path: String, mode: String) -> anyhow::Result<()> {
+    let (files_svc, sites_svc, identity_svc) = build_files(config).await?;
+    let site_id = resolve_site_id(&sites_svc, &site).await?;
+    let caller = identity_svc
+        .list_users()
+        .await?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("caller not found"))?;
+    let rel = openpanel_domain::files::path::Path::new(&path)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let m = u32::from_str_radix(mode.trim_start_matches('0'), 8)
+        .map_err(|e| anyhow::anyhow!("invalid octal `{mode}`: {e}"))?;
+    files_svc
+        .chmod(&caller, site_id, &rel, m)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("chmod {mode} {path}");
     Ok(())
 }
