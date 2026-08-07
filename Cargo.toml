@@ -98,6 +98,9 @@ regex = "1.10"
 # Property-based testing (used in openpanel-domain)
 proptest = "1"
 
+# Mocking framework (used in openpanel-app + openpanel-test-support)
+mockall = "0.13"
+
 # AES-GCM (used by databases module for password encryption at rest)
 aes-gcm = "0.10"
 

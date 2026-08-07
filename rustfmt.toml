@@ -1,0 +1,14 @@
+# rustfmt.toml — workspace-wide formatting policy.
+# See: openspec/changes/add-quality-engineering-infrastructure/tasks.md § 4.
+
+edition = "2024"
+max_width = 100
+newline_style = "Unix"
+use_small_heuristics = "Default"
+imports_granularity = "Crate"
+group_imports = "StdExternalCrate"
+format_code_in_doc_comments = true
+normalize_comments = false
+normalize_doc_attributes = false
+reorder_impl_items = true
+use_try_shorthand = true

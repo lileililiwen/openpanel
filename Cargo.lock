@@ -1715,6 +1715,7 @@ dependencies = [
  "async-trait",
  "base64",
  "chrono",
+ "openpanel-test-support",
  "proptest",
  "rand 0.8.7",
  "regex",

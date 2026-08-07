@@ -33,5 +33,5 @@ openpanel-domain = { workspace = true }
 
 [dev-dependencies]
 openpanel-test-support = { workspace = true }
-mockall = "0.13"
+mockall = { workspace = true }
 proptest = { workspace = true }
