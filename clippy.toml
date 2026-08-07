@@ -1,0 +1,12 @@
+# Workspace clippy configuration.
+#
+# These are enforced in non-test code via `[workspace.lints]` in the
+# root Cargo.toml. Test code (`#[cfg(test)]`) is exempt — see
+# `Agents.md` § Quality Engineering.
+#
+# Field names in this file use underscores (not dashes) per
+# https://doc.rust-lang.org/clippy/configuration.html
+
+disallowed-methods = [
+    { path = "std::panic::catch_unwind", reason = "panics are forbidden in production code; let them propagate" },
+]

@@ -94,13 +94,12 @@ impl MigrationRunner {
                 if stmt.trim().is_empty() {
                     continue;
                 }
-                sqlx::query(&stmt)
-                    .execute(&mut *tx)
-                    .await
-                    .map_err(|e| DatabaseError::Migration {
+                sqlx::query(&stmt).execute(&mut *tx).await.map_err(|e| {
+                    DatabaseError::Migration {
                         path: format!("{module}/{version}"),
                         message: e.to_string(),
-                    })?;
+                    }
+                })?;
             }
             sqlx::query("INSERT INTO _migrations (module, version, applied_at) VALUES (?, ?, ?)")
                 .bind(module)
@@ -195,7 +194,10 @@ mod tests {
     #[test]
     fn parses_version() {
         assert_eq!(parse_version("V001__init.sql"), Some("001".to_string()));
-        assert_eq!(parse_version("V002__add_index.sql"), Some("002".to_string()));
+        assert_eq!(
+            parse_version("V002__add_index.sql"),
+            Some("002".to_string())
+        );
         assert_eq!(parse_version("README.md"), None);
     }
 

@@ -132,3 +132,50 @@ mod tests {
         assert_eq!(joined.as_str(), "wp-content/themes");
     }
 }
+
+/// Property-based tests: every `Path::new` input either succeeds
+/// (for root or a relative path without `..`, null, or leading `/`)
+/// or returns `InvalidPath`. The classifier is exhaustive.
+#[cfg(test)]
+mod prop {
+    use super::*;
+    use proptest::prelude::*;
+
+    /// Returns true iff `s` should be accepted by `Path::new`.
+    fn should_accept(s: &str) -> bool {
+        s.is_empty()
+            || (!s.starts_with('/') && !s.contains('\0') && !s.split('/').any(|c| c == ".."))
+    }
+
+    proptest! {
+        #[test]
+        fn prop_path_classifier_matches_validator(s in "\\PC{0,80}") {
+            let accepted = Path::new(&s).is_ok();
+            prop_assert_eq!(accepted, should_accept(&s), "input={:?}", s);
+        }
+
+        #[test]
+        fn prop_root_is_always_valid(_x in 0u32..100) {
+            prop_assert!(Path::root().is_root());
+        }
+
+        #[test]
+        fn prop_empty_string_is_root(s in "\\PC{0,40}") {
+            prop_assert_eq!(Path::new("").map(|p| p.is_root()), Ok(true));
+            if !s.is_empty() && should_accept(&s) {
+                prop_assert_eq!(Path::new(&s).map(|p| p.is_root()), Ok(false));
+            }
+        }
+
+        #[test]
+        fn prop_null_bytes_rejected(bytes in proptest::collection::vec(any::<u8>(), 0..40)) {
+            let s = String::from_utf8(bytes).unwrap_or_default();
+            if s.contains('\0') {
+                prop_assert!(matches!(
+                    Path::new(s),
+                    Err(FileError::InvalidPath(_))
+                ));
+            }
+        }
+    }
+}

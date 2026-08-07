@@ -17,8 +17,7 @@ pub struct FilesModule {
 impl FilesModule {
     pub async fn new(ctx: &AppContext) -> Self {
         let pool = ctx.db.pool().await;
-        let sites_repo: Arc<dyn SiteRepository> =
-            Arc::new(SqliteSiteRepository::new(pool));
+        let sites_repo: Arc<dyn SiteRepository> = Arc::new(SqliteSiteRepository::new(pool));
         let service = Arc::new(FilesService::new(sites_repo, ctx.audit.clone()));
         Self { service }
     }

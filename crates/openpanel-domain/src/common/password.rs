@@ -3,9 +3,9 @@
 
 use std::fmt;
 
+use argon2::Argon2;
 use argon2::password_hash::rand_core::OsRng;
 use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
-use argon2::Argon2;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -61,8 +61,8 @@ impl Password {
     }
 
     pub fn verify(&self, plaintext: &str) -> Result<bool, PasswordError> {
-        let parsed = PasswordHash::new(&self.hash)
-            .map_err(|e| PasswordError::Verify(e.to_string()))?;
+        let parsed =
+            PasswordHash::new(&self.hash).map_err(|e| PasswordError::Verify(e.to_string()))?;
         Ok(Argon2::default()
             .verify_password(plaintext.as_bytes(), &parsed)
             .is_ok())
@@ -96,5 +96,29 @@ mod tests {
         let p = Password::hash("correct horse battery staple").unwrap();
         assert!(p.verify("correct horse battery staple").unwrap());
         assert!(!p.verify("wrong horse").unwrap());
+    }
+}
+
+#[cfg(test)]
+mod prop {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(10))]
+
+        #[test]
+        fn prop_hash_and_verify_roundtrip(p in "[a-zA-Z0-9 !@#$%^&*]{12,256}") {
+            let pw = Password::hash(&p).unwrap();
+            prop_assert!(pw.verify(&p).unwrap());
+        }
+
+        #[test]
+        fn prop_short_password_rejected(p in "[a-zA-Z0-9]{1,11}") {
+            prop_assert!(matches!(
+                Password::hash(&p),
+                Err(PasswordError::TooShort(MIN_PASSWORD_LEN))
+            ));
+        }
     }
 }

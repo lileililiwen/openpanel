@@ -34,10 +34,7 @@ pub async fn canonicalize_chroot(chroot: &str) -> Result<PathBuf, FileError> {
 }
 
 /// Resolve a relative `Path` against the canonical chroot.
-pub async fn resolve_path(
-    chroot_canonical: &FsPath,
-    rel: &Path,
-) -> Result<PathBuf, FileError> {
+pub async fn resolve_path(chroot_canonical: &FsPath, rel: &Path) -> Result<PathBuf, FileError> {
     let candidate = if rel.is_root() {
         chroot_canonical.to_path_buf()
     } else {
@@ -108,7 +105,12 @@ impl FileRepository for FilesystemRepository {
             let mime = if meta.is_dir() {
                 None
             } else {
-                Some(mime_guess::from_path(&name).first_or_octet_stream().essence_str().to_string())
+                Some(
+                    mime_guess::from_path(&name)
+                        .first_or_octet_stream()
+                        .essence_str()
+                        .to_string(),
+                )
             };
             out.push(FileInfo::new(
                 name,
@@ -162,9 +164,7 @@ impl FileRepository for FilesystemRepository {
         }
         let tmp = abs.with_extension(format!(
             "{}.new",
-            abs.extension()
-                .and_then(|s| s.to_str())
-                .unwrap_or("")
+            abs.extension().and_then(|s| s.to_str()).unwrap_or("")
         ));
         tokio::fs::write(&tmp, bytes)
             .await
@@ -177,11 +177,7 @@ impl FileRepository for FilesystemRepository {
         Ok(())
     }
 
-    async fn mkdir(
-        &self,
-        chroot_canonical: &FsPath,
-        path: &Path,
-    ) -> Result<(), FileError> {
+    async fn mkdir(&self, chroot_canonical: &FsPath, path: &Path) -> Result<(), FileError> {
         let abs = resolve_path(chroot_canonical, path).await?;
         if abs.exists() {
             return Err(FileError::AlreadyExists(path.to_string()));

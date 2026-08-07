@@ -206,3 +206,46 @@ mod tests {
         assert_eq!(d.status(), DatabaseStatus::Active);
     }
 }
+
+#[cfg(test)]
+mod prop {
+    use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn prop_auto_prefixed_name(
+            username in "[a-z0-9_]{3,32}",
+            suffix in "[a-z0-9_]{3,32}"
+        ) {
+            let d = Database::new(
+                Uuid::new_v4(),
+                Uuid::new_v4(),
+                &username,
+                &suffix,
+                "utf8mb4",
+                "tester",
+            ).unwrap();
+            prop_assert_eq!(d.name(), format!("{username}_{suffix}"));
+            prop_assert_eq!(d.db_user(), format!("{username}_{suffix}"));
+        }
+
+        #[test]
+        fn prop_invalid_owner_username_rejected(
+            username in "[^a-z0-9_]{1,40}"
+        ) {
+            prop_assert!(!username.is_empty());
+            prop_assert!(matches!(
+                Database::new(
+                    Uuid::new_v4(),
+                    Uuid::new_v4(),
+                    &username,
+                    "app",
+                    "utf8mb4",
+                    "tester",
+                ),
+                Err(DatabaseError::InvalidName(_))
+            ));
+        }
+    }
+}

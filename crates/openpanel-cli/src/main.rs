@@ -3,7 +3,7 @@
 use clap::Parser;
 use openpanel_cli::handlers;
 use openpanel_cli::{Cli, Command, DatabaseCommand, FileCommand, SiteCommand, UserCommand};
-use openpanel_core::{init_tracing, Config};
+use openpanel_core::{Config, init_tracing};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -33,7 +33,18 @@ async fn main() -> anyhow::Result<()> {
                 php,
                 php_version,
                 document_root,
-            } => handlers::create_site(config, domain, owner, aliases, php, php_version, document_root).await,
+            } => {
+                handlers::create_site(
+                    config,
+                    domain,
+                    owner,
+                    aliases,
+                    php,
+                    php_version,
+                    document_root,
+                )
+                .await
+            }
             SiteCommand::List => handlers::list_sites(config).await,
             SiteCommand::Delete { id } => handlers::delete_site(config, id).await,
             SiteCommand::Enable { id } => handlers::enable_site(config, id).await,

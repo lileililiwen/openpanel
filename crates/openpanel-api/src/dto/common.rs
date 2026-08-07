@@ -1,4 +1,4 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 
 #[derive(Debug, Serialize)]
 pub struct ErrorBody {
@@ -7,8 +7,6 @@ pub struct ErrorBody {
 
 impl ErrorBody {
     pub fn new(code: impl Into<String>) -> Self {
-        Self {
-            error: code.into(),
-        }
+        Self { error: code.into() }
     }
 }

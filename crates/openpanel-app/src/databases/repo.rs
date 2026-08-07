@@ -98,13 +98,12 @@ impl DatabaseRepository for SqliteDatabaseRepository {
     }
 
     async fn password_ciphertext(&self, id: Uuid) -> Result<Option<String>, RepoError> {
-        let row: Option<(String,)> = sqlx::query_as(
-            "SELECT password_ciphertext FROM databases WHERE id = ?",
-        )
-        .bind(id.to_string())
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| RepoError::new(e.to_string()))?;
+        let row: Option<(String,)> =
+            sqlx::query_as("SELECT password_ciphertext FROM databases WHERE id = ?")
+                .bind(id.to_string())
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| RepoError::new(e.to_string()))?;
         Ok(row.map(|r| r.0))
     }
 
@@ -166,8 +165,8 @@ struct DatabaseRow {
 
 impl DatabaseRow {
     fn into_database(self) -> Result<Database, RepoError> {
-        let id = Uuid::parse_str(&self.id)
-            .map_err(|e| RepoError::new(format!("bad db id: {e}")))?;
+        let id =
+            Uuid::parse_str(&self.id).map_err(|e| RepoError::new(format!("bad db id: {e}")))?;
         let owner_id = Uuid::parse_str(&self.owner_id)
             .map_err(|e| RepoError::new(format!("bad owner id: {e}")))?;
         let engine: DatabaseEngine = self

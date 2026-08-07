@@ -30,3 +30,8 @@ mime_guess = { workspace = true }
 
 openpanel-core = { workspace = true }
 openpanel-domain = { workspace = true }
+
+[dev-dependencies]
+openpanel-test-support = { workspace = true }
+mockall = "0.13"
+proptest = { workspace = true }

@@ -59,10 +59,7 @@ mod tests {
     #[test]
     fn rejects_invalid_usernames() {
         assert_eq!(Username::new("ab"), Err(UsernameError::Length));
-        assert_eq!(
-            Username::new("a".repeat(33)),
-            Err(UsernameError::Length)
-        );
+        assert_eq!(Username::new("a".repeat(33)), Err(UsernameError::Length));
         assert!(matches!(
             Username::new("has space"),
             Err(UsernameError::InvalidChar(' '))

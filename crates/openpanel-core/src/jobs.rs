@@ -43,8 +43,7 @@ impl JobSupervisor {
             let name = task.name();
             let sd = shutdown.clone();
             let handle = tokio::spawn(async move {
-                let result =
-                    std::panic::AssertUnwindSafe(task.run(sd)).await;
+                let result = std::panic::AssertUnwindSafe(task.run(sd)).await;
                 match result {
                     Ok(()) => tracing::info!(name, "background task exited cleanly"),
                     Err(e) => tracing::error!(name, error = %e, "background task failed"),
@@ -52,10 +51,7 @@ impl JobSupervisor {
             });
             handles.push(handle);
         }
-        SupervisorHandle {
-            shutdown,
-            handles,
-        }
+        SupervisorHandle { shutdown, handles }
     }
 }
 

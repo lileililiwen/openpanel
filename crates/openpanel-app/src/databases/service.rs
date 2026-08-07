@@ -73,9 +73,7 @@ impl DatabasesService {
         let password = generate_password(24);
 
         // Provision MySQL first; if it fails, no DB row is created.
-        self.mysql
-            .create_database(db.name(), db.charset())
-            .await?;
+        self.mysql.create_database(db.name(), db.charset()).await?;
         self.mysql
             .create_user(db.db_user(), db.db_host(), &password)
             .await?;
@@ -160,11 +158,7 @@ impl DatabasesService {
         Ok(())
     }
 
-    pub async fn change_password(
-        &self,
-        caller: &User,
-        id: Uuid,
-    ) -> Result<String, DatabaseError> {
+    pub async fn change_password(&self, caller: &User, id: Uuid) -> Result<String, DatabaseError> {
         let db = self.get_database(caller, id).await?;
         let new_password = generate_password(24);
         self.mysql
@@ -191,11 +185,7 @@ impl DatabasesService {
         Ok(new_password)
     }
 
-    pub async fn reveal_password(
-        &self,
-        caller: &User,
-        id: Uuid,
-    ) -> Result<String, DatabaseError> {
+    pub async fn reveal_password(&self, caller: &User, id: Uuid) -> Result<String, DatabaseError> {
         let db = self.get_database(caller, id).await?;
         let stored = self
             .repos
@@ -223,14 +213,7 @@ impl DatabasesService {
 
     fn assert_can_view(&self, caller: &User, db: &Database) -> Result<(), DatabaseError> {
         match caller.role() {
-            Role::Owner => Ok(()),
-            Role::Admin => {
-                if db.owner_id() == caller.id() {
-                    Ok(())
-                } else {
-                    Ok(())
-                }
-            }
+            Role::Owner | Role::Admin => Ok(()),
             Role::User => {
                 if db.owner_id() == caller.id() {
                     Ok(())
@@ -243,8 +226,7 @@ impl DatabasesService {
 }
 
 fn generate_password(len: usize) -> String {
-    const CHARS: &[u8] =
-        b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
     let mut rng = rand::thread_rng();
     (0..len)
         .map(|_| {

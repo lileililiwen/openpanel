@@ -5,8 +5,8 @@ use std::sync::Arc;
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::identity::role::Role;
 use openpanel_domain::{
-    Email, IdentityError, Password, Session, SessionRepository, SessionToken, User,
-    UserRepository, Username,
+    Email, IdentityError, Password, Session, SessionRepository, SessionToken, User, UserRepository,
+    Username,
 };
 use uuid::Uuid;
 
@@ -25,7 +25,11 @@ impl IdentityService {
         sessions: Arc<dyn SessionRepository>,
         audit: Arc<dyn AuditService>,
     ) -> Self {
-        Self { users, sessions, audit }
+        Self {
+            users,
+            sessions,
+            audit,
+        }
     }
 
     pub fn users(&self) -> Arc<dyn UserRepository> {
@@ -57,12 +61,27 @@ impl IdentityService {
 
         let username = Username::new(username.to_string()).map_err(|_| IdentityError::Forbidden)?;
         let email = Email::new(email.to_string()).map_err(|_| IdentityError::Forbidden)?;
-        let password = Password::hash(plaintext_password).map_err(|_| IdentityError::PasswordTooShort)?;
+        let password =
+            Password::hash(plaintext_password).map_err(|_| IdentityError::PasswordTooShort)?;
 
-        if self.users.find_by_username(username.as_str()).await.ok().flatten().is_some() {
+        if self
+            .users
+            .find_by_username(username.as_str())
+            .await
+            .ok()
+            .flatten()
+            .is_some()
+        {
             return Err(IdentityError::UsernameTaken);
         }
-        if self.users.find_by_email(email.as_str()).await.ok().flatten().is_some() {
+        if self
+            .users
+            .find_by_email(email.as_str())
+            .await
+            .ok()
+            .flatten()
+            .is_some()
+        {
             return Err(IdentityError::EmailTaken);
         }
 
@@ -333,12 +352,8 @@ impl IdentityService {
             .map_err(|e| IdentityError::Persistence(e.0))?;
         self.audit
             .record(
-                AuditEvent::new(
-                    actor,
-                    AuditAction::PasswordChanged,
-                    AuditOutcome::Success,
-                )
-                .target(target_id.to_string()),
+                AuditEvent::new(actor, AuditAction::PasswordChanged, AuditOutcome::Success)
+                    .target(target_id.to_string()),
             )
             .await
             .ok();
@@ -349,10 +364,7 @@ impl IdentityService {
 /// Convenience: build the SQLite-backed repositories from a pool.
 pub fn build_repos(
     pool: sqlx::Pool<sqlx::Sqlite>,
-) -> (
-    Arc<SqliteUserRepository>,
-    Arc<SqliteSessionRepository>,
-) {
+) -> (Arc<SqliteUserRepository>, Arc<SqliteSessionRepository>) {
     (
         Arc::new(SqliteUserRepository::new(pool.clone())),
         Arc::new(SqliteSessionRepository::new(pool)),

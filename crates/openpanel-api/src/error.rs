@@ -1,8 +1,8 @@
 //! HTTP error type with `IntoResponse` mapping for typed domain errors.
 
+use axum::Json;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
-use axum::Json;
 use openpanel_domain::IdentityError;
 use thiserror::Error;
 
@@ -41,7 +41,9 @@ impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
         let (status, code) = match &self {
             ApiError::Identity(e) => match e {
-                IdentityError::InvalidCredentials => (StatusCode::UNAUTHORIZED, "invalid_credentials"),
+                IdentityError::InvalidCredentials => {
+                    (StatusCode::UNAUTHORIZED, "invalid_credentials")
+                }
                 IdentityError::AccountDisabled => (StatusCode::UNAUTHORIZED, "account_disabled"),
                 IdentityError::PasswordTooShort => (StatusCode::BAD_REQUEST, "password_too_short"),
                 IdentityError::UsernameTaken => (StatusCode::CONFLICT, "username_taken"),

@@ -5,8 +5,8 @@
 
 use aes_gcm::aead::{Aead, KeyInit};
 use aes_gcm::{Aes256Gcm, Key, Nonce};
-use base64::engine::general_purpose::STANDARD as B64;
 use base64::Engine;
+use base64::engine::general_purpose::STANDARD as B64;
 use rand::RngCore;
 
 use openpanel_domain::databases::error::DatabaseError;
@@ -63,18 +63,16 @@ pub fn decrypt_from_storage(
     let (nonce_hex, ct_hex) = stored
         .split_once(':')
         .ok_or_else(|| DatabaseError::Decryption("missing `:` separator".into()))?;
-    let nonce_bytes = hex_decode(nonce_hex).ok_or_else(|| {
-        DatabaseError::Decryption(format!("bad nonce hex `{nonce_hex}`"))
-    })?;
+    let nonce_bytes = hex_decode(nonce_hex)
+        .ok_or_else(|| DatabaseError::Decryption(format!("bad nonce hex `{nonce_hex}`")))?;
     if nonce_bytes.len() != NONCE_LEN {
         return Err(DatabaseError::Decryption(format!(
             "nonce length {} != {NONCE_LEN}",
             nonce_bytes.len()
         )));
     }
-    let ct = hex_decode(ct_hex).ok_or_else(|| {
-        DatabaseError::Decryption(format!("bad ciphertext hex"))
-    })?;
+    let ct = hex_decode(ct_hex)
+        .ok_or_else(|| DatabaseError::Decryption("bad ciphertext hex".to_string()))?;
     let cipher = cipher(master_key);
     let nonce = Nonce::from_slice(&nonce_bytes);
     let pt = cipher

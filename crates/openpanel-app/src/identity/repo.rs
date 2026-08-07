@@ -161,18 +161,18 @@ struct UserRow {
 
 impl UserRow {
     fn into_user(self) -> Result<User, RepoError> {
-        let id = Uuid::parse_str(&self.id)
-            .map_err(|e| RepoError::new(format!("bad user id: {e}")))?;
+        let id =
+            Uuid::parse_str(&self.id).map_err(|e| RepoError::new(format!("bad user id: {e}")))?;
         let username = openpanel_domain::Username::new(self.username)
             .map_err(|e| RepoError::new(e.to_string()))?;
-        let email = openpanel_domain::Email::new(self.email)
-            .map_err(|e| RepoError::new(e.to_string()))?;
-        let role: Role = self
-            .role
-            .parse()
-            .map_err(|e: openpanel_domain::identity::role::RoleParseError| {
-                RepoError::new(e.to_string())
-            })?;
+        let email =
+            openpanel_domain::Email::new(self.email).map_err(|e| RepoError::new(e.to_string()))?;
+        let role: Role =
+            self.role
+                .parse()
+                .map_err(|e: openpanel_domain::identity::role::RoleParseError| {
+                    RepoError::new(e.to_string())
+                })?;
         let created_at = parse_dt(&self.created_at)?;
         let disabled_at = self.disabled_at.as_deref().map(parse_dt).transpose()?;
         let last_login_at = self.last_login_at.as_deref().map(parse_dt).transpose()?;
@@ -239,10 +239,10 @@ impl SessionRepository for SqliteSessionRepository {
         .await
         .map_err(|e| RepoError::new(e.to_string()))?;
         for row in rows {
-            if let Ok(session) = row.into_session() {
-                if session.verify_token(token) {
-                    return Ok(Some(session));
-                }
+            if let Ok(session) = row.into_session()
+                && session.verify_token(token)
+            {
+                return Ok(Some(session));
             }
         }
         Ok(None)
@@ -318,12 +318,12 @@ impl SessionRow {
             .map_err(|e| RepoError::new(format!("bad session id: {e}")))?;
         let user_id = Uuid::parse_str(&self.user_id)
             .map_err(|e| RepoError::new(format!("bad user id: {e}")))?;
-        let role: Role = self
-            .role
-            .parse()
-            .map_err(|e: openpanel_domain::identity::role::RoleParseError| {
-                RepoError::new(e.to_string())
-            })?;
+        let role: Role =
+            self.role
+                .parse()
+                .map_err(|e: openpanel_domain::identity::role::RoleParseError| {
+                    RepoError::new(e.to_string())
+                })?;
         Ok(SessionBuilder {
             id,
             user_id,

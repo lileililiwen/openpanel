@@ -18,11 +18,22 @@ pub struct SitesModule {
 
 impl SitesModule {
     pub async fn new(ctx: &AppContext) -> Self {
+        let paths = NginxPaths::detect();
+        Self::with_paths(ctx, paths).await
+    }
+
+    /// Construct with custom nginx paths. Useful for tests that need to
+    /// write configs to a sandbox directory instead of `/etc/nginx/`.
+    pub async fn with_paths(ctx: &AppContext, paths: NginxPaths) -> Self {
         let pool = ctx.db.pool().await;
         let repo: Arc<dyn openpanel_domain::SiteRepository> =
             Arc::new(SqliteSiteRepository::new(pool));
-        let generator = NginxConfigGenerator::new(NginxPaths::detect());
-        let service = Arc::new(SitesService::new(repo, ctx.audit.clone(), generator));
+        let generator = NginxConfigGenerator::new(paths);
+        let service = Arc::new(SitesService::new(
+            repo,
+            ctx.audit.clone(),
+            generator.clone(),
+        ));
         let migrations = vec![Migration {
             module: MODULE_NAME,
             version: "001".to_string(),
@@ -32,7 +43,7 @@ impl SitesModule {
         Self {
             service,
             migrations,
-            generator: NginxConfigGenerator::new(NginxPaths::detect()),
+            generator,
         }
     }
 

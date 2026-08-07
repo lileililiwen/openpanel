@@ -1,5 +1,7 @@
 //! HTTP adapter: routes, middleware, DTOs, error mapping.
 
+#![deny(rustdoc::broken_intra_doc_links)]
+
 pub mod dto;
 pub mod error;
 pub mod extract;

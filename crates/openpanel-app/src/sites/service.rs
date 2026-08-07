@@ -36,6 +36,7 @@ impl SitesService {
         &self.nginx
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_site(
         &self,
         caller: &User,
@@ -56,12 +57,13 @@ impl SitesService {
             .await
             .map_err(|e| SiteError::Persistence(e.0))?
         {
-            return Err(SiteError::DuplicateDomain(existing.primary_domain().to_string()));
+            return Err(SiteError::DuplicateDomain(
+                existing.primary_domain().to_string(),
+            ));
         }
 
-        let document_root = document_root.unwrap_or_else(|| {
-            format!("/var/www/{primary_domain}/public_html")
-        });
+        let document_root =
+            document_root.unwrap_or_else(|| format!("/var/www/{primary_domain}/public_html"));
 
         let site = Site::new(
             Uuid::new_v4(),
@@ -242,8 +244,8 @@ impl SitesService {
         let mut site = self.get_site(id).await?;
         self.assert_can_manage(caller, &site)?;
         site.change_aliases(aliases, caller.username().as_str())?;
-        let json = serde_json::to_string(site.aliases())
-            .map_err(|e| SiteError::Io(e.to_string()))?;
+        let json =
+            serde_json::to_string(site.aliases()).map_err(|e| SiteError::Io(e.to_string()))?;
         self.sites
             .update_aliases(id, &json, caller.username().as_str())
             .await

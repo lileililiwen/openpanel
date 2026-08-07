@@ -1,9 +1,9 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
+use crate::RepoError;
 use crate::databases::database::Database;
 use crate::databases::status::DatabaseStatus;
-use crate::RepoError;
 
 #[async_trait]
 pub trait DatabaseRepository: Send + Sync + 'static {
@@ -14,7 +14,7 @@ pub trait DatabaseRepository: Send + Sync + 'static {
     async fn list_by_owner(&self, owner_id: Uuid) -> Result<Vec<Database>, RepoError>;
     async fn password_ciphertext(&self, id: Uuid) -> Result<Option<String>, RepoError>;
     async fn update_password_ciphertext(&self, id: Uuid, ciphertext: &str)
-        -> Result<(), RepoError>;
+    -> Result<(), RepoError>;
     async fn update_status(&self, id: Uuid, status: DatabaseStatus) -> Result<(), RepoError>;
     async fn delete(&self, id: Uuid) -> Result<(), RepoError>;
     async fn count(&self) -> Result<i64, RepoError>;

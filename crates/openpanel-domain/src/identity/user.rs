@@ -19,13 +19,7 @@ pub struct User {
 }
 
 impl User {
-    pub fn new(
-        id: Uuid,
-        username: Username,
-        email: Email,
-        password: Password,
-        role: Role,
-    ) -> Self {
+    pub fn new(id: Uuid, username: Username, email: Email, password: Password, role: Role) -> Self {
         Self {
             id,
             username,

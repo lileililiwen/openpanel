@@ -5,8 +5,10 @@ use uuid::Uuid;
 use crate::sites::error::SiteError;
 use crate::sites::status::SiteStatus;
 
-const DOMAIN_RE: &str = r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$";
-const ALIAS_RE: &str = r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$";
+const DOMAIN_RE: &str =
+    r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$";
+const ALIAS_RE: &str =
+    r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Site {
@@ -25,6 +27,7 @@ pub struct Site {
 }
 
 impl Site {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: Uuid,
         owner_id: Uuid,
@@ -42,7 +45,10 @@ impl Site {
         for alias in aliases {
             let a = alias.to_lowercase();
             if a == primary_domain {
-                return Err(SiteError::InvalidAlias(a, "alias matches primary domain".into()));
+                return Err(SiteError::InvalidAlias(
+                    a,
+                    "alias matches primary domain".into(),
+                ));
             }
             validate_alias(&a)?;
             if validated_aliases.contains(&a) {
@@ -91,7 +97,10 @@ impl Site {
         for alias in aliases {
             let a = alias.to_lowercase();
             if a == self.primary_domain {
-                return Err(SiteError::InvalidAlias(a, "alias matches primary domain".into()));
+                return Err(SiteError::InvalidAlias(
+                    a,
+                    "alias matches primary domain".into(),
+                ));
             }
             validate_alias(&a)?;
             if validated.contains(&a) {
@@ -186,17 +195,25 @@ fn validate_domain(s: &str) -> Result<(), SiteError> {
     }
     let re = regex::Regex::new(DOMAIN_RE).expect("valid regex");
     if !re.is_match(s) {
-        return Err(SiteError::InvalidDomain(format!("`{s}` does not match domain pattern")));
+        return Err(SiteError::InvalidDomain(format!(
+            "`{s}` does not match domain pattern"
+        )));
     }
     Ok(())
 }
 
 fn validate_alias(s: &str) -> Result<(), SiteError> {
     if s.is_empty() || s.len() > 253 {
-        return Err(SiteError::InvalidAlias(s.into(), "length out of range".into()));
+        return Err(SiteError::InvalidAlias(
+            s.into(),
+            "length out of range".into(),
+        ));
     }
     if s.starts_with('.') || s.contains('*') {
-        return Err(SiteError::InvalidAlias(s.into(), "wildcards not allowed".into()));
+        return Err(SiteError::InvalidAlias(
+            s.into(),
+            "wildcards not allowed".into(),
+        ));
     }
     let re = regex::Regex::new(ALIAS_RE).expect("valid regex");
     if !re.is_match(s) {
@@ -206,11 +223,14 @@ fn validate_alias(s: &str) -> Result<(), SiteError> {
 }
 
 fn validate_document_root(p: &str) -> Result<(), SiteError> {
-    if !p.starts_with("/var/www/") {
+    if !p.starts_with('/') {
         return Err(SiteError::InvalidDocumentRoot(p.into()));
     }
     if p.contains("..") {
         return Err(SiteError::InvalidDocumentRoot(format!("{p} contains `..`")));
+    }
+    if p.contains('\0') {
+        return Err(SiteError::InvalidDocumentRoot(format!("{p} contains NUL")));
     }
     Ok(())
 }
@@ -269,13 +289,13 @@ mod tests {
     }
 
     #[test]
-    fn rejects_document_root_outside_var_www() {
+    fn rejects_relative_document_root() {
         let r = Site::new(
             Uuid::new_v4(),
             Uuid::new_v4(),
             "example.com",
             vec![],
-            "/etc/passwd",
+            "var/www/x/public_html",
             false,
             None,
             "t",
@@ -306,5 +326,87 @@ mod tests {
         assert_eq!(s.status(), SiteStatus::Disabled);
         s.enable("admin");
         assert_eq!(s.status(), SiteStatus::Active);
+    }
+}
+
+#[cfg(test)]
+mod prop {
+    use super::*;
+    use proptest::prelude::*;
+
+    fn make_site(domain: &str, aliases: Vec<String>, doc_root: &str) -> Result<Site, SiteError> {
+        Site::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            domain,
+            aliases,
+            doc_root,
+            false,
+            None,
+            "tester",
+        )
+    }
+
+    proptest! {
+        #[test]
+        fn prop_domain_with_slash_rejected(s in "[a-z0-9]+/[a-z0-9]+") {
+            prop_assert!(!matches!(
+                make_site(&s, vec![], "/var/www/x/public_html"),
+                Err(SiteError::InvalidDomain(_))
+            ) || s.contains('/'));
+        }
+
+        #[test]
+        fn prop_domain_with_space_rejected(
+            prefix in "[a-z0-9]{1,20}",
+            suffix in "[a-z0-9]{1,20}"
+        ) {
+            let domain = format!("{prefix} {suffix}");
+            prop_assert!(matches!(
+                make_site(&domain, vec![], "/var/www/x/public_html"),
+                Err(SiteError::InvalidDomain(_))
+            ));
+        }
+
+        #[test]
+        fn prop_domain_with_wildcard_rejected(s in "[a-z0-9*]{1,20}") {
+            if s.contains('*') {
+                prop_assert!(matches!(
+                    make_site(&s, vec![], "/var/www/x/public_html"),
+                    Err(SiteError::InvalidDomain(_))
+                ));
+            }
+        }
+
+        #[test]
+        fn prop_domain_with_control_chars_rejected(
+            s in "\\p{C}{1,20}"
+        ) {
+            prop_assert!(!s.is_empty());
+            prop_assert!(matches!(
+                make_site(&s, vec![], "/var/www/x/public_html"),
+                Err(SiteError::InvalidDomain(_))
+            ));
+        }
+
+        #[test]
+        fn prop_document_root_with_parent_traversal_rejected(
+            root in "/var/www/[a-z]{1,8}/\\.\\./[a-z]{1,8}"
+        ) {
+            prop_assert!(matches!(
+                make_site("example.com", vec![], &root),
+                Err(SiteError::InvalidDocumentRoot(_))
+            ));
+        }
+
+        #[test]
+        fn prop_alias_matching_primary_rejected(
+            domain in "[a-z0-9]{1,10}\\.[a-z0-9]{1,10}"
+        ) {
+            prop_assert!(matches!(
+                make_site(&domain, vec![domain.clone()], "/var/www/x/public_html"),
+                Err(SiteError::InvalidAlias(_, _))
+            ));
+        }
     }
 }

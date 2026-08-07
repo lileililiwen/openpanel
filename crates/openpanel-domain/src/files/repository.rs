@@ -31,11 +31,8 @@ pub trait FileRepository: Send + Sync + 'static {
         bytes: &[u8],
     ) -> Result<(), FileError>;
 
-    async fn mkdir(
-        &self,
-        chroot_canonical: &std::path::Path,
-        path: &Path,
-    ) -> Result<(), FileError>;
+    async fn mkdir(&self, chroot_canonical: &std::path::Path, path: &Path)
+    -> Result<(), FileError>;
 
     async fn remove(
         &self,

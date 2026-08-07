@@ -28,3 +28,9 @@ data/
 *.sqlite-journal
 *.db
 certs/
+
+# Proptest regression cases (auto-generated on failure)
+**/proptest-regressions/
+
+# Test artifacts
+/tmp/openpanel-test/

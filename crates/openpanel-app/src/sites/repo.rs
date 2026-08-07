@@ -24,8 +24,8 @@ impl SqliteSiteRepository {
 #[async_trait]
 impl SiteRepository for SqliteSiteRepository {
     async fn insert(&self, site: &Site) -> Result<(), RepoError> {
-        let aliases_json = serde_json::to_string(site.aliases())
-            .map_err(|e| RepoError::new(e.to_string()))?;
+        let aliases_json =
+            serde_json::to_string(site.aliases()).map_err(|e| RepoError::new(e.to_string()))?;
         sqlx::query(
             r#"
             INSERT INTO sites
@@ -104,12 +104,7 @@ impl SiteRepository for SqliteSiteRepository {
         rows.into_iter().map(SiteRow::into_site).collect()
     }
 
-    async fn update_status(
-        &self,
-        id: Uuid,
-        status: SiteStatus,
-        by: &str,
-    ) -> Result<(), RepoError> {
+    async fn update_status(&self, id: Uuid, status: SiteStatus, by: &str) -> Result<(), RepoError> {
         sqlx::query("UPDATE sites SET status = ?, updated_at = ?, modified_by = ? WHERE id = ?")
             .bind(status.as_str())
             .bind(Utc::now().to_rfc3339())
@@ -186,8 +181,8 @@ struct SiteRow {
 
 impl SiteRow {
     fn into_site(self) -> Result<Site, RepoError> {
-        let id = Uuid::parse_str(&self.id)
-            .map_err(|e| RepoError::new(format!("bad site id: {e}")))?;
+        let id =
+            Uuid::parse_str(&self.id).map_err(|e| RepoError::new(format!("bad site id: {e}")))?;
         let owner_id = Uuid::parse_str(&self.owner_id)
             .map_err(|e| RepoError::new(format!("bad owner id: {e}")))?;
         let aliases: Vec<String> = serde_json::from_str(&self.aliases)

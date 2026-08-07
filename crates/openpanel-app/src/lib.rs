@@ -3,6 +3,8 @@
 //! `Module` trait from `openpanel-core` and registers its services,
 //! routes, CLI, and migrations.
 
+#![deny(rustdoc::broken_intra_doc_links)]
+
 pub mod databases;
 pub mod files;
 pub mod identity;

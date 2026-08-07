@@ -20,10 +20,7 @@ pub struct FilesService {
 }
 
 impl FilesService {
-    pub fn new(
-        sites: Arc<dyn SiteRepository>,
-        audit: Arc<dyn AuditService>,
-    ) -> Self {
+    pub fn new(sites: Arc<dyn SiteRepository>, audit: Arc<dyn AuditService>) -> Self {
         Self {
             repo: Arc::new(FilesystemRepository::new()),
             sites,
@@ -124,12 +121,7 @@ impl FilesService {
         Ok(())
     }
 
-    pub async fn mkdir(
-        &self,
-        caller: &User,
-        site_id: Uuid,
-        path: &Path,
-    ) -> Result<(), FileError> {
+    pub async fn mkdir(&self, caller: &User, site_id: Uuid, path: &Path) -> Result<(), FileError> {
         let site = self.load_site(caller, site_id).await?;
         let chroot = crate::files::repo::canonicalize_chroot(site.document_root()).await?;
         self.repo.mkdir(&chroot, path).await?;

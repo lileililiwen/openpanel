@@ -41,17 +41,25 @@ fn validate(s: &str) -> Result<(), DomainError> {
         None => return Err(DomainError::Validation("email missing '@'".into())),
     };
     if at == 0 || at == s.len() - 1 {
-        return Err(DomainError::Validation("email has empty local/domain part".into()));
+        return Err(DomainError::Validation(
+            "email has empty local/domain part".into(),
+        ));
     }
     let domain = &s[at + 1..];
     if !domain.contains('.') {
-        return Err(DomainError::Validation("email domain must contain a dot".into()));
+        return Err(DomainError::Validation(
+            "email domain must contain a dot".into(),
+        ));
     }
     if domain.starts_with('.') || domain.ends_with('.') {
-        return Err(DomainError::Validation("email domain cannot start or end with a dot".into()));
+        return Err(DomainError::Validation(
+            "email domain cannot start or end with a dot".into(),
+        ));
     }
     if !s.chars().all(|c| c.is_ascii_graphic() || c == ' ') {
-        return Err(DomainError::Validation("email contains invalid characters".into()));
+        return Err(DomainError::Validation(
+            "email contains invalid characters".into(),
+        ));
     }
     Ok(())
 }

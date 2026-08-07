@@ -5,6 +5,7 @@
 //! `openpanel-domain`; concrete modules (services + repos + migrations) live in
 //! `openpanel-app`. Adapters (HTTP, CLI) sit on top.
 
+#![deny(rustdoc::broken_intra_doc_links)]
 #![allow(clippy::result_large_err)]
 
 pub mod audit;

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use axum::body::Bytes;
-use axum::extract::{multipart::Multipart, Path, State};
+use axum::extract::{Path, State, multipart::Multipart};
 use axum::http::header;
 use axum::response::{IntoResponse, Response};
 use axum::routing::{delete, patch, post};
@@ -35,7 +35,10 @@ async fn list_root(
     Path(site_id): Path<Uuid>,
 ) -> ApiResult<Response> {
     let rel = FilePath::root();
-    let entries = svc.list_dir(&user, site_id, &rel).await.map_err(map_file_err)?;
+    let entries = svc
+        .list_dir(&user, site_id, &rel)
+        .await
+        .map_err(map_file_err)?;
     let body = Json(ListDirResponse {
         entries: entries.iter().map(FileInfoDto::from_info).collect(),
     });
@@ -52,9 +55,13 @@ async fn list_or_read(
     let abs = openpanel_app::files::repo::resolve_path(&chroot, &rel)
         .await
         .map_err(map_file_err)?;
-    let meta = tokio::fs::metadata(&abs)
-        .await
-        .map_err(|e| ApiError::Internal(e.to_string()))?;
+    let meta = match tokio::fs::metadata(&abs).await {
+        Ok(m) => m,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            return Err(ApiError::NotFound(format!("{rel} not found")));
+        }
+        Err(e) => return Err(ApiError::Internal(e.to_string())),
+    };
     if meta.is_dir() {
         let entries = svc
             .repo()

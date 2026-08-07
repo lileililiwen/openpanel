@@ -73,12 +73,7 @@ impl MySqlClient {
         self.run(&sql).await
     }
 
-    pub async fn grant_all(
-        &self,
-        db: &str,
-        user: &str,
-        host: &str,
-    ) -> Result<(), DatabaseError> {
+    pub async fn grant_all(&self, db: &str, user: &str, host: &str) -> Result<(), DatabaseError> {
         if !self.available() {
             return Err(DatabaseError::MysqlMissing);
         }

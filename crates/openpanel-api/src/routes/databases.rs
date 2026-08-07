@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use axum::extract::{Path, State};
-use axum::routing::{delete, get, post};
+use axum::routing::{get, post};
 use axum::{Json, Router};
 use openpanel_app::DatabasesService;
 use openpanel_domain::DatabaseError;
@@ -36,7 +36,13 @@ async fn create_database(
 ) -> ApiResult<Json<CreatedDatabaseResponse>> {
     let owner_id = req.owner_id.unwrap_or(user.id());
     let (db, password) = svc
-        .create_database(&user, owner_id, &req.owner_username, &req.suffix, req.charset)
+        .create_database(
+            &user,
+            owner_id,
+            &req.owner_username,
+            &req.suffix,
+            req.charset,
+        )
         .await
         .map_err(map_db_err)?;
     Ok(Json(CreatedDatabaseResponse {
@@ -68,15 +74,11 @@ async fn change_password(
     AuthUser(user, _): AuthUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let password = svc
-        .change_password(&user, id)
-        .await
-        .map_err(map_db_err)?;
+    let password = svc.change_password(&user, id).await.map_err(map_db_err)?;
     Ok(Json(serde_json::json!({
         "ok": true,
         "password": password,
-    }))
-    .into())
+    })))
 }
 
 fn map_db_err(e: DatabaseError) -> ApiError {
@@ -87,9 +89,9 @@ fn map_db_err(e: DatabaseError) -> ApiError {
             ApiError::BadRequest(e.to_string())
         }
         DatabaseError::DuplicateDatabase(_) => ApiError::Conflict(e.to_string()),
-        DatabaseError::MysqlMissing => ApiError::Internal(
-            "mysql CLI not installed; install mysql-server".to_string(),
-        ),
+        DatabaseError::MysqlMissing => {
+            ApiError::Internal("mysql CLI not installed; install mysql-server".to_string())
+        }
         DatabaseError::MasterKeyMissing => {
             ApiError::Internal("master key missing from config".to_string())
         }

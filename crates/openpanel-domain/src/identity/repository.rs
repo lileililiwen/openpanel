@@ -1,10 +1,10 @@
 use async_trait::async_trait;
 use uuid::Uuid;
 
+use crate::RepoError;
 use crate::identity::role::Role;
 use crate::identity::session::{Session, SessionToken};
 use crate::identity::user::User;
-use crate::RepoError;
 
 #[async_trait]
 pub trait UserRepository: Send + Sync + 'static {

@@ -42,6 +42,9 @@ mod tests {
     #[test]
     fn round_trip() {
         assert_eq!(SiteStatus::Active.as_str(), "active");
-        assert_eq!("disabled".parse::<SiteStatus>().unwrap(), SiteStatus::Disabled);
+        assert_eq!(
+            "disabled".parse::<SiteStatus>().unwrap(),
+            SiteStatus::Disabled
+        );
     }
 }

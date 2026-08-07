@@ -2,6 +2,8 @@
 //! Zero I/O — no sqlx, no axum, no tokio. Implementation lives in
 //! `openpanel-app`.
 
+#![deny(rustdoc::broken_intra_doc_links)]
+
 pub mod common;
 pub mod databases;
 pub mod files;

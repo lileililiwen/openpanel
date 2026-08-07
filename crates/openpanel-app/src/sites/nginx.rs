@@ -6,9 +6,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use openpanel_domain::SiteError;
 use openpanel_domain::sites::site::Site;
 use openpanel_domain::sites::status::SiteStatus;
-use openpanel_domain::SiteError;
 
 #[derive(Debug, Clone)]
 pub struct NginxPaths {
@@ -28,16 +28,27 @@ impl Default for NginxPaths {
 }
 
 impl NginxPaths {
+    /// Construct paths rooted under an arbitrary directory. Used by tests to
+    /// sandbox nginx config writes.
+    pub fn under(root: PathBuf) -> Self {
+        Self {
+            conf_d_active: root.join("active"),
+            conf_d_disabled: root.join("disabled"),
+            nginx_binary: PathBuf::from("/usr/sbin/nginx"),
+        }
+    }
+}
+
+impl NginxPaths {
     pub fn detect() -> Self {
         let mut paths = NginxPaths::default();
-        if let Ok(out) = Command::new("which").arg("nginx").output() {
-            if out.status.success() {
-                if let Ok(s) = String::from_utf8(out.stdout) {
-                    let s = s.trim();
-                    if !s.is_empty() {
-                        paths.nginx_binary = PathBuf::from(s);
-                    }
-                }
+        if let Ok(out) = Command::new("which").arg("nginx").output()
+            && out.status.success()
+            && let Ok(s) = String::from_utf8(out.stdout)
+        {
+            let s = s.trim();
+            if !s.is_empty() {
+                paths.nginx_binary = PathBuf::from(s);
             }
         }
         paths
@@ -52,6 +63,7 @@ impl NginxPaths {
     }
 }
 
+#[derive(Clone)]
 pub struct NginxConfigGenerator {
     paths: NginxPaths,
 }
@@ -139,11 +151,9 @@ server {{
             return Ok(());
         }
 
-        let previous = fs::read_to_string(&active)
-            .map_err(|e| SiteError::Io(e.to_string()))?;
+        let previous = fs::read_to_string(&active).map_err(|e| SiteError::Io(e.to_string()))?;
 
-        fs::remove_file(&active)
-            .map_err(|e| SiteError::Io(e.to_string()))?;
+        fs::remove_file(&active).map_err(|e| SiteError::Io(e.to_string()))?;
 
         if !self.nginx_available() {
             tracing::warn!(domain = site.primary_domain(), "nginx missing; skipping -t");
@@ -156,15 +166,13 @@ server {{
         }
 
         if !self.test()? {
-            fs::write(&active, previous)
-                .map_err(|e| SiteError::Io(e.to_string()))?;
+            fs::write(&active, previous).map_err(|e| SiteError::Io(e.to_string()))?;
             return Err(SiteError::NginxTest("nginx -t failed after disable".into()));
         }
 
         fs::create_dir_all(self.paths.conf_d_disabled.clone())
             .map_err(|e| SiteError::Io(e.to_string()))?;
-        fs::rename(&active, &disabled)
-            .map_err(|e| SiteError::Io(e.to_string()))?;
+        fs::rename(&active, &disabled).map_err(|e| SiteError::Io(e.to_string()))?;
         self.reload()?;
         Ok(())
     }
@@ -221,8 +229,7 @@ server {{
     }
 
     fn ensure_dirs(&self) -> Result<(), SiteError> {
-        fs::create_dir_all(&self.paths.conf_d_active)
-            .map_err(|e| SiteError::Io(e.to_string()))?;
+        fs::create_dir_all(&self.paths.conf_d_active).map_err(|e| SiteError::Io(e.to_string()))?;
         fs::create_dir_all(&self.paths.conf_d_disabled)
             .map_err(|e| SiteError::Io(e.to_string()))?;
         Ok(())
@@ -285,7 +292,7 @@ pub fn status_to_path_suffix(status: SiteStatus) -> &'static str {
 mod tests {
     use super::*;
     use chrono::Utc;
-    use openpanel_domain::{Email, Password, Role, Username, User};
+    use openpanel_domain::{Email, Password, Role, User, Username};
     use uuid::Uuid;
 
     fn dummy_site() -> Site {

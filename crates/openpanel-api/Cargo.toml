@@ -22,3 +22,8 @@ async-trait = { workspace = true }
 openpanel-core = { workspace = true }
 openpanel-domain = { workspace = true }
 openpanel-app = { workspace = true }
+
+[dev-dependencies]
+openpanel-test-support = { workspace = true }
+tokio = { workspace = true }
+serde_json = { workspace = true }

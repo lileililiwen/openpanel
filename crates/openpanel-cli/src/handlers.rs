@@ -5,11 +5,11 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use openpanel_api::build_router;
+use openpanel_app::databases::crypto as db_crypto;
 use openpanel_app::{DatabasesModule, FilesModule, IdentityModule, SitesModule};
 use openpanel_core::{
     AppContext, Config, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
 };
-use openpanel_app::databases::crypto as db_crypto;
 use openpanel_domain::Role;
 use tokio::net::TcpListener;
 
@@ -62,10 +62,16 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
 fn load_master_key(config: &Arc<Config>) -> anyhow::Result<[u8; 32]> {
     let raw = std::env::var("OPENPANEL__DATABASE__MASTER_KEY")
         .ok()
-        .or_else(|| config.module_config("database").and_then(|v| v.get("master_key")).and_then(|v| v.as_str().map(String::from)))
-        .ok_or_else(|| anyhow::anyhow!("OPENPANEL__DATABASE__MASTER_KEY must be set (base64-encoded 32 bytes)"))?;
-    db_crypto::decode_master_key(&raw)
-        .map_err(|e| anyhow::anyhow!(e.to_string()))
+        .or_else(|| {
+            config
+                .module_config("database")
+                .and_then(|v| v.get("master_key"))
+                .and_then(|v| v.as_str().map(String::from))
+        })
+        .ok_or_else(|| {
+            anyhow::anyhow!("OPENPANEL__DATABASE__MASTER_KEY must be set (base64-encoded 32 bytes)")
+        })?;
+    db_crypto::decode_master_key(&raw).map_err(|e| anyhow::anyhow!(e.to_string()))
 }
 
 pub async fn migrate(config: Arc<Config>) -> anyhow::Result<()> {
@@ -177,7 +183,11 @@ pub async fn list_sites(config: Arc<Config>) -> anyhow::Result<()> {
         .into_iter()
         .find(|u| u.username().as_str() == "admin")
         .ok_or_else(|| anyhow::anyhow!("caller not found"))?;
-    for site in sites_svc.list_sites(&caller).await.map_err(|e| anyhow::anyhow!(e.to_string()))? {
+    for site in sites_svc
+        .list_sites(&caller)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+    {
         println!(
             "{}  {}  {}  owner={}",
             site.id(),
@@ -242,7 +252,11 @@ pub async fn disable_site(config: Arc<Config>, id: String) -> anyhow::Result<()>
 
 async fn bootstrap_persistence(
     config: &Arc<Config>,
-) -> anyhow::Result<(sqlx::Pool<sqlx::Sqlite>, Arc<SqliteAuditService>, Arc<dyn openpanel_core::DatabaseDriver>)> {
+) -> anyhow::Result<(
+    sqlx::Pool<sqlx::Sqlite>,
+    Arc<SqliteAuditService>,
+    Arc<dyn openpanel_core::DatabaseDriver>,
+)> {
     let driver = SqliteDriver::new(config.database().url.clone());
     let pool = driver.connect().await.context("connect sqlite")?;
     SqliteAuditService::new(pool.clone())
@@ -256,7 +270,11 @@ async fn bootstrap_persistence(
 
 async fn build_identity(
     config: Arc<Config>,
-) -> anyhow::Result<(Arc<openpanel_app::IdentityService>, Arc<SqliteAuditService>, sqlx::Pool<sqlx::Sqlite>)> {
+) -> anyhow::Result<(
+    Arc<openpanel_app::IdentityService>,
+    Arc<SqliteAuditService>,
+    sqlx::Pool<sqlx::Sqlite>,
+)> {
     let (pool, audit, db) = bootstrap_persistence(&config).await?;
     let ctx = AppContext::new(config, db, audit.clone());
     let module = IdentityModule::new(&ctx).await;
@@ -265,23 +283,43 @@ async fn build_identity(
 
 async fn build_sites(
     config: Arc<Config>,
-) -> anyhow::Result<(Arc<openpanel_app::SitesService>, Arc<openpanel_app::IdentityService>, Arc<SqliteAuditService>, sqlx::Pool<sqlx::Sqlite>)> {
+) -> anyhow::Result<(
+    Arc<openpanel_app::SitesService>,
+    Arc<openpanel_app::IdentityService>,
+    Arc<SqliteAuditService>,
+    sqlx::Pool<sqlx::Sqlite>,
+)> {
     let (pool, audit, db) = bootstrap_persistence(&config).await?;
     let ctx = AppContext::new(config, db, audit.clone());
     let identity_module = IdentityModule::new(&ctx).await;
     let sites_module = SitesModule::new(&ctx).await;
-    Ok((sites_module.service(), identity_module.service(), audit, pool))
+    Ok((
+        sites_module.service(),
+        identity_module.service(),
+        audit,
+        pool,
+    ))
 }
 
 async fn build_databases(
     config: Arc<Config>,
-) -> anyhow::Result<(Arc<openpanel_app::DatabasesService>, Arc<openpanel_app::IdentityService>, Arc<SqliteAuditService>, sqlx::Pool<sqlx::Sqlite>)> {
+) -> anyhow::Result<(
+    Arc<openpanel_app::DatabasesService>,
+    Arc<openpanel_app::IdentityService>,
+    Arc<SqliteAuditService>,
+    sqlx::Pool<sqlx::Sqlite>,
+)> {
     let (pool, audit, db) = bootstrap_persistence(&config).await?;
     let ctx = AppContext::new(config, db, audit.clone());
     let identity_module = IdentityModule::new(&ctx).await;
     let master_key = load_master_key(&build_helper_config(&pool, &audit))?;
     let databases_module = DatabasesModule::new(&ctx, master_key).await;
-    Ok((databases_module.service(), identity_module.service(), audit, pool))
+    Ok((
+        databases_module.service(),
+        identity_module.service(),
+        audit,
+        pool,
+    ))
 }
 
 // Helper that re-derives an Arc<Config> from the persistence layer.
@@ -390,17 +428,25 @@ pub async fn change_database_password(config: Arc<Config>, id: String) -> anyhow
 
 async fn build_files(
     config: Arc<Config>,
-) -> anyhow::Result<(Arc<openpanel_app::FilesService>, Arc<openpanel_app::SitesService>, Arc<openpanel_app::IdentityService>)> {
-    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+) -> anyhow::Result<(
+    Arc<openpanel_app::FilesService>,
+    Arc<openpanel_app::SitesService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (_pool, audit, db) = bootstrap_persistence(&config).await?;
     let ctx = AppContext::new(config, db, audit.clone());
     let identity_module = IdentityModule::new(&ctx).await;
     let sites_module = SitesModule::new(&ctx).await;
     let files_module = FilesModule::new(&ctx).await;
-    Ok((files_module.service(), sites_module.service(), identity_module.service()))
+    Ok((
+        files_module.service(),
+        sites_module.service(),
+        identity_module.service(),
+    ))
 }
 
 async fn resolve_site_id(
-    sites_svc: &openpanel_app::SitesService,
+    _sites_svc: &openpanel_app::SitesService,
     site: &str,
 ) -> anyhow::Result<uuid::Uuid> {
     // Try UUID first
@@ -428,7 +474,7 @@ pub async fn file_list(config: Arc<Config>, site: String, path: String) -> anyho
         .list_dir(&caller, site_id, &rel)
         .await
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-    println!("{:<8} {:>10}  {:<6}  {}", "TYPE", "SIZE", "MODE", "NAME");
+    println!("{:<8} {:>10}  {:<6}  NAME", "TYPE", "SIZE", "MODE");
     for e in entries {
         let t = if e.is_dir { "dir" } else { "file" };
         println!("{:<8} {:>10}  {:<6}  {}", t, e.size, e.mode, e.name);
@@ -456,7 +502,12 @@ pub async fn file_read(config: Arc<Config>, site: String, path: String) -> anyho
     Ok(())
 }
 
-pub async fn file_write(config: Arc<Config>, site: String, path: String, content: String) -> anyhow::Result<()> {
+pub async fn file_write(
+    config: Arc<Config>,
+    site: String,
+    path: String,
+    content: String,
+) -> anyhow::Result<()> {
     let (files_svc, sites_svc, identity_svc) = build_files(config).await?;
     let site_id = resolve_site_id(&sites_svc, &site).await?;
     let caller = identity_svc
@@ -494,7 +545,12 @@ pub async fn file_mkdir(config: Arc<Config>, site: String, path: String) -> anyh
     Ok(())
 }
 
-pub async fn file_rm(config: Arc<Config>, site: String, path: String, recursive: bool) -> anyhow::Result<()> {
+pub async fn file_rm(
+    config: Arc<Config>,
+    site: String,
+    path: String,
+    recursive: bool,
+) -> anyhow::Result<()> {
     let (files_svc, sites_svc, identity_svc) = build_files(config).await?;
     let site_id = resolve_site_id(&sites_svc, &site).await?;
     let caller = identity_svc
@@ -513,7 +569,12 @@ pub async fn file_rm(config: Arc<Config>, site: String, path: String, recursive:
     Ok(())
 }
 
-pub async fn file_rename(config: Arc<Config>, site: String, from: String, to: String) -> anyhow::Result<()> {
+pub async fn file_rename(
+    config: Arc<Config>,
+    site: String,
+    from: String,
+    to: String,
+) -> anyhow::Result<()> {
     let (files_svc, sites_svc, identity_svc) = build_files(config).await?;
     let site_id = resolve_site_id(&sites_svc, &site).await?;
     let caller = identity_svc
@@ -534,7 +595,12 @@ pub async fn file_rename(config: Arc<Config>, site: String, from: String, to: St
     Ok(())
 }
 
-pub async fn file_chmod(config: Arc<Config>, site: String, path: String, mode: String) -> anyhow::Result<()> {
+pub async fn file_chmod(
+    config: Arc<Config>,
+    site: String,
+    path: String,
+    mode: String,
+) -> anyhow::Result<()> {
     let (files_svc, sites_svc, identity_svc) = build_files(config).await?;
     let site_id = resolve_site_id(&sites_svc, &site).await?;
     let caller = identity_svc

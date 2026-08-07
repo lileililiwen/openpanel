@@ -40,6 +40,9 @@ mod tests {
     #[test]
     fn round_trip() {
         assert_eq!(DatabaseEngine::Mysql.as_str(), "mysql");
-        assert_eq!("mysql".parse::<DatabaseEngine>().unwrap(), DatabaseEngine::Mysql);
+        assert_eq!(
+            "mysql".parse::<DatabaseEngine>().unwrap(),
+            DatabaseEngine::Mysql
+        );
     }
 }

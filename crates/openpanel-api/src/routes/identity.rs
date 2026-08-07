@@ -69,8 +69,8 @@ async fn logout(
     AuthUser(user, _session): AuthUser,
     headers_in: HeaderMap,
 ) -> ApiResult<impl IntoResponse> {
-    let ip = client_ip(&headers_in);
-    let ua = user_agent(&headers_in);
+    let _ip = client_ip(&headers_in);
+    let _ua = user_agent(&headers_in);
     let token_str = headers_in
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
@@ -83,7 +83,8 @@ async fn logout(
                 .and_then(|s| {
                     s.split(';').find_map(|p| {
                         let p = p.trim();
-                        p.strip_prefix(&format!("{SESSION_COOKIE}=")).map(|v| v.to_string())
+                        p.strip_prefix(&format!("{SESSION_COOKIE}="))
+                            .map(|v| v.to_string())
                     })
                 })
         })

@@ -45,10 +45,7 @@ pub trait Module: Send + Sync + 'static {
     }
 
     /// Background tasks spawned by the agent supervisor.
-    fn background_tasks(
-        &self,
-        _ctx: &AppContext,
-    ) -> Vec<Box<dyn BackgroundTask>> {
+    fn background_tasks(&self, _ctx: &AppContext) -> Vec<Box<dyn BackgroundTask>> {
         Vec::new()
     }
 }

@@ -9,7 +9,7 @@ use axum::http::header::COOKIE;
 use axum::middleware::Next;
 use axum::response::Response;
 use openpanel_app::IdentityService;
-use openpanel_domain::{Session, SessionToken, User};
+use openpanel_domain::SessionToken;
 
 use crate::extract::{AuthSession, AuthSessionExt};
 
@@ -21,31 +21,29 @@ pub async fn session_middleware(
     next: Next,
 ) -> Response {
     let token = extract_token(&req);
-    if let Some(tok) = token {
-        if let Ok(parsed) = SessionToken::from_string(tok) {
-            if let Ok((user, session)) = svc.resolve_session(&parsed).await {
-                req.extensions_mut().insert(AuthSession { user, session });
-            }
-        }
+    if let Some(tok) = token
+        && let Ok(parsed) = SessionToken::from_string(tok)
+        && let Ok((user, session)) = svc.resolve_session(&parsed).await
+    {
+        req.extensions_mut().insert(AuthSession { user, session });
     }
     next.run(req).await
 }
 
 fn extract_token(req: &Request) -> Option<String> {
-    if let Some(h) = req.headers().get(axum::http::header::AUTHORIZATION) {
-        if let Ok(s) = h.to_str() {
-            if let Some(rest) = s.strip_prefix("Bearer ") {
-                return Some(rest.trim().to_string());
-            }
-        }
+    if let Some(h) = req.headers().get(axum::http::header::AUTHORIZATION)
+        && let Ok(s) = h.to_str()
+        && let Some(rest) = s.strip_prefix("Bearer ")
+    {
+        return Some(rest.trim().to_string());
     }
-    if let Some(h) = req.headers().get(COOKIE) {
-        if let Ok(s) = h.to_str() {
-            for part in s.split(';') {
-                let part = part.trim();
-                if let Some(rest) = part.strip_prefix(&format!("{SESSION_COOKIE}=")) {
-                    return Some(rest.to_string());
-                }
+    if let Some(h) = req.headers().get(COOKIE)
+        && let Ok(s) = h.to_str()
+    {
+        for part in s.split(';') {
+            let part = part.trim();
+            if let Some(rest) = part.strip_prefix(&format!("{SESSION_COOKIE}=")) {
+                return Some(rest.to_string());
             }
         }
     }

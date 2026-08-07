@@ -38,10 +38,7 @@ impl SqliteDriver {
     }
 
     pub async fn connect(&self) -> CoreResult<SqlitePool> {
-        let opts: SqliteConnectOptions = self
-            .url
-            .parse()
-            .map_err(DatabaseError::Sqlx)?;
+        let opts: SqliteConnectOptions = self.url.parse().map_err(DatabaseError::Sqlx)?;
         let opts = opts
             .create_if_missing(true)
             .journal_mode(SqliteJournalMode::Wal)
@@ -53,12 +50,13 @@ impl SqliteDriver {
             .strip_prefix("sqlite://")
             .or_else(|| self.url.strip_prefix("sqlite:"))
             .unwrap_or(&self.url);
-        if path_str != ":memory:" && !path_str.is_empty() {
-            if let Some(parent) = Path::new(path_str).parent() {
-                if !parent.as_os_str().is_empty() && !parent.exists() {
-                    std::fs::create_dir_all(parent)?;
-                }
-            }
+        if path_str != ":memory:"
+            && !path_str.is_empty()
+            && let Some(parent) = Path::new(path_str).parent()
+            && !parent.as_os_str().is_empty()
+            && !parent.exists()
+        {
+            std::fs::create_dir_all(parent)?;
         }
 
         let pool = SqlitePoolOptions::new()

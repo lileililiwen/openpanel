@@ -1,7 +1,7 @@
 use std::fmt;
 
-use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use chrono::{DateTime, Duration, Utc};
 use rand::RngCore;
 use serde::{Deserialize, Serialize};
@@ -76,9 +76,9 @@ impl Session {
         source_ip: Option<String>,
         user_agent: Option<String>,
     ) -> (Self, SessionToken) {
+        use argon2::Argon2;
         use argon2::password_hash::rand_core::OsRng;
         use argon2::password_hash::{PasswordHasher, SaltString};
-        use argon2::Argon2;
 
         let salt = SaltString::generate(&mut OsRng);
         let hash = Argon2::default()
@@ -106,13 +106,12 @@ impl Session {
     }
 
     pub fn is_expired(&self, now: DateTime<Utc>) -> bool {
-        now > self.absolute_expires_at
-            || now - self.last_seen_at > SESSION_INACTIVITY
+        now > self.absolute_expires_at || now - self.last_seen_at > SESSION_INACTIVITY
     }
 
     pub fn verify_token(&self, token: &SessionToken) -> bool {
-        use argon2::password_hash::{PasswordHash, PasswordVerifier};
         use argon2::Argon2;
+        use argon2::password_hash::{PasswordHash, PasswordVerifier};
         let parsed = match PasswordHash::new(&self.token_hash) {
             Ok(p) => p,
             Err(_) => return false,
