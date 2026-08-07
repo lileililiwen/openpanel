@@ -137,6 +137,60 @@ failing path.
 Each change adds a new bounded context, registers it on the
 `ModuleRegistry`, and ships its own migration set.
 
+## Testing
+
+Four test categories live in this repo:
+
+| Category | Where | Run with |
+|---|---|---|
+| Unit | `#[cfg(test)]` in each module | `cargo test --workspace` |
+| Property | `proptest!` in `openpanel-domain` | `cargo test --workspace` |
+| Integration | `tests/integration/*.rs` | `cargo test -p openpanel --test integration` |
+| CLI E2E | `tests/cli/*.rs` | `cargo test -p openpanel --test cli_*` |
+
+Integration tests boot a real axum router against a per-test SQLite DB
+and a sandboxed temp directory for nginx configs / document roots.
+See `tests/README.md` and `crates/openpanel-test-support/README.md`.
+
+```bash
+# Run everything
+./scripts/check-tests.sh
+
+# A single failing test
+cargo test -p openpanel --test integration sites::sites_list_empty_for_fresh_db -- --nocapture
+
+# More proptest cases for CI
+PROPTEST_CASES=1000 cargo test --workspace
+```
+
+## Quality
+
+The codebase enforces a strict quality policy via `clippy.toml` and the
+root `Cargo.toml` `[workspace.lints]` block. The intent: catch bugs at
+compile time rather than in production.
+
+**Rules:**
+
+- `unsafe_code = "forbid"` — no `unsafe` blocks anywhere.
+- `unwrap_used = "deny"` / `expect_used = "deny"` / `panic_used = "deny"` /
+  `todo = "deny"` / `unimplemented = "deny"` — in **production code**.
+  Test code is exempt.
+- `missing_docs = "warn"` — every public item should have a doc comment.
+- `rustdoc::broken_intra_doc_links = "deny"` — enforced per-crate.
+- `disallowed-methods = ["std::panic::catch_unwind"]` in `clippy.toml`.
+
+**Local checks:**
+
+```bash
+./scripts/check-quality.sh   # fmt + clippy + doc
+./scripts/check-tests.sh     # check + test
+```
+
+**CI:** `.github/workflows/ci.yml` runs the same gates on every push.
+
+**Dependency audit:** `cargo audit` is part of the quality gate. Known
+false positives go in `audit-suppressions.toml`.
+
 ## Repository layout
 
 ```
@@ -146,9 +200,13 @@ crates/
 ├── openpanel-app/        use-case services + SQLite repository adapters
 ├── openpanel-api/        axum routes, middleware, DTOs
 ├── openpanel-cli/        clap commands + serve/migrate/user handlers
-└── openpanel-agent/      standalone binary (same handler set as cli::serve)
+├── openpanel-agent/      standalone binary (same handler set as cli::serve)
+└── openpanel-test-support/  TestDb, TestServer, mocks (dev-only)
 web/                      React + Vite + TanStack Router frontend (skeleton)
 openspec/                 OpenSpec specs and change proposals
+scripts/                  check-tests.sh, check-quality.sh, coverage.sh
+tests/                    integration + CLI E2E tests
+.github/workflows/        CI pipelines
 ```
 
 ## License

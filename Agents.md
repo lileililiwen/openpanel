@@ -202,9 +202,26 @@ See `openspec/specs/testing/spec.md` for the full standard.
 - `cargo audit` blocks the build on known RUSTSEC advisories.
 - `cargo doc` enforces `rustdoc::broken_intra_doc_links`.
 
+**How to fix violations:**
+
+| Lint hit | Fix |
+|---|---|
+| `unwrap_used` | Replace with `?`, `match`, or `.expect("invariant: ...")` |
+| `expect_used` (with a vague message) | Add an invariant description: `.expect("user_id always set after create_user")` |
+| `panic_used` | Replace with a typed error in the function's return |
+| `todo` / `unimplemented` | Either implement it now or remove the code path |
+| `too_many_arguments` | Either group into an options struct or `#[allow]` with a justification comment |
+
 **Why:** a passing test does not guarantee safe code. A test that
 calls `.unwrap()` on input it never received will still panic in
 production. Static analysis catches what tests don't.
+
+**Workflow gate:** every PR must exit 0 from `./scripts/check-quality.sh`.
+Local invocation runs the same steps as CI:
+1. `cargo fmt --all -- --check`
+2. `cargo clippy --workspace --all-targets -- -D warnings`
+3. `cargo doc --workspace --no-deps`
+4. (optional) `cargo audit`
 
 `add-quality-engineering-infrastructure` defines the full policy.
 
@@ -282,5 +299,10 @@ When asked to implement a feature or spec:
 - `openspec/specs/testing/spec.md` — TDD infrastructure (TBD)
 - `openspec/specs/quality/spec.md` — quality engineering (TBD)
 - `openspec/changes/archive/` — frozen history of every shipped change
-- `crates/openpanel-test-support/README.md` — test helpers API (TBD)
-- `scripts/check-quality.sh` — single-entry CI script (TBD)
+- `crates/openpanel-test-support/README.md` — test helpers API
+- `tests/README.md` — how to run each test category
+- `scripts/check-quality.sh` — single-entry CI script
+- `scripts/check-tests.sh` — test gate
+- `scripts/coverage.sh` — coverage report (informational)
+- `.github/workflows/ci.yml` — CI pipeline
+- `clippy.toml` + `rustfmt.toml` — quality policy files
