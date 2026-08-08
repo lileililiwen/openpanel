@@ -23,7 +23,7 @@ It operationalises the rule from `Agents.md`:
 - `cargo audit` for known vulnerabilities in the dep graph.
 - `rustdoc::broken_intra_doc_links` enforced.
 - `unsafe_code = "forbid"` in production crates.
-- A single `scripts/check-quality.sh` entry point.
+- A single `make check` entry point that dispatches per-gate scripts.
 - Informational GitHub Actions workflow.
 - Informational coverage report.
 
@@ -69,19 +69,27 @@ tool's defaults; keeps CI diffs minimal.
 ### 4. `cargo audit` as a hard gate
 
 **Decision**: `cargo audit` failure blocks the build. Suppressions
-live in `audit-suppressions.toml` with `reason` and `expires_on`.
+live in `.cargo/audit.toml` (cargo-audit's default config location)
+with a `reason`.
 
 **Rationale**: A known RUSTSEC advisory is a real risk; ignoring it
 in CI is the same as ignoring a CVE. The suppression mechanism lets
 us acknowledge a false positive with an expiry.
 
-### 5. `scripts/check-quality.sh` chains to `scripts/check-tests.sh`
+### 5. `make check` dispatches each gate to its own script
 
-**Decision**: The quality script sources the test script rather than
-duplicating its logic. Output of each step is prefixed with
-`step:` for log scrapers.
+**Decision**: A root `Makefile` is the quality gate *manager*. It
+declares the gates and their order (`fmt clippy docs audit test`) but
+holds no business logic. Each gate is one small script under
+`scripts/` (`check-fmt.sh`, `check-clippy.sh`, `check-docs.sh`,
+`check-audit.sh`, `check-tests.sh`) that shares a single `step`
+helper (`scripts/lib/step.sh`) for the machine-parseable
+`step: <name> status: ok | failed` lines.
 
-**Rationale**: One entry point for CI; composition over duplication.
+**Rationale**: One entry point for CI (`make check`), while keeping
+each check independently runnable and fixable — a single fat script
+that does everything is hard to maintain. Composition over
+duplication, dispatch over implementation.
 
 ### 6. Coverage is informational in v0.1
 
@@ -111,7 +119,10 @@ Informational gives the team time to learn the baseline.
   `todo` / `unimplemented` in production code.
 - Run `cargo fmt` once across the workspace to normalise formatting.
 - Add `clippy.toml` and `[workspace.lints.rust]`.
-- Add `scripts/check-quality.sh`.
+- Add `scripts/lib/step.sh` and one per-gate script under `scripts/`
+  (`check-fmt.sh`, `check-clippy.sh`, `check-docs.sh`,
+  `check-audit.sh`); reuse `check-tests.sh` from the TDD change.
+- Add the root `Makefile` that dispatches them (`make check`).
 - Add `.github/workflows/ci.yml` (informational).
 - Update `Agents.md` with the new section.
 

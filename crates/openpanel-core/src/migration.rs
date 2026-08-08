@@ -6,30 +6,40 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 use sqlx::{Pool, Sqlite};
-use walkdir::WalkDir;
 
 use crate::error::{CoreResult, DatabaseError};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// A single SQL migration owned by a module.
 pub struct Migration {
+    /// Name of the module that owns this migration.
     pub module: &'static str,
+    /// Version string, e.g. `001`.
     pub version: String,
+    /// Short description of the change.
     pub description: String,
+    /// The SQL statements to execute.
     pub sql: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// A record of a migration that has been applied.
 pub struct MigrationRecord {
+    /// Module the migration belongs to.
     pub module: String,
+    /// Version of the applied migration.
     pub version: String,
+    /// When the migration was applied.
     pub applied_at: chrono::DateTime<chrono::Utc>,
 }
 
+/// Runs pending migrations and tracks applied versions in `_migrations`.
 pub struct MigrationRunner {
     pool: Pool<Sqlite>,
 }
 
 impl MigrationRunner {
+    /// Create a runner backed by the given SQLite pool.
     pub fn for_sqlite(pool: Pool<Sqlite>) -> Self {
         Self { pool }
     }
@@ -114,6 +124,7 @@ impl MigrationRunner {
         Ok(())
     }
 
+    /// Return the versions already applied for a module, ordered ascending.
     pub async fn applied_versions(&self, module: &str) -> CoreResult<Vec<String>> {
         let rows = sqlx::query_scalar::<_, String>(
             "SELECT version FROM _migrations WHERE module = ? ORDER BY version",
@@ -124,62 +135,8 @@ impl MigrationRunner {
         .map_err(DatabaseError::Sqlx)?;
         Ok(rows)
     }
-
-    /// Helper to load migrations from disk at runtime. Used by tests and
-    /// by the CLI's `migrate` subcommand when running from a source tree.
-    #[allow(dead_code)]
-    pub fn discover_from_disk(root: &std::path::Path) -> Vec<(String, Migration)> {
-        let mut out = Vec::new();
-        for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
-            if !entry.file_type().is_file() {
-                continue;
-            }
-            let path = entry.path();
-            let Some(name) = path.file_name().and_then(|s| s.to_str()) else {
-                continue;
-            };
-            if !name.ends_with(".sql") {
-                continue;
-            }
-            let Some(version) = parse_version(name) else {
-                continue;
-            };
-            let module = path
-                .parent()
-                .and_then(|p| p.file_name())
-                .and_then(|s| s.to_str())
-                .unwrap_or("unknown")
-                .to_string();
-            let sql = std::fs::read_to_string(path).unwrap_or_default();
-            let description = name.trim_end_matches(".sql").replace('_', " ");
-            out.push((
-                module.clone(),
-                Migration {
-                    module: Box::leak(module.into_boxed_str()),
-                    version,
-                    description,
-                    sql,
-                },
-            ));
-        }
-        out
-    }
 }
 
-fn parse_version(name: &str) -> Option<String> {
-    // V001__init.sql -> "001"
-    let stripped = name.strip_prefix('V')?;
-    let version = stripped.split('_').next()?;
-    if version.chars().all(|c| c.is_ascii_digit()) {
-        Some(version.to_string())
-    } else {
-        None
-    }
-}
-
-/// Split a SQL file into individual statements on `;` boundaries. Naive but
-/// sufficient for migrations — modules should not write stored procedures
-/// with embedded semicolons in v0.1.
 fn split_sql(sql: &str) -> Vec<String> {
     sql.split(';')
         .map(|s| s.trim().to_string())
@@ -190,6 +147,17 @@ fn split_sql(sql: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// V001__init.sql -> "001"
+    fn parse_version(name: &str) -> Option<String> {
+        let stripped = name.strip_prefix('V')?;
+        let version = stripped.split('_').next()?;
+        if version.chars().all(|c| c.is_ascii_digit()) {
+            Some(version.to_string())
+        } else {
+            None
+        }
+    }
 
     #[test]
     fn parses_version() {

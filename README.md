@@ -182,14 +182,14 @@ compile time rather than in production.
 **Local checks:**
 
 ```bash
-./scripts/check-quality.sh   # fmt + clippy + doc
-./scripts/check-tests.sh     # check + test
+make check                 # fmt + clippy + doc + audit + test
+make fmt                   # or run a single gate: make clippy, ...
 ```
 
 **CI:** `.github/workflows/ci.yml` runs the same gates on every push.
 
 **Dependency audit:** `cargo audit` is part of the quality gate. Known
-false positives go in `audit-suppressions.toml`.
+false positives go in `.cargo/audit.toml`.
 
 ## Repository layout
 
@@ -204,7 +204,8 @@ crates/
 └── openpanel-test-support/  TestDb, TestServer, mocks (dev-only)
 web/                      React + Vite + TanStack Router frontend (skeleton)
 openspec/                 OpenSpec specs and change proposals
-scripts/                  check-tests.sh, check-quality.sh, coverage.sh
+scripts/                  check-fmt/clippy/docs/audit/tests.sh, coverage.sh
+Makefile                  quality gate entry point (`make check`)
 tests/                    integration + CLI E2E tests
 .github/workflows/        CI pipelines
 ```

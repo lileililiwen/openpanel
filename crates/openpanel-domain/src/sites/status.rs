@@ -1,15 +1,20 @@
-use serde::{Deserialize, Serialize};
-use std::fmt;
-use std::str::FromStr;
+use std::{fmt, str::FromStr};
 
+use serde::{Deserialize, Serialize};
+
+/// The lifecycle status of a site.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SiteStatus {
+    /// The site is enabled and its vhost is live.
     Active,
+
+    /// The site is disabled and its vhost is not served.
     Disabled,
 }
 
 impl SiteStatus {
+    /// The canonical lowercase string form used for storage and display.
     pub fn as_str(&self) -> &'static str {
         match self {
             SiteStatus::Active => "active",
@@ -26,6 +31,7 @@ impl fmt::Display for SiteStatus {
 
 impl FromStr for SiteStatus {
     type Err = String;
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "active" => Ok(SiteStatus::Active),

@@ -34,9 +34,11 @@ The principle (see `Agents.md`):
   `panic_used`, `todo`, `unimplemented`.
 - New `Cargo.toml` workspace-level `[lints.rust]` section that sets
   `unsafe_code = "forbid"` for production crates (allows in tests).
-- New `scripts/check-quality.sh` that runs clippy, fmt-check, audit,
-  and doc-link checks; integrates with `scripts/check-tests.sh` from
-  the TDD change.
+- New per-gate scripts under `scripts/` (`check-fmt.sh`,
+  `check-clippy.sh`, `check-docs.sh`, `check-audit.sh`, with a shared
+  `lib/step.sh`) that run clippy, fmt-check, audit, and doc-link
+  checks; a root `Makefile` dispatches them (`make check`) and
+  integrates `scripts/check-tests.sh` from the TDD change.
 - New `.cargo/config.toml` (informational) registering
   `RUSTFLAGS="-D warnings"` for the workspace.
 - New `.github/workflows/ci.yml` (informational; no CI server yet)
@@ -64,7 +66,11 @@ The principle (see `Agents.md`):
 ## Impact
 
 - **New file**: `clippy.toml` — workspace lint config.
-- **New file**: `scripts/check-quality.sh` — single-entry shell script.
+- **New file**: `Makefile` — single-entry quality gate dispatcher.
+- **New files**: `scripts/check-fmt.sh`, `scripts/check-clippy.sh`,
+  `scripts/check-docs.sh`, `scripts/check-audit.sh`,
+  `scripts/lib/step.sh` — one small script per gate, sharing the
+  `step` output helper.
 - **New file**: `.github/workflows/ci.yml` — informational GitHub
   Actions workflow.
 - **New file**: `.cargo/config.toml` — workspace-wide cargo config.

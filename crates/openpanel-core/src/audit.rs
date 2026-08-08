@@ -13,13 +13,18 @@ use crate::error::CoreResult;
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+/// Result of an audited operation.
 pub enum AuditOutcome {
+    /// The operation completed successfully.
     Success,
+    /// The operation failed.
     Failure,
+    /// The operation was denied (e.g. missing permission).
     Denied,
 }
 
 impl AuditOutcome {
+    /// Serialized form used when persisting to the audit log.
     pub fn as_str(&self) -> &'static str {
         match self {
             AuditOutcome::Success => "success",
@@ -31,32 +36,56 @@ impl AuditOutcome {
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
+/// An audited action performed on the system.
 pub enum AuditAction {
+    /// User successfully logged in.
     Login,
+    /// User logged out.
     Logout,
+    /// A user account was created.
     UserCreated,
+    /// A user account was disabled.
     UserDisabled,
+    /// A user account was deleted.
     UserDeleted,
+    /// A user's role was changed.
     RoleChanged,
+    /// A user's password was changed.
     PasswordChanged,
+    /// An operation was denied due to permissions.
     PermissionDenied,
+    /// A website/site was created.
     SiteCreated,
+    /// A website/site was deleted.
     SiteDeleted,
+    /// A website/site was enabled.
     SiteEnabled,
+    /// A website/site was disabled.
     SiteDisabled,
+    /// A website/site's owner was changed.
     SiteOwnerChanged,
+    /// An SSL certificate was issued.
     SslIssued,
+    /// A database was created.
     DatabaseCreated,
+    /// A database was deleted.
     DatabaseDeleted,
+    /// A database password was changed.
     DatabasePasswordChanged,
+    /// A file was uploaded.
     FileUploaded,
+    /// A file's contents were updated.
     FileUpdated,
+    /// A file was renamed.
     FileRenamed,
+    /// A file's mode/permissions were changed.
     FileModeChanged,
+    /// A file was deleted.
     FileDeleted,
 }
 
 impl AuditAction {
+    /// Serialized form used when persisting to the audit log.
     pub fn as_str(&self) -> &'static str {
         match self {
             AuditAction::Login => "login",
@@ -86,17 +115,26 @@ impl AuditAction {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// A single audited event recorded to the audit log.
 pub struct AuditEvent {
+    /// When the event occurred.
     pub ts: DateTime<Utc>,
+    /// The actor (user or service) that performed the action.
     pub actor: String,
+    /// The action that was performed.
     pub action: AuditAction,
+    /// Optional target the action was performed on.
     pub target: Option<String>,
+    /// Optional source IP address of the request.
     pub source_ip: Option<String>,
+    /// Whether the action succeeded, failed, or was denied.
     pub outcome: AuditOutcome,
+    /// Free-form JSON metadata attached to the event.
     pub metadata: Value,
 }
 
 impl AuditEvent {
+    /// Create a new event with the current timestamp and no target/IP/metadata.
     pub fn new(actor: impl Into<String>, action: AuditAction, outcome: AuditOutcome) -> Self {
         Self {
             ts: Utc::now(),
@@ -109,16 +147,19 @@ impl AuditEvent {
         }
     }
 
+    /// Set the target the action was performed on (builder style).
     pub fn target(mut self, target: impl Into<String>) -> Self {
         self.target = Some(target.into());
         self
     }
 
+    /// Set the source IP of the request (builder style).
     pub fn source_ip(mut self, ip: impl Into<String>) -> Self {
         self.source_ip = Some(ip.into());
         self
     }
 
+    /// Set the JSON metadata attached to the event (builder style).
     pub fn metadata(mut self, value: Value) -> Self {
         self.metadata = value;
         self
@@ -126,8 +167,11 @@ impl AuditEvent {
 }
 
 #[async_trait]
+/// Contract for persisting and reading audit events.
 pub trait AuditService: Send + Sync + 'static {
+    /// Append an event to the audit log.
     async fn record(&self, event: AuditEvent) -> CoreResult<()>;
+    /// Return the most recent events, newest first, up to `limit`.
     async fn recent(&self, limit: i64) -> CoreResult<Vec<AuditEvent>>;
 }
 
@@ -140,20 +184,24 @@ impl AuditService for NoopAuditService {
         tracing::debug!(?event, "audit");
         Ok(())
     }
+
     async fn recent(&self, _limit: i64) -> CoreResult<Vec<AuditEvent>> {
         Ok(Vec::new())
     }
 }
 
+/// SQLite-backed audit service persisting events to the `audit_log` table.
 pub struct SqliteAuditService {
     pool: Pool<Sqlite>,
 }
 
 impl SqliteAuditService {
+    /// Create a service using the given SQLite pool.
     pub fn new(pool: Pool<Sqlite>) -> Self {
         Self { pool }
     }
 
+    /// Create the `audit_log` table and its indexes if they do not exist.
     pub async fn ensure_schema(&self) -> CoreResult<()> {
         sqlx::query(
             r#"
@@ -268,6 +316,7 @@ impl AuditService for SqliteAuditService {
 /// Convenience wrapper for `Arc<dyn AuditService>` callers.
 pub type SharedAudit = Arc<dyn AuditService>;
 
+/// Build a shared no-op audit service.
 pub fn noop() -> SharedAudit {
     Arc::new(NoopAuditService)
 }

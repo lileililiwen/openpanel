@@ -3,16 +3,21 @@
 use std::sync::Arc;
 
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
-use openpanel_domain::files::error::FileError;
-use openpanel_domain::files::file_info::FileInfo;
-use openpanel_domain::files::path::Path;
-use openpanel_domain::files::repository::{FileRepository, MAX_READ_BYTES};
-use openpanel_domain::sites::site::Site;
-use openpanel_domain::{Role, SiteRepository, User};
+use openpanel_domain::{
+    Role, SiteRepository, User,
+    files::{
+        error::FileError,
+        file_info::FileInfo,
+        path::Path,
+        repository::{FileRepository, MAX_READ_BYTES},
+    },
+    sites::site::Site,
+};
 use uuid::Uuid;
 
 use crate::files::repo::FilesystemRepository;
 
+/// Application service for file operations scoped to a site document root.
 pub struct FilesService {
     repo: Arc<dyn FileRepository>,
     sites: Arc<dyn SiteRepository>,
@@ -20,6 +25,8 @@ pub struct FilesService {
 }
 
 impl FilesService {
+    /// Construct the service with the sites repository (for chroot lookup) and
+    /// audit sink.
     pub fn new(sites: Arc<dyn SiteRepository>, audit: Arc<dyn AuditService>) -> Self {
         Self {
             repo: Arc::new(FilesystemRepository::new()),
@@ -28,10 +35,12 @@ impl FilesService {
         }
     }
 
+    /// Borrow the underlying file repository (mostly for tests).
     pub fn repo(&self) -> &Arc<dyn FileRepository> {
         &self.repo
     }
 
+    /// Return the canonicalized document root for a site the caller can manage.
     pub async fn chroot_for(
         &self,
         caller: &User,
@@ -71,6 +80,7 @@ impl FilesService {
         Ok(site)
     }
 
+    /// List the entries in a site-relative directory.
     pub async fn list_dir(
         &self,
         caller: &User,
@@ -82,6 +92,7 @@ impl FilesService {
         self.repo.list_dir(&chroot, path).await
     }
 
+    /// Read a file's bytes plus its modification time.
     pub async fn read_file(
         &self,
         caller: &User,
@@ -93,6 +104,7 @@ impl FilesService {
         self.repo.read_file(&chroot, path).await
     }
 
+    /// Write `bytes` to a site-relative path, creating parents if needed.
     pub async fn write_file(
         &self,
         caller: &User,
@@ -121,6 +133,7 @@ impl FilesService {
         Ok(())
     }
 
+    /// Create a directory at the given site-relative path.
     pub async fn mkdir(&self, caller: &User, site_id: Uuid, path: &Path) -> Result<(), FileError> {
         let site = self.load_site(caller, site_id).await?;
         let chroot = crate::files::repo::canonicalize_chroot(site.document_root()).await?;
@@ -143,6 +156,7 @@ impl FilesService {
         Ok(())
     }
 
+    /// Remove a file or directory (`recursive=true` to wipe non-empty dirs).
     pub async fn remove(
         &self,
         caller: &User,
@@ -171,6 +185,7 @@ impl FilesService {
         Ok(())
     }
 
+    /// Rename or move a file/directory within the same site chroot.
     pub async fn rename(
         &self,
         caller: &User,
@@ -199,6 +214,7 @@ impl FilesService {
         Ok(())
     }
 
+    /// Set the POSIX mode bits on a file or directory.
     pub async fn chmod(
         &self,
         caller: &User,
@@ -228,4 +244,5 @@ impl FilesService {
     }
 }
 
+/// Maximum bytes the files service will read from a file in a single call.
 pub const MAX_BYTES: u64 = MAX_READ_BYTES;

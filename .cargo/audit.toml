@@ -1,0 +1,15 @@
+# cargo-audit config.
+#
+# Format for suppressions:
+# [advisories]
+# ignore = ["RUSTSEC-YYYY-NNNN", ...]
+#
+# To regenerate the advisory-db, run:
+#   cargo audit fetch
+
+[advisories]
+# rsa is a transitive dependency of the ACME certificate stack
+# (rustls-acme). RUSTSEC-2023-0071 has no fixed upgrade available and
+# applies to server-side RSA private key operations; we accept it until
+# an upstream fix lands. Revisit on every `cargo update`.
+ignore = ["RUSTSEC-2023-0071"]

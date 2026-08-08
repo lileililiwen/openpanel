@@ -4,17 +4,17 @@
 
 use std::sync::Arc;
 
-use axum::extract::Request;
-use axum::http::header::COOKIE;
-use axum::middleware::Next;
-use axum::response::Response;
+use axum::{extract::Request, http::header::COOKIE, middleware::Next, response::Response};
 use openpanel_app::IdentityService;
 use openpanel_domain::SessionToken;
 
 use crate::extract::{AuthSession, AuthSessionExt};
 
+/// Name of the HTTP cookie that carries the session token for browser clients.
 pub const SESSION_COOKIE: &str = "openpanel_session";
 
+/// Axum middleware that resolves the bearer token (or `SESSION_COOKIE` cookie) into
+/// an [`AuthSession`] and stores it in the request extensions for downstream extractors.
 pub async fn session_middleware(
     axum::extract::State(svc): axum::extract::State<Arc<IdentityService>>,
     mut req: Request,

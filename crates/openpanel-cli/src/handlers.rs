@@ -5,14 +5,17 @@ use std::sync::Arc;
 
 use anyhow::Context;
 use openpanel_api::build_router;
-use openpanel_app::databases::crypto as db_crypto;
-use openpanel_app::{DatabasesModule, FilesModule, IdentityModule, SitesModule};
+use openpanel_app::{
+    DatabasesModule, FilesModule, IdentityModule, SitesModule, databases::crypto as db_crypto,
+};
 use openpanel_core::{
     AppContext, Config, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
 };
 use openpanel_domain::Role;
 use tokio::net::TcpListener;
 
+/// Bootstraps persistence, runs all module migrations, and serves the OpenPanel
+/// API + agent over HTTP on the configured bind address until the process exits.
 pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let (pool, audit, db) = bootstrap_persistence(&config).await?;
 
@@ -74,6 +77,7 @@ fn load_master_key(config: &Arc<Config>) -> anyhow::Result<[u8; 32]> {
     db_crypto::decode_master_key(&raw).map_err(|e| anyhow::anyhow!(e.to_string()))
 }
 
+/// Applies pending identity and sites migrations, then exits without starting the server.
 pub async fn migrate(config: Arc<Config>) -> anyhow::Result<()> {
     let (pool, audit, db) = bootstrap_persistence(&config).await?;
     let ctx = AppContext::new(config, db, audit);
@@ -92,6 +96,7 @@ pub async fn migrate(config: Arc<Config>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Creates a new user with the given username, email, password, and role.
 pub async fn create_user(
     config: Arc<Config>,
     username: String,
@@ -107,6 +112,7 @@ pub async fn create_user(
     Ok(())
 }
 
+/// Lists all users (id, username, email, role) to stdout.
 pub async fn list_users(config: Arc<Config>) -> anyhow::Result<()> {
     let (svc, _audit, _pool) = build_identity(config).await?;
     for user in svc.list_users().await? {
@@ -121,6 +127,7 @@ pub async fn list_users(config: Arc<Config>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Disables the user identified by the given UUID, preventing future logins.
 pub async fn disable_user(config: Arc<Config>, id: String) -> anyhow::Result<()> {
     let (svc, _audit, _pool) = build_identity(config).await?;
     let uuid = uuid::Uuid::parse_str(&id).context("invalid user id")?;
@@ -129,6 +136,7 @@ pub async fn disable_user(config: Arc<Config>, id: String) -> anyhow::Result<()>
     Ok(())
 }
 
+/// Deletes the user identified by the given UUID.
 pub async fn delete_user(config: Arc<Config>, id: String) -> anyhow::Result<()> {
     let (svc, _audit, _pool) = build_identity(config).await?;
     let uuid = uuid::Uuid::parse_str(&id).context("invalid user id")?;
@@ -137,6 +145,7 @@ pub async fn delete_user(config: Arc<Config>, id: String) -> anyhow::Result<()> 
     Ok(())
 }
 
+/// Creates a new site with the given primary domain, owner, aliases, and PHP options.
 pub async fn create_site(
     config: Arc<Config>,
     domain: String,
@@ -175,6 +184,7 @@ pub async fn create_site(
     Ok(())
 }
 
+/// Lists all sites (id, primary domain, status, owner id) to stdout.
 pub async fn list_sites(config: Arc<Config>) -> anyhow::Result<()> {
     let (sites_svc, identity_svc, _audit, _pool) = build_sites(config).await?;
     let caller = identity_svc
@@ -199,6 +209,7 @@ pub async fn list_sites(config: Arc<Config>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Deletes the site identified by the given UUID.
 pub async fn delete_site(config: Arc<Config>, id: String) -> anyhow::Result<()> {
     let (sites_svc, identity_svc, _audit, _pool) = build_sites(config).await?;
     let caller = identity_svc
@@ -216,6 +227,7 @@ pub async fn delete_site(config: Arc<Config>, id: String) -> anyhow::Result<()> 
     Ok(())
 }
 
+/// Re-enables the site identified by the given UUID.
 pub async fn enable_site(config: Arc<Config>, id: String) -> anyhow::Result<()> {
     let (sites_svc, identity_svc, _audit, _pool) = build_sites(config).await?;
     let caller = identity_svc
@@ -233,6 +245,7 @@ pub async fn enable_site(config: Arc<Config>, id: String) -> anyhow::Result<()> 
     Ok(())
 }
 
+/// Disables the site identified by the given UUID (stops serving traffic without deletion).
 pub async fn disable_site(config: Arc<Config>, id: String) -> anyhow::Result<()> {
     let (sites_svc, identity_svc, _audit, _pool) = build_sites(config).await?;
     let caller = identity_svc
@@ -333,6 +346,8 @@ fn build_helper_config(
     Arc::new(Config::default())
 }
 
+/// Creates a new MySQL database and DB user owned by the given user.
+/// Prints the generated password to stdout (it will not be shown again).
 pub async fn create_database(
     config: Arc<Config>,
     owner_username: String,
@@ -366,6 +381,7 @@ pub async fn create_database(
     Ok(())
 }
 
+/// Lists all databases (id, name, status, owner id) to stdout.
 pub async fn list_databases(config: Arc<Config>) -> anyhow::Result<()> {
     let (databases_svc, identity_svc, _audit, _pool) = build_databases(config).await?;
     let caller = identity_svc
@@ -390,6 +406,7 @@ pub async fn list_databases(config: Arc<Config>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Deletes the database identified by the given UUID.
 pub async fn delete_database(config: Arc<Config>, id: String) -> anyhow::Result<()> {
     let (databases_svc, identity_svc, _audit, _pool) = build_databases(config).await?;
     let caller = identity_svc
@@ -407,6 +424,8 @@ pub async fn delete_database(config: Arc<Config>, id: String) -> anyhow::Result<
     Ok(())
 }
 
+/// Rotates the DB user's password for the database identified by the given UUID.
+/// Prints the new password to stdout (it will not be shown again).
 pub async fn change_database_password(config: Arc<Config>, id: String) -> anyhow::Result<()> {
     let (databases_svc, identity_svc, _audit, _pool) = build_databases(config).await?;
     let caller = identity_svc
@@ -459,6 +478,7 @@ async fn resolve_site_id(
     anyhow::bail!("site id `{site}` not a UUID; pass the UUID instead")
 }
 
+/// Lists entries under `path` inside the site's document root as a tabular stdout dump.
 pub async fn file_list(config: Arc<Config>, site: String, path: String) -> anyhow::Result<()> {
     let (files_svc, sites_svc, identity_svc) = build_files(config).await?;
     let site_id = resolve_site_id(&sites_svc, &site).await?;
@@ -482,6 +502,7 @@ pub async fn file_list(config: Arc<Config>, site: String, path: String) -> anyho
     Ok(())
 }
 
+/// Writes the raw bytes of the file at `path` inside the site's document root to stdout.
 pub async fn file_read(config: Arc<Config>, site: String, path: String) -> anyhow::Result<()> {
     let (files_svc, sites_svc, identity_svc) = build_files(config).await?;
     let site_id = resolve_site_id(&sites_svc, &site).await?;
@@ -502,6 +523,7 @@ pub async fn file_read(config: Arc<Config>, site: String, path: String) -> anyho
     Ok(())
 }
 
+/// Writes `content` to the file at `path` inside the site's document root.
 pub async fn file_write(
     config: Arc<Config>,
     site: String,
@@ -526,6 +548,7 @@ pub async fn file_write(
     Ok(())
 }
 
+/// Creates a directory at `path` inside the site's document root.
 pub async fn file_mkdir(config: Arc<Config>, site: String, path: String) -> anyhow::Result<()> {
     let (files_svc, sites_svc, identity_svc) = build_files(config).await?;
     let site_id = resolve_site_id(&sites_svc, &site).await?;
@@ -545,6 +568,8 @@ pub async fn file_mkdir(config: Arc<Config>, site: String, path: String) -> anyh
     Ok(())
 }
 
+/// Removes the file or directory at `path` inside the site's document root.
+/// If `recursive` is true, non-empty directories are removed as well.
 pub async fn file_rm(
     config: Arc<Config>,
     site: String,
@@ -569,6 +594,7 @@ pub async fn file_rm(
     Ok(())
 }
 
+/// Renames/moves `from` to `to` within the site's document root.
 pub async fn file_rename(
     config: Arc<Config>,
     site: String,
@@ -595,6 +621,8 @@ pub async fn file_rename(
     Ok(())
 }
 
+/// Changes the permission bits of the file at `path` inside the site's document root.
+/// `mode` is an octal string (e.g. `"755"` or `"0644"`).
 pub async fn file_chmod(
     config: Arc<Config>,
     site: String,

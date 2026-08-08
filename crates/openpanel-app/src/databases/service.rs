@@ -4,15 +4,16 @@
 use std::sync::Arc;
 
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
-use openpanel_domain::databases::database::Database;
-use openpanel_domain::databases::error::DatabaseError;
-use openpanel_domain::{DatabaseRepository, Role, User};
+use openpanel_domain::{
+    DatabaseRepository, Role, User,
+    databases::{database::Database, error::DatabaseError},
+};
 use rand::Rng;
 use uuid::Uuid;
 
-use crate::databases::crypto;
-use crate::databases::mysql::MySqlClient;
+use crate::databases::{crypto, mysql::MySqlClient};
 
+/// Application service orchestrating the database use cases.
 pub struct DatabasesService {
     repos: Arc<dyn DatabaseRepository>,
     mysql: MySqlClient,
@@ -21,6 +22,8 @@ pub struct DatabasesService {
 }
 
 impl DatabasesService {
+    /// Construct the service with the given repository, MySQL shell-out,
+    /// audit sink, and 32-byte master key for at-rest password encryption.
     pub fn new(
         repos: Arc<dyn DatabaseRepository>,
         mysql: MySqlClient,
@@ -35,10 +38,13 @@ impl DatabasesService {
         }
     }
 
+    /// Returns true when the underlying MySQL CLI binary is installed.
     pub fn mysql_available(&self) -> bool {
         self.mysql.available()
     }
 
+    /// Provision a new database, MySQL user, and grant; persist a row in the
+    /// repository; encrypt the generated password; record an audit event.
     pub async fn create_database(
         &self,
         caller: &User,
@@ -109,6 +115,7 @@ impl DatabasesService {
         Ok((db, password))
     }
 
+    /// List databases visible to the caller (all for Owner, own for others).
     pub async fn list_databases(&self, caller: &User) -> Result<Vec<Database>, DatabaseError> {
         match caller.role() {
             Role::Owner => self
@@ -124,6 +131,7 @@ impl DatabasesService {
         }
     }
 
+    /// Fetch a single database by id, enforcing RBAC visibility.
     pub async fn get_database(&self, caller: &User, id: Uuid) -> Result<Database, DatabaseError> {
         let db = self
             .repos
@@ -135,6 +143,7 @@ impl DatabasesService {
         Ok(db)
     }
 
+    /// Drop the MySQL database + user and remove the row from the repository.
     pub async fn delete_database(&self, caller: &User, id: Uuid) -> Result<(), DatabaseError> {
         let db = self.get_database(caller, id).await?;
         self.mysql.drop_database(db.name()).await?;
@@ -158,6 +167,8 @@ impl DatabasesService {
         Ok(())
     }
 
+    /// Rotate the MySQL password for a database and persist the new ciphertext.
+    /// Returns the new plaintext password.
     pub async fn change_password(&self, caller: &User, id: Uuid) -> Result<String, DatabaseError> {
         let db = self.get_database(caller, id).await?;
         let new_password = generate_password(24);
@@ -185,6 +196,7 @@ impl DatabasesService {
         Ok(new_password)
     }
 
+    /// Decrypt and return the stored plaintext database password.
     pub async fn reveal_password(&self, caller: &User, id: Uuid) -> Result<String, DatabaseError> {
         let db = self.get_database(caller, id).await?;
         let stored = self

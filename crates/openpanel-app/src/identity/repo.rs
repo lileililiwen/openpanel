@@ -2,21 +2,25 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sqlx::Pool;
-use sqlx::Sqlite;
+use openpanel_domain::{
+    RepoError, SessionRepository, UserRepository,
+    identity::{
+        role::Role,
+        session::{Session, SessionToken},
+        user::User,
+    },
+};
+use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
 
-use openpanel_domain::identity::role::Role;
-use openpanel_domain::identity::session::{Session, SessionToken};
-use openpanel_domain::identity::user::User;
-use openpanel_domain::{RepoError, SessionRepository, UserRepository};
-
+/// SQLite-backed adapter for the domain `UserRepository` trait.
 #[derive(Clone)]
 pub struct SqliteUserRepository {
     pool: Pool<Sqlite>,
 }
 
 impl SqliteUserRepository {
+    /// Build a user repository over the given SQLite connection pool.
     pub fn new(pool: Pool<Sqlite>) -> Self {
         Self { pool }
     }
@@ -189,12 +193,14 @@ impl UserRow {
     }
 }
 
+/// SQLite-backed adapter for the domain `SessionRepository` trait.
 #[derive(Clone)]
 pub struct SqliteSessionRepository {
     pool: Pool<Sqlite>,
 }
 
 impl SqliteSessionRepository {
+    /// Build a session repository over the given SQLite connection pool.
     pub fn new(pool: Pool<Sqlite>) -> Self {
         Self { pool }
     }

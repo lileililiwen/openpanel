@@ -1,14 +1,8 @@
 #!/usr/bin/env bash
-# scripts/check-tests.sh — Run the full test suite and report results.
-# Exit code 0 = all green, 1 = failures.
+# scripts/check-tests.sh — test gate: compile everything, then run the
+# full test suite. Exits non-zero on any failure.
 set -euo pipefail
+source "$(dirname "$0")/lib/step.sh"
 
-echo "=== cargo check --workspace --all-targets ==="
-cargo check --workspace --all-targets
-
-echo ""
-echo "=== cargo test --workspace --all-targets ==="
-cargo test --workspace --all-targets -- --test-threads=1
-
-echo ""
-echo "=== All tests passed ==="
+step "test-check" cargo check --workspace --all-targets
+step "test" cargo test --workspace --all-targets -- --test-threads=1

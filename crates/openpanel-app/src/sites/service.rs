@@ -4,15 +4,15 @@
 use std::sync::Arc;
 
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
-use openpanel_domain::sites::error::SiteError;
-use openpanel_domain::sites::site::Site;
-use openpanel_domain::sites::status::SiteStatus;
-use openpanel_domain::{Role, SiteRepository, User};
+use openpanel_domain::{
+    Role, SiteRepository, User,
+    sites::{error::SiteError, site::Site, status::SiteStatus},
+};
 use uuid::Uuid;
 
-use crate::sites::document_root::DocumentRootProvisioner;
-use crate::sites::nginx::NginxConfigGenerator;
+use crate::sites::{document_root::DocumentRootProvisioner, nginx::NginxConfigGenerator};
 
+/// Application service orchestrating site use cases (create, delete, enable, ...).
 pub struct SitesService {
     sites: Arc<dyn SiteRepository>,
     audit: Arc<dyn AuditService>,
@@ -20,6 +20,7 @@ pub struct SitesService {
 }
 
 impl SitesService {
+    /// Construct the service with the sites repository, audit sink, and nginx generator.
     pub fn new(
         sites: Arc<dyn SiteRepository>,
         audit: Arc<dyn AuditService>,
@@ -32,10 +33,12 @@ impl SitesService {
         }
     }
 
+    /// Borrow the underlying nginx config generator.
     pub fn nginx(&self) -> &NginxConfigGenerator {
         &self.nginx
     }
 
+    /// Provision a site: persist, render+apply nginx config, audit.
     #[allow(clippy::too_many_arguments)]
     pub async fn create_site(
         &self,
@@ -111,6 +114,7 @@ impl SitesService {
         Ok(site)
     }
 
+    /// List sites visible to the caller (all for Owner, own for others).
     pub async fn list_sites(&self, caller: &User) -> Result<Vec<Site>, SiteError> {
         match caller.role() {
             Role::Owner => self
@@ -126,6 +130,7 @@ impl SitesService {
         }
     }
 
+    /// Fetch a single site by id.
     pub async fn get_site(&self, id: Uuid) -> Result<Site, SiteError> {
         self.sites
             .find_by_id(id)
@@ -134,6 +139,7 @@ impl SitesService {
             .ok_or_else(|| SiteError::NotFound(id.to_string()))
     }
 
+    /// Remove the nginx config and delete the site row.
     pub async fn delete_site(&self, caller: &User, id: Uuid) -> Result<(), SiteError> {
         let site = self.get_site(id).await?;
         self.assert_can_manage(caller, &site)?;
@@ -159,6 +165,7 @@ impl SitesService {
         Ok(())
     }
 
+    /// Mark a site active, apply its nginx config, and persist the status.
     pub async fn enable_site(&self, caller: &User, id: Uuid) -> Result<(), SiteError> {
         let mut site = self.get_site(id).await?;
         self.assert_can_manage(caller, &site)?;
@@ -182,6 +189,7 @@ impl SitesService {
         Ok(())
     }
 
+    /// Mark a site disabled, move its nginx config to `disabled/`, persist status.
     pub async fn disable_site(&self, caller: &User, id: Uuid) -> Result<(), SiteError> {
         let mut site = self.get_site(id).await?;
         self.assert_can_manage(caller, &site)?;
@@ -205,6 +213,7 @@ impl SitesService {
         Ok(())
     }
 
+    /// Transfer ownership of a site (Owner role required).
     pub async fn change_owner(
         &self,
         caller: &User,
@@ -235,6 +244,7 @@ impl SitesService {
         Ok(())
     }
 
+    /// Replace the site's domain aliases and re-apply the nginx config.
     pub async fn change_aliases(
         &self,
         caller: &User,

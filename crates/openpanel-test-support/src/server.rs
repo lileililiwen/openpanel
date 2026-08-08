@@ -8,18 +8,18 @@
 use std::sync::Arc;
 
 use openpanel_api::build_router;
-use openpanel_app::sites::nginx::NginxPaths;
 use openpanel_app::{
     DatabasesModule, DatabasesService, FilesModule, FilesService, IdentityModule, IdentityService,
-    SitesModule, SitesService,
+    SitesModule, SitesService, sites::nginx::NginxPaths,
 };
 use openpanel_core::{AppContext, Config, MigrationRunner, Module, NoopAuditService, SqliteDriver};
 use tempfile::TempDir;
-use tokio::net::TcpListener;
-use tokio::task::JoinHandle;
+use tokio::{net::TcpListener, task::JoinHandle};
 
 use super::db::TestDb;
 
+/// Per-test HTTP server that boots the real axum router on a random local
+/// port. Created by `TestServer::new()` and torn down on drop.
 pub struct TestServer {
     addr: String,
     client: reqwest::Client,

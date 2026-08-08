@@ -28,10 +28,12 @@ impl Path {
         Self(String::new())
     }
 
+    /// The underlying relative path string (`""` for the root).
     pub fn as_str(&self) -> &str {
         &self.0
     }
 
+    /// Whether this path refers to the document root itself.
     pub fn is_root(&self) -> bool {
         self.0.is_empty()
     }
@@ -138,8 +140,9 @@ mod tests {
 /// or returns `InvalidPath`. The classifier is exhaustive.
 #[cfg(test)]
 mod prop {
-    use super::*;
     use proptest::prelude::*;
+
+    use super::*;
 
     /// Returns true iff `s` should be accepted by `Path::new`.
     fn should_accept(s: &str) -> bool {

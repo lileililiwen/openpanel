@@ -25,3 +25,6 @@ openpanel-domain = { workspace = true }
 openpanel-app = { workspace = true }
 openpanel-api = { workspace = true }
 openpanel-cli = { workspace = true }
+
+[lints]
+workspace = true

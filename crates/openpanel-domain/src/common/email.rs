@@ -1,3 +1,5 @@
+//! Validated email address value object.
+
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
@@ -9,12 +11,14 @@ use super::error::DomainError;
 pub struct Email(String);
 
 impl Email {
+    /// Create a new `Email`, validating the address.
     pub fn new(value: impl Into<String>) -> Result<Self, DomainError> {
         let s = value.into();
         validate(&s)?;
         Ok(Self(s))
     }
 
+    /// Return the raw email address string.
     pub fn as_str(&self) -> &str {
         &self.0
     }

@@ -7,8 +7,10 @@ use openpanel_core::{AppContext, Migration, Module};
 
 use crate::identity::service::IdentityService;
 
+/// Stable identifier for the identity module used in migration bookkeeping.
 pub const MODULE_NAME: &str = "identity";
 
+/// Identity bounded-context module: wires the service + SQLite repos + migrations.
 pub struct IdentityModule {
     service: Arc<IdentityService>,
     migrations: Vec<Migration>,
@@ -33,6 +35,7 @@ impl IdentityModule {
         }
     }
 
+    /// Return a clone of the shared service handle.
     pub fn service(&self) -> Arc<IdentityService> {
         self.service.clone()
     }

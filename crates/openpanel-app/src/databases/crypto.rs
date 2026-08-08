@@ -3,15 +3,17 @@
 //! representation is `hex(nonce) || hex(ciphertext)` so the column is
 //! pure ASCII.
 
-use aes_gcm::aead::{Aead, KeyInit};
-use aes_gcm::{Aes256Gcm, Key, Nonce};
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD as B64;
+use aes_gcm::{
+    Aes256Gcm, Key, Nonce,
+    aead::{Aead, KeyInit},
+};
+use base64::{Engine, engine::general_purpose::STANDARD as B64};
+use openpanel_domain::databases::error::DatabaseError;
 use rand::RngCore;
 
-use openpanel_domain::databases::error::DatabaseError;
-
+/// AES-GCM nonce length in bytes (96-bit, the standard for AES-256-GCM).
 pub const NONCE_LEN: usize = 12;
+/// AES-256 master key length in bytes (256-bit).
 pub const KEY_LEN: usize = 32;
 
 /// Decode a base64 master key into raw bytes. Returns

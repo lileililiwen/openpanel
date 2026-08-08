@@ -27,3 +27,6 @@ openpanel-app = { workspace = true }
 openpanel-test-support = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
+
+[lints]
+workspace = true

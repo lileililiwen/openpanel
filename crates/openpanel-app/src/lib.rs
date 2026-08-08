@@ -4,6 +4,7 @@
 //! routes, CLI, and migrations.
 
 #![deny(rustdoc::broken_intra_doc_links)]
+#![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 pub mod databases;
 pub mod files;
@@ -12,12 +13,11 @@ pub mod migrations;
 pub mod prelude;
 pub mod sites;
 
-pub use databases::DatabasesModule;
-pub use databases::service::DatabasesService;
-pub use files::FilesModule;
-pub use files::service::FilesService;
-pub use identity::IdentityModule;
-pub use identity::service::IdentityService;
-pub use sites::SitesModule;
-pub use sites::nginx::{NginxConfigGenerator, NginxPaths};
-pub use sites::service::SitesService;
+pub use databases::{DatabasesModule, service::DatabasesService};
+pub use files::{FilesModule, service::FilesService};
+pub use identity::{IdentityModule, service::IdentityService};
+pub use sites::{
+    SitesModule,
+    nginx::{NginxConfigGenerator, NginxPaths},
+    service::SitesService,
+};

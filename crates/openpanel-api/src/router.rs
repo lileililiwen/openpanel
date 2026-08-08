@@ -2,17 +2,19 @@
 
 use std::sync::Arc;
 
-use axum::middleware::from_fn_with_state;
-use axum::routing::get;
-use axum::{Json, Router};
+use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
 use openpanel_app::{DatabasesService, FilesService, IdentityService, SitesService};
 
-use crate::middleware::session::session_middleware;
-use crate::routes::databases::router as databases_router;
-use crate::routes::files::router as files_router;
-use crate::routes::identity::router as identity_router;
-use crate::routes::sites::router as sites_router;
+use crate::{
+    middleware::session::session_middleware,
+    routes::{
+        databases::router as databases_router, files::router as files_router,
+        identity::router as identity_router, sites::router as sites_router,
+    },
+};
 
+/// Builds the top-level Axum [`Router`] combining every API module under `/api/v1`
+/// and a `/health` endpoint, with session resolution wired in via middleware.
 pub fn build_router(
     identity: Arc<IdentityService>,
     sites: Arc<SitesService>,

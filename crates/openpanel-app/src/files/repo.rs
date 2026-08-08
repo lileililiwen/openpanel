@@ -2,19 +2,27 @@
 //! async via `tokio::fs`. The repository is stateless; per-call it
 //! canonicalizes the chroot and validates every path stays inside.
 
-use std::os::unix::fs::PermissionsExt;
-use std::path::{Path as FsPath, PathBuf};
+use std::{
+    os::unix::fs::PermissionsExt,
+    path::{Path as FsPath, PathBuf},
+};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use openpanel_domain::files::error::FileError;
-use openpanel_domain::files::file_info::FileInfo;
-use openpanel_domain::files::path::Path;
-use openpanel_domain::files::repository::{FileRepository, MAX_READ_BYTES};
+use openpanel_domain::files::{
+    error::FileError,
+    file_info::FileInfo,
+    path::Path,
+    repository::{FileRepository, MAX_READ_BYTES},
+};
 
+/// Filesystem-backed implementation of `FileRepository`. The repository is
+/// stateless; per-call it canonicalizes the chroot and validates every path
+/// stays inside it.
 pub struct FilesystemRepository;
 
 impl FilesystemRepository {
+    /// Construct a new filesystem repository.
     pub fn new() -> Self {
         Self
     }

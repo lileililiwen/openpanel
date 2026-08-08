@@ -2,17 +2,22 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
-use axum::routing::{get, post};
-use axum::{Json, Router};
+use axum::{
+    Json, Router,
+    extract::{Path, State},
+    routing::{get, post},
+};
 use openpanel_app::DatabasesService;
 use openpanel_domain::DatabaseError;
 use uuid::Uuid;
 
-use crate::dto::{CreateDatabaseRequest, CreatedDatabaseResponse, DatabaseDto};
-use crate::error::{ApiError, ApiResult};
-use crate::extract::AuthUser;
+use crate::{
+    dto::{CreateDatabaseRequest, CreatedDatabaseResponse, DatabaseDto},
+    error::{ApiError, ApiResult},
+    extract::AuthUser,
+};
 
+/// Builds the Axum sub-router for `/databases` routes.
 pub fn router(svc: Arc<DatabasesService>) -> Router {
     Router::new()
         .route("/", get(list_databases).post(create_database))

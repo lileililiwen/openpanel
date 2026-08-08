@@ -3,15 +3,15 @@
 use std::sync::Arc;
 
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
-use openpanel_domain::identity::role::Role;
 use openpanel_domain::{
     Email, IdentityError, Password, Session, SessionRepository, SessionToken, User, UserRepository,
-    Username,
+    Username, identity::role::Role,
 };
 use uuid::Uuid;
 
 use crate::identity::repo::{SqliteSessionRepository, SqliteUserRepository};
 
+/// Application service orchestrating identity use cases (users, sessions).
 #[derive(Clone)]
 pub struct IdentityService {
     users: Arc<dyn UserRepository>,
@@ -20,6 +20,7 @@ pub struct IdentityService {
 }
 
 impl IdentityService {
+    /// Construct the service with the user + session repositories and audit sink.
     pub fn new(
         users: Arc<dyn UserRepository>,
         sessions: Arc<dyn SessionRepository>,
@@ -32,14 +33,17 @@ impl IdentityService {
         }
     }
 
+    /// Return a clone of the underlying user repository handle.
     pub fn users(&self) -> Arc<dyn UserRepository> {
         self.users.clone()
     }
 
+    /// Return a clone of the underlying session repository handle.
     pub fn sessions(&self) -> Arc<dyn SessionRepository> {
         self.sessions.clone()
     }
 
+    /// Create a new user, hashing the plaintext password and auditing the action.
     pub async fn create_user(
         &self,
         username: &str,
@@ -100,6 +104,7 @@ impl IdentityService {
         Ok(user)
     }
 
+    /// Authenticate by username or email, create a session, return (user, token).
     pub async fn login(
         &self,
         username_or_email: &str,
@@ -188,6 +193,7 @@ impl IdentityService {
         Ok((user, token))
     }
 
+    /// Invalidate the session matching `token` and record a logout audit event.
     pub async fn logout(&self, token: &SessionToken, actor: &str) -> Result<(), IdentityError> {
         let session = self
             .sessions
@@ -210,6 +216,7 @@ impl IdentityService {
         Ok(())
     }
 
+    /// Resolve a session token to its (user, session), expiring stale sessions.
     pub async fn resolve_session(
         &self,
         token: &SessionToken,
@@ -241,6 +248,7 @@ impl IdentityService {
         Ok((user, session))
     }
 
+    /// List every user in the repository.
     pub async fn list_users(&self) -> Result<Vec<User>, IdentityError> {
         self.users
             .list()
@@ -248,6 +256,7 @@ impl IdentityService {
             .map_err(|e| IdentityError::Persistence(e.0))
     }
 
+    /// Change a user's role, refusing to demote the last owner.
     pub async fn change_role(
         &self,
         target_id: Uuid,
@@ -277,6 +286,7 @@ impl IdentityService {
         Ok(())
     }
 
+    /// Disable a user account and purge all of their active sessions.
     pub async fn disable_user(&self, target_id: Uuid, actor: &str) -> Result<(), IdentityError> {
         let mut user = self
             .users
@@ -303,6 +313,7 @@ impl IdentityService {
         Ok(())
     }
 
+    /// Permanently delete a user (refuses owners and the last remaining user).
     pub async fn delete_user(&self, target_id: Uuid, actor: &str) -> Result<(), IdentityError> {
         let count = self
             .users
@@ -339,6 +350,7 @@ impl IdentityService {
         Ok(())
     }
 
+    /// Change a user's password to a new plaintext value (hashed before persist).
     pub async fn change_password(
         &self,
         target_id: Uuid,

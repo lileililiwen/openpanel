@@ -2,16 +2,21 @@
 //! with mode 0755, a placeholder `index.html`, and chown to the site
 //! owner (best-effort; requires the openpanel process to run as root).
 
-use std::fs;
-use std::io::{BufRead, BufReader, Write};
-use std::os::unix::fs::PermissionsExt;
-use std::path::Path;
+use std::{
+    fs,
+    io::{BufRead, BufReader, Write},
+    os::unix::fs::PermissionsExt,
+    path::Path,
+};
 
 use openpanel_domain::SiteError;
 
+/// Creates the on-disk document root for a site and drops in a placeholder
+/// `index.html`. Stateless helper; all logic lives in associated functions.
 pub struct DocumentRootProvisioner;
 
 impl DocumentRootProvisioner {
+    /// Create `root` (mode 0755) and write a placeholder `index.html` if missing.
     pub fn provision(root: &Path, owner_name: &str, site_name: &str) -> Result<(), SiteError> {
         if !root.exists() {
             fs::create_dir_all(root).map_err(|e| SiteError::Io(e.to_string()))?;

@@ -2,14 +2,18 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::sites::error::SiteError;
-use crate::sites::status::SiteStatus;
+use crate::sites::{error::SiteError, status::SiteStatus};
 
 const DOMAIN_RE: &str =
     r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$";
 const ALIAS_RE: &str =
     r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$";
 
+/// A nginx-hosted site: the aggregate root of the sites bounded context.
+///
+/// Construction enforces the domain invariants (hostname pattern,
+/// aliases, document root). Fields are private and read via accessors;
+/// mutation goes through the `enable`/`disable`/`change_*` methods.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Site {
     id: Uuid,
@@ -27,6 +31,8 @@ pub struct Site {
 }
 
 impl Site {
+    /// Create a new site, validating the primary domain, aliases, and
+    /// document root. New sites start with `SiteStatus::Active`.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: Uuid,
@@ -77,21 +83,26 @@ impl Site {
         })
     }
 
+    /// Set the site's status to `Active`, recording `by` as the modifier.
     pub fn enable(&mut self, by: &str) {
         self.status = SiteStatus::Active;
         self.touch(by);
     }
 
+    /// Set the site's status to `Disabled`, recording `by` as the modifier.
     pub fn disable(&mut self, by: &str) {
         self.status = SiteStatus::Disabled;
         self.touch(by);
     }
 
+    /// Transfer the site to a new owner, recording `by` as the modifier.
     pub fn change_owner(&mut self, new_owner: Uuid, by: &str) {
         self.owner_id = new_owner;
         self.touch(by);
     }
 
+    /// Replace the aliases, validating each; rejects aliases that match
+    /// the primary domain or duplicate each other.
     pub fn change_aliases(&mut self, aliases: Vec<String>, by: &str) -> Result<(), SiteError> {
         let mut validated = Vec::with_capacity(aliases.len());
         for alias in aliases {
@@ -120,6 +131,8 @@ impl Site {
         }
     }
 
+    /// Rebuild a site from persistence. Used by the repository adapter;
+    /// skips validation because stored state is already trusted.
     #[allow(clippy::too_many_arguments)]
     pub fn restore(
         id: Uuid,
@@ -151,39 +164,62 @@ impl Site {
         }
     }
 
+    /// The site's unique identifier.
     pub fn id(&self) -> Uuid {
         self.id
     }
+
+    /// The id of the user who owns this site.
     pub fn owner_id(&self) -> Uuid {
         self.owner_id
     }
+
+    /// The site's primary domain.
     pub fn primary_domain(&self) -> &str {
         &self.primary_domain
     }
+
+    /// The site's aliases.
     pub fn aliases(&self) -> &[String] {
         &self.aliases
     }
+
+    /// The absolute document root served by nginx.
     pub fn document_root(&self) -> &str {
         &self.document_root
     }
+
+    /// Whether PHP is enabled for this site.
     pub fn php_enabled(&self) -> bool {
         self.php_enabled
     }
+
+    /// The PHP version, if PHP is enabled.
     pub fn php_version(&self) -> Option<&str> {
         self.php_version.as_deref()
     }
+
+    /// The site's current status.
     pub fn status(&self) -> SiteStatus {
         self.status
     }
+
+    /// When the site was created.
     pub fn created_at(&self) -> DateTime<Utc> {
         self.created_at
     }
+
+    /// When the site was last modified.
     pub fn updated_at(&self) -> DateTime<Utc> {
         self.updated_at
     }
+
+    /// Who created the site.
     pub fn created_by(&self) -> &str {
         &self.created_by
     }
+
+    /// Who last modified the site.
     pub fn modified_by(&self) -> &str {
         &self.modified_by
     }
@@ -193,7 +229,9 @@ fn validate_domain(s: &str) -> Result<(), SiteError> {
     if s.is_empty() || s.len() > 253 {
         return Err(SiteError::InvalidDomain("length out of range".into()));
     }
-    let re = regex::Regex::new(DOMAIN_RE).expect("valid regex");
+    #[allow(clippy::expect_used)]
+    let re = regex::Regex::new(DOMAIN_RE)
+        .expect("DOMAIN_RE is a compile-time constant; a broken pattern is a programming error");
     if !re.is_match(s) {
         return Err(SiteError::InvalidDomain(format!(
             "`{s}` does not match domain pattern"
@@ -215,7 +253,9 @@ fn validate_alias(s: &str) -> Result<(), SiteError> {
             "wildcards not allowed".into(),
         ));
     }
-    let re = regex::Regex::new(ALIAS_RE).expect("valid regex");
+    #[allow(clippy::expect_used)]
+    let re = regex::Regex::new(ALIAS_RE)
+        .expect("ALIAS_RE is a compile-time constant; a broken pattern is a programming error");
     if !re.is_match(s) {
         return Err(SiteError::InvalidAlias(s.into(), "invalid hostname".into()));
     }
@@ -237,8 +277,9 @@ fn validate_document_root(p: &str) -> Result<(), SiteError> {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use uuid::Uuid;
+
+    use super::*;
 
     fn make_site() -> Result<Site, SiteError> {
         Site::new(
@@ -331,8 +372,9 @@ mod tests {
 
 #[cfg(test)]
 mod prop {
-    use super::*;
     use proptest::prelude::*;
+
+    use super::*;
 
     fn make_site(domain: &str, aliases: Vec<String>, doc_root: &str) -> Result<Site, SiteError> {
         Site::new(

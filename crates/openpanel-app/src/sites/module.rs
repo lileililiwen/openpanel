@@ -4,12 +4,16 @@ use std::sync::Arc;
 
 use openpanel_core::{AppContext, Migration, Module};
 
-use crate::sites::nginx::{NginxConfigGenerator, NginxPaths};
-use crate::sites::repo::SqliteSiteRepository;
-use crate::sites::service::SitesService;
+use crate::sites::{
+    nginx::{NginxConfigGenerator, NginxPaths},
+    repo::SqliteSiteRepository,
+    service::SitesService,
+};
 
+/// Stable identifier for the sites module used in migration bookkeeping.
 pub const MODULE_NAME: &str = "sites";
 
+/// Sites bounded-context module: wires the service + repo + nginx generator.
 pub struct SitesModule {
     service: Arc<SitesService>,
     migrations: Vec<Migration>,
@@ -17,6 +21,7 @@ pub struct SitesModule {
 }
 
 impl SitesModule {
+    /// Build the module using nginx paths detected from the host environment.
     pub async fn new(ctx: &AppContext) -> Self {
         let paths = NginxPaths::detect();
         Self::with_paths(ctx, paths).await
@@ -47,10 +52,12 @@ impl SitesModule {
         }
     }
 
+    /// Return a clone of the shared service handle.
     pub fn service(&self) -> Arc<SitesService> {
         self.service.clone()
     }
 
+    /// Borrow the underlying nginx config generator.
     pub fn generator(&self) -> &NginxConfigGenerator {
         &self.generator
     }

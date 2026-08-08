@@ -4,9 +4,12 @@
 //! `/tmp/openpanel-test/<uuid>.db`, connects, runs all migrations,
 //! and returns the pool. `Drop` removes the file.
 
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
-use sqlx::{Pool, Sqlite};
 use std::path::PathBuf;
+
+use sqlx::{
+    Pool, Sqlite,
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
+};
 use uuid::Uuid;
 
 /// RAII wrapper around a per-test SQLite database file.

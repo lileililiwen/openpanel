@@ -1,5 +1,6 @@
-use crate::common::*;
 use serde_json::json;
+
+use crate::common::*;
 
 /// Boot a server with an owner user and return `(server, token)`.
 async fn owner_server() -> (TestServer, String) {

@@ -22,6 +22,8 @@ chrono = { workspace = true }
 uuid = { workspace = true }
 axum = { workspace = true }
 clap = { workspace = true }
-walkdir = { workspace = true }
 
 openpanel-domain = { workspace = true }
+
+[lints]
+workspace = true

@@ -2,18 +2,22 @@
 //! `/etc/nginx/conf.d/openpanel/`, validates with `nginx -t`, and reloads
 //! with `nginx -s reload`. On `nginx -t` failure, restores the prior state.
 
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::{
+    fs,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
-use openpanel_domain::SiteError;
-use openpanel_domain::sites::site::Site;
-use openpanel_domain::sites::status::SiteStatus;
+use openpanel_domain::{SiteError, sites::site::Site};
 
+/// Filesystem paths used by the nginx config generator.
 #[derive(Debug, Clone)]
 pub struct NginxPaths {
+    /// Directory where active site configs (`<domain>.conf`) are written.
     pub conf_d_active: PathBuf,
+    /// Directory where disabled configs (`<domain>.conf.disabled`) are moved.
     pub conf_d_disabled: PathBuf,
+    /// Absolute path to the `nginx` binary used for `-t` and `-s reload`.
     pub nginx_binary: PathBuf,
 }
 
@@ -40,6 +44,8 @@ impl NginxPaths {
 }
 
 impl NginxPaths {
+    /// Detect the host's `nginx` binary via `which`, falling back to the default
+    /// `/usr/sbin/nginx` path when not found.
     pub fn detect() -> Self {
         let mut paths = NginxPaths::default();
         if let Ok(out) = Command::new("which").arg("nginx").output()
@@ -54,25 +60,30 @@ impl NginxPaths {
         paths
     }
 
+    /// Absolute path to the active config file for a given domain.
     pub fn active_path(&self, domain: &str) -> PathBuf {
         self.conf_d_active.join(format!("{domain}.conf"))
     }
 
+    /// Absolute path to the disabled config file for a given domain.
     pub fn disabled_path(&self, domain: &str) -> PathBuf {
         self.conf_d_disabled.join(format!("{domain}.conf.disabled"))
     }
 }
 
 #[derive(Clone)]
+/// Renders, writes, and reloads nginx server blocks for OpenPanel sites.
 pub struct NginxConfigGenerator {
     paths: NginxPaths,
 }
 
 impl NginxConfigGenerator {
+    /// Build a generator bound to the given nginx paths.
     pub fn new(paths: NginxPaths) -> Self {
         Self { paths }
     }
 
+    /// Borrow the configured paths.
     pub fn paths(&self) -> &NginxPaths {
         &self.paths
     }
@@ -195,6 +206,7 @@ server {{
         Ok(())
     }
 
+    /// Send `nginx -s reload` to pick up the latest configs.
     pub fn reload(&self) -> Result<(), SiteError> {
         let out = Command::new(&self.paths.nginx_binary)
             .arg("-s")
@@ -214,6 +226,7 @@ server {{
         Ok(())
     }
 
+    /// Run `nginx -t` to validate the current config; returns success status.
     pub fn test(&self) -> Result<bool, SiteError> {
         let out = Command::new(&self.paths.nginx_binary)
             .arg("-t")
@@ -275,25 +288,19 @@ server {{
         self.reload()
     }
 
+    /// Returns true when the configured nginx binary exists on disk.
     pub fn nginx_available(&self) -> bool {
         self.paths.nginx_binary.exists()
     }
 }
 
-#[allow(dead_code)]
-pub fn status_to_path_suffix(status: SiteStatus) -> &'static str {
-    match status {
-        SiteStatus::Active => "",
-        SiteStatus::Disabled => ".disabled",
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
     use chrono::Utc;
     use openpanel_domain::{Email, Password, Role, User, Username};
     use uuid::Uuid;
+
+    use super::*;
 
     fn dummy_site() -> Site {
         Site::new(

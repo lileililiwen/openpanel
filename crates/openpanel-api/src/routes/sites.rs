@@ -2,17 +2,22 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
-use axum::routing::{get, post};
-use axum::{Json, Router};
+use axum::{
+    Json, Router,
+    extract::{Path, State},
+    routing::{get, post},
+};
 use openpanel_app::SitesService;
 use openpanel_domain::SiteError;
 use uuid::Uuid;
 
-use crate::dto::{CreateSiteRequest, PatchSiteRequest, SiteDto};
-use crate::error::{ApiError, ApiResult};
-use crate::extract::AuthUser;
+use crate::{
+    dto::{CreateSiteRequest, PatchSiteRequest, SiteDto},
+    error::{ApiError, ApiResult},
+    extract::AuthUser,
+};
 
+/// Builds the Axum sub-router for `/sites` routes.
 pub fn router(svc: Arc<SitesService>) -> Router {
     Router::new()
         .route("/", get(list_sites).post(create_site))

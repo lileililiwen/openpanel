@@ -1,43 +1,56 @@
 //! HTTP error type with `IntoResponse` mapping for typed domain errors.
 
-use axum::Json;
-use axum::http::StatusCode;
-use axum::response::{IntoResponse, Response};
+use axum::{
+    Json,
+    http::StatusCode,
+    response::{IntoResponse, Response},
+};
 use openpanel_domain::IdentityError;
 use thiserror::Error;
 
 use crate::dto::ErrorBody;
 
+/// Convenience alias for `Result<T, ApiError>` used by every route handler.
 pub type ApiResult<T> = Result<T, ApiError>;
 
+/// All errors that may be returned from an API handler, mapped to HTTP responses.
 #[derive(Debug, Error)]
 pub enum ApiError {
+    /// Wraps a typed [`IdentityError`] from the domain layer.
     #[error(transparent)]
     Identity(#[from] IdentityError),
 
+    /// A request could not be processed due to malformed input.
     #[error("bad request: {0}")]
     BadRequest(String),
 
+    /// The requested resource does not exist.
     #[error("not found: {0}")]
     NotFound(String),
 
+    /// The caller is not authenticated.
     #[error("unauthorized")]
     Unauthorized,
 
+    /// The caller is authenticated but lacks the required permission.
     #[error("forbidden")]
     Forbidden,
 
+    /// The request conflicts with the current resource state (e.g. duplicate).
     #[error("conflict: {0}")]
     Conflict(String),
 
+    /// The request body exceeded the configured size limit.
     #[error("payload too large: {0} bytes")]
     PayloadTooLarge(u64),
 
+    /// An unexpected internal failure. Avoid leaking details to clients.
     #[error("internal error: {0}")]
     Internal(String),
 }
 
 impl IntoResponse for ApiError {
+    /// Converts this error into a stable `(<status>, <machine_code>)` JSON response.
     fn into_response(self) -> Response {
         let (status, code) = match &self {
             ApiError::Identity(e) => match e {

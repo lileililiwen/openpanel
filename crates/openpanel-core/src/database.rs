@@ -1,16 +1,18 @@
 //! Database abstraction. v0.1 ships only the SQLite driver; the trait leaves
 //! room for a Postgres driver later without touching modules.
 
-use std::path::Path;
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
 use async_trait::async_trait;
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
-use sqlx::{Pool, Sqlite};
+use sqlx::{
+    Pool, Sqlite,
+    sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
+};
 use tokio::sync::RwLock;
 
 use crate::error::{CoreResult, DatabaseError};
 
+/// A SQLite connection pool.
 pub type SqlitePool = Pool<Sqlite>;
 
 /// Database contract used by application services. v0.1 only exposes
@@ -20,6 +22,7 @@ pub trait DatabaseDriver: Send + Sync + 'static {
     /// Return an owned clone of the pool. Cheap — `Pool` is `Arc` internally.
     async fn pool(&self) -> SqlitePool;
 
+    /// Begin a transaction against the pool.
     async fn begin(&self) -> Result<sqlx::Transaction<'_, Sqlite>, DatabaseError>;
 }
 
@@ -30,6 +33,8 @@ pub struct SqliteDriver {
 }
 
 impl SqliteDriver {
+    /// Create a driver for the given `sqlite://` URL. The pool is opened lazily
+    /// by [`connect`](Self::connect).
     pub fn new(url: impl Into<String>) -> Self {
         Self {
             url: url.into(),
@@ -37,6 +42,8 @@ impl SqliteDriver {
         }
     }
 
+    /// Open the connection pool, creating the database file and parent
+    /// directories if needed. The opened pool is cached for later calls.
     pub async fn connect(&self) -> CoreResult<SqlitePool> {
         let opts: SqliteConnectOptions = self.url.parse().map_err(DatabaseError::Sqlx)?;
         let opts = opts
@@ -72,6 +79,7 @@ impl SqliteDriver {
 }
 
 impl SqliteDriver {
+    /// Wrap the driver in an `Arc` for shared use.
     pub fn shared(self) -> Arc<Self> {
         Arc::new(self)
     }
@@ -81,9 +89,10 @@ impl SqliteDriver {
 impl DatabaseDriver for SqliteDriver {
     async fn pool(&self) -> SqlitePool {
         let guard = self.pool.read().await;
+        #[allow(clippy::expect_used)]
         guard
             .clone()
-            .expect("SqliteDriver::connect must be awaited before pool()")
+            .expect("invariant: SqliteDriver::connect must be awaited before pool()")
     }
 
     async fn begin(&self) -> Result<sqlx::Transaction<'_, Sqlite>, DatabaseError> {

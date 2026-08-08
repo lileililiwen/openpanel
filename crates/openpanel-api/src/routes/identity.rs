@@ -2,24 +2,28 @@
 
 use std::sync::Arc;
 
-use axum::extract::{Path, State};
-use axum::http::header::SET_COOKIE;
-use axum::http::{HeaderMap, HeaderValue};
-use axum::response::IntoResponse;
-use axum::routing::{delete, get, post};
-use axum::{Json, Router};
+use axum::{
+    Json, Router,
+    extract::{Path, State},
+    http::{HeaderMap, HeaderValue, header::SET_COOKIE},
+    response::IntoResponse,
+    routing::{delete, get, post},
+};
 use openpanel_app::IdentityService;
 use openpanel_domain::IdentityError;
 use uuid::Uuid;
 
-use crate::dto::{
-    ChangePasswordRequest, ChangeRoleRequest, CreateUserRequest, ErrorBody, LoginRequest,
-    LoginResponse, UserDto,
+use crate::{
+    dto::{
+        ChangePasswordRequest, ChangeRoleRequest, CreateUserRequest, LoginRequest, LoginResponse,
+        UserDto,
+    },
+    error::{ApiError, ApiResult},
+    extract::{AuthUser, RequireOwner},
+    middleware::session::SESSION_COOKIE,
 };
-use crate::error::{ApiError, ApiResult};
-use crate::extract::{AuthUser, RequireOwner};
-use crate::middleware::session::SESSION_COOKIE;
 
+/// Builds the Axum sub-router for `/identity` routes (login, logout, me, user CRUD).
 pub fn router(svc: Arc<IdentityService>) -> Router {
     Router::new()
         .route("/login", post(login))
@@ -180,9 +184,4 @@ fn user_agent(headers: &HeaderMap) -> Option<String> {
         .get(axum::http::header::USER_AGENT)
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string())
-}
-
-#[allow(dead_code)]
-fn error_body(s: &str) -> ErrorBody {
-    ErrorBody::new(s)
 }

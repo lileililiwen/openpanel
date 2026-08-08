@@ -5,24 +5,29 @@
 
 use std::future::Future;
 
-use axum::extract::FromRequestParts;
-use axum::http::request::Parts;
+use axum::{extract::FromRequestParts, http::request::Parts};
 use openpanel_domain::{Role, Session, User};
 
 use crate::error::ApiError;
 
+/// Authenticated `(user, session)` pair stored in request extensions by middleware.
 #[derive(Clone)]
 pub struct AuthSession {
+    /// The authenticated user.
     pub user: User,
+    /// The resolved session backing the bearer token / cookie.
     pub session: Session,
 }
 
 /// Internal extension trait used by the session middleware.
 pub trait AuthSessionExt {
+    /// Returns the [`AuthSession`] attached to this request, if any.
     fn auth_session(&self) -> Option<AuthSession>;
 }
 
 /// Authenticated user extractor.
+///
+/// Yields `(User, Session)` for handlers that require any logged-in user.
 pub struct AuthUser(pub User, pub Session);
 
 impl<S> FromRequestParts<S> for AuthUser
@@ -69,6 +74,7 @@ where
     }
 }
 
+/// Marker extractor: succeeds only when the authenticated user is an `Owner`.
 pub struct RequireOwner;
 
 impl<S> FromRequestParts<S> for RequireOwner

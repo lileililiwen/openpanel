@@ -3,12 +3,14 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::databases::engine::DatabaseEngine;
-use crate::databases::error::DatabaseError;
-use crate::databases::status::DatabaseStatus;
+use crate::databases::{engine::DatabaseEngine, error::DatabaseError, status::DatabaseStatus};
 
 const NAME_RE: &str = r"^[a-z0-9_]{3,32}$";
 
+/// A MySQL database provisioned on behalf of a user.
+///
+/// The `name` is derived from the owning user's username and the
+/// caller-supplied suffix, so it is always unique per owner.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Database {
     id: Uuid,
@@ -24,6 +26,8 @@ pub struct Database {
 }
 
 impl Database {
+    /// Create a new database. Validates the suffix and owner username,
+    /// then derives the database name as `{username}_{suffix}`.
     pub fn new(
         id: Uuid,
         owner_id: Uuid,
@@ -56,6 +60,8 @@ impl Database {
         })
     }
 
+    /// Reconstruct a database aggregate from stored persistence state,
+    /// bypassing validation and derivation.
     #[allow(clippy::too_many_arguments)]
     pub fn restore(
         id: Uuid,
@@ -83,47 +89,71 @@ impl Database {
         }
     }
 
+    /// Mark the database as suspended.
     pub fn suspend(&mut self) {
         self.status = DatabaseStatus::Suspended;
     }
+
+    /// Mark the database as active again.
     pub fn resume(&mut self) {
         self.status = DatabaseStatus::Active;
     }
 
+    /// The database's unique identifier.
     pub fn id(&self) -> Uuid {
         self.id
     }
+
+    /// The identifier of the user who owns this database.
     pub fn owner_id(&self) -> Uuid {
         self.owner_id
     }
+
+    /// The fully qualified database name.
     pub fn name(&self) -> &str {
         &self.name
     }
+
+    /// The MySQL user that owns the database.
     pub fn db_user(&self) -> &str {
         &self.db_user
     }
+
+    /// The host the database lives on.
     pub fn db_host(&self) -> &str {
         &self.db_host
     }
+
+    /// The database engine in use.
     pub fn engine(&self) -> DatabaseEngine {
         self.engine
     }
+
+    /// The character set configured for the database.
     pub fn charset(&self) -> &str {
         &self.charset
     }
+
+    /// The current lifecycle status of the database.
     pub fn status(&self) -> DatabaseStatus {
         self.status
     }
+
+    /// When the database was created.
     pub fn created_at(&self) -> DateTime<Utc> {
         self.created_at
     }
+
+    /// The username of the actor who created the database.
     pub fn created_by(&self) -> &str {
         &self.created_by
     }
 }
 
 fn validate_name(s: &str) -> Result<(), DatabaseError> {
-    let re = Regex::new(NAME_RE).expect("valid regex");
+    #[allow(clippy::expect_used)]
+    let re = Regex::new(NAME_RE)
+        .expect("NAME_RE is a compile-time constant; a broken pattern is a programming error");
     if !re.is_match(s) {
         return Err(DatabaseError::InvalidName(format!(
             "`{s}` does not match {NAME_RE}"
@@ -133,7 +163,9 @@ fn validate_name(s: &str) -> Result<(), DatabaseError> {
 }
 
 fn validate_username(s: &str) -> Result<String, DatabaseError> {
-    let re = Regex::new(NAME_RE).expect("valid regex");
+    #[allow(clippy::expect_used)]
+    let re = Regex::new(NAME_RE)
+        .expect("NAME_RE is a compile-time constant; a broken pattern is a programming error");
     if !re.is_match(s) {
         return Err(DatabaseError::InvalidName(format!(
             "owner username `{s}` is not a valid name component"
@@ -209,8 +241,9 @@ mod tests {
 
 #[cfg(test)]
 mod prop {
-    use super::*;
     use proptest::prelude::*;
+
+    use super::*;
 
     proptest! {
         #[test]

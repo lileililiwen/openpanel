@@ -2,7 +2,6 @@
 //! `openpanel-core::AuditService`.
 
 use mockall::mock;
-
 use openpanel_core::{AuditEvent, AuditService, CoreResult};
 use openpanel_domain::{
     DatabaseRepository, RepoError, SessionRepository, SiteRepository, UserRepository,

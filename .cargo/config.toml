@@ -1,0 +1,13 @@
+# Workspace-wide cargo configuration.
+#
+# Note: We intentionally do NOT set a workspace-wide `RUSTFLAGS="-D warnings"`.
+# That flag would apply to dependency crates and `build.rs` scripts too,
+# where it frequently breaks third-party code we do not control. The
+# clippy gate (`scripts/check-clippy.sh`) already enforces `-D warnings`
+# against our own crates via `cargo clippy --workspace --all-targets`.
+#
+# See `openspec/changes/add-quality-engineering-infrastructure/proposal.md`
+# "New `.cargo/config.toml` (informational)".
+
+[registries.crates-io]
+protocol = "sparse"

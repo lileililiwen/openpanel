@@ -3,9 +3,10 @@
 
 use std::fmt;
 
-use argon2::Argon2;
-use argon2::password_hash::rand_core::OsRng;
-use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use argon2::{
+    Argon2,
+    password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString, rand_core::OsRng},
+};
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
@@ -14,18 +15,24 @@ const ARGON2_M_COST: u32 = 19456;
 const ARGON2_T_COST: u32 = 2;
 const ARGON2_P_COST: u32 = 1;
 
+/// Errors that can occur while hashing or verifying a password.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum PasswordError {
+    /// Password is shorter than the minimum allowed length.
     #[error("password must be at least {0} characters")]
     TooShort(usize),
+    /// Password exceeds the maximum allowed length.
     #[error("password exceeds maximum length")]
     TooLong,
+    /// The argon2 hashing operation failed.
     #[error("argon2 hash error: {0}")]
     Hash(String),
+    /// The argon2 verification operation failed.
     #[error("argon2 verify error: {0}")]
     Verify(String),
 }
 
+/// Hashed password value object.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Password {
     /// argon2id PHC-format string. Plaintext is dropped at construction.
@@ -56,10 +63,12 @@ impl Password {
         Ok(Self { hash })
     }
 
+    /// Construct a `Password` from an existing argon2id PHC-format hash string.
     pub fn from_hash(hash: impl Into<String>) -> Self {
         Self { hash: hash.into() }
     }
 
+    /// Verify a plaintext candidate against the stored hash.
     pub fn verify(&self, plaintext: &str) -> Result<bool, PasswordError> {
         let parsed =
             PasswordHash::new(&self.hash).map_err(|e| PasswordError::Verify(e.to_string()))?;
@@ -68,6 +77,7 @@ impl Password {
             .is_ok())
     }
 
+    /// Return the stored argon2id hash string.
     pub fn hash_str(&self) -> &str {
         &self.hash
     }
@@ -101,8 +111,9 @@ mod tests {
 
 #[cfg(test)]
 mod prop {
-    use super::*;
     use proptest::prelude::*;
+
+    use super::*;
 
     proptest! {
         #![proptest_config(ProptestConfig::with_cases(10))]

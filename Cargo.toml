@@ -86,9 +86,6 @@ rustls-acme = { version = "0.13", features = ["axum"] }
 # Async traits
 async-trait = "0.1"
 
-# Filesystem walking (migration discovery)
-walkdir = "2.5"
-
 # File watching (used later by sites module)
 notify = "6.1"
 
@@ -131,6 +128,7 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 sqlx = { workspace = true }
 tempfile = "3"
+cargo-audit = "0.22"
 
 [[test]]
 name = "integration"
@@ -150,6 +148,6 @@ missing_docs = "warn"
 [workspace.lints.clippy]
 unwrap_used = "deny"
 expect_used = "deny"
-panic_used = "deny"
+panic = "deny"
 todo = "deny"
 unimplemented = "deny"

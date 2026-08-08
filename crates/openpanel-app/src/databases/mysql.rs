@@ -5,16 +5,19 @@
 //! integrate with the tokio runtime without blocking.
 
 use std::path::PathBuf;
-use tokio::process::Command;
 
 use openpanel_domain::databases::error::DatabaseError;
+use tokio::process::Command;
 
+/// Thin wrapper around the `mysql` CLI used to perform MySQL mutations
+/// without a native client library.
 pub struct MySqlClient {
     binary: PathBuf,
     admin_user: String,
 }
 
 impl MySqlClient {
+    /// Construct a client bound to a specific `mysql` binary path and admin user.
     pub fn new(binary: impl Into<PathBuf>, admin_user: impl Into<String>) -> Self {
         Self {
             binary: binary.into(),
@@ -38,10 +41,12 @@ impl MySqlClient {
         None
     }
 
+    /// Returns true when the configured `mysql` binary exists on disk.
     pub fn available(&self) -> bool {
         self.binary.exists()
     }
 
+    /// Create a new MySQL database with the given character set.
     pub async fn create_database(&self, name: &str, charset: &str) -> Result<(), DatabaseError> {
         if !self.available() {
             return Err(DatabaseError::MysqlMissing);
@@ -54,6 +59,7 @@ impl MySqlClient {
         self.run(&sql).await
     }
 
+    /// Create a MySQL user account identified by the given password.
     pub async fn create_user(
         &self,
         user: &str,
@@ -73,6 +79,7 @@ impl MySqlClient {
         self.run(&sql).await
     }
 
+    /// Grant full privileges on the given database to a user/host pair.
     pub async fn grant_all(&self, db: &str, user: &str, host: &str) -> Result<(), DatabaseError> {
         if !self.available() {
             return Err(DatabaseError::MysqlMissing);
@@ -86,6 +93,7 @@ impl MySqlClient {
         self.run(&sql).await
     }
 
+    /// Rotate the password for an existing MySQL user.
     pub async fn change_password(
         &self,
         user: &str,
@@ -105,6 +113,7 @@ impl MySqlClient {
         self.run(&sql).await
     }
 
+    /// Drop a MySQL database if it exists.
     pub async fn drop_database(&self, name: &str) -> Result<(), DatabaseError> {
         if !self.available() {
             return Err(DatabaseError::MysqlMissing);
@@ -113,6 +122,7 @@ impl MySqlClient {
         self.run(&sql).await
     }
 
+    /// Drop a MySQL user account if it exists.
     pub async fn drop_user(&self, user: &str, host: &str) -> Result<(), DatabaseError> {
         if !self.available() {
             return Err(DatabaseError::MysqlMissing);

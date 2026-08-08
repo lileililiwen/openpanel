@@ -1,15 +1,17 @@
-use std::fmt;
-use std::str::FromStr;
+use std::{fmt, str::FromStr};
 
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+/// The database engine used by a database.
 pub enum DatabaseEngine {
+    /// MySQL 8.x, provisioned through the `mysql` CLI.
     Mysql,
 }
 
 impl DatabaseEngine {
+    /// The string representation of the engine, as used in MySQL commands.
     pub fn as_str(&self) -> &'static str {
         match self {
             DatabaseEngine::Mysql => "mysql",
@@ -25,6 +27,7 @@ impl fmt::Display for DatabaseEngine {
 
 impl FromStr for DatabaseEngine {
     type Err = String;
+
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "mysql" => Ok(DatabaseEngine::Mysql),

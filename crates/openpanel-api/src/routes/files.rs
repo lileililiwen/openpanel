@@ -2,22 +2,26 @@
 
 use std::sync::Arc;
 
-use axum::body::Bytes;
-use axum::extract::{Path, State, multipart::Multipart};
-use axum::http::header;
-use axum::response::{IntoResponse, Response};
-use axum::routing::{delete, patch, post};
-use axum::{Json, Router};
+use axum::{
+    Json, Router,
+    body::Bytes,
+    extract::{Path, State, multipart::Multipart},
+    http::header,
+    response::{IntoResponse, Response},
+    routing::{delete, patch, post},
+};
 use openpanel_app::FilesService;
-use openpanel_domain::files::error::FileError;
-use openpanel_domain::files::path::Path as FilePath;
+use openpanel_domain::files::{error::FileError, path::Path as FilePath};
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::dto::{FileInfoDto, ListDirResponse, RemoveRequest};
-use crate::error::{ApiError, ApiResult};
-use crate::extract::AuthUser;
+use crate::{
+    dto::{FileInfoDto, ListDirResponse, RemoveRequest},
+    error::{ApiError, ApiResult},
+    extract::AuthUser,
+};
 
+/// Builds the Axum sub-router for `/files/{site_id}/...` routes.
 pub fn router(svc: Arc<FilesService>) -> Router {
     Router::new()
         .route("/{site_id}", axum::routing::get(list_root))

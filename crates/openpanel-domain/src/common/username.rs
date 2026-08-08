@@ -1,26 +1,34 @@
+//! Validated username value object.
+
 use std::fmt;
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
 
+/// Errors that can occur when constructing a username.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum UsernameError {
+    /// Username is outside the allowed length range.
     #[error("username must be 3-32 chars long")]
     Length,
+    /// Username contains a character that is not allowed.
     #[error("username contains invalid character `{0}`")]
     InvalidChar(char),
 }
 
+/// Validated username value object.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Username(String);
 
 impl Username {
+    /// Create a new `Username`, validating the value.
     pub fn new(value: impl Into<String>) -> Result<Self, UsernameError> {
         let s = value.into();
         validate(&s)?;
         Ok(Self(s))
     }
 
+    /// Return the raw username string.
     pub fn as_str(&self) -> &str {
         &self.0
     }

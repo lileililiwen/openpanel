@@ -2,20 +2,21 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use sqlx::Pool;
-use sqlx::Sqlite;
+use openpanel_domain::{
+    RepoError, SiteRepository,
+    sites::{site::Site, status::SiteStatus},
+};
+use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
 
-use openpanel_domain::sites::site::Site;
-use openpanel_domain::sites::status::SiteStatus;
-use openpanel_domain::{RepoError, SiteRepository};
-
+/// SQLite-backed adapter for the domain `SiteRepository` trait.
 #[derive(Clone)]
 pub struct SqliteSiteRepository {
     pool: Pool<Sqlite>,
 }
 
 impl SqliteSiteRepository {
+    /// Build a site repository over the given SQLite connection pool.
     pub fn new(pool: Pool<Sqlite>) -> Self {
         Self { pool }
     }

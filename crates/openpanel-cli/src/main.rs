@@ -1,8 +1,9 @@
 //! openpanel — CLI entry point.
 
 use clap::Parser;
-use openpanel_cli::handlers;
-use openpanel_cli::{Cli, Command, DatabaseCommand, FileCommand, SiteCommand, UserCommand};
+use openpanel_cli::{
+    Cli, Command, DatabaseCommand, FileCommand, SiteCommand, UserCommand, handlers,
+};
 use openpanel_core::{Config, init_tracing};
 
 #[tokio::main]

@@ -4,20 +4,25 @@
 //! Final config is validated against a built-in JSON Schema. On failure,
 //! startup aborts with exit code 78 (`EX_CONFIG`).
 
-use std::path::Path;
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 
-use figment::Figment;
-use figment::providers::{Env, Format, Toml};
+use figment::{
+    Figment,
+    providers::{Env, Format, Toml},
+};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::error::{ConfigError, CoreResult};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// HTTP server settings.
 pub struct ServerConfig {
+    /// Address the server binds to.
     pub bind: String,
+    /// Port the server listens on.
     pub port: u16,
+    /// Optional number of worker threads (defaults when `None`).
     pub workers: Option<usize>,
 }
 
@@ -32,9 +37,13 @@ impl Default for ServerConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Database connection settings.
 pub struct DatabaseConfig {
+    /// Driver name, e.g. `sqlite`.
     pub driver: String,
+    /// Connection URL, e.g. `sqlite:///var/lib/openpanel/openpanel.db`.
     pub url: String,
+    /// Maximum number of pooled connections.
     pub max_connections: u32,
 }
 
@@ -49,8 +58,11 @@ impl Default for DatabaseConfig {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Logging settings.
 pub struct LogConfig {
+    /// Minimum log level, e.g. `info` or `debug`.
     pub level: String,
+    /// Log output format, e.g. `compact` or `json`.
     pub format: String,
 }
 
@@ -64,13 +76,18 @@ impl Default for LogConfig {
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+/// Validated application configuration assembled from defaults, files, and env.
 pub struct Config {
+    /// HTTP server settings.
     #[serde(default)]
     pub server: ServerConfig,
+    /// Database connection settings.
     #[serde(default)]
     pub database: DatabaseConfig,
+    /// Logging settings.
     #[serde(default)]
     pub log: LogConfig,
+    /// Per-module config sections keyed by module name.
     #[serde(default)]
     pub modules: serde_json::Map<String, Value>,
 }
@@ -101,6 +118,7 @@ impl Config {
         Ok(Arc::new(cfg))
     }
 
+    /// Validate the config against the built-in JSON Schema.
     pub fn validate(&self) -> CoreResult<()> {
         let schema = serde_json::json!({
             "type": "object",
@@ -148,15 +166,22 @@ impl Config {
         Ok(())
     }
 
+    /// Accessor for the server settings.
     pub fn server(&self) -> &ServerConfig {
         &self.server
     }
+
+    /// Accessor for the database settings.
     pub fn database(&self) -> &DatabaseConfig {
         &self.database
     }
+
+    /// Accessor for the logging settings.
     pub fn log(&self) -> &LogConfig {
         &self.log
     }
+
+    /// Look up a module's config section, if present.
     pub fn module_config(&self, name: &str) -> Option<&Value> {
         self.modules.get(name)
     }
@@ -172,11 +197,15 @@ pub fn with_overrides(mut cfg: Config, path: &str, value: Value) -> CoreResult<C
         if !cursor.is_object() {
             return Err(ConfigError::Load(format!("path `{path}` is not an object")).into());
         }
-        let obj = cursor.as_object_mut().unwrap();
+        let obj = cursor
+            .as_object_mut()
+            .ok_or_else(|| ConfigError::Load(format!("path `{path}` is not an object")))?;
         if !obj.contains_key(*seg) {
             obj.insert((*seg).to_string(), Value::Null);
         }
-        cursor = obj.get_mut(*seg).unwrap();
+        cursor = obj.get_mut(*seg).ok_or_else(|| {
+            ConfigError::Load(format!("segment `{seg}` vanished from path `{path}`"))
+        })?;
     }
     *cursor = value;
     let updated: Config =
@@ -185,6 +214,7 @@ pub fn with_overrides(mut cfg: Config, path: &str, value: Value) -> CoreResult<C
     Ok(cfg)
 }
 
+/// Check whether the given filesystem path exists.
 pub fn path_exists(p: &str) -> bool {
     Path::new(p).exists()
 }

@@ -56,16 +56,16 @@ fail on any diff.
 every CI build. Any advisory with severity `warning` or higher MUST
 fail the build.
 
-The repo MUST contain an `audit-suppressions.toml` (auto-managed) for
-advisories the team has triaged. Each entry MUST have a `reason` and
-an `expires_on` date.
+The repo MUST contain an `.cargo/audit.toml` (auto-managed) for
+advisories the team has triaged. Each entry MUST have a `reason`.
+Entries with a known upstream fix MUST have an `expires_on` date.
 
 #### Scenario: Transitive dep has a known RUSTSEC advisory
 
 - **WHEN** `cargo audit` detects `RUSTSEC-2024-XXXX` in the dep graph
-- **THEN** `scripts/check-quality.sh` exits non-zero and the PR cannot
-  be merged until the advisory is resolved or explicitly suppressed
-  with an expiry.
+- **THEN** the audit gate fails (`make check` exits non-zero) and the
+  PR cannot be merged until the advisory is resolved or explicitly
+  suppressed with an expiry.
 
 ### Requirement: Documentation Link Check
 
@@ -96,29 +96,43 @@ blocks. Test crates MAY use `unsafe` inside `#[cfg(test)]` blocks.
 
 ### Requirement: Quality Script
 
-A new `scripts/check-quality.sh` MUST run, in order:
-1. `cargo fmt --all -- --check`
-2. `cargo clippy --workspace --all-targets -- -D warnings`
-3. `cargo doc --workspace --no-deps` (catches broken doc links)
-4. `cargo audit`
-5. `cargo test --workspace` (delegates to the TDD script)
+A root `Makefile` MUST act as the quality gate *manager*: it knows the
+gates and their order but holds no business logic. Each gate MUST live
+in its own small script under `scripts/` and be runnable in isolation
+via its own target (`make fmt`, `make clippy`, `make docs`, `make
+audit`, `make test`). `make check` MUST run, in order:
+1. `scripts/check-fmt.sh` — `cargo fmt --all -- --check`
+2. `scripts/check-clippy.sh` — `cargo clippy --workspace --all-targets
+   -- -D warnings`
+3. `scripts/check-docs.sh` — `cargo doc --workspace --no-deps` (catches
+   broken doc links)
+4. `scripts/check-audit.sh` — `cargo audit` (skips gracefully when the
+   tool is not installed)
+5. `scripts/check-tests.sh` — `cargo test --workspace` (the TDD script)
 
-Exit code MUST be non-zero if any step fails. Output MUST be
-machine-parseable (each step on its own line: `step: name status: ok
-| failed`).
+The exit code of `make check` MUST be non-zero if any gate fails.
+Output MUST be machine-parseable: each step on its own line as
+`step: name status: ok | failed`, produced by a shared helper
+(`scripts/lib/step.sh`).
 
 #### Scenario: Single entry point
 
-- **WHEN** a developer runs `scripts/check-quality.sh` locally
-- **THEN** all five steps execute in order; a failure in step 1
-  short-circuits the rest and the script exits with a non-zero code.
+- **WHEN** a developer runs `make check` locally
+- **THEN** all five gates execute in order; a failure in gate 1
+  short-circuits the rest and `make` exits with a non-zero code.
+
+#### Scenario: Isolated gate
+
+- **WHEN** a developer runs `make clippy` alone
+- **THEN** only the clippy gate runs; a passing run exits 0 without
+  touching the other gates.
 
 ### Requirement: CI Workflow
 
 A new `.github/workflows/ci.yml` MUST run on every push and PR:
 1. Checkout, install Rust toolchain
 2. Cache cargo registry and target/
-3. Run `scripts/check-quality.sh`
+3. Run `make check`
 4. Upload coverage report as an artifact (informational)
 
 The workflow MUST be informational in v0.1 — no actual CI server

@@ -1,7 +1,12 @@
+/// Authentication- and user-related request/response DTOs.
 pub mod auth;
+/// Shared DTOs used by multiple endpoints (e.g. generic error envelope).
 pub mod common;
+/// Database management request/response DTOs.
 pub mod database;
+/// File-manager request/response DTOs.
 pub mod file;
+/// Site management request/response DTOs.
 pub mod site;
 
 pub use auth::*;

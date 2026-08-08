@@ -35,3 +35,6 @@ openpanel-domain = { workspace = true }
 openpanel-test-support = { workspace = true }
 mockall = { workspace = true }
 proptest = { workspace = true }
+
+[lints]
+workspace = true

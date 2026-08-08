@@ -192,12 +192,16 @@ See `openspec/specs/testing/spec.md` for the full standard.
 > and you must not make assumptions about the state of the database
 > environment.
 
-**Production-code policy (enforced by `scripts/check-quality.sh`):**
+**Production-code policy (enforced by `make check`):**
 
 - `unwrap`, `expect`, `panic!`, `todo!`, `unimplemented!` are **forbidden
   in production code** (`#[cfg(test)]` exempt). Use `?` propagation,
   `match`, or `.expect("invariant: ...")` with a justification.
 - `unsafe_code = "forbid"` in production crates.
+- `#[allow(dead_code)]` is **banned** — dead code is real debt. Restructure
+  the code so everything is genuinely used (e.g. one shared test module
+  compiled per test binary), or delete the dead path. Never silence the
+  lint.
 - `cargo fmt --check` on every commit.
 - `cargo audit` blocks the build on known RUSTSEC advisories.
 - `cargo doc` enforces `rustdoc::broken_intra_doc_links`.
@@ -216,12 +220,13 @@ See `openspec/specs/testing/spec.md` for the full standard.
 calls `.unwrap()` on input it never received will still panic in
 production. Static analysis catches what tests don't.
 
-**Workflow gate:** every PR must exit 0 from `./scripts/check-quality.sh`.
-Local invocation runs the same steps as CI:
-1. `cargo fmt --all -- --check`
-2. `cargo clippy --workspace --all-targets -- -D warnings`
-3. `cargo doc --workspace --no-deps`
-4. (optional) `cargo audit`
+**Workflow gate:** every PR must exit 0 from `make check`.
+Local invocation runs the same gates as CI:
+1. `make fmt` — `cargo fmt --all -- --check`
+2. `make clippy` — `cargo clippy --workspace --all-targets -- -D warnings`
+3. `make docs` — `cargo doc --workspace --no-deps`
+4. `make audit` — `cargo audit` (optional, skipped if tool absent)
+5. `make test` — full test suite
 
 `add-quality-engineering-infrastructure` defines the full policy.
 
@@ -260,7 +265,7 @@ When asked to implement a feature or spec:
 5. **Smoke-test** at the HTTP layer (`curl` against the local
    server) before declaring done. End-to-end CLI tests live in
    `tests/cli/`.
-6. **Run** `scripts/check-quality.sh` locally. Fix every clippy
+6. **Run** `make check` locally. Fix every clippy
    warning. Fix every fmt diff.
 7. **Update** the change's `tasks.md` — every box checked.
 8. **Archive** via `openspec archive <name>`. The delta is folded
@@ -279,6 +284,9 @@ When asked to implement a feature or spec:
 - **Don't** assume a database is empty or contains specific rows in
   a test. Seed what you need, tear down after.
 - **Don't** put `unwrap()` in production code. Use `?`.
+- **Don't** add `#[allow(dead_code)]` to silence a warning. Either use the
+  code or delete it; if a shared test helper has fields unused in some
+  test binaries, consolidate them into a single test target.
 - **Don't** mix layers. Domain code MUST NOT import `sqlx`. App code
   MAY import domain but not api. API MAY import app and domain.
 - **Don't** edit files outside your bounded context unless the
@@ -301,7 +309,9 @@ When asked to implement a feature or spec:
 - `openspec/changes/archive/` — frozen history of every shipped change
 - `crates/openpanel-test-support/README.md` — test helpers API
 - `tests/README.md` — how to run each test category
-- `scripts/check-quality.sh` — single-entry CI script
+- `Makefile` — single-entry quality gate (`make check`)
+- `scripts/check-fmt.sh`, `scripts/check-clippy.sh`,
+  `scripts/check-docs.sh`, `scripts/check-audit.sh` — per-gate scripts
 - `scripts/check-tests.sh` — test gate
 - `scripts/coverage.sh` — coverage report (informational)
 - `.github/workflows/ci.yml` — CI pipeline
