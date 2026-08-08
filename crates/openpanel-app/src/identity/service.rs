@@ -11,6 +11,80 @@ use uuid::Uuid;
 
 use crate::identity::repo::{SqliteSessionRepository, SqliteUserRepository};
 
+#[cfg(test)]
+mod tests {
+    //! Unit tests for `IdentityService` using `mockall` mocks at the
+    //! repository / audit port boundaries. These tests run with no
+    //! SQLite, no axum, no network — just the service logic over trait
+    //! mocks.
+    //!
+    //! See `openspec/changes/add-tdd-infrastructure/tasks.md` § 2.4.
+
+    use std::sync::Arc;
+
+    use openpanel_core::{AuditAction, AuditOutcome};
+    use openpanel_domain::{IdentityError, Password, Role, User};
+    use openpanel_test_support::{MockAudit, MockSessionRepo, MockUserRepo};
+    use uuid::Uuid;
+
+    use super::IdentityService;
+
+    /// Build a disabled `User` row for the mock to return.
+    fn disabled_user(username: &str) -> User {
+        let email = openpanel_domain::Email::new(format!("{username}@example.com")).unwrap();
+        let uname = openpanel_domain::Username::new(username.to_string()).unwrap();
+        let pwd = Password::hash("correct horse battery staple").unwrap();
+        let mut u = User::new(Uuid::new_v4(), uname, email, pwd, Role::Owner);
+        u.disable();
+        u
+    }
+
+    /// `login()` MUST return `AccountDisabled` (and audit the failure)
+    /// when the user exists but is disabled. This is the unit-test
+    /// equivalent of `tests/integration/identity::identity_login_disabled_user`,
+    /// running without a database.
+    #[tokio::test]
+    async fn login_returns_account_disabled_when_user_is_disabled() {
+        let user = disabled_user("alice");
+
+        let mut users = MockUserRepo::new();
+        users
+            .expect_find_by_username()
+            .times(1)
+            .returning(move |_| Ok(Some(user.clone())));
+
+        let sessions = MockSessionRepo::new();
+
+        let mut audit = MockAudit::new();
+        audit.expect_record().times(1).returning(|event| {
+            // The audit event MUST record the Login failure with the
+            // `account_disabled` reason.
+            assert_eq!(event.action, AuditAction::Login);
+            assert_eq!(event.outcome, AuditOutcome::Failure);
+            assert_eq!(
+                event.metadata.get("reason").and_then(|v| v.as_str()),
+                Some("account_disabled"),
+            );
+            Ok(())
+        });
+        // `recent` is never called during a disabled login; provide a
+        // stub so the mock doesn't fail to satisfy an implicit
+        // expectation.
+        audit.expect_recent().returning(|_| Ok(vec![]));
+
+        let svc = IdentityService::new(Arc::new(users), Arc::new(sessions), Arc::new(audit));
+
+        let err = svc
+            .login("alice", "correct horse battery staple", None, None)
+            .await
+            .expect_err("login should fail");
+        assert!(
+            matches!(err, IdentityError::AccountDisabled),
+            "expected AccountDisabled, got {err:?}"
+        );
+    }
+}
+
 /// Application service orchestrating identity use cases (users, sessions).
 #[derive(Clone)]
 pub struct IdentityService {

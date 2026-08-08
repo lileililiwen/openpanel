@@ -94,3 +94,42 @@ mock! {
         async fn count(&self) -> Result<i64, RepoError>;
     }
 }
+
+/// Demonstrates `mockall` mock expectations against `MockAudit`.
+/// `mockall` checks expectations when the mock is dropped: meeting the
+/// expectations exactly is a no-op; over- or under-meeting panics.
+#[cfg(test)]
+mod tests {
+    use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
+
+    use super::MockAudit;
+
+    fn login_event() -> AuditEvent {
+        AuditEvent::new("alice", AuditAction::Login, AuditOutcome::Success)
+    }
+
+    /// Met expectation: exactly one `record` call when `times(1)` is
+    /// set. Dropping the mock without panicking proves the expectation
+    /// was satisfied.
+    #[tokio::test]
+    async fn mock_audit_records_called_with_matching_event() {
+        let mut mock = MockAudit::new();
+        mock.expect_record().times(1).returning(|_| Ok(()));
+        mock.expect_recent().returning(|_| Ok(vec![]));
+
+        mock.record(login_event()).await.unwrap();
+        // Drop checks expectations here; no panic = pass.
+    }
+
+    /// Over-met expectation: two `record` calls when `times(1)` is set.
+    /// mockall panics on Drop when expectations are violated.
+    #[tokio::test]
+    #[should_panic(expected = "Expectation")]
+    async fn mock_audit_over_met_expectation_panics_on_drop() {
+        let mut mock = MockAudit::new();
+        mock.expect_record().times(1).returning(|_| Ok(()));
+        mock.record(login_event()).await.unwrap();
+        mock.record(login_event()).await.unwrap();
+        // Drop triggers expectation check and panics.
+    }
+}
