@@ -45,6 +45,6 @@
 - [x] 3.1 `cargo test --workspace` passes.
 - [x] 3.2 `cargo clippy --workspace --all-targets -- -D warnings` and
       `cargo fmt --all -- --check` pass.
-- [ ] 3.3 Manual smoke: log in, confirm the dashboard shows live
+- [x] 3.3 Manual smoke: log in, confirm the dashboard shows live
       host gauges that refresh, cards, and the alerts empty state.
-- [ ] 3.4 Commit + archive via OpenSpec.
+- [x] 3.4 Commit + archive via OpenSpec.
