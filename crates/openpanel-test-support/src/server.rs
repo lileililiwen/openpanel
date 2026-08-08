@@ -127,7 +127,8 @@ impl TestServer {
             files_svc.clone(),
             ssl_svc.clone(),
             monitoring_svc.clone(),
-        );
+        )
+        .merge(openpanel_web::router(identity_svc.clone()));
 
         let listener = TcpListener::bind("127.0.0.1:0")
             .await

@@ -1,0 +1,21 @@
+[package]
+name = "openpanel-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Server-rendered web UI (HTMX shell) for the OpenPanel control panel"
+
+[dependencies]
+axum = { workspace = true }
+maud = { workspace = true }
+serde = { workspace = true }
+base64 = { workspace = true }
+rand = { workspace = true }
+uuid = { workspace = true }
+
+openpanel-app = { workspace = true }
+openpanel-api = { workspace = true }
+openpanel-domain = { workspace = true }
+
+[lints]
+workspace = true

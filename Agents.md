@@ -336,12 +336,14 @@ When asked to implement a feature or spec:
 - `openspec/specs/files/spec.md` — chrooted file manager
 - `openspec/specs/ssl/spec.md` — TLS certificate lifecycle
 - `openspec/specs/monitoring/spec.md` — host resource monitoring
+- `openspec/changes/add-web-ui-foundation/specs/web-ui/spec.md` — web UI (login, shell, CSRF)
 - `openspec/specs/testing/spec.md` — TDD infrastructure (TBD)
 - `openspec/specs/quality/spec.md` — quality engineering (TBD)
 - `openspec/changes/archive/` — frozen history of every shipped change
 - `crates/openpanel-test-support/README.md` — test helpers API
 - `crates/openpanel-app/src/ssl/README.md` — SSL module internals
 - `crates/openpanel-app/src/monitoring/README.md` — monitoring module internals
+- `crates/openpanel-web/` — pure-Rust HTMX web UI (`layout`, `login`, `csrf`, `assets`, `router`)
 - `tests/README.md` — how to run each test category
 - `Makefile` — single-entry quality gate (`make check`)
 - `scripts/check-fmt.sh`, `scripts/check-clippy.sh`,

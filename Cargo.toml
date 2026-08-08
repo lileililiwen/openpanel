@@ -15,6 +15,7 @@ members = [
     "crates/openpanel-domain",
     "crates/openpanel-app",
     "crates/openpanel-test-support",
+    "crates/openpanel-web",
 ]
 
 [workspace.package]
@@ -33,6 +34,9 @@ axum = { version = "0.8", features = ["macros", "ws", "multipart"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["trace", "cors", "fs", "limit", "auth"] }
 hyper = { version = "1.5", features = ["full"] }
+
+# Compile-time HTML templating (web UI)
+maud = { version = "0.27", features = ["axum"] }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }
@@ -117,6 +121,7 @@ openpanel-api = { path = "crates/openpanel-api", version = "0.1.0" }
 openpanel-cli = { path = "crates/openpanel-cli", version = "0.1.0" }
 openpanel-test-support = { path = "crates/openpanel-test-support", version = "0.1.0" }
 openpanel-agent = { path = "crates/openpanel-agent", version = "0.1.0" }
+openpanel-web = { path = "crates/openpanel-web", version = "0.1.0" }
 
 [dev-dependencies]
 openpanel-test-support = { workspace = true }

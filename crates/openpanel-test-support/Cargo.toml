@@ -19,6 +19,7 @@ openpanel-core = { workspace = true }
 openpanel-domain = { workspace = true }
 openpanel-app = { workspace = true }
 openpanel-api = { workspace = true }
+openpanel-web = { workspace = true }
 sqlx = { workspace = true }
 
 [lints]

@@ -1,0 +1,127 @@
+//! Web router: shell, login/logout, and static assets, all behind the same
+//! session middleware used by the API so there is one auth system.
+
+use std::sync::Arc;
+
+use axum::{
+    Router,
+    extract::{FromRequestParts, State},
+    http::{HeaderMap, HeaderValue, StatusCode, header::LOCATION},
+    middleware::from_fn_with_state,
+    response::{IntoResponse, Redirect, Response},
+    routing::{get, post},
+};
+use maud::{Markup, html};
+use openpanel_api::{
+    extract::AuthSession,
+    middleware::session::{SESSION_COOKIE, session_middleware},
+};
+use openpanel_app::IdentityService;
+use openpanel_domain::{Session, SessionToken, User};
+
+use crate::{
+    assets,
+    csrf::{CsrfStore, ValidateCsrf},
+    layout::Shell,
+    login,
+};
+
+/// Shared state for every web handler.
+#[derive(Clone)]
+pub struct WebState {
+    /// Identity service for login/logout/session resolution.
+    pub identity: Arc<IdentityService>,
+    /// Per-session CSRF token store.
+    pub csrf: Arc<CsrfStore>,
+}
+
+/// Authenticated web user; rejects unauthenticated requests with a 302 to `/login`.
+pub struct WebUser(pub User, pub Session);
+
+impl<S> FromRequestParts<S> for WebUser
+where
+    S: Send + Sync,
+{
+    type Rejection = Response;
+
+    fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        _state: &S,
+    ) -> impl std::future::Future<Output = Result<Self, Self::Rejection>> + Send {
+        let auth = parts.extensions.get::<AuthSession>().cloned();
+        std::future::ready(match auth {
+            Some(a) => Ok(WebUser(a.user, a.session)),
+            None => Err(unauth_redirect()),
+        })
+    }
+}
+
+/// 302 Found → `/login`, used when an authenticated web route is hit without a
+/// valid session.
+fn unauth_redirect() -> Response {
+    (StatusCode::FOUND, [(LOCATION, "/login")]).into_response()
+}
+
+/// GET / — the shell home page (dashboard placeholder).
+async fn home(State(state): State<WebState>, WebUser(user, session): WebUser) -> Markup {
+    let csrf = state.csrf.token_for(session.id());
+    let content = html! {
+        h1 { "Dashboard" }
+        p { "Welcome back." }
+    };
+    Shell::new(user.username().as_str(), &csrf, content).render()
+}
+
+/// POST /logout — invalidate the session, clear the cookie, redirect to login.
+async fn logout(
+    State(state): State<WebState>,
+    WebUser(user, _session): WebUser,
+    headers: HeaderMap,
+    _csrf: ValidateCsrf,
+) -> Response {
+    if let Some(tok) = cookie_token(&headers)
+        && let Ok(token) = SessionToken::from_string(tok)
+    {
+        let _ = state
+            .identity
+            .logout(&token, user.username().as_str())
+            .await;
+    }
+    let mut resp = Redirect::to("/login").into_response();
+    let cookie = format!("{SESSION_COOKIE}=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0");
+    if let Ok(value) = HeaderValue::from_str(&cookie) {
+        resp.headers_mut()
+            .insert(axum::http::header::SET_COOKIE, value);
+    }
+    resp
+}
+
+fn cookie_token(headers: &HeaderMap) -> Option<String> {
+    let cookie = headers.get(axum::http::header::COOKIE)?.to_str().ok()?;
+    for part in cookie.split(';') {
+        let part = part.trim();
+        if let Some(rest) = part.strip_prefix(&format!("{SESSION_COOKIE}=")) {
+            return Some(rest.to_string());
+        }
+    }
+    None
+}
+
+/// Build the web router. Returns a `Router<()>` ready to merge into the API app.
+pub fn router(identity: Arc<IdentityService>) -> Router {
+    let state = WebState {
+        identity: identity.clone(),
+        csrf: Arc::new(CsrfStore::new()),
+    };
+    Router::new()
+        .route("/", get(home))
+        .route(
+            "/login",
+            get(login::login_page_handler).post(login::login_handler),
+        )
+        .route("/logout", post(logout))
+        .route("/assets/htmx.min.js", get(assets::htmx_min_js))
+        .route("/assets/app.css", get(assets::app_css))
+        .layer(from_fn_with_state(identity, session_middleware))
+        .with_state(state)
+}

@@ -5,7 +5,9 @@ cPanel alternative without PHP. MIT licensed.
 
 > Status: **v0.1-alpha**. Identity + auth, sites, databases, files,
 > SSL, and monitoring ship as bounded contexts against this
-> architectural baseline. Cron lands in a follow-on OpenSpec change.
+> architectural baseline. A pure-Rust HTMX web UI (login, shell,
+> logout) serves as the panel front-end. Cron lands in a follow-on
+> OpenSpec change.
 
 ## Why Rust
 
@@ -83,6 +85,35 @@ OPENPANEL__DATABASE__URL=/var/lib/openpanel/openpanel.db \
 curl -X POST http://127.0.0.1:8080/api/v1/identity/login \
   -H 'Content-Type: application/json' \
   -d '{"username_or_email":"admin","password":"a strong password (≥12 chars)"}'
+```
+
+## Web UI
+
+A pure-Rust, server-rendered control panel lives in the `openpanel-web`
+crate. It uses **HTMX** for interactivity — no JavaScript build step, no
+Node toolchain. The shell (sidebar + topbar + content region), login
+page, and logout are server-rendered `maud` templates; the same
+`openpanel_session` cookie and session middleware back both the API and
+the web UI, so there is a single auth system.
+
+- **Login** — `GET /login` renders the form; `POST /login` authenticates
+  via `IdentityService`, sets the `openpanel_session` cookie
+  (HttpOnly, `SameSite=Lax`, `Max-Age=86400`), and redirects to `/`.
+- **Shell** — `GET /` renders the HTMX shell: sidebar nav (with
+  `hx-boost`), topbar with the logged-in user, and a content region.
+- **Logout** — `POST /logout` invalidates the session and clears the
+  cookie. State-changing web POSTs require a per-session CSRF token
+  (`_csrf`); mismatches return `403`.
+- **Assets** — `htmx.min.js` (pinned, with license header) and
+  `app.css` are embedded via `include_bytes!` and served under
+  `/assets/*`.
+
+```bash
+# Boot the panel (API + web UI on :8080)
+cargo run --release -- serve
+
+# Open a browser
+xdg-open http://127.0.0.1:8080/login
 ```
 
 ## Configuration layering

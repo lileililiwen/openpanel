@@ -31,6 +31,7 @@ openpanel-core = { workspace = true }
 openpanel-domain = { workspace = true }
 openpanel-app = { workspace = true }
 openpanel-api = { workspace = true }
+openpanel-web = { workspace = true }
 
 [dev-dependencies]
 openpanel-test-support = { workspace = true }

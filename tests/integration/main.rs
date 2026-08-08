@@ -14,3 +14,4 @@ mod quality;
 mod sites;
 mod smoke;
 mod ssl;
+mod web_ui;

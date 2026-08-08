@@ -65,13 +65,14 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let ssl_svc = ssl_module.service();
     let monitoring_svc = monitoring_module.service();
     let app = build_router(
-        identity_svc,
+        identity_svc.clone(),
         sites_svc,
         databases_svc,
         files_svc,
         ssl_svc,
         monitoring_svc,
-    );
+    )
+    .merge(openpanel_web::router(identity_svc));
 
     let addr = format!("{}:{}", config.server().bind, config.server().port);
     let listener = TcpListener::bind(&addr)
