@@ -10,7 +10,8 @@ use std::sync::Arc;
 use openpanel_api::build_router;
 use openpanel_app::{
     DatabasesModule, DatabasesService, FilesModule, FilesService, IdentityModule, IdentityService,
-    SitesModule, SitesService, SslModule, SslPaths, SslService, sites::nginx::NginxPaths,
+    MonitoringModule, MonitoringService, SitesModule, SitesService, SslModule, SslPaths,
+    SslService, sites::nginx::NginxPaths,
 };
 use openpanel_core::{AppContext, Config, MigrationRunner, Module, NoopAuditService, SqliteDriver};
 use tempfile::TempDir;
@@ -28,6 +29,7 @@ pub struct TestServer {
     databases: Arc<DatabasesService>,
     files: Arc<FilesService>,
     ssl: Arc<SslService>,
+    monitoring: Arc<MonitoringService>,
     _handle: JoinHandle<()>,
     _db: TestDb,
     /// Temp directory for sandboxed nginx configs and document roots.
@@ -105,11 +107,18 @@ impl TestServer {
             .await
             .expect("ssl migrations");
 
+        let monitoring_module = MonitoringModule::new(&ctx).await;
+        runner
+            .apply_module(monitoring_module.name(), &monitoring_module.migrations())
+            .await
+            .expect("monitoring migrations");
+
         let identity_svc = identity_module.service();
         let sites_svc = sites_module.service();
         let databases_svc = databases_module.service();
         let files_svc = files_module.service();
         let ssl_svc = ssl_module.service();
+        let monitoring_svc = monitoring_module.service();
 
         let app = build_router(
             identity_svc.clone(),
@@ -117,6 +126,7 @@ impl TestServer {
             databases_svc.clone(),
             files_svc.clone(),
             ssl_svc.clone(),
+            monitoring_svc.clone(),
         );
 
         let listener = TcpListener::bind("127.0.0.1:0")
@@ -141,6 +151,7 @@ impl TestServer {
             databases: databases_svc,
             files: files_svc,
             ssl: ssl_svc,
+            monitoring: monitoring_svc,
             _handle: handle,
             _db: db,
             sandbox,
@@ -180,6 +191,11 @@ impl TestServer {
     /// The SSL service handle.
     pub fn ssl(&self) -> Arc<SslService> {
         self.ssl.clone()
+    }
+
+    /// The monitoring service handle.
+    pub fn monitoring(&self) -> Arc<MonitoringService> {
+        self.monitoring.clone()
     }
 
     /// Resolve a sandboxed absolute path under this server's temp directory.

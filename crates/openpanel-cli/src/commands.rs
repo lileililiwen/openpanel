@@ -46,6 +46,12 @@ pub enum Command {
         #[command(subcommand)]
         action: SslCommand,
     },
+    /// Host resource monitoring commands.
+    Monitoring {
+        /// Monitoring subcommand to execute.
+        #[command(subcommand)]
+        action: MonitoringCommand,
+    },
 }
 
 /// Subcommands for managing OpenPanel users.
@@ -206,6 +212,21 @@ pub enum SslCommand {
     Renew {
         /// Domain of the certificate to renew.
         domain: String,
+    },
+}
+/// Subcommands for host resource monitoring.
+#[derive(Debug, Subcommand)]
+pub enum MonitoringCommand {
+    /// Print the current host snapshot (timestamp, cpu %, memory %, load).
+    Overview,
+    /// Print recent samples for one metric.
+    History {
+        /// Metric kind identifier (`Cpu`, `Memory`, `Disk`, `Network`).
+        #[arg(long)]
+        metric: String,
+        /// Look-back window in seconds (default 3600).
+        #[arg(long, default_value_t = 3600)]
+        range: i64,
     },
 }
 

@@ -87,9 +87,34 @@ pub struct Config {
     /// Logging settings.
     #[serde(default)]
     pub log: LogConfig,
+    /// Monitoring settings.
+    #[serde(default)]
+    pub monitoring: MonitoringConfig,
     /// Per-module config sections keyed by module name.
     #[serde(default)]
     pub modules: serde_json::Map<String, Value>,
+}
+
+/// Monitoring module settings.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct MonitoringConfig {
+    /// Seconds between collector ticks.
+    pub interval_secs: u64,
+    /// Retention window in days; `0` disables pruning.
+    pub retention_days: u64,
+    /// Optional alert thresholds, keyed by metric kind.
+    #[serde(default)]
+    pub alert: serde_json::Map<String, Value>,
+}
+
+impl Default for MonitoringConfig {
+    fn default() -> Self {
+        Self {
+            interval_secs: 60,
+            retention_days: 7,
+            alert: serde_json::Map::new(),
+        }
+    }
 }
 
 impl Config {
@@ -147,6 +172,14 @@ impl Config {
                         "format": {"type": "string", "enum": ["compact", "json"]},
                     },
                 },
+                "monitoring": {
+                    "type": "object",
+                    "properties": {
+                        "interval_secs": {"type": "integer", "minimum": 1},
+                        "retention_days": {"type": "integer", "minimum": 0},
+                        "alert": {"type": "object"},
+                    },
+                },
                 "modules": {"type": "object"},
             },
             "required": ["server", "database"],
@@ -179,6 +212,11 @@ impl Config {
     /// Accessor for the logging settings.
     pub fn log(&self) -> &LogConfig {
         &self.log
+    }
+
+    /// Accessor for the monitoring settings.
+    pub fn monitoring(&self) -> &MonitoringConfig {
+        &self.monitoring
     }
 
     /// Look up a module's config section, if present.

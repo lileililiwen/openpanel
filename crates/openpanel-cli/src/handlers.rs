@@ -6,8 +6,8 @@ use std::sync::Arc;
 use anyhow::Context;
 use openpanel_api::build_router;
 use openpanel_app::{
-    AcmeEndpoint, DatabasesModule, FilesModule, IdentityModule, SitesModule, SslModule, SslPaths,
-    databases::crypto as db_crypto,
+    AcmeEndpoint, DatabasesModule, FilesModule, IdentityModule, MonitoringModule, SitesModule,
+    SslModule, SslPaths, databases::crypto as db_crypto,
 };
 use openpanel_core::{
     AppContext, Config, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
@@ -34,6 +34,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let databases_module = DatabasesModule::new(&ctx, master_key).await;
     let files_module = FilesModule::new(&ctx).await;
     let ssl_module = SslModule::new(&ctx, master_key, ssl_contact_email(&config)).await;
+    let monitoring_module = MonitoringModule::new(&ctx).await;
 
     let runner = MigrationRunner::for_sqlite(pool.clone());
     runner
@@ -52,13 +53,25 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .apply_module(ssl_module.name(), &ssl_module.migrations())
         .await
         .context("apply ssl migrations")?;
+    runner
+        .apply_module(monitoring_module.name(), &monitoring_module.migrations())
+        .await
+        .context("apply monitoring migrations")?;
 
     let identity_svc = identity_module.service();
     let sites_svc = sites_module.service();
     let databases_svc = databases_module.service();
     let files_svc = files_module.service();
     let ssl_svc = ssl_module.service();
-    let app = build_router(identity_svc, sites_svc, databases_svc, files_svc, ssl_svc);
+    let monitoring_svc = monitoring_module.service();
+    let app = build_router(
+        identity_svc,
+        sites_svc,
+        databases_svc,
+        files_svc,
+        ssl_svc,
+        monitoring_svc,
+    );
 
     let addr = format!("{}:{}", config.server().bind, config.server().port);
     let listener = TcpListener::bind(&addr)
@@ -844,5 +857,73 @@ pub async fn ssl_renew(config: Arc<Config>, domain: String) -> anyhow::Result<()
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     println!("renewed:");
     print_certificate_row(&cert);
+    Ok(())
+}
+
+/// Bootstrap the `MonitoringService` for CLI subcommands.
+async fn build_monitoring(
+    config: Arc<Config>,
+) -> anyhow::Result<Arc<openpanel_app::MonitoringService>> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = openpanel_core::AppContext::new(config.clone(), db, audit);
+    let module = MonitoringModule::new(&ctx).await;
+    let runner = openpanel_core::MigrationRunner::for_sqlite(pool);
+    runner
+        .apply_module(module.name(), &module.migrations())
+        .await
+        .context("apply monitoring migrations")?;
+    Ok(module.service())
+}
+
+/// `openpanel monitoring overview` — print the current host snapshot.
+pub async fn monitoring_overview(config: Arc<Config>) -> anyhow::Result<()> {
+    let svc = build_monitoring(config).await?;
+    let snap = svc
+        .snapshot_now()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "timestamp={}  cpu={:.1}%  memory={:.1}%  load={:.2}",
+        snap.timestamp.to_rfc3339(),
+        snap.cpu,
+        snap.memory,
+        snap.load
+    );
+    for d in &snap.disk {
+        println!("disk  mount={:<20} {}%", d.mount, d.percent);
+    }
+    for n in &snap.network {
+        println!(
+            "net   iface={:<16} rx={} B/s  tx={} B/s",
+            n.interface, n.rx_bytes_per_sec, n.tx_bytes_per_sec
+        );
+    }
+    Ok(())
+}
+
+/// `openpanel monitoring history --metric <kind> [--range <secs>]`.
+pub async fn monitoring_history(
+    config: Arc<Config>,
+    metric: String,
+    range: i64,
+) -> anyhow::Result<()> {
+    let kind = metric
+        .parse::<openpanel_domain::monitoring::MetricKind>()
+        .map_err(|e: openpanel_domain::monitoring::MonitoringError| {
+            anyhow::anyhow!("unknown metric `{metric}`: {e}")
+        })?;
+    let svc = build_monitoring(config).await?;
+    let since = chrono::Utc::now() - chrono::Duration::seconds(range);
+    let samples = svc
+        .history(kind, since)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    if samples.is_empty() {
+        println!("no samples for {metric} in the last {range}s");
+        return Ok(());
+    }
+    for s in samples {
+        println!("{}  {} {metric}", s.ts.to_rfc3339(), s.value);
+    }
     Ok(())
 }

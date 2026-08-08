@@ -17,6 +17,7 @@ tests/
 │   ├── databases.rs         #   /api/v1/databases/*
 │   ├── files.rs             #   /api/v1/files/*
 │   ├── ssl.rs               #   /api/v1/ssl/* (list/create/get/delete, force-https)
+│   ├── monitoring.rs        #   /api/v1/monitoring/* (overview/history/alerts)
 │   ├── smoke.rs             #   server boots + every route mounted
 │   └── debug_test.rs        #   canary for the new infra
 └── cli/                     # CLI E2E tests (separate binaries per file)
@@ -26,7 +27,8 @@ tests/
     ├── site.rs              #   nginx-gated
     ├── database.rs          #   mysql-gated
     ├── file.rs              #   write + read roundtrip
-    └── ssl.rs               #   ssl list/self-signed/revoke (offline flows)
+    ├── ssl.rs               #   ssl list/self-signed/revoke (offline flows)
+    └── monitoring.rs        #   monitoring overview/history (real host metrics)
 ```
 
 ## Running

@@ -6,6 +6,8 @@ pub mod databases;
 pub mod files;
 /// Identity resource routes (`/identity`).
 pub mod identity;
+/// Monitoring resource routes (`/monitoring`).
+pub mod monitoring;
 /// Sites resource routes (`/sites`).
 pub mod sites;
 /// SSL resource routes (`/ssl`).

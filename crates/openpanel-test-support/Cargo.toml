@@ -14,6 +14,7 @@ mockall = "0.13"
 uuid = { workspace = true }
 tempfile = "3"
 async-trait = { workspace = true }
+chrono = { workspace = true }
 openpanel-core = { workspace = true }
 openpanel-domain = { workspace = true }
 openpanel-app = { workspace = true }

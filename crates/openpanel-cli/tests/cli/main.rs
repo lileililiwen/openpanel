@@ -9,6 +9,7 @@
 mod common;
 mod database;
 mod file;
+mod monitoring;
 mod serve;
 mod site;
 mod ssl;

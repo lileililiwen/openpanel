@@ -2,7 +2,8 @@
 
 use clap::Parser;
 use openpanel_cli::{
-    Cli, Command, DatabaseCommand, FileCommand, SiteCommand, SslCommand, UserCommand, handlers,
+    Cli, Command, DatabaseCommand, FileCommand, MonitoringCommand, SiteCommand, SslCommand,
+    UserCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -98,6 +99,12 @@ async fn main() -> anyhow::Result<()> {
             SslCommand::SelfSigned { domain } => handlers::ssl_self_signed(config, domain).await,
             SslCommand::Revoke { domain } => handlers::ssl_revoke(config, domain).await,
             SslCommand::Renew { domain } => handlers::ssl_renew(config, domain).await,
+        },
+        Command::Monitoring { action } => match action {
+            MonitoringCommand::Overview => handlers::monitoring_overview(config).await,
+            MonitoringCommand::History { metric, range } => {
+                handlers::monitoring_history(config, metric, range).await
+            }
         },
     }
 }

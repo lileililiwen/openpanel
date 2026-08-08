@@ -5,7 +5,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use openpanel_domain::{IdentityError, SslError};
+use openpanel_domain::{IdentityError, MonitoringError, SslError};
 use thiserror::Error;
 
 use crate::dto::ErrorBody;
@@ -23,6 +23,10 @@ pub enum ApiError {
     /// Wraps a typed [`SslError`] from the ssl bounded context.
     #[error(transparent)]
     Ssl(#[from] SslError),
+
+    /// Wraps a typed [`MonitoringError`] from the monitoring context.
+    #[error(transparent)]
+    Monitoring(#[from] MonitoringError),
 
     /// A request could not be processed due to malformed input.
     #[error("bad request: {0}")]
@@ -86,6 +90,16 @@ impl IntoResponse for ApiError {
                 | SslError::Io(_)
                 | SslError::Encryption(_)
                 | SslError::Decryption(_) => (StatusCode::INTERNAL_SERVER_ERROR, "ssl_internal"),
+            },
+            ApiError::Monitoring(e) => match e {
+                MonitoringError::InvalidKind(_) => (StatusCode::BAD_REQUEST, "invalid_metric"),
+                MonitoringError::NotFound(_) => (StatusCode::NOT_FOUND, "not_found"),
+                MonitoringError::Repo(_) | MonitoringError::Io(_) => {
+                    (StatusCode::INTERNAL_SERVER_ERROR, "monitoring_internal")
+                }
+                MonitoringError::InvalidValue(_)
+                | MonitoringError::TimestampInFuture
+                | MonitoringError::EmptySnapshot => (StatusCode::BAD_REQUEST, "bad_request"),
             },
             ApiError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             ApiError::NotFound(_) => (StatusCode::NOT_FOUND, "not_found"),

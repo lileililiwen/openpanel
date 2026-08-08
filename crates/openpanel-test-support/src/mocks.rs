@@ -17,6 +17,34 @@ mock! {
     }
 }
 
+impl MockAudit {
+    /// Build a mock whose `record`/`recent` are stubbed to accept any
+    /// input and return `Ok`. Use when a test only cares about another
+    /// port's calls.
+    pub fn stub() -> Self {
+        let mut mock = Self::new();
+        mock.expect_record().returning(|_| Ok(()));
+        mock.expect_recent().returning(|_| Ok(vec![]));
+        mock
+    }
+}
+
+mock! {
+    pub SnapshotRepo {}
+
+    #[async_trait::async_trait]
+    impl openpanel_domain::SnapshotRepository for SnapshotRepo {
+        async fn insert(&self, sample: &openpanel_domain::MetricSample) -> Result<(), openpanel_domain::RepoError>;
+        async fn latest(&self) -> Result<Vec<openpanel_domain::MetricSample>, openpanel_domain::RepoError>;
+        async fn history(
+            &self,
+            kind: openpanel_domain::MetricKind,
+            since: chrono::DateTime<chrono::Utc>,
+        ) -> Result<Vec<openpanel_domain::MetricSample>, openpanel_domain::RepoError>;
+        async fn prune(&self, before: chrono::DateTime<chrono::Utc>) -> Result<u64, openpanel_domain::RepoError>;
+    }
+}
+
 mock! {
     pub UserRepo {}
 

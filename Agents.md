@@ -13,8 +13,8 @@ OpenPanel is a memory-safe, Rust-based, open-source server
 management panel — a Baota / cPanel alternative without PHP. It is a
 single static binary with no script engine at runtime. MIT licensed.
 
-**Status:** v0.1-alpha. Identity + auth, sites, databases, and files
-ship. SSL, monitoring, cron are planned.
+**Status:** v0.1-alpha. Identity + auth, sites, databases, files,
+SSL, and monitoring ship. Cron is planned.
 
 ---
 
@@ -335,10 +335,13 @@ When asked to implement a feature or spec:
 - `openspec/specs/databases/spec.md` — MySQL provisioning
 - `openspec/specs/files/spec.md` — chrooted file manager
 - `openspec/specs/ssl/spec.md` — TLS certificate lifecycle
+- `openspec/specs/monitoring/spec.md` — host resource monitoring
 - `openspec/specs/testing/spec.md` — TDD infrastructure (TBD)
 - `openspec/specs/quality/spec.md` — quality engineering (TBD)
 - `openspec/changes/archive/` — frozen history of every shipped change
 - `crates/openpanel-test-support/README.md` — test helpers API
+- `crates/openpanel-app/src/ssl/README.md` — SSL module internals
+- `crates/openpanel-app/src/monitoring/README.md` — monitoring module internals
 - `tests/README.md` — how to run each test category
 - `Makefile` — single-entry quality gate (`make check`)
 - `scripts/check-fmt.sh`, `scripts/check-clippy.sh`,

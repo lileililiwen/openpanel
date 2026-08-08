@@ -12,6 +12,7 @@ pub mod common;
 pub mod databases;
 pub mod files;
 pub mod identity;
+pub mod monitoring;
 pub mod sites;
 pub mod ssl;
 
@@ -35,6 +36,10 @@ pub use identity::{
     role::Role,
     session::{Session, SessionBuilder, SessionToken, SessionTokenError},
     user::User,
+};
+pub use monitoring::{
+    Alert, AlertRule, DiskReading, MetricKind, MetricSample, MonitoringError, NetworkReading,
+    SnapshotRepository, SystemSnapshot, Unit,
 };
 pub use sites::{error::SiteError, repository::SiteRepository, site::Site, status::SiteStatus};
 pub use ssl::{

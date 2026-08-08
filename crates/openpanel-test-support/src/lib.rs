@@ -17,5 +17,7 @@ pub mod mocks;
 pub mod server;
 
 pub use db::TestDb;
-pub use mocks::{MockAudit, MockDatabaseRepo, MockSessionRepo, MockSiteRepo, MockUserRepo};
+pub use mocks::{
+    MockAudit, MockDatabaseRepo, MockSessionRepo, MockSiteRepo, MockSnapshotRepo, MockUserRepo,
+};
 pub use server::TestServer;

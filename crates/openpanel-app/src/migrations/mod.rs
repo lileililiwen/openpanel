@@ -12,3 +12,5 @@ pub const SITES_V001: &str = include_str!("sites/V001__init.sql");
 pub const DATABASES_V001: &str = include_str!("databases/V001__init.sql");
 /// SQL for the ssl v001 migration (`certificates` table).
 pub const SSL_V001: &str = include_str!("ssl/V001__init.sql");
+/// SQL for the monitoring v001 migration (`monitoring_samples` table).
+pub const MONITORING_V001: &str = include_str!("monitoring/V001__init.sql");

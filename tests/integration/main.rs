@@ -9,6 +9,7 @@ mod common;
 mod databases;
 mod files;
 mod identity;
+mod monitoring;
 mod quality;
 mod sites;
 mod smoke;

@@ -35,6 +35,7 @@ rustls = { workspace = true }
 rustls-acme = { workspace = true }
 rustls-pemfile = { workspace = true }
 x509-parser = { workspace = true }
+sysinfo = { workspace = true }
 
 [dev-dependencies]
 openpanel-test-support = { workspace = true }
