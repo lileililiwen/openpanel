@@ -28,17 +28,23 @@ pub enum Command {
         #[command(subcommand)]
         action: SiteCommand,
     },
-    /// Database (MySQL) management commands.
+    /// Database management commands.
     Database {
         /// Database subcommand to execute.
         #[command(subcommand)]
         action: DatabaseCommand,
     },
-    /// File manager commands (operate on a site's document root).
+    /// File-manager commands.
     File {
         /// File subcommand to execute.
         #[command(subcommand)]
         action: FileCommand,
+    },
+    /// SSL / TLS certificate management commands.
+    Ssl {
+        /// SSL subcommand to execute.
+        #[command(subcommand)]
+        action: SslCommand,
     },
 }
 
@@ -150,6 +156,56 @@ pub enum DatabaseCommand {
         /// ID of the database whose password should be rotated.
         #[arg(long)]
         id: String,
+    },
+}
+
+/// Subcommands for managing TLS certificates for sites.
+#[derive(Debug, Subcommand)]
+pub enum SslCommand {
+    /// List every managed certificate (metadata only; private keys
+    /// are never printed).
+    List,
+    /// Issue a certificate for `domain` via ACME HTTP-01.
+    Issue {
+        /// Domain to issue for.
+        domain: String,
+        /// Target the production Let's Encrypt environment instead of
+        /// the default staging endpoint.
+        #[arg(long)]
+        production: bool,
+    },
+    /// Upload a manually-managed PEM bundle (cert + chain + key) for
+    /// a domain. The private key is stored encrypted at rest.
+    Upload {
+        /// Domain this certificate covers.
+        domain: String,
+        /// Path to the leaf certificate PEM file.
+        #[arg(long)]
+        cert: String,
+        /// Path to the intermediate chain PEM file (optional).
+        #[arg(long)]
+        chain: Option<String>,
+        /// Path to the private key PEM file.
+        #[arg(long)]
+        key: String,
+    },
+    /// Generate a self-signed certificate for `domain` (365-day
+    /// validity by default).
+    SelfSigned {
+        /// Domain to issue the self-signed cert for.
+        domain: String,
+    },
+    /// Revoke and delete a certificate. The row + on-disk files are
+    /// removed; ACME formal revocation is not performed (v0.1).
+    Revoke {
+        /// Domain of the certificate to remove.
+        domain: String,
+    },
+    /// Force-renew an ACME-issued certificate regardless of the
+    /// renewal window. Manual / self-signed certs return an error.
+    Renew {
+        /// Domain of the certificate to renew.
+        domain: String,
     },
 }
 

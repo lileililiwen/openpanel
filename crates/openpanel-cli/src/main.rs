@@ -2,7 +2,7 @@
 
 use clap::Parser;
 use openpanel_cli::{
-    Cli, Command, DatabaseCommand, FileCommand, SiteCommand, UserCommand, handlers,
+    Cli, Command, DatabaseCommand, FileCommand, SiteCommand, SslCommand, UserCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -83,6 +83,21 @@ async fn main() -> anyhow::Result<()> {
             FileCommand::Chmod { site, path, mode } => {
                 handlers::file_chmod(config, site, path, mode).await
             }
+        },
+        Command::Ssl { action } => match action {
+            SslCommand::List => handlers::ssl_list(config).await,
+            SslCommand::Issue { domain, production } => {
+                handlers::ssl_issue(config, domain, production).await
+            }
+            SslCommand::Upload {
+                domain,
+                cert,
+                chain,
+                key,
+            } => handlers::ssl_upload(config, domain, cert, chain, key).await,
+            SslCommand::SelfSigned { domain } => handlers::ssl_self_signed(config, domain).await,
+            SslCommand::Revoke { domain } => handlers::ssl_revoke(config, domain).await,
+            SslCommand::Renew { domain } => handlers::ssl_renew(config, domain).await,
         },
     }
 }

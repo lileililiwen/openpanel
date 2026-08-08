@@ -3,13 +3,14 @@
 use std::sync::Arc;
 
 use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
-use openpanel_app::{DatabasesService, FilesService, IdentityService, SitesService};
+use openpanel_app::{DatabasesService, FilesService, IdentityService, SitesService, SslService};
 
 use crate::{
     middleware::session::session_middleware,
     routes::{
         databases::router as databases_router, files::router as files_router,
         identity::router as identity_router, sites::router as sites_router,
+        ssl::router as ssl_router,
     },
 };
 
@@ -20,6 +21,7 @@ pub fn build_router(
     sites: Arc<SitesService>,
     databases: Arc<DatabasesService>,
     files: Arc<FilesService>,
+    ssl: Arc<SslService>,
 ) -> Router {
     let identity_for_layer = identity.clone();
 
@@ -28,6 +30,7 @@ pub fn build_router(
         .nest("/sites", sites_router(sites))
         .nest("/databases", databases_router(databases))
         .nest("/files", files_router(files.clone()))
+        .nest("/ssl", ssl_router(ssl))
         .layer(from_fn_with_state(identity_for_layer, session_middleware));
 
     Router::new()

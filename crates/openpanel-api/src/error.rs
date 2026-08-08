@@ -5,7 +5,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use openpanel_domain::IdentityError;
+use openpanel_domain::{IdentityError, SslError};
 use thiserror::Error;
 
 use crate::dto::ErrorBody;
@@ -19,6 +19,10 @@ pub enum ApiError {
     /// Wraps a typed [`IdentityError`] from the domain layer.
     #[error(transparent)]
     Identity(#[from] IdentityError),
+
+    /// Wraps a typed [`SslError`] from the ssl bounded context.
+    #[error(transparent)]
+    Ssl(#[from] SslError),
 
     /// A request could not be processed due to malformed input.
     #[error("bad request: {0}")]
@@ -67,6 +71,21 @@ impl IntoResponse for ApiError {
                 IdentityError::LastOwner => (StatusCode::CONFLICT, "last_owner"),
                 IdentityError::InvalidToken => (StatusCode::UNAUTHORIZED, "invalid_token"),
                 IdentityError::Persistence(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal"),
+            },
+            ApiError::Ssl(e) => match e {
+                SslError::NotFound(_) => (StatusCode::NOT_FOUND, "ssl_not_found"),
+                SslError::AcmeChallenge(_) | SslError::Acme(_) => {
+                    (StatusCode::BAD_GATEWAY, "ssl_acme_failed")
+                }
+                SslError::KeyMismatch => (StatusCode::BAD_REQUEST, "ssl_key_mismatch"),
+                SslError::Expired => (StatusCode::BAD_REQUEST, "ssl_expired"),
+                SslError::InvalidPem(_) | SslError::InvalidCert(_) | SslError::InvalidKey(_) => {
+                    (StatusCode::BAD_REQUEST, "ssl_invalid_pem")
+                }
+                SslError::Repo(_)
+                | SslError::Io(_)
+                | SslError::Encryption(_)
+                | SslError::Decryption(_) => (StatusCode::INTERNAL_SERVER_ERROR, "ssl_internal"),
             },
             ApiError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             ApiError::NotFound(_) => (StatusCode::NOT_FOUND, "not_found"),

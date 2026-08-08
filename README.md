@@ -191,6 +191,58 @@ make fmt                   # or run a single gate: make clippy, ...
 **Dependency audit:** `cargo audit` is part of the quality gate. Known
 false positives go in `.cargo/audit.toml`.
 
+## SSL / TLS
+
+Every managed site is automatically wired to HTTPS once an SSL
+certificate is installed. The panel handles the full lifecycle:
+
+- **Let's Encrypt HTTP-01** — one-click issuance against
+  `https://acme-staging-v02.api.letsencrypt.org/directory` by default
+  (production opt-in via `--production`). The local ACME HTTP-01
+  challenge server binds to `127.0.0.1:9080` and nginx's port-80
+  vhost proxies `/.well-known/acme-challenge/` to it.
+- **Manual PEM upload** — paste cert + chain + private key for a
+  domain; the key is stored encrypted at rest.
+- **Self-signed generation** — `rcgen`-backed, for dev / internal
+  services.
+- **Auto-renewal** — a daily background task re-issues ACME certs
+  whose `valid_to - now < 30 days`.
+- **Force-HTTPS 301** — per-site toggle; default on when a cert is
+  active. The nginx render uses `location ^~` priority so ACME
+  renewals still work even with force-HTTPS on.
+
+The default ACME endpoint is **staging** so fresh installs don't
+burn Let's Encrypt rate limits or produce real public certs. Switch
+to production explicitly via the API or CLI.
+
+**CLI:**
+
+```bash
+openpanel ssl list
+openpanel ssl issue example.com --production
+openpanel ssl upload example.com --cert cert.pem --key key.pem [--chain chain.pem]
+openpanel ssl self-signed internal.example.com
+openpanel ssl revoke example.com
+openpanel ssl renew example.com
+```
+
+**API** (under `/api/v1/ssl/*`):
+
+```
+GET    /certificates                              list
+GET    /certificates/{domain}                     fetch one
+POST   /certificates/acme                         ACME HTTP-01 issue
+POST   /certificates/manual                       upload PEM
+POST   /certificates/self-signed                  self-signed
+DELETE /certificates/{domain}                     revoke + delete
+POST   /certificates/{domain}/renew               force-renew
+PATCH  /certificates/{domain}/force-https         toggle 301
+```
+
+Private-key material is **never** returned in any response — only
+metadata. See `crates/openpanel-app/src/ssl/README.md` for the full
+public surface, renewal policy, and storage envelope.
+
 ## Repository layout
 
 ```

@@ -6,7 +6,8 @@ use std::sync::Arc;
 use anyhow::Context;
 use openpanel_api::build_router;
 use openpanel_app::{
-    DatabasesModule, FilesModule, IdentityModule, SitesModule, databases::crypto as db_crypto,
+    AcmeEndpoint, DatabasesModule, FilesModule, IdentityModule, SitesModule, SslModule, SslPaths,
+    databases::crypto as db_crypto,
 };
 use openpanel_core::{
     AppContext, Config, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
@@ -32,6 +33,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let master_key = load_master_key(&config)?;
     let databases_module = DatabasesModule::new(&ctx, master_key).await;
     let files_module = FilesModule::new(&ctx).await;
+    let ssl_module = SslModule::new(&ctx, master_key, ssl_contact_email(&config)).await;
 
     let runner = MigrationRunner::for_sqlite(pool.clone());
     runner
@@ -46,12 +48,17 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .apply_module(databases_module.name(), &databases_module.migrations())
         .await
         .context("apply databases migrations")?;
+    runner
+        .apply_module(ssl_module.name(), &ssl_module.migrations())
+        .await
+        .context("apply ssl migrations")?;
 
     let identity_svc = identity_module.service();
     let sites_svc = sites_module.service();
     let databases_svc = databases_module.service();
     let files_svc = files_module.service();
-    let app = build_router(identity_svc, sites_svc, databases_svc, files_svc);
+    let ssl_svc = ssl_module.service();
+    let app = build_router(identity_svc, sites_svc, databases_svc, files_svc, ssl_svc);
 
     let addr = format!("{}:{}", config.server().bind, config.server().port);
     let listener = TcpListener::bind(&addr)
@@ -76,6 +83,22 @@ fn load_master_key(config: &Arc<Config>) -> anyhow::Result<[u8; 32]> {
         })?;
     db_crypto::decode_master_key(&raw).map_err(|e| anyhow::anyhow!(e.to_string()))
 }
+
+/// Resolve the Let's Encrypt contact email from
+/// `OPENPANEL__SSL__CONTACT_EMAIL` or fall back to the operator
+/// account. Required by ACME.
+fn ssl_contact_email(_config: &Arc<Config>) -> String {
+    std::env::var("OPENPANEL__SSL__CONTACT_EMAIL")
+        .unwrap_or_else(|_| "[email protected]".to_string())
+}
+
+// Suppress unused-import warning when the env helpers below are
+// pruned. Kept here so future flags (e.g. staging/production
+// override) have a place to land.
+#[allow(dead_code)]
+const _: Option<AcmeEndpoint> = None;
+#[allow(dead_code)]
+const _: Option<SslPaths> = None;
 
 /// Applies pending identity and sites migrations, then exits without starting the server.
 pub async fn migrate(config: Arc<Config>) -> anyhow::Result<()> {
@@ -646,5 +669,180 @@ pub async fn file_chmod(
         .await
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     println!("chmod {mode} {path}");
+    Ok(())
+}
+
+/// Bootstrap the `SslService` for CLI subcommands. Uses the path
+/// overrides from `OPENPANEL__SSL__PATHS__CERT_DIR` /
+/// `OPENPANEL__SSL__PATHS__KEY_DIR` if set (so tests can redirect
+/// the cert/key writes to a sandbox), otherwise falls back to
+/// `/etc/openpanel/ssl/certs` and `/etc/openpanel/ssl/keys`.
+async fn build_ssl(config: Arc<Config>) -> anyhow::Result<Arc<openpanel_app::SslService>> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = openpanel_core::AppContext::new(config.clone(), db, audit);
+    let master_key = load_master_key(&config)?;
+    let paths = resolve_ssl_paths();
+    let module = openpanel_app::SslModule::with_paths(
+        &ctx,
+        paths,
+        openpanel_app::AcmeEndpoint::default_safe(),
+        master_key,
+        ssl_contact_email(&config),
+    )
+    .await;
+    let runner = openpanel_core::MigrationRunner::for_sqlite(pool);
+    runner
+        .apply_module(module.name(), &module.migrations())
+        .await
+        .context("apply ssl migrations")?;
+    Ok(module.service())
+}
+
+fn resolve_ssl_paths() -> openpanel_app::SslPaths {
+    let cert_dir = std::env::var("OPENPANEL__SSL__PATHS__CERT_DIR").ok();
+    let key_dir = std::env::var("OPENPANEL__SSL__PATHS__KEY_DIR").ok();
+    match (cert_dir, key_dir) {
+        (Some(cert_dir), Some(key_dir)) => openpanel_app::SslPaths {
+            cert_dir: std::path::PathBuf::from(cert_dir),
+            key_dir: std::path::PathBuf::from(key_dir),
+        },
+        _ => openpanel_app::SslPaths::default_paths(),
+    }
+}
+
+/// Pretty-print a `Certificate` (metadata only — never the key) for
+/// CLI output.
+fn print_certificate_row(cert: &openpanel_domain::Certificate) {
+    println!(
+        "{domain:<40} {source:<12} {status:<10} issuer={issuer:<24} valid_to={valid_to}",
+        domain = cert.domain,
+        source = cert.source.as_str(),
+        status = format!("{:?}", cert.status(cert.valid_to)).to_lowercase(),
+        issuer = cert.issuer,
+        valid_to = cert.valid_to.to_rfc3339(),
+    );
+}
+
+/// `openpanel ssl list` — print every certificate's metadata.
+pub async fn ssl_list(config: Arc<Config>) -> anyhow::Result<()> {
+    let svc = build_ssl(config).await?;
+    let certs = svc
+        .list()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    if certs.is_empty() {
+        println!("(no certificates)");
+        return Ok(());
+    }
+    for cert in certs {
+        print_certificate_row(&cert);
+    }
+    Ok(())
+}
+
+/// `openpanel ssl issue <domain> [--production]` — ACME HTTP-01.
+///
+/// By default targets the staging endpoint so fresh installs don't
+/// burn Let's Encrypt rate limits; pass `--production` to switch.
+pub async fn ssl_issue(
+    config: Arc<Config>,
+    domain: String,
+    production: bool,
+) -> anyhow::Result<()> {
+    let endpoint = if production {
+        openpanel_app::AcmeEndpoint::Production
+    } else {
+        openpanel_app::AcmeEndpoint::Staging
+    };
+    eprintln!(
+        "[ssl] using ACME endpoint: {} (override at the module level \
+         if you need a different CA)",
+        endpoint.as_str()
+    );
+    // The service holds the configured endpoint at construction
+    // time. To honor the CLI flag we'd need to rebuild the module
+    // here — for v0.1 we rebuild with the requested endpoint.
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = openpanel_core::AppContext::new(config.clone(), db, audit);
+    let master_key = load_master_key(&config)?;
+    let paths = openpanel_app::SslPaths::default_paths();
+    let acme: Arc<dyn openpanel_app::ssl::acme::AcmeClient> = Arc::new(
+        openpanel_app::ssl::acme::RustlsAcmeClient::new(endpoint, ssl_contact_email(&config)),
+    );
+    let svc = Arc::new(openpanel_app::SslService::new(
+        Arc::new(openpanel_app::ssl::SqliteCertificateRepository::new(pool)),
+        ctx.audit.clone(),
+        master_key,
+        paths,
+        openpanel_app::AcmeHttpServer::new(),
+        acme,
+        endpoint,
+        ssl_contact_email(&config),
+    ));
+    let cert = svc
+        .issue_acme(&domain)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("issued:");
+    print_certificate_row(&cert);
+    Ok(())
+}
+
+/// `openpanel ssl upload <domain> --cert <pem> [--chain <pem>]
+/// --key <pem>` — manual PEM upload.
+pub async fn ssl_upload(
+    config: Arc<Config>,
+    domain: String,
+    cert: String,
+    chain: Option<String>,
+    key: String,
+) -> anyhow::Result<()> {
+    let svc = build_ssl(config).await?;
+    let cert_pem = std::fs::read_to_string(&cert).context("read cert pem")?;
+    let chain_pem = match chain {
+        Some(p) => std::fs::read_to_string(&p).context("read chain pem")?,
+        None => String::new(),
+    };
+    let key_pem = std::fs::read_to_string(&key).context("read key pem")?;
+    let cert = svc
+        .upload_manual(&domain, &cert_pem, &chain_pem, &key_pem)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("uploaded:");
+    print_certificate_row(&cert);
+    Ok(())
+}
+
+/// `openpanel ssl self-signed <domain>` — 365-day self-signed.
+pub async fn ssl_self_signed(config: Arc<Config>, domain: String) -> anyhow::Result<()> {
+    let svc = build_ssl(config).await?;
+    let cert = svc
+        .generate_self_signed(&domain, 365)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("generated:");
+    print_certificate_row(&cert);
+    Ok(())
+}
+
+/// `openpanel ssl revoke <domain>` — revoke + delete.
+pub async fn ssl_revoke(config: Arc<Config>, domain: String) -> anyhow::Result<()> {
+    let svc = build_ssl(config).await?;
+    svc.delete(&domain)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("revoked {domain}");
+    Ok(())
+}
+
+/// `openpanel ssl renew <domain>` — force-renew (ACME only).
+pub async fn ssl_renew(config: Arc<Config>, domain: String) -> anyhow::Result<()> {
+    let svc = build_ssl(config).await?;
+    let cert = svc
+        .renew_now(&domain)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("renewed:");
+    print_certificate_row(&cert);
     Ok(())
 }

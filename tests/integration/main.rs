@@ -12,3 +12,4 @@ mod identity;
 mod quality;
 mod sites;
 mod smoke;
+mod ssl;

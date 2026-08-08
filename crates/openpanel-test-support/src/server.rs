@@ -10,7 +10,7 @@ use std::sync::Arc;
 use openpanel_api::build_router;
 use openpanel_app::{
     DatabasesModule, DatabasesService, FilesModule, FilesService, IdentityModule, IdentityService,
-    SitesModule, SitesService, sites::nginx::NginxPaths,
+    SitesModule, SitesService, SslModule, SslPaths, SslService, sites::nginx::NginxPaths,
 };
 use openpanel_core::{AppContext, Config, MigrationRunner, Module, NoopAuditService, SqliteDriver};
 use tempfile::TempDir;
@@ -27,6 +27,7 @@ pub struct TestServer {
     sites: Arc<SitesService>,
     databases: Arc<DatabasesService>,
     files: Arc<FilesService>,
+    ssl: Arc<SslService>,
     _handle: JoinHandle<()>,
     _db: TestDb,
     /// Temp directory for sandboxed nginx configs and document roots.
@@ -63,7 +64,7 @@ impl TestServer {
                 .expect("tempdir"),
         );
         let nginx_root = sandbox.path().to_path_buf();
-        let paths = NginxPaths::under(nginx_root);
+        let paths = NginxPaths::under(nginx_root.clone());
 
         let identity_module = IdentityModule::new(&ctx).await;
         let sites_module = SitesModule::with_paths(&ctx, paths).await;
@@ -72,6 +73,19 @@ impl TestServer {
         let master_key = [0u8; 32];
         let databases_module = DatabasesModule::new(&ctx, master_key).await;
         let files_module = FilesModule::new(&ctx).await;
+
+        // SSL module: shares the same master key as the databases module
+        // (the encryption envelope is identical). Sandbox the cert /
+        // key writes under the same temp dir as nginx configs.
+        let ssl_paths = SslPaths::under(nginx_root.join("ssl"));
+        let ssl_module = SslModule::with_paths(
+            &ctx,
+            ssl_paths,
+            openpanel_app::AcmeEndpoint::default_safe(),
+            master_key,
+            "[email protected]",
+        )
+        .await;
 
         let runner = MigrationRunner::for_sqlite(pool.clone());
         runner
@@ -86,17 +100,23 @@ impl TestServer {
             .apply_module(databases_module.name(), &databases_module.migrations())
             .await
             .expect("databases migrations");
+        runner
+            .apply_module(ssl_module.name(), &ssl_module.migrations())
+            .await
+            .expect("ssl migrations");
 
         let identity_svc = identity_module.service();
         let sites_svc = sites_module.service();
         let databases_svc = databases_module.service();
         let files_svc = files_module.service();
+        let ssl_svc = ssl_module.service();
 
         let app = build_router(
             identity_svc.clone(),
             sites_svc.clone(),
             databases_svc.clone(),
             files_svc.clone(),
+            ssl_svc.clone(),
         );
 
         let listener = TcpListener::bind("127.0.0.1:0")
@@ -120,6 +140,7 @@ impl TestServer {
             sites: sites_svc,
             databases: databases_svc,
             files: files_svc,
+            ssl: ssl_svc,
             _handle: handle,
             _db: db,
             sandbox,
@@ -154,6 +175,11 @@ impl TestServer {
     /// The files service handle.
     pub fn files(&self) -> Arc<FilesService> {
         self.files.clone()
+    }
+
+    /// The SSL service handle.
+    pub fn ssl(&self) -> Arc<SslService> {
+        self.ssl.clone()
     }
 
     /// Resolve a sandboxed absolute path under this server's temp directory.

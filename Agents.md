@@ -232,7 +232,37 @@ Local invocation runs the same gates as CI:
 
 ---
 
-## 6. Configuration Layering
+## 6. Security — private-key & secret handling
+
+Secrets (passwords, session tokens, TLS private keys) MUST NOT leak.
+The same rules apply to code, logs, error messages, DB rows, API
+responses, and CLI output:
+
+- **Never log secrets.** No `info!`/`debug!`/`error!` line may print a
+  plaintext password, session token, or PEM private key — even at
+  debug level.
+- **Never return secret material.** TLS private keys (plaintext or
+  ciphertext) never appear in any API/CLI response; list/get replies
+  are metadata-only.
+- **Encrypt at rest.** Passwords and TLS private keys live in the DB
+  as AES-256-GCM ciphertext under the master key
+  (`OPENPANEL__DATABASE__MASTER_KEY`). The ciphertext layout is
+  `hex(nonce) || ":" || hex(ciphertext)` (see `crypto.rs`).
+- **The plaintext key only touches disk** in `SslPaths::key_dir`
+  (mode `0600`) for nginx to read; never in the DB, never in an
+  error, never in a test assertion unless the test asserts ciphertext
+  (not valid PEM).
+- **Challenge server is local-only.** The ACME HTTP-01 challenge
+  server binds to `127.0.0.1:9080`; nginx proxies
+  `/.well-known/acme-challenge/` to it. It MUST NOT bind to a public
+  interface.
+- **Staging default.** ACME issuance defaults to Let's Encrypt
+  **staging**; production requires an explicit opt-in flag. Tests
+  never hit the real production endpoint.
+
+---
+
+## 7. Configuration Layering
 
 Configuration loads from the lowest-numbered source to the highest:
 
@@ -247,7 +277,7 @@ config aborts with exit code 78 (`EX_CONFIG`) and a path message.
 
 ---
 
-## 7. Agent Workflow Checklist
+## 8. Agent Workflow Checklist
 
 When asked to implement a feature or spec:
 
@@ -276,7 +306,7 @@ When asked to implement a feature or spec:
 
 ---
 
-## 8. Anti-Patterns (do not do these)
+## 9. Anti-Patterns (do not do these)
 
 - **Don't** write a test that only verifies the current code
   produces the current output. That test will pass when the code is
@@ -297,13 +327,14 @@ When asked to implement a feature or spec:
 
 ---
 
-## 9. References
+## 10. References
 
 - `openspec/specs/architecture/spec.md` — DDD layering contract
 - `openspec/specs/identity/spec.md` — auth model
 - `openspec/specs/sites/spec.md` — vhost provisioning
 - `openspec/specs/databases/spec.md` — MySQL provisioning
 - `openspec/specs/files/spec.md` — chrooted file manager
+- `openspec/specs/ssl/spec.md` — TLS certificate lifecycle
 - `openspec/specs/testing/spec.md` — TDD infrastructure (TBD)
 - `openspec/specs/quality/spec.md` — quality engineering (TBD)
 - `openspec/changes/archive/` — frozen history of every shipped change

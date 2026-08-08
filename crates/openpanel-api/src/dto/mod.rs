@@ -8,9 +8,12 @@ pub mod database;
 pub mod file;
 /// Site management request/response DTOs.
 pub mod site;
+/// SSL management request/response DTOs.
+pub mod ssl;
 
 pub use auth::*;
 pub use common::*;
 pub use database::*;
 pub use file::*;
 pub use site::*;
+pub use ssl::*;

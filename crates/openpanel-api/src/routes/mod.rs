@@ -8,3 +8,5 @@ pub mod files;
 pub mod identity;
 /// Sites resource routes (`/sites`).
 pub mod sites;
+/// SSL resource routes (`/ssl`).
+pub mod ssl;
