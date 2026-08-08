@@ -11,6 +11,7 @@
 
 pub mod assets;
 pub mod csrf;
+pub mod dashboard;
 pub mod layout;
 pub mod login;
 pub mod router;

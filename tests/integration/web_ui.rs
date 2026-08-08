@@ -252,3 +252,127 @@ async fn web_htmx_asset_served() {
         Some("application/javascript")
     );
 }
+
+/// Log in as the bootstrap owner and return the session cookie.
+async fn login(server: &TestServer, username: &str, password: &str) -> String {
+    let login = server
+        .client()
+        .post(format!("{}/login", server.base_url()))
+        .form(&[("username_or_email", username), ("password", password)])
+        .send()
+        .await
+        .expect("POST /login");
+    assert_eq!(login.status(), 303, "login redirects");
+    session_cookie(&login)
+}
+
+/// Authenticated `GET /` renders the dashboard inside the shell: the gauge
+/// region, the quick-count card region, and the alerts region.
+#[tokio::test]
+async fn web_dashboard_renders_gauges_cards_and_alerts() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+
+    let resp = server
+        .client()
+        .get(format!("{}/", server.base_url()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .send()
+        .await
+        .expect("GET /");
+    assert_eq!(resp.status(), 200);
+    let body = resp.text().await.expect("dashboard body");
+    assert!(body.contains("id=\"host-gauges\""), "gauge region: {body}");
+    assert!(body.contains("class=\"cards\""), "card region: {body}");
+    assert!(body.contains("Recent alerts"), "alerts region: {body}");
+    // The card grid links to every resource page.
+    for href in ["/sites", "/databases", "/files", "/ssl", "/users"] {
+        assert!(
+            body.contains(&format!("href=\"{href}\"")),
+            "card link {href}"
+        );
+    }
+    // Shell chrome is present.
+    assert!(body.contains("admin"), "shell shows user name");
+    assert!(body.contains("Log out"));
+}
+
+/// `GET /dashboard/gauges` returns the auto-refresh partial with host values.
+#[tokio::test]
+async fn web_dashboard_gauges_partial_returns_host_values() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+
+    let resp = server
+        .client()
+        .get(format!("{}/dashboard/gauges", server.base_url()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .send()
+        .await
+        .expect("GET /dashboard/gauges");
+    assert_eq!(resp.status(), 200);
+    let body = resp.text().await.expect("gauges partial body");
+    assert!(
+        body.contains("id=\"host-gauges\""),
+        "partial region: {body}"
+    );
+    assert!(
+        body.contains("hx-trigger=\"every 30s\""),
+        "refresh trigger: {body}"
+    );
+    // Real host values render as percentages / a load figure.
+    assert!(body.contains("CPU"), "cpu gauge label");
+    assert!(body.contains("Memory"), "memory gauge label");
+    assert!(body.contains("Disk"), "disk gauge label");
+    assert!(body.contains("Load"), "load gauge label");
+    assert!(body.contains("%"), "percent values rendered");
+}
+
+/// `GET /dashboard` is an explicit alias for the dashboard page.
+#[tokio::test]
+async fn web_dashboard_alias_renders_dashboard() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+
+    let resp = server
+        .client()
+        .get(format!("{}/dashboard", server.base_url()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .send()
+        .await
+        .expect("GET /dashboard");
+    assert_eq!(resp.status(), 200);
+    let body = resp.text().await.expect("dashboard body");
+    assert!(
+        body.contains("id=\"host-gauges\""),
+        "alias renders dashboard"
+    );
+}
+
+/// Unauthenticated `GET /dashboard` redirects to `/login`.
+#[tokio::test]
+async fn web_unauthenticated_dashboard_redirects_to_login() {
+    let server = TestServer::new().await;
+    let resp = server
+        .client()
+        .get(format!("{}/dashboard", server.base_url()))
+        .send()
+        .await
+        .expect("GET /dashboard");
+    assert_eq!(resp.status(), 302);
+    assert_eq!(
+        resp.headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok()),
+        Some("/login")
+    );
+}
