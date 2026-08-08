@@ -13,6 +13,7 @@ pub mod databases;
 pub mod files;
 pub mod identity;
 pub mod sites;
+pub mod ssl;
 
 pub use common::{
     Email, Password, PasswordError, Username, UsernameError,
@@ -36,3 +37,9 @@ pub use identity::{
     user::User,
 };
 pub use sites::{error::SiteError, repository::SiteRepository, site::Site, status::SiteStatus};
+pub use ssl::{
+    certificate::{Certificate, KeyType},
+    error::SslError,
+    repository::CertificateRepository,
+    source::{CertificateSource, CertificateStatus},
+};

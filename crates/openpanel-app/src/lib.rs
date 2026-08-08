@@ -12,6 +12,7 @@ pub mod identity;
 pub mod migrations;
 pub mod prelude;
 pub mod sites;
+pub mod ssl;
 
 pub use databases::{DatabasesModule, service::DatabasesService};
 pub use files::{FilesModule, service::FilesService};
@@ -20,4 +21,8 @@ pub use sites::{
     SitesModule,
     nginx::{NginxConfigGenerator, NginxPaths},
     service::SitesService,
+};
+pub use ssl::{
+    AcmeEndpoint, SslModule, SslPaths, SslService, challenge_server::AcmeHttpServer,
+    module::CHALLENGE_SERVER_PORT,
 };

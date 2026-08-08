@@ -30,11 +30,18 @@ mime_guess = { workspace = true }
 
 openpanel-core = { workspace = true }
 openpanel-domain = { workspace = true }
+rcgen = { workspace = true }
+rustls = { workspace = true }
+rustls-acme = { workspace = true }
+rustls-pemfile = { workspace = true }
+x509-parser = { workspace = true }
 
 [dev-dependencies]
 openpanel-test-support = { workspace = true }
 mockall = { workspace = true }
 proptest = { workspace = true }
+reqwest = { workspace = true }
+tokio = { workspace = true }
 
 [lints]
 workspace = true

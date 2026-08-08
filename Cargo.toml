@@ -82,6 +82,11 @@ sysinfo = "0.32"
 # TLS
 rustls = { version = "0.23", default-features = false, features = ["std", "aws_lc_rs"] }
 rustls-acme = { version = "0.13", features = ["axum"] }
+# PEM parsing + serialisation for the ssl bounded context
+rustls-pemfile = "2"
+x509-parser = "0.16"
+# Self-signed certificate generation (pure-Rust)
+rcgen = "0.13"
 
 # Async traits
 async-trait = "0.1"

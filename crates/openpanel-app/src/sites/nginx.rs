@@ -89,7 +89,30 @@ impl NginxConfigGenerator {
     }
 
     /// Render the nginx server block for a site. Pure function.
+    /// Without TLS — emits only the HTTP vhost. Use [`Self::render`]
+    /// is the legacy entry; new callers should use
+    /// [`Self::render_full`] which handles the optional TLS + acme
+    /// challenge proxy + force-https redirect.
     pub fn render(site: &Site) -> String {
+        Self::render_full(site, None, None)
+    }
+
+    /// Render the full nginx config for a site, including an optional
+    /// TLS vhost on `:443`, the ACME HTTP-01 challenge proxy block on
+    /// `:80`, and the force-HTTPS 301 redirect.
+    ///
+    /// - `tls`: when `Some((cert_path, key_path))`, emits a `:443` server
+    //   block with the Mozilla-modern TLS profile.
+    /// - `acme_challenge_upstream`: when `Some("http://127.0.0.1:9080")`,
+    //   emits a `location ^~ /.well-known/acme-challenge/` block on
+    //   the port-80 vhost proxying to that upstream.
+    /// - `force_https`: when `true` AND `tls.is_some()`, the port-80
+    //   vhost becomes a single `return 301 https://...`.
+    pub fn render_full(
+        site: &Site,
+        tls: Option<(&str, &str)>,
+        acme_challenge_upstream: Option<&str>,
+    ) -> String {
         let mut server_names = vec![site.primary_domain().to_string()];
         for a in site.aliases() {
             server_names.push(a.clone());
@@ -99,12 +122,83 @@ impl NginxConfigGenerator {
         let access_log = format!("/var/log/nginx/{}.access.log", site.primary_domain());
         let error_log = format!("/var/log/nginx/{}.error.log", site.primary_domain());
 
-        format!(
-            r#"# Managed by OpenPanel. Do not edit by hand.
+        let force_https = tls.is_some() && Self::force_https_for(site);
+        let acme_block = match acme_challenge_upstream {
+            Some(up) => format!(
+                r#"
+    location ^~ /.well-known/acme-challenge/ {{
+        proxy_pass {up};
+        proxy_set_header Host $host;
+    }}
+"#
+            ),
+            None => String::new(),
+        };
+
+        let http_vhost = if force_https {
+            format!(
+                r#"# Managed by OpenPanel. Do not edit by hand.
 server {{
     listen 80;
     listen [::]:80;
     server_name {server_names};
+
+    access_log {access_log};
+    error_log  {error_log};
+{acme_block}
+    location / {{
+        return 301 https://$host$request_uri;
+    }}
+}}
+"#,
+            )
+        } else {
+            format!(
+                r#"# Managed by OpenPanel. Do not edit by hand.
+server {{
+    listen 80;
+    listen [::]:80;
+    server_name {server_names};
+
+    root {root};
+    index index.html index.htm{php_index};
+
+    access_log {access_log};
+    error_log  {error_log};
+
+    client_max_body_size 100M;
+{acme_block}
+    location / {{
+        try_files $uri $uri/ =404;
+    }}
+
+    location ~ /\.(?!well-known) {{ deny all; }}
+}}
+"#,
+                root = site.document_root(),
+                php_index = if site.php_enabled() { " index.php" } else { "" },
+            )
+        };
+
+        let tls_vhost = match tls {
+            Some((cert_path, key_path)) => format!(
+                r#"
+server {{
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name {server_names};
+
+    ssl_certificate     {cert_path};
+    ssl_certificate_key {key_path};
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphersuites    TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256;
+    ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    add_header Strict-Transport-Security "max-age=63072000" always;
 
     root {root};
     index index.html index.htm{php_index};
@@ -121,9 +215,23 @@ server {{
     location ~ /\.(?!well-known) {{ deny all; }}
 }}
 "#,
-            root = site.document_root(),
-            php_index = if site.php_enabled() { " index.php" } else { "" },
-        )
+                root = site.document_root(),
+                php_index = if site.php_enabled() { " index.php" } else { "" },
+            ),
+            None => String::new(),
+        };
+
+        format!("{http_vhost}{tls_vhost}")
+    }
+
+    /// Per-site force-HTTPS decision. Currently defaults to `true`
+    /// when a cert is active — the site aggregate does not yet carry a
+    /// per-site toggle, so the spec's "per-site toggle" is encoded at
+    /// the cert level (`Certificate::force_https`). Sites without a
+    /// cert are HTTP-only.
+    fn force_https_for(_site: &Site) -> bool {
+        // A future enhancement: let `Site` carry `force_https: bool`.
+        true
     }
 
     /// Apply the rendered config (active site), test nginx, reload on success.
@@ -131,9 +239,21 @@ server {{
     /// is not installed, writes the config and logs a warning instead of
     /// failing — useful for development environments.
     pub fn apply(&self, site: &Site) -> Result<(), SiteError> {
+        self.apply_with_tls(site, None::<(&str, &str)>, None::<&str>)
+    }
+
+    /// Apply the rendered config with optional TLS + ACME challenge
+    /// proxy. The challenge proxy upstream is typically
+    /// `"http://127.0.0.1:9080"`.
+    pub fn apply_with_tls(
+        &self,
+        site: &Site,
+        tls: Option<(&str, &str)>,
+        acme_challenge_upstream: Option<&str>,
+    ) -> Result<(), SiteError> {
         self.ensure_dirs()?;
         let target = self.paths.active_path(site.primary_domain());
-        let rendered = Self::render(site);
+        let rendered = Self::render_full(site, tls, acme_challenge_upstream);
 
         if !self.nginx_available() {
             tracing::warn!(
@@ -357,5 +477,56 @@ mod tests {
             Password::from_hash("$argon2id$dummy"),
             Role::Owner,
         );
+    }
+
+    #[test]
+    fn render_with_tls_emits_443_vhost_with_modern_profile() {
+        let s = dummy_site();
+        let out = NginxConfigGenerator::render_full(
+            &s,
+            Some((
+                "/etc/openpanel/ssl/certs/example.com.crt",
+                "/etc/openpanel/ssl/keys/example.com.key",
+            )),
+            Some("http://127.0.0.1:9080"),
+        );
+        assert!(out.contains("listen 443 ssl http2"));
+        assert!(out.contains("ssl_certificate     /etc/openpanel/ssl/certs/example.com.crt"));
+        assert!(out.contains("ssl_certificate_key /etc/openpanel/ssl/keys/example.com.key"));
+        assert!(out.contains("TLSv1.2 TLSv1.3"));
+        assert!(out.contains("Strict-Transport-Security"));
+    }
+
+    #[test]
+    fn render_with_tls_and_acme_proxy_emits_challenge_block() {
+        let s = dummy_site();
+        let out = NginxConfigGenerator::render_full(
+            &s,
+            Some(("/tmp/cert", "/tmp/key")),
+            Some("http://127.0.0.1:9080"),
+        );
+        assert!(out.contains("proxy_pass http://127.0.0.1:9080"));
+        assert!(out.contains(".well-known/acme-challenge"));
+    }
+
+    #[test]
+    fn render_without_tls_omits_tls_vhost() {
+        let s = dummy_site();
+        let out = NginxConfigGenerator::render_full(&s, None, None);
+        assert!(!out.contains("listen 443"));
+        assert!(!out.contains("ssl_certificate"));
+        // No cert → no force-https redirect either.
+        assert!(!out.contains("return 301 https://"));
+    }
+
+    #[test]
+    fn render_with_tls_emits_force_https_301_on_port_80() {
+        let s = dummy_site();
+        let out = NginxConfigGenerator::render_full(
+            &s,
+            Some(("/tmp/cert", "/tmp/key")),
+            Some("http://127.0.0.1:9080"),
+        );
+        assert!(out.contains("return 301 https://$host$request_uri"));
     }
 }

@@ -66,6 +66,16 @@ pub enum AuditAction {
     SiteOwnerChanged,
     /// An SSL certificate was issued.
     SslIssued,
+    /// An SSL certificate was manually uploaded.
+    SslManualUploaded,
+    /// A self-signed certificate was generated.
+    SslSelfSignedGenerated,
+    /// An SSL certificate was revoked.
+    SslRevoked,
+    /// An SSL certificate was deleted.
+    SslDeleted,
+    /// The force-HTTPS redirect for a site was toggled.
+    SslForceHttpsChanged,
     /// A database was created.
     DatabaseCreated,
     /// A database was deleted.
@@ -102,6 +112,11 @@ impl AuditAction {
             AuditAction::SiteDisabled => "site_disabled",
             AuditAction::SiteOwnerChanged => "site_owner_changed",
             AuditAction::SslIssued => "ssl_issued",
+            AuditAction::SslManualUploaded => "ssl_manual_uploaded",
+            AuditAction::SslSelfSignedGenerated => "ssl_self_signed_generated",
+            AuditAction::SslRevoked => "ssl_revoked",
+            AuditAction::SslDeleted => "ssl_deleted",
+            AuditAction::SslForceHttpsChanged => "ssl_force_https_changed",
             AuditAction::DatabaseCreated => "database_created",
             AuditAction::DatabaseDeleted => "database_deleted",
             AuditAction::DatabasePasswordChanged => "database_password_changed",
@@ -275,6 +290,11 @@ impl AuditService for SqliteAuditService {
                 "site_disabled" => AuditAction::SiteDisabled,
                 "site_owner_changed" => AuditAction::SiteOwnerChanged,
                 "ssl_issued" => AuditAction::SslIssued,
+                "ssl_manual_uploaded" => AuditAction::SslManualUploaded,
+                "ssl_self_signed_generated" => AuditAction::SslSelfSignedGenerated,
+                "ssl_revoked" => AuditAction::SslRevoked,
+                "ssl_deleted" => AuditAction::SslDeleted,
+                "ssl_force_https_changed" => AuditAction::SslForceHttpsChanged,
                 "database_created" => AuditAction::DatabaseCreated,
                 "database_deleted" => AuditAction::DatabaseDeleted,
                 "database_password_changed" => AuditAction::DatabasePasswordChanged,
