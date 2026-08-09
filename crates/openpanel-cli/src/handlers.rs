@@ -7,9 +7,9 @@ use anyhow::Context;
 use base64::Engine;
 use openpanel_api::build_router;
 use openpanel_app::{
-    AcmeEndpoint, BackupsModule, CronModule, DatabasesModule, FilesModule, IdentityModule,
-    LogService, LogsModule, MonitoringModule, SecurityModule, SecurityService, SitesModule,
-    SslModule, SslPaths, SystemServicesModule, databases::crypto as db_crypto,
+    AcmeEndpoint, BackupsModule, CronModule, DatabasesModule, DnsModule, FilesModule,
+    IdentityModule, LogService, LogsModule, MonitoringModule, SecurityModule, SecurityService,
+    SitesModule, SslModule, SslPaths, SystemServicesModule, databases::crypto as db_crypto,
 };
 use openpanel_core::{
     AppContext, Config, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
@@ -61,6 +61,9 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let system_services_module = SystemServicesModule::new(&ctx)
         .await
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let dns_module = DnsModule::new(&ctx)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
 
     let runner = MigrationRunner::for_sqlite(pool.clone());
     runner
@@ -106,6 +109,10 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         )
         .await
         .context("apply system services migrations")?;
+    runner
+        .apply_module(dns_module.name(), &dns_module.migrations())
+        .await
+        .context("apply DNS migrations")?;
 
     let identity_svc = identity_module.service();
     let sites_svc = sites_module.service();
@@ -119,6 +126,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let security_svc = security_module.service();
     let login_throttle = security_module.login_service();
     let system_services_svc = system_services_module.service();
+    let dns_svc = dns_module.service();
     let app = build_router(
         identity_svc.clone(),
         sites_svc.clone(),
@@ -132,6 +140,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         security_svc.clone(),
         login_throttle.clone(),
         system_services_svc.clone(),
+        dns_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -146,13 +155,15 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         security_svc,
         login_throttle,
         system_services_svc,
+        dns_svc,
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
                 .with("backups")
                 .with("logs")
                 .with("host-security")
-                .with("system-services"),
+                .with("system-services")
+                .with("dns"),
         ),
     ));
 
@@ -412,6 +423,243 @@ pub async fn services_logs(config: Arc<Config>, id: String, limit: usize) -> any
     {
         println!("{line}");
     }
+    Ok(())
+}
+
+async fn build_dns(config: Arc<Config>) -> anyhow::Result<Arc<openpanel_app::DnsService>> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    sqlx::query(include_str!("audit.sql"))
+        .execute(&pool)
+        .await
+        .context("ensure audit schema")?;
+    let ctx = AppContext::new(config, db, audit);
+    let module = DnsModule::new(&ctx)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    MigrationRunner::for_sqlite(pool)
+        .apply_module(module.name(), &module.migrations())
+        .await?;
+    Ok(module.service())
+}
+fn parse_record_kind(value: &str) -> anyhow::Result<openpanel_domain::dns::RecordKind> {
+    use openpanel_domain::dns::RecordKind;
+    match value.to_ascii_uppercase().as_str() {
+        "A" => Ok(RecordKind::A),
+        "AAAA" => Ok(RecordKind::Aaaa),
+        "CNAME" => Ok(RecordKind::Cname),
+        "TXT" => Ok(RecordKind::Txt),
+        "MX" => Ok(RecordKind::Mx),
+        "CAA" => Ok(RecordKind::Caa),
+        "NS" => Ok(RecordKind::Ns),
+        "SRV" => Ok(RecordKind::Srv),
+        _ => Err(anyhow::anyhow!("unsupported DNS record type")),
+    }
+}
+/// Add a protected DNS provider account.
+pub async fn dns_provider_add(
+    config: Arc<Config>,
+    kind: String,
+    name: String,
+    credential: String,
+) -> anyhow::Result<()> {
+    let account = build_dns(config)
+        .await?
+        .create_account(uuid::Uuid::nil(), Role::Owner, &kind, &name, &credential)
+        .await?;
+    println!("{} {}", account.id, account.name);
+    Ok(())
+}
+/// List secret-free provider account metadata.
+pub async fn dns_providers(config: Arc<Config>) -> anyhow::Result<()> {
+    for account in build_dns(config).await?.accounts().await? {
+        println!("{} {} {}", account.id, account.kind, account.name);
+    }
+    Ok(())
+}
+async fn first_dns_account(
+    service: &openpanel_app::DnsService,
+) -> anyhow::Result<openpanel_app::dns::ProviderAccount> {
+    service
+        .accounts()
+        .await?
+        .into_iter()
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("no DNS provider account"))
+}
+/// Retest the first configured provider account.
+pub async fn dns_provider_test(config: Arc<Config>) -> anyhow::Result<()> {
+    let service = build_dns(config).await?;
+    let account = first_dns_account(&service).await?;
+    let tested = service
+        .test_account(uuid::Uuid::nil(), Role::Owner, account.id)
+        .await?;
+    println!("{} tested", tested.id);
+    Ok(())
+}
+/// Rotate the first provider account credential.
+pub async fn dns_provider_rotate(config: Arc<Config>, credential: String) -> anyhow::Result<()> {
+    let service = build_dns(config).await?;
+    let account = first_dns_account(&service).await?;
+    let rotated = service
+        .rotate_account(uuid::Uuid::nil(), Role::Owner, account.id, &credential)
+        .await?;
+    println!("{} rotated", rotated.id);
+    Ok(())
+}
+/// Enable or disable the first provider account.
+pub async fn dns_provider_enabled(config: Arc<Config>, enabled: bool) -> anyhow::Result<()> {
+    let service = build_dns(config).await?;
+    let account = first_dns_account(&service).await?;
+    let updated = service
+        .set_account_enabled(uuid::Uuid::nil(), Role::Owner, account.id, enabled)
+        .await?;
+    println!("{} enabled={}", updated.id, updated.enabled);
+    Ok(())
+}
+/// Delete first provider metadata after confirmation.
+pub async fn dns_provider_delete(config: Arc<Config>, confirm: bool) -> anyhow::Result<()> {
+    if !confirm {
+        return Err(anyhow::anyhow!("DNS provider deletion requires --confirm"));
+    }
+    let service = build_dns(config).await?;
+    let account = first_dns_account(&service).await?;
+    service
+        .delete_account(uuid::Uuid::nil(), Role::Owner, account.id)
+        .await?;
+    println!("deleted {}", account.id);
+    Ok(())
+}
+/// Synchronize the first configured provider account.
+pub async fn dns_sync(config: Arc<Config>) -> anyhow::Result<()> {
+    let service = build_dns(config).await?;
+    let account = first_dns_account(&service).await?;
+    let result = service
+        .sync(uuid::Uuid::nil(), Role::Owner, account.id)
+        .await?;
+    println!("zones={} records={}", result.zones, result.imported_records);
+    Ok(())
+}
+/// List synchronized DNS zones.
+pub async fn dns_zones(config: Arc<Config>) -> anyhow::Result<()> {
+    for zone in build_dns(config).await?.zones().await? {
+        println!("{} {}", zone.id, zone.name);
+    }
+    Ok(())
+}
+async fn dns_zone(
+    service: &openpanel_app::DnsService,
+    name: &str,
+) -> anyhow::Result<openpanel_app::dns::ProviderZone> {
+    service
+        .zones()
+        .await?
+        .into_iter()
+        .find(|zone| zone.name.as_str() == name.trim_end_matches('.').to_ascii_lowercase())
+        .ok_or_else(|| anyhow::anyhow!("DNS zone not found"))
+}
+/// Add one typed DNS record.
+pub async fn dns_record_add(
+    config: Arc<Config>,
+    zone: String,
+    name: String,
+    kind: String,
+    value: String,
+    ttl: u32,
+) -> anyhow::Result<()> {
+    let service = build_dns(config).await?;
+    let zone = dns_zone(&service, &zone).await?;
+    let record = service
+        .create_record(
+            uuid::Uuid::nil(),
+            Role::Owner,
+            zone.id,
+            &name,
+            parse_record_kind(&kind)?,
+            &value,
+            ttl,
+            zone.remote_version.as_str(),
+        )
+        .await?;
+    println!("{} {} {}", record.remote_id, record.name, record.data);
+    Ok(())
+}
+/// Update one existing DNS record, preserving its type.
+pub async fn dns_record_update(
+    config: Arc<Config>,
+    zone: String,
+    record: String,
+    value: String,
+    ttl: u32,
+) -> anyhow::Result<()> {
+    let service = build_dns(config).await?;
+    let zone = dns_zone(&service, &zone).await?;
+    let found = service
+        .records(zone.id)
+        .await?
+        .into_iter()
+        .find(|item| item.name.as_str() == record.trim_end_matches('.').to_ascii_lowercase())
+        .ok_or_else(|| anyhow::anyhow!("DNS record not found"))?;
+    let updated = service
+        .update_record(
+            uuid::Uuid::nil(),
+            Role::Owner,
+            zone.id,
+            &found.remote_id,
+            found.name.as_str(),
+            found.data.kind(),
+            &value,
+            ttl,
+            found.remote_version.as_str(),
+        )
+        .await?;
+    println!("{} {}", updated.name, updated.data);
+    Ok(())
+}
+/// List synchronized records for a zone.
+pub async fn dns_records(config: Arc<Config>, zone: String) -> anyhow::Result<()> {
+    let service = build_dns(config).await?;
+    let zone = dns_zone(&service, &zone).await?;
+    for record in service.records(zone.id).await? {
+        println!("{} {} {}", record.remote_id, record.name, record.data);
+    }
+    Ok(())
+}
+/// Check propagation status for a zone.
+pub async fn dns_check(config: Arc<Config>, zone: String) -> anyhow::Result<()> {
+    let service = build_dns(config).await?;
+    let zone = dns_zone(&service, &zone).await?;
+    let result = service.check(zone.id).await?;
+    println!("{}", result.status);
+    Ok(())
+}
+/// Delete exactly one matching record after confirmation.
+pub async fn dns_record_delete(
+    config: Arc<Config>,
+    zone: String,
+    record: String,
+    confirm: bool,
+) -> anyhow::Result<()> {
+    if !confirm {
+        return Err(anyhow::anyhow!("DNS record deletion requires --confirm"));
+    }
+    let service = build_dns(config).await?;
+    let zone = dns_zone(&service, &zone).await?;
+    let found = service
+        .records(zone.id)
+        .await?
+        .into_iter()
+        .find(|item| item.name.as_str() == record.trim_end_matches('.').to_ascii_lowercase())
+        .ok_or_else(|| anyhow::anyhow!("DNS record not found"))?;
+    service
+        .delete_record(
+            uuid::Uuid::nil(),
+            Role::Owner,
+            zone.id,
+            &found.remote_id,
+            found.remote_version.as_str(),
+        )
+        .await?;
+    println!("deleted {}", found.remote_id);
     Ok(())
 }
 

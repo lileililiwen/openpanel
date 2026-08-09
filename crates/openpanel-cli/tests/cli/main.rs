@@ -10,6 +10,7 @@ mod backup;
 mod common;
 mod cron;
 mod database;
+mod dns;
 mod file;
 mod logs;
 mod monitoring;

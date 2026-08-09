@@ -116,6 +116,8 @@ pub enum AuditAction {
     SecurityBlockChanged,
     /// A registered host service lifecycle action completed.
     ServiceChanged,
+    /// A DNS provider account, zone, or record changed.
+    DnsChanged,
 }
 
 impl AuditAction {
@@ -161,6 +163,7 @@ impl AuditAction {
             AuditAction::FirewallChanged => "firewall_changed",
             AuditAction::SecurityBlockChanged => "security_block_changed",
             AuditAction::ServiceChanged => "service_changed",
+            AuditAction::DnsChanged => "dns_changed",
         }
     }
 }

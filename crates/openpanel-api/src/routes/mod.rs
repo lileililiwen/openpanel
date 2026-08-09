@@ -6,6 +6,8 @@ pub mod backups;
 pub mod cron;
 /// Databases resource routes (`/databases`).
 pub mod databases;
+/// Provider-backed DNS routes (`/dns`).
+pub mod dns;
 /// Files resource routes (`/files/{site_id}/...`).
 pub mod files;
 /// Identity resource routes (`/identity`).

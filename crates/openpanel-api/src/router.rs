@@ -4,20 +4,20 @@ use std::sync::Arc;
 
 use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
 use openpanel_app::{
-    BackupService, CronService, DatabasesService, FilesService, IdentityService, LogService,
-    MonitoringService, SecurityService, SitesService, SslService, security::LoginThrottleService,
-    system_services::ServiceManager,
+    BackupService, CronService, DatabasesService, DnsService, FilesService, IdentityService,
+    LogService, MonitoringService, SecurityService, SitesService, SslService,
+    security::LoginThrottleService, system_services::ServiceManager,
 };
 
 use crate::{
     middleware::session::session_middleware,
     routes::{
         backups::router as backups_router, cron::router as cron_router,
-        databases::router as databases_router, files::router as files_router,
-        identity::router as identity_router, logs::router as logs_router,
-        monitoring::router as monitoring_router, security::router as security_router,
-        sites::router as sites_router, ssl::router as ssl_router,
-        system_services::router as system_services_router,
+        databases::router as databases_router, dns::router as dns_router,
+        files::router as files_router, identity::router as identity_router,
+        logs::router as logs_router, monitoring::router as monitoring_router,
+        security::router as security_router, sites::router as sites_router,
+        ssl::router as ssl_router, system_services::router as system_services_router,
     },
 };
 
@@ -39,6 +39,7 @@ pub fn build_router(
     security: Arc<SecurityService>,
     login_throttle: Arc<LoginThrottleService>,
     system_services: Arc<ServiceManager>,
+    dns: Arc<DnsService>,
 ) -> Router {
     let identity_for_layer = identity.clone();
 
@@ -54,6 +55,7 @@ pub fn build_router(
         .nest("/logs", logs_router(logs))
         .nest("/security", security_router(security))
         .nest("/services", system_services_router(system_services))
+        .nest("/dns", dns_router(dns))
         .layer(from_fn_with_state(identity_for_layer, session_middleware));
 
     Router::new()

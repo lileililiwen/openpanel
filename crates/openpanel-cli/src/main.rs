@@ -3,9 +3,9 @@
 use clap::Parser;
 use openpanel_cli::{
     BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, Command, CronCommand,
-    DatabaseCommand, FileCommand, LogsCommand, MonitoringCommand, SecurityAllowlistCommand,
-    SecurityCommand, SecurityRuleCommand, ServicesCommand, SiteCommand, SslCommand, UserCommand,
-    handlers,
+    DatabaseCommand, DnsCommand, FileCommand, LogsCommand, MonitoringCommand,
+    SecurityAllowlistCommand, SecurityCommand, SecurityRuleCommand, ServicesCommand, SiteCommand,
+    SslCommand, UserCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -268,6 +268,45 @@ async fn main() -> anyhow::Result<()> {
             }
             ServicesCommand::History { id } => handlers::services_history(config, id).await,
             ServicesCommand::Logs { id, limit } => handlers::services_logs(config, id, limit).await,
+        },
+        Command::Dns { action } => match action {
+            DnsCommand::ProviderAdd {
+                kind,
+                name,
+                credential,
+            } => handlers::dns_provider_add(config, kind, name, credential).await,
+            DnsCommand::Providers => handlers::dns_providers(config).await,
+            DnsCommand::ProviderTest => handlers::dns_provider_test(config).await,
+            DnsCommand::ProviderRotate { credential } => {
+                handlers::dns_provider_rotate(config, credential).await
+            }
+            DnsCommand::ProviderDisable => handlers::dns_provider_enabled(config, false).await,
+            DnsCommand::ProviderEnable => handlers::dns_provider_enabled(config, true).await,
+            DnsCommand::ProviderDelete { confirm } => {
+                handlers::dns_provider_delete(config, confirm).await
+            }
+            DnsCommand::Sync => handlers::dns_sync(config).await,
+            DnsCommand::Zones => handlers::dns_zones(config).await,
+            DnsCommand::RecordAdd {
+                zone,
+                name,
+                kind,
+                value,
+                ttl,
+            } => handlers::dns_record_add(config, zone, name, kind, value, ttl).await,
+            DnsCommand::RecordUpdate {
+                zone,
+                record,
+                value,
+                ttl,
+            } => handlers::dns_record_update(config, zone, record, value, ttl).await,
+            DnsCommand::Records { zone } => handlers::dns_records(config, zone).await,
+            DnsCommand::Check { zone } => handlers::dns_check(config, zone).await,
+            DnsCommand::RecordDelete {
+                zone,
+                record,
+                confirm,
+            } => handlers::dns_record_delete(config, zone, record, confirm).await,
         },
     }
 }

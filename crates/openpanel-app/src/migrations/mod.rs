@@ -24,3 +24,5 @@ pub const LOGS_V001: &str = include_str!("logs/V001__init.sql");
 pub const SECURITY_V001: &str = include_str!("security/V001__init.sql");
 /// System-service health history schema.
 pub const SYSTEM_SERVICES_V001: &str = include_str!("system_services/V001__init.sql");
+/// Provider accounts, zones, and synchronized records.
+pub const DNS_V001: &str = include_str!("dns/V001__init.sql");

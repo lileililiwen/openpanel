@@ -17,9 +17,9 @@ use openpanel_api::{
     middleware::session::{SESSION_COOKIE, session_middleware},
 };
 use openpanel_app::{
-    BackupService, CronService, DatabasesService, FilesService, IdentityService, LogService,
-    MonitoringService, SecurityService, SitesService, SslService, security::LoginThrottleService,
-    system_services::ServiceManager,
+    BackupService, CronService, DatabasesService, DnsService, FilesService, IdentityService,
+    LogService, MonitoringService, SecurityService, SitesService, SslService,
+    security::LoginThrottleService, system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
 use openpanel_domain::{Session, SessionToken, User};
@@ -97,6 +97,8 @@ pub struct WebState {
     pub login_throttle: Arc<LoginThrottleService>,
     /// Allowlisted host-service manager.
     pub system_services: Arc<ServiceManager>,
+    /// Provider-backed DNS service.
+    pub dns: Arc<DnsService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -206,6 +208,7 @@ pub fn router(
     security_service: Arc<SecurityService>,
     login_throttle: Arc<LoginThrottleService>,
     system_services_service: Arc<ServiceManager>,
+    dns_service: Arc<DnsService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -224,6 +227,7 @@ pub fn router(
         security: security_service,
         login_throttle,
         system_services: system_services_service,
+        dns: dns_service,
         csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
@@ -265,6 +269,33 @@ pub fn router(
             "/services/{id}/actions",
             post(crate::system_services::action),
         )
+        .route("/dns", get(crate::dns::page))
+        .route("/dns/providers", post(crate::dns::create_provider))
+        .route("/dns/providers/{id}/test", post(crate::dns::test_provider))
+        .route(
+            "/dns/providers/{id}/rotate",
+            post(crate::dns::rotate_provider),
+        )
+        .route(
+            "/dns/providers/{id}/disable",
+            post(crate::dns::disable_provider),
+        )
+        .route(
+            "/dns/providers/{id}/delete",
+            post(crate::dns::delete_provider),
+        )
+        .route("/dns/providers/{id}/sync", post(crate::dns::sync_provider))
+        .route("/dns/zones/{id}", get(crate::dns::zone_page))
+        .route("/dns/zones/{id}/records", post(crate::dns::create_record))
+        .route(
+            "/dns/zones/{id}/records/{record_id}/update",
+            post(crate::dns::update_record),
+        )
+        .route(
+            "/dns/zones/{id}/records/{record_id}/delete",
+            post(crate::dns::delete_record),
+        )
+        .route("/dns/zones/{id}/check", post(crate::dns::check_zone))
         .route("/sites", get(sites::list).post(sites::create))
         .route("/sites/new", get(sites::new_form))
         .route("/sites/{id}", get(sites::detail).delete(sites::delete))

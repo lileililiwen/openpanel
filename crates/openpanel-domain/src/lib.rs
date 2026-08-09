@@ -14,6 +14,8 @@ pub mod common;
 /// Scheduled command and HTTP job domain model.
 pub mod cron;
 pub mod databases;
+/// Provider-backed DNS zones and typed records.
+pub mod dns;
 pub mod files;
 pub mod identity;
 pub mod logs;

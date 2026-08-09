@@ -86,6 +86,78 @@ pub enum Command {
         #[command(subcommand)]
         action: ServicesCommand,
     },
+    /// Manage external-provider DNS zones and records.
+    Dns {
+        /// DNS operation.
+        #[command(subcommand)]
+        action: DnsCommand,
+    },
+}
+
+/// Provider-backed DNS operations.
+#[derive(Debug, Subcommand)]
+#[allow(missing_docs)]
+pub enum DnsCommand {
+    ProviderAdd {
+        #[arg(long)]
+        kind: String,
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        credential: String,
+    },
+    Providers,
+    ProviderTest,
+    ProviderRotate {
+        #[arg(long)]
+        credential: String,
+    },
+    ProviderDisable,
+    ProviderEnable,
+    ProviderDelete {
+        #[arg(long)]
+        confirm: bool,
+    },
+    Sync,
+    Zones,
+    RecordAdd {
+        #[arg(long)]
+        zone: String,
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        kind: String,
+        #[arg(long)]
+        value: String,
+        #[arg(long)]
+        ttl: u32,
+    },
+    RecordUpdate {
+        #[arg(long)]
+        zone: String,
+        #[arg(long)]
+        record: String,
+        #[arg(long)]
+        value: String,
+        #[arg(long)]
+        ttl: u32,
+    },
+    Records {
+        #[arg(long)]
+        zone: String,
+    },
+    Check {
+        #[arg(long)]
+        zone: String,
+    },
+    RecordDelete {
+        #[arg(long)]
+        zone: String,
+        #[arg(long)]
+        record: String,
+        #[arg(long)]
+        confirm: bool,
+    },
 }
 
 /// Registered system-service operations.

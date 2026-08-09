@@ -15,6 +15,7 @@ pub mod cron;
 pub mod csrf;
 pub mod dashboard;
 pub mod databases;
+pub mod dns;
 pub mod files;
 pub mod layout;
 pub mod login;
