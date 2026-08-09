@@ -28,6 +28,8 @@ hex = { workspace = true }
 base64 = { workspace = true }
 mime_guess = { workspace = true }
 reqwest = { workspace = true }
+walkdir = { workspace = true }
+sha2 = { workspace = true }
 
 openpanel-core = { workspace = true }
 openpanel-domain = { workspace = true }
@@ -39,6 +41,7 @@ x509-parser = { workspace = true }
 sysinfo = { workspace = true }
 
 [dev-dependencies]
+tempfile = "3"
 openpanel-test-support = { workspace = true }
 mockall = { workspace = true }
 proptest = { workspace = true }

@@ -17,14 +17,14 @@ use openpanel_api::{
     middleware::session::{SESSION_COOKIE, session_middleware},
 };
 use openpanel_app::{
-    CronService, DatabasesService, FilesService, IdentityService, MonitoringService, SitesService,
-    SslService,
+    BackupService, CronService, DatabasesService, FilesService, IdentityService, MonitoringService,
+    SitesService, SslService,
 };
 use openpanel_core::{AuditService, Config};
 use openpanel_domain::{Session, SessionToken, User};
 
 use crate::{
-    assets, cron,
+    assets, backups, cron,
     csrf::{CsrfStore, ValidateCsrf},
     dashboard, databases, files,
     layout::CapabilitySet,
@@ -86,6 +86,8 @@ pub struct WebState {
     pub monitoring: Arc<MonitoringService>,
     /// Cron scheduling service.
     pub cron: Arc<CronService>,
+    /// Backup and restore service.
+    pub backups: Arc<BackupService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -190,6 +192,7 @@ pub fn router(
     ssl: Arc<SslService>,
     monitoring: Arc<MonitoringService>,
     cron: Arc<CronService>,
+    backups: Arc<BackupService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -203,6 +206,7 @@ pub fn router(
         ssl,
         monitoring,
         cron,
+        backups,
         csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
@@ -232,6 +236,9 @@ pub fn router(
         .route("/cron/jobs/{id}/run", post(cron::run))
         .route("/cron/runs", get(cron::runs))
         .route("/cron/runs/{id}", get(cron::run_detail))
+        .route("/backups", get(backups::page))
+        .route("/backups/new", get(backups::new_form))
+        .route("/backups/plans", post(backups::create))
         .route("/sites", get(sites::list).post(sites::create))
         .route("/sites/new", get(sites::new_form))
         .route("/sites/{id}", get(sites::detail).delete(sites::delete))

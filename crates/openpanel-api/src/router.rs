@@ -4,22 +4,25 @@ use std::sync::Arc;
 
 use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
 use openpanel_app::{
-    CronService, DatabasesService, FilesService, IdentityService, MonitoringService, SitesService,
-    SslService,
+    BackupService, CronService, DatabasesService, FilesService, IdentityService, MonitoringService,
+    SitesService, SslService,
 };
 
 use crate::{
     middleware::session::session_middleware,
     routes::{
-        cron::router as cron_router, databases::router as databases_router,
-        files::router as files_router, identity::router as identity_router,
-        monitoring::router as monitoring_router, sites::router as sites_router,
-        ssl::router as ssl_router,
+        backups::router as backups_router, cron::router as cron_router,
+        databases::router as databases_router, files::router as files_router,
+        identity::router as identity_router, monitoring::router as monitoring_router,
+        sites::router as sites_router, ssl::router as ssl_router,
     },
 };
 
 /// Builds the top-level Axum [`Router`] combining every API module under `/api/v1`
 /// and a `/health` endpoint, with session resolution wired in via middleware.
+// The composition root lists bounded-context services explicitly so module
+// dependencies remain visible and type checked.
+#[allow(clippy::too_many_arguments)]
 pub fn build_router(
     identity: Arc<IdentityService>,
     sites: Arc<SitesService>,
@@ -28,6 +31,7 @@ pub fn build_router(
     ssl: Arc<SslService>,
     monitoring: Arc<MonitoringService>,
     cron: Arc<CronService>,
+    backups: Arc<BackupService>,
 ) -> Router {
     let identity_for_layer = identity.clone();
 
@@ -39,6 +43,7 @@ pub fn build_router(
         .nest("/ssl", ssl_router(ssl))
         .nest("/monitoring", monitoring_router(monitoring))
         .nest("/cron", cron_router(cron))
+        .nest("/backups", backups_router(backups))
         .layer(from_fn_with_state(identity_for_layer, session_middleware));
 
     Router::new()

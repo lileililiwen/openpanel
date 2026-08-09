@@ -16,3 +16,5 @@ pub const SSL_V001: &str = include_str!("ssl/V001__init.sql");
 pub const MONITORING_V001: &str = include_str!("monitoring/V001__init.sql");
 /// SQL for the cron v001 migration (`cron_jobs` and `cron_runs`).
 pub const CRON_V001: &str = include_str!("cron/V001__init.sql");
+/// SQL for backup plans, runs, and restore jobs.
+pub const BACKUPS_V001: &str = include_str!("backups/V001__init.sql");

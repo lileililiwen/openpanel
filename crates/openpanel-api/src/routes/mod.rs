@@ -1,5 +1,7 @@
 //! Per-resource HTTP route modules. Each submodule exposes a `router(...)` builder.
 
+/// Backup and restore routes (`/backups`).
+pub mod backups;
 /// Cron scheduling routes (`/cron`).
 pub mod cron;
 /// Databases resource routes (`/databases`).

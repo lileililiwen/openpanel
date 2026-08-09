@@ -62,6 +62,130 @@ pub enum Command {
         #[command(subcommand)]
         action: CronCommand,
     },
+    /// Backup plans, runs, verification, and restore.
+    Backup {
+        /// Backup subcommand.
+        #[command(subcommand)]
+        action: BackupCommand,
+    },
+}
+
+/// Backup subcommands.
+#[derive(Debug, Subcommand)]
+pub enum BackupCommand {
+    /// Manage recurring plans.
+    Plan {
+        /// Plan action.
+        #[command(subcommand)]
+        action: BackupPlanCommand,
+    },
+    /// Run a plan now.
+    Run {
+        /// Plan identifier.
+        #[arg(long)]
+        plan_id: String,
+    },
+    /// List runs.
+    Runs,
+    /// Show run status.
+    Status {
+        /// Run identifier.
+        #[arg(long)]
+        id: String,
+    },
+    /// Verify checksums.
+    Verify {
+        /// Run identifier.
+        #[arg(long)]
+        id: String,
+    },
+    /// Preview or start restore.
+    Restore {
+        /// Restore action.
+        #[command(subcommand)]
+        action: BackupRestoreCommand,
+    },
+    /// Delete a finalized run.
+    Delete {
+        /// Run identifier.
+        #[arg(long)]
+        id: String,
+    },
+}
+
+/// Backup plan CRUD.
+#[derive(Debug, Subcommand)]
+pub enum BackupPlanCommand {
+    /// Create a panel metadata plan.
+    Create {
+        /// Plan name.
+        #[arg(long)]
+        name: String,
+        /// Cron expression.
+        #[arg(long)]
+        schedule: String,
+        /// IANA timezone.
+        #[arg(long)]
+        timezone: String,
+        /// Include panel metadata.
+        #[arg(long)]
+        panel_metadata: bool,
+        /// Copies retained.
+        #[arg(long)]
+        retention: usize,
+    },
+    /// List plans.
+    List,
+    /// Get a plan.
+    Get {
+        /// Plan id.
+        #[arg(long)]
+        id: String,
+    },
+    /// Update retention.
+    Update {
+        /// Plan id.
+        #[arg(long)]
+        id: String,
+        /// Copies retained.
+        #[arg(long)]
+        retention: usize,
+    },
+    /// Enable a plan.
+    Enable {
+        /// Plan id.
+        #[arg(long)]
+        id: String,
+    },
+    /// Disable a plan.
+    Disable {
+        /// Plan id.
+        #[arg(long)]
+        id: String,
+    },
+    /// Delete a plan.
+    Delete {
+        /// Plan id.
+        #[arg(long)]
+        id: String,
+    },
+}
+
+/// Restore actions.
+#[derive(Debug, Subcommand)]
+pub enum BackupRestoreCommand {
+    /// Preflight only.
+    Preview {
+        /// Run id.
+        #[arg(long)]
+        id: String,
+    },
+    /// Start safe restore.
+    Start {
+        /// Run id.
+        #[arg(long)]
+        id: String,
+    },
 }
 
 /// Subcommands for scheduled jobs and execution history.

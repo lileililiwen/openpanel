@@ -8,6 +8,8 @@
 // the deny to a warn for test compilation only.
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+/// Backup plans, manifests, runs, and safe restore values.
+pub mod backups;
 pub mod common;
 /// Scheduled command and HTTP job domain model.
 pub mod cron;

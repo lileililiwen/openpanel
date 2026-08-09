@@ -7,8 +7,8 @@ use anyhow::Context;
 use base64::Engine;
 use openpanel_api::build_router;
 use openpanel_app::{
-    AcmeEndpoint, CronModule, DatabasesModule, FilesModule, IdentityModule, MonitoringModule,
-    SitesModule, SslModule, SslPaths, databases::crypto as db_crypto,
+    AcmeEndpoint, BackupsModule, CronModule, DatabasesModule, FilesModule, IdentityModule,
+    MonitoringModule, SitesModule, SslModule, SslPaths, databases::crypto as db_crypto,
 };
 use openpanel_core::{
     AppContext, Config, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
@@ -37,6 +37,16 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let ssl_module = SslModule::new(&ctx, master_key, ssl_contact_email(&config)).await;
     let monitoring_module = MonitoringModule::new(&ctx).await;
     let cron_module = CronModule::new(&ctx).await;
+    let backup_root = std::env::var("OPENPANEL__BACKUPS__ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("/var/lib/openpanel/backups"));
+    let backups_module = BackupsModule::with_root(
+        &ctx,
+        backup_root,
+        Some(master_key),
+        Some((cron_module.service(), std::path::PathBuf::from("/var/www"))),
+    )
+    .await;
 
     let runner = MigrationRunner::for_sqlite(pool.clone());
     runner
@@ -63,6 +73,10 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .apply_module(cron_module.name(), &cron_module.migrations())
         .await
         .context("apply cron migrations")?;
+    runner
+        .apply_module(backups_module.name(), &backups_module.migrations())
+        .await
+        .context("apply backup migrations")?;
 
     let identity_svc = identity_module.service();
     let sites_svc = sites_module.service();
@@ -71,6 +85,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let ssl_svc = ssl_module.service();
     let monitoring_svc = monitoring_module.service();
     let cron_svc = cron_module.service();
+    let backups_svc = backups_module.service();
     let app = build_router(
         identity_svc.clone(),
         sites_svc.clone(),
@@ -79,6 +94,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         ssl_svc.clone(),
         monitoring_svc.clone(),
         cron_svc.clone(),
+        backups_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -88,8 +104,12 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         ssl_svc,
         monitoring_svc,
         cron_svc,
-        web_runtime(&config, audit)
-            .with_capabilities(openpanel_web::layout::CapabilitySet::shipped().with("cron")),
+        backups_svc,
+        web_runtime(&config, audit).with_capabilities(
+            openpanel_web::layout::CapabilitySet::shipped()
+                .with("cron")
+                .with("backups"),
+        ),
     ));
 
     let addr = format!("{}:{}", config.server().bind, config.server().port);
@@ -167,6 +187,217 @@ async fn build_cron(config: Arc<Config>) -> anyhow::Result<Arc<openpanel_app::Cr
 
 fn cron_owner() -> uuid::Uuid {
     uuid::Uuid::nil()
+}
+
+async fn build_backups(config: Arc<Config>) -> anyhow::Result<Arc<openpanel_app::BackupService>> {
+    let master_key = load_master_key(&config).ok();
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config, db, audit);
+    let root = std::env::var("OPENPANEL__BACKUPS__ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or(std::env::current_dir()?.join("backups"));
+    let cron_module = CronModule::with_roots(&ctx, vec![std::env::current_dir()?]).await;
+    let runner = MigrationRunner::for_sqlite(pool);
+    runner
+        .apply_module(cron_module.name(), &cron_module.migrations())
+        .await?;
+    let module = BackupsModule::with_root(
+        &ctx,
+        root,
+        master_key,
+        Some((cron_module.service(), std::env::current_dir()?)),
+    )
+    .await;
+    runner
+        .apply_module(module.name(), &module.migrations())
+        .await?;
+    Ok(module.service())
+}
+fn backup_owner() -> uuid::Uuid {
+    uuid::Uuid::nil()
+}
+/// Create a backup plan.
+pub async fn backup_plan_create(
+    config: Arc<Config>,
+    name: String,
+    schedule: String,
+    timezone: String,
+    panel_metadata: bool,
+    retention: usize,
+) -> anyhow::Result<()> {
+    if !panel_metadata {
+        return Err(anyhow::anyhow!("select at least one resource"));
+    }
+    let plan = build_backups(config)
+        .await?
+        .create_plan(
+            backup_owner(),
+            openpanel_app::backups::BackupPlanInput {
+                name,
+                resources: vec![openpanel_domain::backups::BackupResource::PanelMetadata],
+                schedule,
+                timezone,
+                retention_copies: retention,
+            },
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("created backup plan {}", plan.id());
+    Ok(())
+}
+/// List backup plans.
+pub async fn backup_plan_list(config: Arc<Config>) -> anyhow::Result<()> {
+    for plan in build_backups(config)
+        .await?
+        .plans(backup_owner(), false)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+    {
+        println!("{}  {}  {}", plan.id(), plan.name(), plan.schedule());
+    }
+    Ok(())
+}
+/// Show a backup plan.
+pub async fn backup_plan_get(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let plan = build_backups(config)
+        .await?
+        .plan(backup_owner(), false, uuid::Uuid::parse_str(&id)?)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("{}  {}", plan.id(), plan.name());
+    Ok(())
+}
+/// Update backup retention.
+pub async fn backup_plan_update(
+    config: Arc<Config>,
+    id: String,
+    retention: usize,
+) -> anyhow::Result<()> {
+    let id = uuid::Uuid::parse_str(&id)?;
+    build_backups(config)
+        .await?
+        .update_plan(
+            backup_owner(),
+            false,
+            id,
+            openpanel_app::backups::BackupPlanUpdate {
+                name: None,
+                retention_copies: Some(retention),
+            },
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("updated {id}");
+    Ok(())
+}
+/// Enable or disable a backup plan.
+pub async fn backup_plan_enabled(
+    config: Arc<Config>,
+    id: String,
+    enabled: bool,
+) -> anyhow::Result<()> {
+    let id = uuid::Uuid::parse_str(&id)?;
+    build_backups(config)
+        .await?
+        .set_enabled(backup_owner(), false, id, enabled)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("changed {id}");
+    Ok(())
+}
+/// Delete a backup plan.
+pub async fn backup_plan_delete(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let id = uuid::Uuid::parse_str(&id)?;
+    build_backups(config)
+        .await?
+        .delete_plan(backup_owner(), false, id)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("deleted {id}");
+    Ok(())
+}
+/// Run a backup plan immediately.
+pub async fn backup_run(config: Arc<Config>, plan_id: String) -> anyhow::Result<()> {
+    let run = build_backups(config)
+        .await?
+        .run_plan(backup_owner(), false, uuid::Uuid::parse_str(&plan_id)?)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("backup run {}", run.id());
+    Ok(())
+}
+/// List backup runs.
+pub async fn backup_runs(config: Arc<Config>) -> anyhow::Result<()> {
+    for run in build_backups(config)
+        .await?
+        .runs(backup_owner(), false)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+    {
+        println!("{}  {:?}", run.id(), run.state());
+    }
+    Ok(())
+}
+/// Show backup status.
+pub async fn backup_status(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let run = build_backups(config)
+        .await?
+        .run(backup_owner(), false, uuid::Uuid::parse_str(&id)?)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("{}  {:?}", run.id(), run.state());
+    Ok(())
+}
+/// Verify a backup.
+pub async fn backup_verify(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let id = uuid::Uuid::parse_str(&id)?;
+    build_backups(config)
+        .await?
+        .verify(backup_owner(), false, id)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("verified {id}");
+    Ok(())
+}
+/// Preview a restore.
+pub async fn backup_restore_preview(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let preview = build_backups(config)
+        .await?
+        .restore_preview(backup_owner(), false, uuid::Uuid::parse_str(&id)?)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("ready={} bytes={}", preview.ready, preview.required_bytes);
+    Ok(())
+}
+/// Start a safe restore.
+pub async fn backup_restore_start(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let job = build_backups(config)
+        .await?
+        .restore(
+            backup_owner(),
+            false,
+            uuid::Uuid::parse_str(&id)?,
+            openpanel_app::backups::RestoreInput {
+                resources: vec![],
+                conflict_policy: "fail".into(),
+                confirmation_token: None,
+            },
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("restore {}", job.id);
+    Ok(())
+}
+/// Delete a finalized backup run.
+pub async fn backup_delete(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let id = uuid::Uuid::parse_str(&id)?;
+    build_backups(config)
+        .await?
+        .delete_run(backup_owner(), false, id)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("deleted {id}");
+    Ok(())
 }
 
 /// Create a direct command cron job.

@@ -2,8 +2,9 @@
 
 use clap::Parser;
 use openpanel_cli::{
-    Cli, Command, CronCommand, DatabaseCommand, FileCommand, MonitoringCommand, SiteCommand,
-    SslCommand, UserCommand, handlers,
+    BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, Command, CronCommand,
+    DatabaseCommand, FileCommand, MonitoringCommand, SiteCommand, SslCommand, UserCommand,
+    handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -139,6 +140,52 @@ async fn main() -> anyhow::Result<()> {
             CronCommand::Run { id } => handlers::cron_run(config, id).await,
             CronCommand::Runs { job_id } => handlers::cron_runs(config, job_id).await,
             CronCommand::Delete { id } => handlers::cron_delete(config, id).await,
+        },
+        Command::Backup { action } => match action {
+            BackupCommand::Plan { action } => match action {
+                BackupPlanCommand::Create {
+                    name,
+                    schedule,
+                    timezone,
+                    panel_metadata,
+                    retention,
+                } => {
+                    handlers::backup_plan_create(
+                        config,
+                        name,
+                        schedule,
+                        timezone,
+                        panel_metadata,
+                        retention,
+                    )
+                    .await
+                }
+                BackupPlanCommand::List => handlers::backup_plan_list(config).await,
+                BackupPlanCommand::Get { id } => handlers::backup_plan_get(config, id).await,
+                BackupPlanCommand::Update { id, retention } => {
+                    handlers::backup_plan_update(config, id, retention).await
+                }
+                BackupPlanCommand::Enable { id } => {
+                    handlers::backup_plan_enabled(config, id, true).await
+                }
+                BackupPlanCommand::Disable { id } => {
+                    handlers::backup_plan_enabled(config, id, false).await
+                }
+                BackupPlanCommand::Delete { id } => handlers::backup_plan_delete(config, id).await,
+            },
+            BackupCommand::Run { plan_id } => handlers::backup_run(config, plan_id).await,
+            BackupCommand::Runs => handlers::backup_runs(config).await,
+            BackupCommand::Status { id } => handlers::backup_status(config, id).await,
+            BackupCommand::Verify { id } => handlers::backup_verify(config, id).await,
+            BackupCommand::Restore { action } => match action {
+                BackupRestoreCommand::Preview { id } => {
+                    handlers::backup_restore_preview(config, id).await
+                }
+                BackupRestoreCommand::Start { id } => {
+                    handlers::backup_restore_start(config, id).await
+                }
+            },
+            BackupCommand::Delete { id } => handlers::backup_delete(config, id).await,
         },
     }
 }

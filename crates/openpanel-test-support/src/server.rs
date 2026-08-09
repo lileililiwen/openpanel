@@ -9,9 +9,10 @@ use std::{path::PathBuf, sync::Arc};
 
 use openpanel_api::build_router;
 use openpanel_app::{
-    CronModule, CronService, DatabasesModule, DatabasesService, FilesModule, FilesService,
-    IdentityModule, IdentityService, MonitoringModule, MonitoringService, SitesModule,
-    SitesService, SslModule, SslPaths, SslService, sites::nginx::NginxPaths,
+    BackupService, BackupsModule, CronModule, CronService, DatabasesModule, DatabasesService,
+    FilesModule, FilesService, IdentityModule, IdentityService, MonitoringModule,
+    MonitoringService, SitesModule, SitesService, SslModule, SslPaths, SslService,
+    sites::nginx::NginxPaths,
 };
 use openpanel_core::{
     AppContext, AuditEvent, AuditService, Config, MigrationRunner, Module, SqliteAuditService,
@@ -34,6 +35,7 @@ pub struct TestServer {
     ssl: Arc<SslService>,
     monitoring: Arc<MonitoringService>,
     cron: Arc<CronService>,
+    backups: Arc<BackupService>,
     audit: Arc<dyn AuditService>,
     settings_path: PathBuf,
     _handle: JoinHandle<()>,
@@ -115,6 +117,13 @@ impl TestServer {
 
         let monitoring_module = MonitoringModule::new(&ctx).await;
         let cron_module = CronModule::with_roots(&ctx, vec![sandbox.path().to_path_buf()]).await;
+        let backups_module = BackupsModule::with_root(
+            &ctx,
+            sandbox.path().join("backups"),
+            Some(master_key),
+            Some((cron_module.service(), sandbox.path().to_path_buf())),
+        )
+        .await;
         runner
             .apply_module(monitoring_module.name(), &monitoring_module.migrations())
             .await
@@ -123,6 +132,10 @@ impl TestServer {
             .apply_module(cron_module.name(), &cron_module.migrations())
             .await
             .expect("cron migrations");
+        runner
+            .apply_module(backups_module.name(), &backups_module.migrations())
+            .await
+            .expect("backup migrations");
 
         let identity_svc = identity_module.service();
         let sites_svc = sites_module.service();
@@ -131,6 +144,7 @@ impl TestServer {
         let ssl_svc = ssl_module.service();
         let monitoring_svc = monitoring_module.service();
         let cron_svc = cron_module.service();
+        let backups_svc = backups_module.service();
 
         let settings_path = sandbox.path().join("web-preferences.json");
         let app = build_router(
@@ -141,6 +155,7 @@ impl TestServer {
             ssl_svc.clone(),
             monitoring_svc.clone(),
             cron_svc.clone(),
+            backups_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -150,6 +165,7 @@ impl TestServer {
             ssl_svc.clone(),
             monitoring_svc.clone(),
             cron_svc.clone(),
+            backups_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -161,7 +177,11 @@ impl TestServer {
                     .to_string_lossy()
                     .into_owned(),
             )
-            .with_capabilities(openpanel_web::layout::CapabilitySet::shipped().with("cron")),
+            .with_capabilities(
+                openpanel_web::layout::CapabilitySet::shipped()
+                    .with("cron")
+                    .with("backups"),
+            ),
         ));
 
         let listener = TcpListener::bind("127.0.0.1:0")
@@ -188,6 +208,7 @@ impl TestServer {
             ssl: ssl_svc,
             monitoring: monitoring_svc,
             cron: cron_svc,
+            backups: backups_svc,
             audit,
             settings_path,
             _handle: handle,
@@ -239,6 +260,11 @@ impl TestServer {
     /// The cron scheduling service handle.
     pub fn cron(&self) -> Arc<CronService> {
         self.cron.clone()
+    }
+
+    /// The backup and restore service handle.
+    pub fn backups(&self) -> Arc<BackupService> {
+        self.backups.clone()
     }
 
     /// Path used by the web preference store.

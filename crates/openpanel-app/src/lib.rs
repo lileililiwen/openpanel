@@ -6,6 +6,7 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+pub mod backups;
 pub mod cron;
 pub mod databases;
 pub mod files;
@@ -16,6 +17,7 @@ pub mod prelude;
 pub mod sites;
 pub mod ssl;
 
+pub use backups::{BackupService, BackupsModule};
 pub use cron::{CronModule, CronService};
 pub use databases::{DatabasesModule, service::DatabasesService};
 pub use files::{FilesModule, service::FilesService};

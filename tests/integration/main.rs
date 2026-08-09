@@ -6,6 +6,7 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+mod backups;
 mod cron;
 mod databases;
 mod files;

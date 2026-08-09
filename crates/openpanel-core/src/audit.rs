@@ -102,6 +102,12 @@ pub enum AuditAction {
     CronChanged,
     /// A scheduled job was manually executed.
     CronRun,
+    /// A backup plan changed.
+    BackupChanged,
+    /// A backup run completed or failed.
+    BackupRun,
+    /// A restore was requested.
+    BackupRestore,
 }
 
 impl AuditAction {
@@ -140,6 +146,9 @@ impl AuditAction {
             AuditAction::SettingsChanged => "settings_changed",
             AuditAction::CronChanged => "cron_changed",
             AuditAction::CronRun => "cron_run",
+            AuditAction::BackupChanged => "backup_changed",
+            AuditAction::BackupRun => "backup_run",
+            AuditAction::BackupRestore => "backup_restore",
         }
     }
 }
