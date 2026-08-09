@@ -20,6 +20,7 @@ pub mod files;
 pub mod layout;
 pub mod login;
 pub mod logs;
+pub mod mail;
 pub mod monitoring;
 pub mod router;
 pub mod security;

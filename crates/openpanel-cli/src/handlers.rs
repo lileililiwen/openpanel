@@ -8,8 +8,9 @@ use base64::Engine;
 use openpanel_api::build_router;
 use openpanel_app::{
     AcmeEndpoint, BackupsModule, CronModule, DatabasesModule, DnsModule, FilesModule,
-    IdentityModule, LogService, LogsModule, MonitoringModule, SecurityModule, SecurityService,
-    SitesModule, SslModule, SslPaths, SystemServicesModule, databases::crypto as db_crypto,
+    IdentityModule, LogService, LogsModule, MailModule, MonitoringModule, SecurityModule,
+    SecurityService, SitesModule, SslModule, SslPaths, SystemServicesModule,
+    databases::crypto as db_crypto,
 };
 use openpanel_core::{
     AppContext, Config, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
@@ -64,6 +65,9 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let dns_module = DnsModule::new(&ctx)
         .await
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let mail_module = MailModule::new(&ctx)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
 
     let runner = MigrationRunner::for_sqlite(pool.clone());
     runner
@@ -113,6 +117,10 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .apply_module(dns_module.name(), &dns_module.migrations())
         .await
         .context("apply DNS migrations")?;
+    runner
+        .apply_module(mail_module.name(), &mail_module.migrations())
+        .await
+        .context("apply mail migrations")?;
 
     let identity_svc = identity_module.service();
     let sites_svc = sites_module.service();
@@ -127,6 +135,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let login_throttle = security_module.login_service();
     let system_services_svc = system_services_module.service();
     let dns_svc = dns_module.service();
+    let mail_svc = mail_module.service();
     let app = build_router(
         identity_svc.clone(),
         sites_svc.clone(),
@@ -141,6 +150,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         login_throttle.clone(),
         system_services_svc.clone(),
         dns_svc.clone(),
+        mail_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -156,6 +166,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         login_throttle,
         system_services_svc,
         dns_svc,
+        mail_svc,
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
@@ -163,7 +174,8 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
                 .with("logs")
                 .with("host-security")
                 .with("system-services")
-                .with("dns"),
+                .with("dns")
+                .with("mail"),
         ),
     ));
 
@@ -660,6 +672,159 @@ pub async fn dns_record_delete(
         )
         .await?;
     println!("deleted {}", found.remote_id);
+    Ok(())
+}
+
+async fn build_mail(config: Arc<Config>) -> anyhow::Result<Arc<openpanel_app::MailService>> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    sqlx::query(include_str!("audit.sql"))
+        .execute(&pool)
+        .await
+        .context("ensure audit schema")?;
+    let ctx = AppContext::new(config, db, audit);
+    let module = MailModule::new(&ctx)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    MigrationRunner::for_sqlite(pool)
+        .apply_module(module.name(), &module.migrations())
+        .await?;
+    Ok(module.service())
+}
+
+async fn mail_domain(
+    service: &openpanel_app::MailService,
+    name: &str,
+) -> anyhow::Result<openpanel_app::mail::MailDomain> {
+    service
+        .domains(uuid::Uuid::nil(), Role::Owner)
+        .await?
+        .into_iter()
+        .find(|domain| domain.name.as_str() == name.trim_end_matches('.').to_ascii_lowercase())
+        .ok_or_else(|| anyhow::anyhow!("mail domain not found"))
+}
+
+/// Print dependency and DNS/TLS readiness without secrets.
+pub async fn mail_readiness(config: Arc<Config>) -> anyhow::Result<()> {
+    println!(
+        "{}",
+        serde_json::to_string(&build_mail(config).await?.readiness().await?)?
+    );
+    Ok(())
+}
+
+/// Create a disabled hosted-mail domain.
+pub async fn mail_domain_add(config: Arc<Config>, name: String) -> anyhow::Result<()> {
+    let domain = build_mail(config)
+        .await?
+        .create_domain(uuid::Uuid::nil(), Role::Owner, &name)
+        .await?;
+    println!("{} {}", domain.id, domain.name);
+    Ok(())
+}
+
+/// List hosted-mail domains.
+pub async fn mail_domains(config: Arc<Config>) -> anyhow::Result<()> {
+    for domain in build_mail(config)
+        .await?
+        .domains(uuid::Uuid::nil(), Role::Owner)
+        .await?
+    {
+        println!("{} {} enabled={}", domain.id, domain.name, domain.enabled);
+    }
+    Ok(())
+}
+
+/// Create a mailbox and print its one-time credential.
+pub async fn mail_mailbox_add(
+    config: Arc<Config>,
+    domain: String,
+    local: String,
+    quota: u64,
+    password: String,
+) -> anyhow::Result<()> {
+    let service = build_mail(config).await?;
+    let domain = mail_domain(&service, &domain).await?;
+    let quota = openpanel_domain::mail::MailQuota::new(quota, 1_024, 1_073_741_824)?;
+    let credential = service
+        .create_mailbox(
+            uuid::Uuid::nil(),
+            Role::Owner,
+            domain.id,
+            &local,
+            quota,
+            Some(&password),
+        )
+        .await?;
+    println!("{} {}", credential.mailbox.address, credential.password);
+    Ok(())
+}
+
+/// List secret-free mailboxes for a domain.
+pub async fn mail_mailboxes(config: Arc<Config>, domain: String) -> anyhow::Result<()> {
+    let service = build_mail(config).await?;
+    let domain = mail_domain(&service, &domain).await?;
+    for mailbox in service
+        .mailboxes(uuid::Uuid::nil(), Role::Owner, domain.id)
+        .await?
+    {
+        println!("{} quota={}", mailbox.address, mailbox.quota.bytes());
+    }
+    Ok(())
+}
+
+/// Create a non-cyclic alias.
+pub async fn mail_alias_add(
+    config: Arc<Config>,
+    domain: String,
+    source: String,
+    destination: String,
+) -> anyhow::Result<()> {
+    let service = build_mail(config).await?;
+    let domain = mail_domain(&service, &domain).await?;
+    let alias = service
+        .add_alias(
+            uuid::Uuid::nil(),
+            Role::Owner,
+            domain.id,
+            &source,
+            &destination,
+        )
+        .await?;
+    println!("{} -> {}", alias.source, alias.destination);
+    Ok(())
+}
+
+/// Change a mailbox quota.
+pub async fn mail_quota(config: Arc<Config>, address: String, bytes: u64) -> anyhow::Result<()> {
+    let quota = openpanel_domain::mail::MailQuota::new(bytes, 1_024, 1_073_741_824)?;
+    let mailbox = build_mail(config)
+        .await?
+        .update_quota(uuid::Uuid::nil(), Role::Owner, &address, quota)
+        .await?;
+    println!("{} quota={}", mailbox.address, mailbox.quota.bytes());
+    Ok(())
+}
+
+/// Rotate and print a mailbox's one-time credential.
+pub async fn mail_password(
+    config: Arc<Config>,
+    address: String,
+    password: String,
+) -> anyhow::Result<()> {
+    let credential = build_mail(config)
+        .await?
+        .rotate_password(uuid::Uuid::nil(), Role::Owner, &address, &password)
+        .await?;
+    println!("{} {}", credential.mailbox.address, credential.password);
+    Ok(())
+}
+
+/// Print aggregate mail diagnostics only.
+pub async fn mail_status(config: Arc<Config>) -> anyhow::Result<()> {
+    println!(
+        "{}",
+        serde_json::to_string(&build_mail(config).await?.status().await?)?
+    );
     Ok(())
 }
 

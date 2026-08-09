@@ -14,6 +14,8 @@ pub mod files;
 pub mod identity;
 /// Authorized log and traffic routes (`/logs`).
 pub mod logs;
+/// Hosted mail routes (`/mail`).
+pub mod mail;
 /// Monitoring resource routes (`/monitoring`).
 pub mod monitoring;
 /// Host firewall and login-abuse routes (`/security`).

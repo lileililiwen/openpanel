@@ -19,6 +19,8 @@ pub mod dns;
 pub mod files;
 pub mod identity;
 pub mod logs;
+/// Hosted mail domains, addresses, quotas, aliases, and relay policy.
+pub mod mail;
 pub mod monitoring;
 pub mod security;
 pub mod sites;

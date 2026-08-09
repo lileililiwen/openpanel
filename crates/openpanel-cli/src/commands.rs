@@ -92,6 +92,59 @@ pub enum Command {
         #[command(subcommand)]
         action: DnsCommand,
     },
+    /// Manage hosted mail domains, mailboxes, aliases, and diagnostics.
+    Mail {
+        /// Mail operation.
+        #[command(subcommand)]
+        action: MailCommand,
+    },
+}
+
+/// Hosted-mail operations.
+#[derive(Debug, Subcommand)]
+#[allow(missing_docs)]
+pub enum MailCommand {
+    Readiness,
+    DomainAdd {
+        #[arg(long)]
+        name: String,
+    },
+    Domains,
+    MailboxAdd {
+        #[arg(long)]
+        domain: String,
+        #[arg(long)]
+        local: String,
+        #[arg(long)]
+        quota: u64,
+        #[arg(long)]
+        password: String,
+    },
+    Mailboxes {
+        #[arg(long)]
+        domain: String,
+    },
+    AliasAdd {
+        #[arg(long)]
+        domain: String,
+        #[arg(long)]
+        source: String,
+        #[arg(long)]
+        destination: String,
+    },
+    Quota {
+        #[arg(long)]
+        address: String,
+        #[arg(long)]
+        bytes: u64,
+    },
+    Password {
+        #[arg(long)]
+        address: String,
+        #[arg(long)]
+        password: String,
+    },
+    Status,
 }
 
 /// Provider-backed DNS operations.

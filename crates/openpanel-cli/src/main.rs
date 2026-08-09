@@ -3,7 +3,7 @@
 use clap::Parser;
 use openpanel_cli::{
     BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, Command, CronCommand,
-    DatabaseCommand, DnsCommand, FileCommand, LogsCommand, MonitoringCommand,
+    DatabaseCommand, DnsCommand, FileCommand, LogsCommand, MailCommand, MonitoringCommand,
     SecurityAllowlistCommand, SecurityCommand, SecurityRuleCommand, ServicesCommand, SiteCommand,
     SslCommand, UserCommand, handlers,
 };
@@ -307,6 +307,30 @@ async fn main() -> anyhow::Result<()> {
                 record,
                 confirm,
             } => handlers::dns_record_delete(config, zone, record, confirm).await,
+        },
+        Command::Mail { action } => match action {
+            MailCommand::Readiness => handlers::mail_readiness(config).await,
+            MailCommand::DomainAdd { name } => handlers::mail_domain_add(config, name).await,
+            MailCommand::Domains => handlers::mail_domains(config).await,
+            MailCommand::MailboxAdd {
+                domain,
+                local,
+                quota,
+                password,
+            } => handlers::mail_mailbox_add(config, domain, local, quota, password).await,
+            MailCommand::Mailboxes { domain } => handlers::mail_mailboxes(config, domain).await,
+            MailCommand::AliasAdd {
+                domain,
+                source,
+                destination,
+            } => handlers::mail_alias_add(config, domain, source, destination).await,
+            MailCommand::Quota { address, bytes } => {
+                handlers::mail_quota(config, address, bytes).await
+            }
+            MailCommand::Password { address, password } => {
+                handlers::mail_password(config, address, password).await
+            }
+            MailCommand::Status => handlers::mail_status(config).await,
         },
     }
 }

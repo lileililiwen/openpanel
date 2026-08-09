@@ -118,6 +118,8 @@ pub enum AuditAction {
     ServiceChanged,
     /// A DNS provider account, zone, or record changed.
     DnsChanged,
+    /// A hosted mail domain, mailbox, alias, or credential changed.
+    MailChanged,
 }
 
 impl AuditAction {
@@ -164,6 +166,7 @@ impl AuditAction {
             AuditAction::SecurityBlockChanged => "security_block_changed",
             AuditAction::ServiceChanged => "service_changed",
             AuditAction::DnsChanged => "dns_changed",
+            AuditAction::MailChanged => "mail_changed",
         }
     }
 }

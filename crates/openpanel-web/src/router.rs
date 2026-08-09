@@ -18,7 +18,7 @@ use openpanel_api::{
 };
 use openpanel_app::{
     BackupService, CronService, DatabasesService, DnsService, FilesService, IdentityService,
-    LogService, MonitoringService, SecurityService, SitesService, SslService,
+    LogService, MailService, MonitoringService, SecurityService, SitesService, SslService,
     security::LoginThrottleService, system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
@@ -99,6 +99,8 @@ pub struct WebState {
     pub system_services: Arc<ServiceManager>,
     /// Provider-backed DNS service.
     pub dns: Arc<DnsService>,
+    /// Hosted mail administration service.
+    pub mail: Arc<MailService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -209,6 +211,7 @@ pub fn router(
     login_throttle: Arc<LoginThrottleService>,
     system_services_service: Arc<ServiceManager>,
     dns_service: Arc<DnsService>,
+    mail_service: Arc<MailService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -228,6 +231,7 @@ pub fn router(
         login_throttle,
         system_services: system_services_service,
         dns: dns_service,
+        mail: mail_service,
         csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
@@ -296,6 +300,8 @@ pub fn router(
             post(crate::dns::delete_record),
         )
         .route("/dns/zones/{id}/check", post(crate::dns::check_zone))
+        .route("/mail", get(crate::mail::page))
+        .route("/mail/domains", post(crate::mail::create_domain))
         .route("/sites", get(sites::list).post(sites::create))
         .route("/sites/new", get(sites::new_form))
         .route("/sites/{id}", get(sites::detail).delete(sites::delete))

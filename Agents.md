@@ -336,6 +336,7 @@ When asked to implement a feature or spec:
 - `openspec/specs/files/spec.md` — chrooted file manager
 - `openspec/specs/ssl/spec.md` — TLS certificate lifecycle
 - `openspec/specs/monitoring/spec.md` — host resource monitoring
+- `openspec/specs/mail/spec.md` — hosted mail domains, mailboxes, and safe MTA/IMAP configuration
 - `openspec/changes/add-web-ui-foundation/specs/web-ui/spec.md` — web UI (login, shell, CSRF)
 - `openspec/specs/testing/spec.md` — TDD infrastructure (TBD)
 - `openspec/specs/quality/spec.md` — quality engineering (TBD)

@@ -13,6 +13,7 @@ pub mod dns;
 pub mod files;
 pub mod identity;
 pub mod logs;
+pub mod mail;
 pub mod migrations;
 pub mod monitoring;
 pub mod prelude;
@@ -28,6 +29,7 @@ pub use dns::{DnsModule, DnsService};
 pub use files::{FilesModule, service::FilesService};
 pub use identity::{IdentityModule, service::IdentityService};
 pub use logs::{LogService, LogsModule};
+pub use mail::{MailModule, MailService};
 pub use monitoring::{MonitoringModule, service::MonitoringService};
 pub use security::{SecurityModule, SecurityService};
 pub use sites::{

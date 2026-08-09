@@ -11,9 +11,9 @@ use openpanel_api::build_router;
 use openpanel_app::{
     BackupService, BackupsModule, CronModule, CronService, DatabasesModule, DatabasesService,
     DnsModule, DnsService, FilesModule, FilesService, IdentityModule, IdentityService, LogService,
-    LogsModule, MonitoringModule, MonitoringService, SecurityModule, SecurityService, SitesModule,
-    SitesService, SslModule, SslPaths, SslService, SystemServicesModule, security::MemoryFirewall,
-    sites::nginx::NginxPaths,
+    LogsModule, MailModule, MailService, MonitoringModule, MonitoringService, SecurityModule,
+    SecurityService, SitesModule, SitesService, SslModule, SslPaths, SslService,
+    SystemServicesModule, security::MemoryFirewall, sites::nginx::NginxPaths,
 };
 use openpanel_core::{
     AppContext, AuditEvent, AuditService, Config, MigrationRunner, Module, SqliteAuditService,
@@ -41,6 +41,7 @@ pub struct TestServer {
     security: Arc<SecurityService>,
     system_services: Arc<openpanel_app::ServiceManager>,
     dns: Arc<DnsService>,
+    mail: Arc<MailService>,
     audit: Arc<dyn AuditService>,
     settings_path: PathBuf,
     _handle: JoinHandle<()>,
@@ -138,6 +139,7 @@ impl TestServer {
             .await
             .expect("system services module");
         let dns_module = DnsModule::memory(&ctx).await.expect("dns module");
+        let mail_module = MailModule::memory(&ctx).await.expect("mail module");
         runner
             .apply_module(monitoring_module.name(), &monitoring_module.migrations())
             .await
@@ -169,6 +171,10 @@ impl TestServer {
             .apply_module(dns_module.name(), &dns_module.migrations())
             .await
             .expect("dns migrations");
+        runner
+            .apply_module(mail_module.name(), &mail_module.migrations())
+            .await
+            .expect("mail migrations");
 
         let identity_svc = identity_module.service();
         let sites_svc = sites_module.service();
@@ -183,6 +189,7 @@ impl TestServer {
         let login_throttle = security_module.login_service();
         let system_services_svc = system_services_module.service();
         let dns_svc = dns_module.service();
+        let mail_svc = mail_module.service();
 
         let settings_path = sandbox.path().join("web-preferences.json");
         let app = build_router(
@@ -199,6 +206,7 @@ impl TestServer {
             login_throttle.clone(),
             system_services_svc.clone(),
             dns_svc.clone(),
+            mail_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -214,6 +222,7 @@ impl TestServer {
             login_throttle,
             system_services_svc.clone(),
             dns_svc.clone(),
+            mail_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -232,7 +241,8 @@ impl TestServer {
                     .with("logs")
                     .with("host-security")
                     .with("system-services")
-                    .with("dns"),
+                    .with("dns")
+                    .with("mail"),
             ),
         ));
 
@@ -270,6 +280,7 @@ impl TestServer {
             security: security_svc,
             system_services: system_services_svc,
             dns: dns_svc,
+            mail: mail_svc,
             audit,
             settings_path,
             _handle: handle,
@@ -306,6 +317,11 @@ impl TestServer {
     /// The provider-backed DNS service handle.
     pub fn dns(&self) -> Arc<DnsService> {
         self.dns.clone()
+    }
+
+    /// The hosted-mail administration service.
+    pub fn mail(&self) -> Arc<MailService> {
+        self.mail.clone()
     }
 
     /// The files service handle.

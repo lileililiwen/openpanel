@@ -13,6 +13,7 @@ mod dns;
 mod files;
 mod identity;
 mod logs;
+mod mail;
 mod monitoring;
 mod quality;
 mod security;
