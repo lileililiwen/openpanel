@@ -12,6 +12,7 @@
 pub mod assets;
 pub mod csrf;
 pub mod dashboard;
+pub mod databases;
 pub mod files;
 pub mod layout;
 pub mod login;

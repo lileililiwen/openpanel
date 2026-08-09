@@ -1867,3 +1867,113 @@ async fn web_files_upload_appears_in_listing() {
     let body = authed_get(&server, &cookie, &format!("/sites/{}/files", site.id())).await;
     assert!(body.contains("upload.txt"), "uploaded file listed: {body}");
 }
+
+// =====================================================================
+// Databases pages
+// =====================================================================
+
+/// Unauthenticated `GET /databases` redirects to `/login` (1.10).
+#[tokio::test]
+async fn web_unauthenticated_databases_redirects_to_login() {
+    let server = TestServer::new().await;
+    let resp = server
+        .client()
+        .get(format!("{}/databases", server.base_url()))
+        .send()
+        .await
+        .expect("GET /databases");
+    assert_eq!(resp.status(), 302);
+    assert_eq!(
+        resp.headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok()),
+        Some("/login")
+    );
+}
+
+/// Authenticated `GET /databases` returns the table (or empty state) (1.4).
+#[tokio::test]
+async fn web_databases_empty_list_renders() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let body = authed_get(&server, &cookie, "/databases").await;
+    assert!(
+        body.contains("id=\"databases-list\""),
+        "list region: {body}"
+    );
+    assert!(body.contains("Add database"), "create action: {body}");
+}
+
+/// List page does NOT contain a password input on the list page (1.3) —
+/// passwords live only in the transient password panel.
+#[tokio::test]
+async fn web_databases_list_never_includes_plaintext_password() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let body = authed_get(&server, &cookie, "/databases").await;
+    // No password input on the list page.
+    assert!(
+        !body.contains("name=\"password\""),
+        "no password input on list: {body}"
+    );
+}
+
+/// CSRF mismatch on a database mutation returns 403 (1.9).
+#[tokio::test]
+async fn web_databases_bad_csrf_rejected() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let resp = server
+        .client()
+        .post(format!(
+            "{}/databases/00000000-0000-0000-0000-000000000000/reveal",
+            server.base_url()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", "not-the-token")])
+        .send()
+        .await
+        .expect("POST reveal bad csrf");
+    assert_eq!(resp.status(), 403, "bad csrf rejected");
+}
+
+/// Reveal endpoint responds (1.7) — the service's NotFound for a
+/// missing row is rendered inline; the panel markup is the same
+/// whether the plaintext is real or absent.
+#[tokio::test]
+async fn web_databases_reveal_endpoint_responds() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let csrf = csrf_token_from_html(&authed_get(&server, &cookie, "/databases").await);
+    let resp = server
+        .client()
+        .post(format!(
+            "{}/databases/00000000-0000-0000-0000-000000000000/reveal",
+            server.base_url()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", csrf.as_str())])
+        .send()
+        .await
+        .expect("POST reveal");
+    assert_eq!(resp.status(), 200, "reveal responds");
+    let body = resp.text().await.expect("reveal body");
+    assert!(
+        body.contains("id=\"password-panel\"")
+            || body.contains("not found")
+            || body.contains("error"),
+        "panel or error rendered: {body}"
+    );
+}

@@ -23,7 +23,7 @@ use openpanel_domain::{Session, SessionToken, User};
 use crate::{
     assets,
     csrf::{CsrfStore, ValidateCsrf},
-    dashboard, files, login, monitoring, sites, ssl, users,
+    dashboard, databases, files, login, monitoring, sites, ssl, users,
 };
 
 /// Shared state for every web handler.
@@ -173,6 +173,14 @@ pub fn router(
             axum::routing::delete(files::remove),
         )
         .route("/sites/{site_id}/files/upload", post(files::upload))
+        .route("/databases", get(databases::list).post(databases::create))
+        .route("/databases/new", get(databases::new_form))
+        .route(
+            "/databases/{id}",
+            get(databases::detail).delete(databases::delete),
+        )
+        .route("/databases/{id}/password", post(databases::change_password))
+        .route("/databases/{id}/reveal", post(databases::reveal))
         .route("/assets/htmx.min.js", get(assets::htmx_min_js))
         .route("/assets/app.css", get(assets::app_css))
         .layer(from_fn_with_state(identity, session_middleware))
