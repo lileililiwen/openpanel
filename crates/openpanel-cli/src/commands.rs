@@ -68,6 +68,47 @@ pub enum Command {
         #[command(subcommand)]
         action: BackupCommand,
     },
+    /// Browse registered logs and traffic insights.
+    Logs {
+        /// Log operation.
+        #[command(subcommand)]
+        action: LogsCommand,
+    },
+}
+
+/// Log browsing and export subcommands.
+#[derive(Debug, Subcommand)]
+pub enum LogsCommand {
+    /// List authorized registered sources.
+    Sources,
+    /// Tail a registered source.
+    Tail {
+        /// Source name or id.
+        #[arg(long)]
+        source: String,
+        /// Maximum lines.
+        #[arg(long, default_value_t = 100)]
+        limit: usize,
+    },
+    /// Tail the panel error source.
+    Errors {
+        /// Maximum lines.
+        #[arg(long, default_value_t = 100)]
+        limit: usize,
+    },
+    /// Show retained traffic summaries.
+    Traffic,
+    /// Show recent audit events.
+    Audit,
+    /// Export one bounded, redacted source.
+    Export {
+        /// Source name or id.
+        #[arg(long)]
+        source: String,
+        /// Destination file.
+        #[arg(long)]
+        output: std::path::PathBuf,
+    },
 }
 
 /// Backup subcommands.

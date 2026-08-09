@@ -11,6 +11,7 @@ mod cron;
 mod databases;
 mod files;
 mod identity;
+mod logs;
 mod monitoring;
 mod quality;
 mod sites;

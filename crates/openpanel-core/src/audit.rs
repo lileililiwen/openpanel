@@ -108,6 +108,8 @@ pub enum AuditAction {
     BackupRun,
     /// A restore was requested.
     BackupRestore,
+    /// An authorized bounded log export was downloaded.
+    LogDownloaded,
 }
 
 impl AuditAction {
@@ -149,6 +151,7 @@ impl AuditAction {
             AuditAction::BackupChanged => "backup_changed",
             AuditAction::BackupRun => "backup_run",
             AuditAction::BackupRestore => "backup_restore",
+            AuditAction::LogDownloaded => "log_downloaded",
         }
     }
 }
@@ -330,6 +333,12 @@ impl AuditService for SqliteAuditService {
                 "file_deleted" => AuditAction::FileDeleted,
                 "alert_fired" => AuditAction::AlertFired,
                 "settings_changed" => AuditAction::SettingsChanged,
+                "cron_changed" => AuditAction::CronChanged,
+                "cron_run" => AuditAction::CronRun,
+                "backup_changed" => AuditAction::BackupChanged,
+                "backup_run" => AuditAction::BackupRun,
+                "backup_restore" => AuditAction::BackupRestore,
+                "log_downloaded" => AuditAction::LogDownloaded,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

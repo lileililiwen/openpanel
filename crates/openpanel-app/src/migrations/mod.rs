@@ -18,3 +18,5 @@ pub const MONITORING_V001: &str = include_str!("monitoring/V001__init.sql");
 pub const CRON_V001: &str = include_str!("cron/V001__init.sql");
 /// SQL for backup plans, runs, and restore jobs.
 pub const BACKUPS_V001: &str = include_str!("backups/V001__init.sql");
+/// SQL for traffic aggregates and idempotent log offsets.
+pub const LOGS_V001: &str = include_str!("logs/V001__init.sql");

@@ -10,6 +10,11 @@ use std::{
 
 use openpanel_domain::{SiteError, sites::site::Site};
 
+/// Nginx `http`-context format used by managed access sources. `$uri` excludes queries.
+pub fn managed_log_format() -> &'static str {
+    "log_format openpanel escape=json '$openpanel_site_id\\t$time_iso8601\\t$request_method\\t$uri\\t$status\\t$body_bytes_sent\\t$request_time\\t$remote_addr\\t$http_user_agent';\n"
+}
+
 /// Filesystem paths used by the nginx config generator.
 #[derive(Debug, Clone)]
 pub struct NginxPaths {
@@ -119,8 +124,9 @@ impl NginxConfigGenerator {
         }
         let server_names = server_names.join(" ");
 
-        let access_log = format!("/var/log/nginx/{}.access.log", site.primary_domain());
-        let error_log = format!("/var/log/nginx/{}.error.log", site.primary_domain());
+        let access_log = format!("/var/log/openpanel/{}.access.log", site.id());
+        let error_log = format!("/var/log/openpanel/{}.error.log", site.id());
+        let site_id = site.id();
 
         let force_https = tls.is_some() && Self::force_https_for(site);
         let acme_block = match acme_challenge_upstream {
@@ -143,7 +149,8 @@ server {{
     listen [::]:80;
     server_name {server_names};
 
-    access_log {access_log};
+    set $openpanel_site_id "{site_id}";
+    access_log {access_log} openpanel;
     error_log  {error_log};
 {acme_block}
     location / {{
@@ -163,7 +170,8 @@ server {{
     root {root};
     index index.html index.htm{php_index};
 
-    access_log {access_log};
+    set $openpanel_site_id "{site_id}";
+    access_log {access_log} openpanel;
     error_log  {error_log};
 
     client_max_body_size 100M;
@@ -177,6 +185,7 @@ server {{
 "#,
                 root = site.document_root(),
                 php_index = if site.php_enabled() { " index.php" } else { "" },
+                site_id = site.id(),
             )
         };
 
@@ -203,7 +212,8 @@ server {{
     root {root};
     index index.html index.htm{php_index};
 
-    access_log {access_log};
+    set $openpanel_site_id "{site_id}";
+    access_log {access_log} openpanel;
     error_log  {error_log};
 
     client_max_body_size 100M;
@@ -217,6 +227,7 @@ server {{
 "#,
                 root = site.document_root(),
                 php_index = if site.php_enabled() { " index.php" } else { "" },
+                site_id = site.id(),
             ),
             None => String::new(),
         };
@@ -365,6 +376,13 @@ server {{
         fs::create_dir_all(&self.paths.conf_d_active).map_err(|e| SiteError::Io(e.to_string()))?;
         fs::create_dir_all(&self.paths.conf_d_disabled)
             .map_err(|e| SiteError::Io(e.to_string()))?;
+        fs::write(
+            self.paths
+                .conf_d_active
+                .join("00-openpanel-log-format.conf"),
+            managed_log_format(),
+        )
+        .map_err(|e| SiteError::Io(e.to_string()))?;
         Ok(())
     }
 
@@ -443,6 +461,18 @@ mod tests {
         assert!(out.contains("server_name example.com www.example.com api.example.com"));
         assert!(out.contains("root /var/www/example.com/public_html"));
         assert!(out.contains("Managed by OpenPanel"));
+    }
+
+    #[test]
+    fn render_uses_managed_query_free_access_format_and_site_identity() {
+        let site = dummy_site();
+        let rendered = NginxConfigGenerator::render(&site);
+        assert!(rendered.contains("access_log /var/log/openpanel/"));
+        assert!(rendered.contains(" openpanel;"));
+        assert!(rendered.contains(&format!("set $openpanel_site_id \"{}\";", site.id())));
+        assert!(!rendered.contains("$request_uri"));
+        assert!(managed_log_format().contains("$uri"));
+        assert!(!managed_log_format().contains("$request_uri"));
     }
 
     #[test]

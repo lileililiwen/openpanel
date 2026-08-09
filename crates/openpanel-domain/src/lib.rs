@@ -16,6 +16,7 @@ pub mod cron;
 pub mod databases;
 pub mod files;
 pub mod identity;
+pub mod logs;
 pub mod monitoring;
 pub mod sites;
 pub mod ssl;

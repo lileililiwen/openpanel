@@ -17,8 +17,8 @@ use openpanel_api::{
     middleware::session::{SESSION_COOKIE, session_middleware},
 };
 use openpanel_app::{
-    BackupService, CronService, DatabasesService, FilesService, IdentityService, MonitoringService,
-    SitesService, SslService,
+    BackupService, CronService, DatabasesService, FilesService, IdentityService, LogService,
+    MonitoringService, SitesService, SslService,
 };
 use openpanel_core::{AuditService, Config};
 use openpanel_domain::{Session, SessionToken, User};
@@ -28,7 +28,7 @@ use crate::{
     csrf::{CsrfStore, ValidateCsrf},
     dashboard, databases, files,
     layout::CapabilitySet,
-    login, monitoring, settings,
+    login, logs, monitoring, settings,
     settings::{InstallationInfo, PanelPreferences, SettingsStore},
     sites, ssl, users,
 };
@@ -88,6 +88,8 @@ pub struct WebState {
     pub cron: Arc<CronService>,
     /// Backup and restore service.
     pub backups: Arc<BackupService>,
+    /// Authorized log browsing service.
+    pub logs: Arc<LogService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -193,6 +195,7 @@ pub fn router(
     monitoring: Arc<MonitoringService>,
     cron: Arc<CronService>,
     backups: Arc<BackupService>,
+    logs: Arc<LogService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -207,6 +210,7 @@ pub fn router(
         monitoring,
         cron,
         backups,
+        logs,
         csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
@@ -239,6 +243,8 @@ pub fn router(
         .route("/backups", get(backups::page))
         .route("/backups/new", get(backups::new_form))
         .route("/backups/plans", post(backups::create))
+        .route("/logs", get(logs::page))
+        .route("/logs/entries", get(logs::entries))
         .route("/sites", get(sites::list).post(sites::create))
         .route("/sites/new", get(sites::new_form))
         .route("/sites/{id}", get(sites::detail).delete(sites::delete))

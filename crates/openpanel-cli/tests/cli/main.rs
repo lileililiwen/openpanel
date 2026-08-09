@@ -11,6 +11,7 @@ mod common;
 mod cron;
 mod database;
 mod file;
+mod logs;
 mod monitoring;
 mod serve;
 mod site;

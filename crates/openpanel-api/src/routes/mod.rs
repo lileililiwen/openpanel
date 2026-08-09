@@ -10,6 +10,8 @@ pub mod databases;
 pub mod files;
 /// Identity resource routes (`/identity`).
 pub mod identity;
+/// Authorized log and traffic routes (`/logs`).
+pub mod logs;
 /// Monitoring resource routes (`/monitoring`).
 pub mod monitoring;
 /// Sites resource routes (`/sites`).

@@ -18,6 +18,7 @@ pub mod databases;
 pub mod files;
 pub mod layout;
 pub mod login;
+pub mod logs;
 pub mod monitoring;
 pub mod router;
 pub mod settings;

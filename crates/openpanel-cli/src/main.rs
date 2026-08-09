@@ -3,8 +3,8 @@
 use clap::Parser;
 use openpanel_cli::{
     BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, Command, CronCommand,
-    DatabaseCommand, FileCommand, MonitoringCommand, SiteCommand, SslCommand, UserCommand,
-    handlers,
+    DatabaseCommand, FileCommand, LogsCommand, MonitoringCommand, SiteCommand, SslCommand,
+    UserCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -186,6 +186,18 @@ async fn main() -> anyhow::Result<()> {
                 }
             },
             BackupCommand::Delete { id } => handlers::backup_delete(config, id).await,
+        },
+        Command::Logs { action } => match action {
+            LogsCommand::Sources => handlers::logs_sources(config).await,
+            LogsCommand::Tail { source, limit } => handlers::logs_tail(config, source, limit).await,
+            LogsCommand::Errors { limit } => {
+                handlers::logs_tail(config, "panel-error".into(), limit).await
+            }
+            LogsCommand::Traffic => handlers::logs_traffic(config).await,
+            LogsCommand::Audit => handlers::logs_audit(config).await,
+            LogsCommand::Export { source, output } => {
+                handlers::logs_export(config, source, output).await
+            }
         },
     }
 }

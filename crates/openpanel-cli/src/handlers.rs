@@ -8,7 +8,8 @@ use base64::Engine;
 use openpanel_api::build_router;
 use openpanel_app::{
     AcmeEndpoint, BackupsModule, CronModule, DatabasesModule, FilesModule, IdentityModule,
-    MonitoringModule, SitesModule, SslModule, SslPaths, databases::crypto as db_crypto,
+    LogService, LogsModule, MonitoringModule, SitesModule, SslModule, SslPaths,
+    databases::crypto as db_crypto,
 };
 use openpanel_core::{
     AppContext, Config, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
@@ -47,6 +48,10 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         Some((cron_module.service(), std::path::PathBuf::from("/var/www"))),
     )
     .await;
+    let log_root = std::env::var("OPENPANEL__LOGS__ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("/var/log/openpanel"));
+    let logs_module = LogsModule::with_root(&ctx, log_root).await;
 
     let runner = MigrationRunner::for_sqlite(pool.clone());
     runner
@@ -77,6 +82,10 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .apply_module(backups_module.name(), &backups_module.migrations())
         .await
         .context("apply backup migrations")?;
+    runner
+        .apply_module(logs_module.name(), &logs_module.migrations())
+        .await
+        .context("apply logs migrations")?;
 
     let identity_svc = identity_module.service();
     let sites_svc = sites_module.service();
@@ -86,6 +95,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let monitoring_svc = monitoring_module.service();
     let cron_svc = cron_module.service();
     let backups_svc = backups_module.service();
+    let logs_svc = logs_module.service();
     let app = build_router(
         identity_svc.clone(),
         sites_svc.clone(),
@@ -95,6 +105,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         monitoring_svc.clone(),
         cron_svc.clone(),
         backups_svc.clone(),
+        logs_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -105,10 +116,12 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         monitoring_svc,
         cron_svc,
         backups_svc,
+        logs_svc,
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
-                .with("backups"),
+                .with("backups")
+                .with("logs"),
         ),
     ));
 
@@ -215,6 +228,89 @@ async fn build_backups(config: Arc<Config>) -> anyhow::Result<Arc<openpanel_app:
 }
 fn backup_owner() -> uuid::Uuid {
     uuid::Uuid::nil()
+}
+
+async fn build_logs(config: Arc<Config>) -> anyhow::Result<Arc<LogService>> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    sqlx::query(include_str!("audit.sql"))
+        .execute(&pool)
+        .await
+        .context("ensure audit schema")?;
+    let ctx = AppContext::new(config, db, audit);
+    let root = std::env::var("OPENPANEL__LOGS__ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("/var/log/openpanel"));
+    let module = LogsModule::with_root(&ctx, root).await;
+    MigrationRunner::for_sqlite(pool)
+        .apply_module(module.name(), &module.migrations())
+        .await?;
+    Ok(module.service())
+}
+
+fn logs_actor() -> openpanel_app::logs::LogActor {
+    openpanel_app::logs::LogActor::new(uuid::Uuid::nil(), openpanel_domain::Role::Owner)
+}
+
+/// List registered log sources visible to the local Owner CLI.
+pub async fn logs_sources(config: Arc<Config>) -> anyhow::Result<()> {
+    let service = build_logs(config).await?;
+    for source in service.sources(logs_actor()).await? {
+        println!("{} {}", source.name(), source.id());
+    }
+    Ok(())
+}
+
+/// Print newest redacted entries from a registered source.
+pub async fn logs_tail(config: Arc<Config>, source: String, limit: usize) -> anyhow::Result<()> {
+    let service = build_logs(config).await?;
+    let source = service.resolve(logs_actor(), &source).await?;
+    let page = service
+        .entries(
+            logs_actor(),
+            openpanel_app::logs::LogReadQuery::new(source.id(), limit),
+        )
+        .await?;
+    for entry in page.entries {
+        println!("{}", entry.text);
+    }
+    Ok(())
+}
+
+/// Print retained traffic aggregates as JSON.
+pub async fn logs_traffic(config: Arc<Config>) -> anyhow::Result<()> {
+    let rows = build_logs(config).await?.traffic(logs_actor()).await?;
+    println!("{}", serde_json::to_string_pretty(&rows)?);
+    Ok(())
+}
+
+/// Print recent audit events as JSON.
+pub async fn logs_audit(config: Arc<Config>) -> anyhow::Result<()> {
+    let events = build_logs(config)
+        .await?
+        .audit_events(logs_actor(), 100)
+        .await?;
+    println!("{}", serde_json::to_string_pretty(&events)?);
+    Ok(())
+}
+
+/// Write a bounded redacted log export to an explicit destination.
+pub async fn logs_export(
+    config: Arc<Config>,
+    source: String,
+    output: std::path::PathBuf,
+) -> anyhow::Result<()> {
+    let service = build_logs(config).await?;
+    let source = service.resolve(logs_actor(), &source).await?;
+    let bytes = service
+        .download(
+            logs_actor(),
+            source.id(),
+            openpanel_app::logs::MAX_DOWNLOAD_BYTES,
+        )
+        .await?;
+    std::fs::write(&output, bytes).with_context(|| format!("write {}", output.display()))?;
+    println!("exported {}", output.display());
+    Ok(())
 }
 /// Create a backup plan.
 pub async fn backup_plan_create(

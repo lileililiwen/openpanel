@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
 use openpanel_app::{
-    BackupService, CronService, DatabasesService, FilesService, IdentityService, MonitoringService,
-    SitesService, SslService,
+    BackupService, CronService, DatabasesService, FilesService, IdentityService, LogService,
+    MonitoringService, SitesService, SslService,
 };
 
 use crate::{
@@ -13,8 +13,9 @@ use crate::{
     routes::{
         backups::router as backups_router, cron::router as cron_router,
         databases::router as databases_router, files::router as files_router,
-        identity::router as identity_router, monitoring::router as monitoring_router,
-        sites::router as sites_router, ssl::router as ssl_router,
+        identity::router as identity_router, logs::router as logs_router,
+        monitoring::router as monitoring_router, sites::router as sites_router,
+        ssl::router as ssl_router,
     },
 };
 
@@ -32,6 +33,7 @@ pub fn build_router(
     monitoring: Arc<MonitoringService>,
     cron: Arc<CronService>,
     backups: Arc<BackupService>,
+    logs: Arc<LogService>,
 ) -> Router {
     let identity_for_layer = identity.clone();
 
@@ -44,6 +46,7 @@ pub fn build_router(
         .nest("/monitoring", monitoring_router(monitoring))
         .nest("/cron", cron_router(cron))
         .nest("/backups", backups_router(backups))
+        .nest("/logs", logs_router(logs))
         .layer(from_fn_with_state(identity_for_layer, session_middleware));
 
     Router::new()
