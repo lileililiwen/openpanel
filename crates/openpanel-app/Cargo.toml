@@ -27,6 +27,7 @@ aes-gcm = { workspace = true }
 hex = { workspace = true }
 base64 = { workspace = true }
 mime_guess = { workspace = true }
+reqwest = { workspace = true }
 
 openpanel-core = { workspace = true }
 openpanel-domain = { workspace = true }

@@ -10,6 +10,7 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 pub mod assets;
+pub mod cron;
 pub mod csrf;
 pub mod dashboard;
 pub mod databases;

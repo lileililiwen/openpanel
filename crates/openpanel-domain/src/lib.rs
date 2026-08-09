@@ -9,6 +9,8 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 pub mod common;
+/// Scheduled command and HTTP job domain model.
+pub mod cron;
 pub mod databases;
 pub mod files;
 pub mod identity;

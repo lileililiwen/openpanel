@@ -17,13 +17,14 @@ use openpanel_api::{
     middleware::session::{SESSION_COOKIE, session_middleware},
 };
 use openpanel_app::{
-    DatabasesService, FilesService, IdentityService, MonitoringService, SitesService, SslService,
+    CronService, DatabasesService, FilesService, IdentityService, MonitoringService, SitesService,
+    SslService,
 };
 use openpanel_core::{AuditService, Config};
 use openpanel_domain::{Session, SessionToken, User};
 
 use crate::{
-    assets,
+    assets, cron,
     csrf::{CsrfStore, ValidateCsrf},
     dashboard, databases, files,
     layout::CapabilitySet,
@@ -83,6 +84,8 @@ pub struct WebState {
     pub ssl: Arc<SslService>,
     /// Monitoring service for the host gauges and alert feed.
     pub monitoring: Arc<MonitoringService>,
+    /// Cron scheduling service.
+    pub cron: Arc<CronService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -178,6 +181,7 @@ fn cookie_token(headers: &HeaderMap) -> Option<String> {
 }
 
 /// Build the web router. Returns a `Router<()>` ready to merge into the API app.
+#[allow(clippy::too_many_arguments)]
 pub fn router(
     identity: Arc<IdentityService>,
     sites: Arc<SitesService>,
@@ -185,6 +189,7 @@ pub fn router(
     files: Arc<FilesService>,
     ssl: Arc<SslService>,
     monitoring: Arc<MonitoringService>,
+    cron: Arc<CronService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -197,6 +202,7 @@ pub fn router(
         files,
         ssl,
         monitoring,
+        cron,
         csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
@@ -216,6 +222,16 @@ pub fn router(
         )
         .route("/logout", post(logout))
         .route("/settings", get(settings::page).post(settings::update))
+        .route("/cron", get(cron::list))
+        .route("/cron/new", get(cron::new_form))
+        .route("/cron/jobs", post(cron::create))
+        .route("/cron/jobs/{id}", get(cron::detail))
+        .route("/cron/jobs/{id}/enable", post(cron::enable))
+        .route("/cron/jobs/{id}/disable", post(cron::disable))
+        .route("/cron/jobs/{id}/delete", post(cron::delete))
+        .route("/cron/jobs/{id}/run", post(cron::run))
+        .route("/cron/runs", get(cron::runs))
+        .route("/cron/runs/{id}", get(cron::run_detail))
         .route("/sites", get(sites::list).post(sites::create))
         .route("/sites/new", get(sites::new_form))
         .route("/sites/{id}", get(sites::detail).delete(sites::delete))

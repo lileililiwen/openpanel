@@ -14,3 +14,5 @@ pub const DATABASES_V001: &str = include_str!("databases/V001__init.sql");
 pub const SSL_V001: &str = include_str!("ssl/V001__init.sql");
 /// SQL for the monitoring v001 migration (`monitoring_samples` table).
 pub const MONITORING_V001: &str = include_str!("monitoring/V001__init.sql");
+/// SQL for the cron v001 migration (`cron_jobs` and `cron_runs`).
+pub const CRON_V001: &str = include_str!("cron/V001__init.sql");

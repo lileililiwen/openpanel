@@ -32,6 +32,10 @@ pub enum ApiError {
     #[error("bad request: {0}")]
     BadRequest(String),
 
+    /// Request syntax was valid but one or more fields failed validation.
+    #[error("unprocessable entity: {0}")]
+    Unprocessable(String),
+
     /// The requested resource does not exist.
     #[error("not found: {0}")]
     NotFound(String),
@@ -102,6 +106,7 @@ impl IntoResponse for ApiError {
                 | MonitoringError::EmptySnapshot => (StatusCode::BAD_REQUEST, "bad_request"),
             },
             ApiError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
+            ApiError::Unprocessable(_) => (StatusCode::UNPROCESSABLE_ENTITY, "validation_failed"),
             ApiError::NotFound(_) => (StatusCode::NOT_FOUND, "not_found"),
             ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),

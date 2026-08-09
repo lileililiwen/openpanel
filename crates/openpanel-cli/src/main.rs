@@ -2,8 +2,8 @@
 
 use clap::Parser;
 use openpanel_cli::{
-    Cli, Command, DatabaseCommand, FileCommand, MonitoringCommand, SiteCommand, SslCommand,
-    UserCommand, handlers,
+    Cli, Command, CronCommand, DatabaseCommand, FileCommand, MonitoringCommand, SiteCommand,
+    SslCommand, UserCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -106,6 +106,39 @@ async fn main() -> anyhow::Result<()> {
             MonitoringCommand::History { metric, range } => {
                 handlers::monitoring_history(config, metric, range).await
             }
+        },
+        Command::Cron { action } => match action {
+            CronCommand::Create {
+                name,
+                schedule,
+                timezone,
+                executable,
+                arguments,
+                working_directory,
+                timeout,
+            } => {
+                handlers::cron_create(
+                    config,
+                    name,
+                    schedule,
+                    timezone,
+                    executable,
+                    arguments,
+                    working_directory,
+                    timeout,
+                )
+                .await
+            }
+            CronCommand::List => handlers::cron_list(config).await,
+            CronCommand::Get { id } => handlers::cron_get(config, id).await,
+            CronCommand::Update { id, schedule } => {
+                handlers::cron_update(config, id, schedule).await
+            }
+            CronCommand::Disable { id } => handlers::cron_enabled(config, id, false).await,
+            CronCommand::Enable { id } => handlers::cron_enabled(config, id, true).await,
+            CronCommand::Run { id } => handlers::cron_run(config, id).await,
+            CronCommand::Runs { job_id } => handlers::cron_runs(config, job_id).await,
+            CronCommand::Delete { id } => handlers::cron_delete(config, id).await,
         },
     }
 }

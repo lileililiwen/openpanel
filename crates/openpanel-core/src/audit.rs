@@ -98,6 +98,10 @@ pub enum AuditAction {
     AlertFired,
     /// Allowlisted panel preferences were changed.
     SettingsChanged,
+    /// A scheduled job was created, changed, enabled, disabled, or deleted.
+    CronChanged,
+    /// A scheduled job was manually executed.
+    CronRun,
 }
 
 impl AuditAction {
@@ -134,6 +138,8 @@ impl AuditAction {
             AuditAction::FileDeleted => "file_deleted",
             AuditAction::AlertFired => "alert_fired",
             AuditAction::SettingsChanged => "settings_changed",
+            AuditAction::CronChanged => "cron_changed",
+            AuditAction::CronRun => "cron_run",
         }
     }
 }

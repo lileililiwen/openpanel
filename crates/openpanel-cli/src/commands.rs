@@ -56,6 +56,74 @@ pub enum Command {
         #[command(subcommand)]
         action: MonitoringCommand,
     },
+    /// Scheduled command management.
+    Cron {
+        /// Cron subcommand to execute.
+        #[command(subcommand)]
+        action: CronCommand,
+    },
+}
+
+/// Subcommands for scheduled jobs and execution history.
+#[derive(Debug, Subcommand)]
+#[allow(missing_docs)]
+pub enum CronCommand {
+    /// Create a command job.
+    Create {
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        schedule: String,
+        #[arg(long)]
+        timezone: String,
+        #[arg(long)]
+        executable: String,
+        #[arg(long = "arg")]
+        arguments: Vec<String>,
+        #[arg(long)]
+        working_directory: String,
+        #[arg(long, default_value_t = 60)]
+        timeout: u64,
+    },
+    /// List jobs.
+    List,
+    /// Show one job.
+    Get {
+        #[arg(long)]
+        id: String,
+    },
+    /// Change a job schedule.
+    Update {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        schedule: String,
+    },
+    /// Disable a job.
+    Disable {
+        #[arg(long)]
+        id: String,
+    },
+    /// Enable a job.
+    Enable {
+        #[arg(long)]
+        id: String,
+    },
+    /// Run a job immediately.
+    Run {
+        #[arg(long)]
+        id: String,
+    },
+    /// List run history.
+    Runs {
+        #[arg(long)]
+        job_id: Option<String>,
+    },
+    /// Delete a job.
+    Delete {
+        #[arg(long)]
+        id: String,
+    },
 }
 
 /// Subcommands for managing OpenPanel users.

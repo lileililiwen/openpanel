@@ -7,11 +7,14 @@ description = "Domain layer: entities, value objects, aggregates, repository tra
 
 [dependencies]
 serde = { workspace = true }
+serde_json = { workspace = true }
 thiserror = { workspace = true }
 argon2 = { workspace = true }
 rand = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
+chrono-tz = { workspace = true }
+cron = { workspace = true }
 uuid = { workspace = true }
 async-trait = { workspace = true }
 regex = { workspace = true }

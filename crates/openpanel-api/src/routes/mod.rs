@@ -1,5 +1,7 @@
 //! Per-resource HTTP route modules. Each submodule exposes a `router(...)` builder.
 
+/// Cron scheduling routes (`/cron`).
+pub mod cron;
 /// Databases resource routes (`/databases`).
 pub mod databases;
 /// Files resource routes (`/files/{site_id}/...`).

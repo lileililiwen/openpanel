@@ -7,8 +7,8 @@ use anyhow::Context;
 use base64::Engine;
 use openpanel_api::build_router;
 use openpanel_app::{
-    AcmeEndpoint, DatabasesModule, FilesModule, IdentityModule, MonitoringModule, SitesModule,
-    SslModule, SslPaths, databases::crypto as db_crypto,
+    AcmeEndpoint, CronModule, DatabasesModule, FilesModule, IdentityModule, MonitoringModule,
+    SitesModule, SslModule, SslPaths, databases::crypto as db_crypto,
 };
 use openpanel_core::{
     AppContext, Config, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
@@ -36,6 +36,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let files_module = FilesModule::new(&ctx).await;
     let ssl_module = SslModule::new(&ctx, master_key, ssl_contact_email(&config)).await;
     let monitoring_module = MonitoringModule::new(&ctx).await;
+    let cron_module = CronModule::new(&ctx).await;
 
     let runner = MigrationRunner::for_sqlite(pool.clone());
     runner
@@ -58,6 +59,10 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .apply_module(monitoring_module.name(), &monitoring_module.migrations())
         .await
         .context("apply monitoring migrations")?;
+    runner
+        .apply_module(cron_module.name(), &cron_module.migrations())
+        .await
+        .context("apply cron migrations")?;
 
     let identity_svc = identity_module.service();
     let sites_svc = sites_module.service();
@@ -65,6 +70,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let files_svc = files_module.service();
     let ssl_svc = ssl_module.service();
     let monitoring_svc = monitoring_module.service();
+    let cron_svc = cron_module.service();
     let app = build_router(
         identity_svc.clone(),
         sites_svc.clone(),
@@ -72,6 +78,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         files_svc.clone(),
         ssl_svc.clone(),
         monitoring_svc.clone(),
+        cron_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -80,7 +87,9 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         files_svc,
         ssl_svc,
         monitoring_svc,
-        web_runtime(&config, audit),
+        cron_svc,
+        web_runtime(&config, audit)
+            .with_capabilities(openpanel_web::layout::CapabilitySet::shipped().with("cron")),
     ));
 
     let addr = format!("{}:{}", config.server().bind, config.server().port);
@@ -143,6 +152,158 @@ fn load_master_key(config: &Arc<Config>) -> anyhow::Result<[u8; 32]> {
 fn ssl_contact_email(_config: &Arc<Config>) -> String {
     std::env::var("OPENPANEL__SSL__CONTACT_EMAIL")
         .unwrap_or_else(|_| "admin@openpanel.local".to_string())
+}
+
+async fn build_cron(config: Arc<Config>) -> anyhow::Result<Arc<openpanel_app::CronService>> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config, db, audit);
+    let root = std::env::current_dir().context("resolve current directory")?;
+    let module = CronModule::with_roots(&ctx, vec![root]).await;
+    MigrationRunner::for_sqlite(pool)
+        .apply_module(module.name(), &module.migrations())
+        .await?;
+    Ok(module.service())
+}
+
+fn cron_owner() -> uuid::Uuid {
+    uuid::Uuid::nil()
+}
+
+/// Create a direct command cron job.
+#[allow(clippy::too_many_arguments)]
+pub async fn cron_create(
+    config: Arc<Config>,
+    name: String,
+    schedule: String,
+    timezone: String,
+    executable: String,
+    arguments: Vec<String>,
+    working_directory: String,
+    timeout: u64,
+) -> anyhow::Result<()> {
+    let svc = build_cron(config).await?;
+    let job = svc
+        .create(
+            cron_owner(),
+            openpanel_app::cron::CronInput {
+                name,
+                schedule,
+                timezone,
+                kind: "command".into(),
+                executable: Some(executable),
+                arguments,
+                working_directory: Some(working_directory),
+                url: None,
+                method: None,
+                timeout_secs: timeout,
+                overlap_policy: "skip".into(),
+            },
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("created cron job {}", job.id());
+    Ok(())
+}
+
+/// List cron jobs.
+pub async fn cron_list(config: Arc<Config>) -> anyhow::Result<()> {
+    for job in build_cron(config)
+        .await?
+        .list(cron_owner(), false)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+    {
+        println!(
+            "{}  {}  {} {}",
+            job.id(),
+            job.name(),
+            job.schedule().expression(),
+            job.schedule().timezone()
+        );
+    }
+    Ok(())
+}
+/// Show a cron job.
+pub async fn cron_get(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let job = build_cron(config)
+        .await?
+        .get(cron_owner(), false, uuid::Uuid::parse_str(&id)?)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "{}  {}  {}",
+        job.id(),
+        job.name(),
+        job.schedule().expression()
+    );
+    Ok(())
+}
+/// Change a cron expression.
+pub async fn cron_update(config: Arc<Config>, id: String, schedule: String) -> anyhow::Result<()> {
+    let id = uuid::Uuid::parse_str(&id)?;
+    build_cron(config)
+        .await?
+        .update(
+            cron_owner(),
+            false,
+            id,
+            openpanel_app::cron::CronUpdate {
+                name: None,
+                schedule: Some(schedule),
+                timezone: None,
+                timeout_secs: None,
+                overlap_policy: None,
+            },
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("updated {id}");
+    Ok(())
+}
+/// Enable or disable a cron job.
+pub async fn cron_enabled(config: Arc<Config>, id: String, enabled: bool) -> anyhow::Result<()> {
+    let id = uuid::Uuid::parse_str(&id)?;
+    build_cron(config)
+        .await?
+        .set_enabled(cron_owner(), false, id, enabled)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("{} {id}", if enabled { "enabled" } else { "disabled" });
+    Ok(())
+}
+/// Execute a cron job now.
+pub async fn cron_run(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let run = build_cron(config)
+        .await?
+        .run_now(cron_owner(), false, uuid::Uuid::parse_str(&id)?)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("run {} {:?}", run.id(), run.state());
+    Ok(())
+}
+/// List cron execution history.
+pub async fn cron_runs(config: Arc<Config>, job_id: Option<String>) -> anyhow::Result<()> {
+    let job_id = job_id.map(|id| uuid::Uuid::parse_str(&id)).transpose()?;
+    for run in build_cron(config)
+        .await?
+        .runs(cron_owner(), false, job_id)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+    {
+        println!("{}  {}  {:?}", run.id(), run.job_id(), run.state());
+    }
+    Ok(())
+}
+/// Delete a cron job.
+pub async fn cron_delete(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let id = uuid::Uuid::parse_str(&id)?;
+    build_cron(config)
+        .await?
+        .delete(cron_owner(), false, id)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("deleted {id}");
+    Ok(())
 }
 
 // Suppress unused-import warning when the env helpers below are
