@@ -57,6 +57,7 @@ mock! {
         async fn list(&self) -> Result<Vec<openpanel_domain::User>, RepoError>;
         async fn update_role(&self, id: uuid::Uuid, role: openpanel_domain::Role) -> Result<(), RepoError>;
         async fn disable(&self, id: uuid::Uuid) -> Result<(), RepoError>;
+        async fn enable(&self, id: uuid::Uuid) -> Result<(), RepoError>;
         async fn update_last_login(&self, id: uuid::Uuid) -> Result<(), RepoError>;
         async fn update_password(&self, id: uuid::Uuid, hash: &str) -> Result<(), RepoError>;
         async fn delete(&self, id: uuid::Uuid) -> Result<(), RepoError>;

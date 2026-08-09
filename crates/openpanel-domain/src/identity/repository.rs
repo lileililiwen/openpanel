@@ -27,6 +27,8 @@ pub trait UserRepository: Send + Sync + 'static {
     async fn update_role(&self, id: Uuid, role: Role) -> Result<(), RepoError>;
     /// Disable a user account.
     async fn disable(&self, id: Uuid) -> Result<(), RepoError>;
+    /// Re-enable a previously disabled user account (clears `disabled_at`).
+    async fn enable(&self, id: Uuid) -> Result<(), RepoError>;
     /// Record the user's most recent login time.
     async fn update_last_login(&self, id: Uuid) -> Result<(), RepoError>;
     /// Update a user's password hash.

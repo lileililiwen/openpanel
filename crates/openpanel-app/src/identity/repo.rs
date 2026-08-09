@@ -113,6 +113,15 @@ impl UserRepository for SqliteUserRepository {
         Ok(())
     }
 
+    async fn enable(&self, id: Uuid) -> Result<(), RepoError> {
+        sqlx::query("UPDATE users SET disabled_at = NULL WHERE id = ?")
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| RepoError::new(e.to_string()))?;
+        Ok(())
+    }
+
     async fn update_last_login(&self, id: Uuid) -> Result<(), RepoError> {
         sqlx::query("UPDATE users SET last_login_at = ? WHERE id = ?")
             .bind(Utc::now().to_rfc3339())

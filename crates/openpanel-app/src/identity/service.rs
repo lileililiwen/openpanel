@@ -387,6 +387,29 @@ impl IdentityService {
         Ok(())
     }
 
+    /// Re-enable a previously disabled user account.
+    pub async fn enable_user(&self, target_id: Uuid, actor: &str) -> Result<(), IdentityError> {
+        let mut user = self
+            .users
+            .find_by_id(target_id)
+            .await
+            .map_err(|e| IdentityError::Persistence(e.0))?
+            .ok_or(IdentityError::UserNotFound)?;
+        user.enable();
+        self.users
+            .enable(user.id())
+            .await
+            .map_err(|e| IdentityError::Persistence(e.0))?;
+        self.audit
+            .record(
+                AuditEvent::new(actor, AuditAction::UserEnabled, AuditOutcome::Success)
+                    .target(user.id().to_string()),
+            )
+            .await
+            .ok();
+        Ok(())
+    }
+
     /// Permanently delete a user (refuses owners and the last remaining user).
     pub async fn delete_user(&self, target_id: Uuid, actor: &str) -> Result<(), IdentityError> {
         let count = self

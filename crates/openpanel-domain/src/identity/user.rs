@@ -40,6 +40,11 @@ impl User {
         self.disabled_at = Some(Utc::now());
     }
 
+    /// Re-enable a previously disabled user account.
+    pub fn enable(&mut self) {
+        self.disabled_at = None;
+    }
+
     /// Record the current time as the user's last login.
     pub fn record_login(&mut self) {
         self.last_login_at = Some(Utc::now());

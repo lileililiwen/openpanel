@@ -46,6 +46,8 @@ pub enum AuditAction {
     UserCreated,
     /// A user account was disabled.
     UserDisabled,
+    /// A user account was re-enabled.
+    UserEnabled,
     /// A user account was deleted.
     UserDeleted,
     /// A user's role was changed.
@@ -104,6 +106,7 @@ impl AuditAction {
             AuditAction::Logout => "logout",
             AuditAction::UserCreated => "user_created",
             AuditAction::UserDisabled => "user_disabled",
+            AuditAction::UserEnabled => "user_enabled",
             AuditAction::UserDeleted => "user_deleted",
             AuditAction::RoleChanged => "role_changed",
             AuditAction::PasswordChanged => "password_changed",
@@ -283,6 +286,7 @@ impl AuditService for SqliteAuditService {
                 "logout" => AuditAction::Logout,
                 "user_created" => AuditAction::UserCreated,
                 "user_disabled" => AuditAction::UserDisabled,
+                "user_enabled" => AuditAction::UserEnabled,
                 "user_deleted" => AuditAction::UserDeleted,
                 "role_changed" => AuditAction::RoleChanged,
                 "password_changed" => AuditAction::PasswordChanged,

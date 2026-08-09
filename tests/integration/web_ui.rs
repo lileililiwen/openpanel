@@ -765,3 +765,366 @@ async fn web_sites_non_owner_sees_own_sites_only() {
         .expect("GET /sites/new as non-owner");
     assert_eq!(new_page.status(), 403, "new-site forbidden");
 }
+
+// =====================================================================
+// User management pages
+// =====================================================================
+
+/// Unauthenticated `GET /users` redirects to `/login` (1.12).
+#[tokio::test]
+async fn web_unauthenticated_users_redirects_to_login() {
+    let server = TestServer::new().await;
+    let resp = server
+        .client()
+        .get(format!("{}/users", server.base_url()))
+        .send()
+        .await
+        .expect("GET /users");
+    assert_eq!(resp.status(), 302);
+    assert_eq!(
+        resp.headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok()),
+        Some("/login")
+    );
+}
+
+/// Non-owner `GET /users` renders a forbidden message, not the table (1.6).
+#[tokio::test]
+async fn web_users_non_owner_forbidden_message() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    server
+        .identity()
+        .create_user(
+            "alice",
+            "alice@example.com",
+            "alice-password-1",
+            openpanel_domain::Role::User,
+            "test",
+        )
+        .await
+        .expect("create alice");
+    let cookie = login(&server, "alice", "alice-password-1").await;
+    let body = authed_get(&server, &cookie, "/users").await;
+    assert!(
+        body.to_lowercase().contains("forbidden"),
+        "forbidden msg: {body}"
+    );
+    assert!(
+        !body.contains("<table"),
+        "no user table for non-owner: {body}"
+    );
+}
+
+/// Owner creates a user and the row appears in `GET /users` (1.5).
+#[tokio::test]
+async fn web_users_owner_creates_user_appears_in_list() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let csrf = csrf_token_from_html(&authed_get(&server, &cookie, "/users").await);
+
+    let create = server
+        .client()
+        .post(format!("{}/users", server.base_url()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[
+            ("_csrf", csrf.as_str()),
+            ("username", "bob"),
+            ("email", "bob@example.com"),
+            ("password", "bob-password-1"),
+            ("role", "user"),
+        ])
+        .send()
+        .await
+        .expect("POST /users");
+    assert_eq!(create.status(), 303, "create redirects");
+
+    let body = authed_get(&server, &cookie, "/users").await;
+    assert!(body.contains("bob"), "row visible: {body}");
+    assert!(body.contains("bob@example.com"), "email visible: {body}");
+    assert!(body.contains("user"), "role visible: {body}");
+}
+
+/// A role change updates the row; demoting the last owner is rejected (1.7).
+#[tokio::test]
+async fn web_users_role_change_and_last_owner_protection() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    server
+        .identity()
+        .create_user(
+            "carol",
+            "carol@example.com",
+            "carol-password-1",
+            openpanel_domain::Role::User,
+            "test",
+        )
+        .await
+        .expect("create carol");
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let csrf = csrf_token_from_html(&authed_get(&server, &cookie, "/users").await);
+
+    let carol = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list")
+        .into_iter()
+        .find(|u| u.username().as_str() == "carol")
+        .expect("carol");
+
+    let promote = server
+        .client()
+        .post(format!("{}/users/{}/role", server.base_url(), carol.id()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", csrf.as_str()), ("role", "admin")])
+        .send()
+        .await
+        .expect("POST role");
+    assert_eq!(promote.status(), 200, "promote swaps row");
+
+    // The user is now an admin; the list page re-renders with the new role.
+    let body = authed_get(&server, &cookie, "/users").await;
+    assert!(body.contains("admin"), "new role visible: {body}");
+
+    // Demote the only owner (admin) — should be rejected inline.
+    let admin_user = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list")
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .expect("admin");
+    let demote = server
+        .client()
+        .post(format!(
+            "{}/users/{}/role",
+            server.base_url(),
+            admin_user.id()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", csrf.as_str()), ("role", "user")])
+        .send()
+        .await
+        .expect("POST role demote last owner");
+    assert_eq!(demote.status(), 200, "rejected but swap returned");
+    let body = demote.text().await.expect("demote body");
+    assert!(
+        body.contains("cannot demote the last owner"),
+        "inline error: {body}"
+    );
+}
+
+/// Disable/enable toggles the user status (1.8).
+#[tokio::test]
+async fn web_users_disable_enable_toggles_status() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    server
+        .identity()
+        .create_user(
+            "dave",
+            "dave@example.com",
+            "dave-password-1",
+            openpanel_domain::Role::User,
+            "test",
+        )
+        .await
+        .expect("create dave");
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let csrf = csrf_token_from_html(&authed_get(&server, &cookie, "/users").await);
+
+    let dave = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list")
+        .into_iter()
+        .find(|u| u.username().as_str() == "dave")
+        .expect("dave");
+
+    let disable = server
+        .client()
+        .post(format!("{}/users/{}/disable", server.base_url(), dave.id()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", csrf.as_str())])
+        .send()
+        .await
+        .expect("POST disable");
+    assert_eq!(disable.status(), 200, "disable swaps row");
+    let body = authed_get(&server, &cookie, "/users").await;
+    assert!(body.contains("disabled"), "user shown as disabled: {body}");
+
+    let enable = server
+        .client()
+        .post(format!("{}/users/{}/enable", server.base_url(), dave.id()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", csrf.as_str())])
+        .send()
+        .await
+        .expect("POST enable");
+    assert_eq!(enable.status(), 200, "enable swaps row");
+    let body = authed_get(&server, &cookie, "/users").await;
+    assert!(body.contains("active"), "user shown as active: {body}");
+}
+
+/// Password reset succeeds without the value being displayed (1.9).
+#[tokio::test]
+async fn web_users_password_reset_does_not_echo_value() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    server
+        .identity()
+        .create_user(
+            "eve",
+            "eve@example.com",
+            "eve-password-1",
+            openpanel_domain::Role::User,
+            "test",
+        )
+        .await
+        .expect("create eve");
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let csrf = csrf_token_from_html(&authed_get(&server, &cookie, "/users").await);
+
+    let eve = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list")
+        .into_iter()
+        .find(|u| u.username().as_str() == "eve")
+        .expect("eve");
+
+    let secret = "the-new-secret-1234";
+    let resp = server
+        .client()
+        .post(format!("{}/users/{}/password", server.base_url(), eve.id()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", csrf.as_str()), ("password", secret)])
+        .send()
+        .await
+        .expect("POST password");
+    assert_eq!(resp.status(), 200, "password swap returned");
+    let body = resp.text().await.expect("password body");
+    assert!(!body.contains(secret), "secret never rendered: {body}");
+    assert!(
+        body.contains("password updated") || body.contains("updated"),
+        "success note: {body}"
+    );
+}
+
+/// Delete requires confirmation and removes the user (1.10).
+#[tokio::test]
+async fn web_users_delete_removes_user() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    server
+        .identity()
+        .create_user(
+            "frank",
+            "frank@example.com",
+            "frank-password-1",
+            openpanel_domain::Role::User,
+            "test",
+        )
+        .await
+        .expect("create frank");
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let csrf = csrf_token_from_html(&authed_get(&server, &cookie, "/users").await);
+
+    let frank = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list")
+        .into_iter()
+        .find(|u| u.username().as_str() == "frank")
+        .expect("frank");
+
+    let listed = authed_get(&server, &cookie, "/users").await;
+    assert!(
+        listed.contains(&format!("hx-delete=\"/users/{}\"", frank.id()))
+            && listed.contains("hx-confirm"),
+        "delete row is confirmable: {listed}"
+    );
+
+    let del = server
+        .client()
+        .delete(format!("{}/users/{}", server.base_url(), frank.id()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", csrf.as_str())])
+        .send()
+        .await
+        .expect("DELETE user");
+    assert_eq!(del.status(), 200, "delete swaps row");
+
+    let body = authed_get(&server, &cookie, "/users").await;
+    assert!(!body.contains("frank"), "user removed: {body}");
+}
+
+/// CSRF mismatch on a mutation returns 403 (1.11).
+#[tokio::test]
+async fn web_users_bad_csrf_rejected() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    server
+        .identity()
+        .create_user(
+            "gina",
+            "gina@example.com",
+            "gina-password-1",
+            openpanel_domain::Role::User,
+            "test",
+        )
+        .await
+        .expect("create gina");
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+
+    let gina = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list")
+        .into_iter()
+        .find(|u| u.username().as_str() == "gina")
+        .expect("gina");
+
+    let resp = server
+        .client()
+        .post(format!("{}/users/{}/disable", server.base_url(), gina.id()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", "not-the-token")])
+        .send()
+        .await
+        .expect("POST disable bad csrf");
+    assert_eq!(resp.status(), 403, "bad csrf rejected");
+
+    // gina is still enabled.
+    let gina_after = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list")
+        .into_iter()
+        .find(|u| u.username().as_str() == "gina")
+        .expect("gina");
+    assert!(!gina_after.is_disabled(), "no state change");
+}
