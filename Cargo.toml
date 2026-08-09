@@ -139,6 +139,7 @@ tracing-subscriber = { workspace = true }
 sqlx = { workspace = true }
 tempfile = "3"
 cargo-audit = "0.22"
+chrono = { workspace = true }
 
 [[test]]
 name = "integration"

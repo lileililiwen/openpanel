@@ -1128,3 +1128,141 @@ async fn web_users_bad_csrf_rejected() {
         .expect("gina");
     assert!(!gina_after.is_disabled(), "no state change");
 }
+
+// =====================================================================
+// Monitoring pages
+// =====================================================================
+
+/// Unauthenticated `GET /monitoring` redirects to `/login` (1.8).
+#[tokio::test]
+async fn web_unauthenticated_monitoring_redirects_to_login() {
+    let server = TestServer::new().await;
+    let resp = server
+        .client()
+        .get(format!("{}/monitoring", server.base_url()))
+        .send()
+        .await
+        .expect("GET /monitoring");
+    assert_eq!(resp.status(), 302);
+    assert_eq!(
+        resp.headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok()),
+        Some("/login")
+    );
+}
+
+/// Authenticated `GET /monitoring` renders the page chrome, the metric + range
+/// selectors, and the `#history-chart` / `#alert-feed` swap targets.
+#[tokio::test]
+async fn web_monitoring_page_renders_selectors_and_targets() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let body = authed_get(&server, &cookie, "/monitoring").await;
+    for needle in [
+        "Monitoring",
+        "id=\"history-chart\"",
+        "id=\"alert-feed\"",
+        "name=\"metric\"",
+        "name=\"range\"",
+        "Cpu",
+        "Memory",
+        "Disk",
+        "Network",
+    ] {
+        assert!(body.contains(needle), "missing {needle}: {body}");
+    }
+}
+
+/// Seeded samples render as an SVG polyline (1.5).
+#[tokio::test]
+async fn web_monitoring_history_returns_svg_polylines() {
+    use openpanel_domain::monitoring::{MetricKind, MetricSample, Unit};
+
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+
+    // Seed three CPU samples via the service repo handle.
+    let now = chrono::Utc::now();
+    let samples = vec![
+        MetricSample::new(MetricKind::Cpu, Unit::Percent, 10.0, now).expect("sample"),
+        MetricSample::new(
+            MetricKind::Cpu,
+            Unit::Percent,
+            50.0,
+            now + chrono::Duration::seconds(30),
+        )
+        .expect("sample"),
+        MetricSample::new(
+            MetricKind::Cpu,
+            Unit::Percent,
+            80.0,
+            now + chrono::Duration::seconds(60),
+        )
+        .expect("sample"),
+    ];
+    for s in &samples {
+        server
+            .monitoring()
+            .repo()
+            .insert(s)
+            .await
+            .expect("insert sample");
+    }
+
+    let resp = server
+        .client()
+        .get(format!(
+            "{}/monitoring/history?metric=Cpu&range=3600",
+            server.base_url()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .send()
+        .await
+        .expect("GET history");
+    assert_eq!(resp.status(), 200);
+    let body = resp.text().await.expect("history body");
+    assert!(body.contains("<svg"), "svg: {body}");
+    assert!(body.contains("<polyline"), "polyline: {body}");
+    assert!(body.contains("points="), "points attribute: {body}");
+}
+
+/// Empty history returns the placeholder (1.6).
+#[tokio::test]
+async fn web_monitoring_history_empty_renders_placeholder() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+
+    let body = authed_get(
+        &server,
+        &cookie,
+        "/monitoring/history?metric=Memory&range=3600",
+    )
+    .await;
+    assert!(
+        body.contains("no samples") || body.contains("No samples"),
+        "placeholder: {body}"
+    );
+}
+
+/// Alerts feed renders the audit-driven alert events or empty state (1.7).
+#[tokio::test]
+async fn web_monitoring_alerts_feed_renders_empty_state() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let body = authed_get(&server, &cookie, "/monitoring/alerts").await;
+    // Empty state: no alert events recorded yet.
+    assert!(body.contains("No alerts"), "empty state: {body}");
+}

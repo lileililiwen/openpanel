@@ -14,6 +14,7 @@ pub mod csrf;
 pub mod dashboard;
 pub mod layout;
 pub mod login;
+pub mod monitoring;
 pub mod router;
 pub mod sites;
 pub mod users;

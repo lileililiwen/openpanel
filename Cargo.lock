@@ -3375,6 +3375,7 @@ name = "openpanel"
 version = "0.1.0"
 dependencies = [
  "cargo-audit",
+ "chrono",
  "openpanel-api",
  "openpanel-app",
  "openpanel-cli",
