@@ -9,6 +9,19 @@ cPanel alternative without PHP. MIT licensed.
 > logout) serves as the panel front-end. Cron lands in a follow-on
 > OpenSpec change.
 
+## Quick start (dev)
+
+```bash
+cargo run -p openpanel-cli -- dev
+```
+
+Picks `/tmp/openpanel-dev` as the data dir (override with
+`OPENPANEL_DATA_DIR`), auto-generates a master key, runs migrations,
+bootstraps a default `admin` owner (password `openpanel-dev` —
+**change it**), and serves the web + API on
+`http://127.0.0.1:8080`. Open `http://127.0.0.1:8080/login` and
+sign in. Idempotent — re-running picks up the existing DB + key.
+
 ## Why Rust
 
 Baota, cPanel, DirectAdmin, and similar panels are written in PHP. PHP

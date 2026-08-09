@@ -15,6 +15,7 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Command::Serve => handlers::serve(config).await,
+        Command::Dev => handlers::dev_up(config).await,
         Command::Migrate => handlers::migrate(config).await,
         Command::User { action } => match action {
             UserCommand::Create {

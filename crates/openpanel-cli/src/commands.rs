@@ -14,6 +14,10 @@ pub struct Cli {
 pub enum Command {
     /// Run the API server + agent in the foreground.
     Serve,
+    /// Zero-config dev launcher: pick a writable data dir, run
+    /// migrations, bootstrap a default owner if none exists, then
+    /// start the web + API server. Idempotent.
+    Dev,
     /// Apply pending database migrations and exit.
     Migrate,
     /// User management commands.

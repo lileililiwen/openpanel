@@ -4,6 +4,7 @@
 use std::sync::Arc;
 
 use anyhow::Context;
+use base64::Engine;
 use openpanel_api::build_router;
 use openpanel_app::{
     AcmeEndpoint, DatabasesModule, FilesModule, IdentityModule, MonitoringModule, SitesModule,
@@ -110,7 +111,7 @@ fn load_master_key(config: &Arc<Config>) -> anyhow::Result<[u8; 32]> {
 /// account. Required by ACME.
 fn ssl_contact_email(_config: &Arc<Config>) -> String {
     std::env::var("OPENPANEL__SSL__CONTACT_EMAIL")
-        .unwrap_or_else(|_| "[email protected]".to_string())
+        .unwrap_or_else(|_| "admin@openpanel.local".to_string())
 }
 
 // Suppress unused-import warning when the env helpers below are
@@ -881,6 +882,144 @@ async fn build_monitoring(
         .await
         .context("apply monitoring migrations")?;
     Ok(module.service())
+}
+
+/// `openpanel dev` — zero-config launcher: pick a writable data dir,
+/// run migrations, bootstrap a default owner if none exists, then start
+/// the web + API server. Idempotent.
+pub async fn dev_up(config: Arc<Config>) -> anyhow::Result<()> {
+    let (data_dir, db_url, master_key) = ensure_dev_defaults(&config)?;
+    println!("openpanel dev");
+    println!("  data dir:   {}", data_dir.display());
+    println!("  database:   {db_url}");
+    println!(
+        "  bind:       {}:{}",
+        config.server().bind,
+        config.server().port
+    );
+
+    // Build a config that reflects the dev defaults without going back
+    // through `Config::load` (which would re-read the same env vars
+    // we just consumed). The defaults are layered on top of whatever
+    // the user already passed via env / file / CLI.
+    let config = build_dev_config(config, &db_url, &master_key);
+
+    // 1. Migrations (idempotent: apply_module skips applied ones).
+    migrate(config.clone())
+        .await
+        .context("apply dev migrations")?;
+
+    // 2. Bootstrap default owner if the users table is empty.
+    bootstrap_default_owner(&config).await?;
+
+    println!();
+    println!(
+        "→ Login at http://{}:{}/login",
+        config.server().bind,
+        config.server().port
+    );
+    println!("  user:     admin");
+    println!("  password: openpanel-dev  (CHANGE THIS IMMEDIATELY in production)");
+
+    // 3. Serve.
+    serve(config).await
+}
+
+/// Resolve the dev data directory, SQLite URL, and master key:
+/// * data dir: `$OPENPANEL_DATA_DIR` or `/tmp/openpanel-dev` (created
+///   if missing)
+/// * db url:   `$OPENPANEL__DATABASE__URL` or `<data_dir>/openpanel.db`
+/// * master key: `$OPENPANEL__DATABASE__MASTER_KEY` if set, else
+///   generated and persisted to `<data_dir>/master.key`
+fn ensure_dev_defaults(
+    _config: &Arc<Config>,
+) -> anyhow::Result<(std::path::PathBuf, String, String)> {
+    let data_dir = std::env::var("OPENPANEL_DATA_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("/tmp/openpanel-dev"));
+    std::fs::create_dir_all(&data_dir)
+        .with_context(|| format!("create data dir {}", data_dir.display()))?;
+
+    let db_url = std::env::var("OPENPANEL__DATABASE__URL")
+        .unwrap_or_else(|_| format!("sqlite://{}/openpanel.db", data_dir.display()));
+
+    let master_key = match std::env::var("OPENPANEL__DATABASE__MASTER_KEY") {
+        Ok(k) if !k.is_empty() => k,
+        _ => {
+            let key_path = data_dir.join("master.key");
+            if key_path.exists() {
+                std::fs::read_to_string(&key_path)
+                    .with_context(|| format!("read {}", key_path.display()))?
+            } else {
+                let mut bytes = [0u8; 32];
+                use rand::RngCore;
+                rand::rngs::OsRng.fill_bytes(&mut bytes);
+                let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+                std::fs::write(&key_path, &encoded)
+                    .with_context(|| format!("write {}", key_path.display()))?;
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::PermissionsExt;
+                    let mut perms = std::fs::metadata(&key_path)?.permissions();
+                    perms.set_mode(0o600);
+                    std::fs::set_permissions(&key_path, perms)?;
+                }
+                encoded
+            }
+        }
+    };
+
+    Ok((data_dir, db_url, master_key))
+}
+
+/// Construct a `Config` for dev: layer the chosen database URL and
+/// master key into the struct so the existing `load_master_key` and
+/// `bootstrap_persistence` see them.
+fn build_dev_config(base: Arc<Config>, db_url: &str, master_key: &str) -> Arc<Config> {
+    let mut modules = base.modules.clone();
+    let db_value = modules
+        .entry("database".to_string())
+        .or_insert_with(|| serde_json::json!({}));
+    if let Some(obj) = db_value.as_object_mut() {
+        obj.insert(
+            "master_key".to_string(),
+            serde_json::Value::String(master_key.to_string()),
+        );
+    }
+    Arc::new(openpanel_core::Config {
+        server: base.server.clone(),
+        database: openpanel_core::config::DatabaseConfig {
+            driver: base.database.driver.clone(),
+            url: db_url.to_string(),
+            max_connections: base.database.max_connections,
+        },
+        log: base.log.clone(),
+        monitoring: base.monitoring.clone(),
+        modules,
+    })
+}
+
+/// Create a default `admin` / `admin` owner if the users table is empty.
+/// Prints a clear warning that the password must be changed.
+async fn bootstrap_default_owner(config: &Arc<Config>) -> anyhow::Result<()> {
+    let (svc, _audit, _pool) = build_identity(config.clone()).await?;
+    let users = svc.list_users().await.context("list users")?;
+    if !users.is_empty() {
+        return Ok(());
+    }
+    let email_str = "admin@openpanel.local";
+    let pw = "openpanel-dev";
+    svc.create_user(
+        "admin",
+        email_str,
+        pw,
+        openpanel_domain::Role::Owner,
+        "dev-bootstrap",
+    )
+    .await
+    .context("create default owner")?;
+    println!("  bootstrapped owner 'admin' (password: openpanel-dev)");
+    Ok(())
 }
 
 /// `openpanel monitoring overview` — print the current host snapshot.
