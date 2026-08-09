@@ -193,3 +193,118 @@ body {
 
 .alert-metric { font-weight: 600; }
 
+/* Shared page elements */
+.btn {
+  display: inline-block;
+  padding: 0.55rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 600;
+  cursor: pointer;
+  background: none;
+}
+
+.btn:hover { background: rgba(79, 140, 255, 0.1); }
+
+.empty { color: var(--muted); }
+
+.alert {
+  padding: 0.7rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 1rem;
+}
+
+.alert.error { color: #ff6b6b; border-color: #ff6b6b; }
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin-top: 1rem;
+}
+
+.table th, .table td {
+  text-align: left;
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.table th { color: var(--muted); font-size: 0.85rem; font-weight: 600; }
+
+.table tr:last-child td { border-bottom: none; }
+
+.table td.actions { white-space: nowrap; }
+
+.table td.actions form { display: inline; margin-right: 0.4rem; }
+
+.table .status {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  background: rgba(79, 140, 255, 0.15);
+  color: var(--accent);
+}
+
+.table button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 0.3rem 0.8rem;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.table button:hover { border-color: var(--accent); color: var(--accent); }
+
+.table button.danger:hover { border-color: #ff6b6b; color: #ff6b6b; }
+
+/* Forms */
+.form {
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1.2rem;
+  margin-top: 1rem;
+}
+
+.form label { color: var(--muted); font-size: 0.9rem; }
+
+.form input[type="text"], .form select {
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.form button {
+  margin-top: 0.8rem;
+  padding: 0.6rem;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+}
+
+/* Detail */
+.detail { background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem; margin-top: 1rem; }
+
+.detail p { margin: 0.3rem 0; }
+
+.detail .links { margin-top: 1rem; display: flex; gap: 1rem; }
+
+.detail .links a { color: var(--accent); text-decoration: none; }
+
+

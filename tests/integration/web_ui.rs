@@ -376,3 +376,392 @@ async fn web_unauthenticated_dashboard_redirects_to_login() {
         Some("/login")
     );
 }
+
+/// Fetch an authenticated page and return `(cookie, body)`.
+async fn authed_get(server: &TestServer, cookie: &str, path: &str) -> String {
+    let resp = server
+        .client()
+        .get(format!("{}{}", server.base_url(), path))
+        .header(reqwest::header::COOKIE, cookie)
+        .send()
+        .await
+        .expect("authed GET");
+    assert_eq!(resp.status(), 200, "GET {path}");
+    resp.text().await.expect("page body")
+}
+
+/// Unauthenticated `GET /sites` redirects to `/login` (1.11).
+#[tokio::test]
+async fn web_unauthenticated_sites_redirects_to_login() {
+    let server = TestServer::new().await;
+    let resp = server
+        .client()
+        .get(format!("{}/sites", server.base_url()))
+        .send()
+        .await
+        .expect("GET /sites");
+    assert_eq!(resp.status(), 302);
+    assert_eq!(
+        resp.headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok()),
+        Some("/login")
+    );
+}
+
+/// Authenticated `GET /sites` with no sites renders the empty state (1.5).
+#[tokio::test]
+async fn web_sites_empty_state_renders() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let body = authed_get(&server, &cookie, "/sites").await;
+    assert!(body.contains("No sites yet"), "empty state: {body}");
+    assert!(
+        body.contains("href=\"/sites/new\""),
+        "create action shown for owner: {body}"
+    );
+}
+
+/// Authenticated `GET /sites` lists each created site with its fields (1.5).
+#[tokio::test]
+async fn web_sites_lists_created_sites() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+
+    let admin = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list users")
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .expect("admin user");
+    server
+        .sites()
+        .create_site(
+            &admin,
+            admin.id(),
+            "example.com",
+            vec!["www.example.com".into()],
+            true,
+            Some("8.3".into()),
+            None,
+        )
+        .await
+        .expect("create site");
+
+    let body = authed_get(&server, &cookie, "/sites").await;
+    assert!(body.contains("example.com"), "domain: {body}");
+    assert!(body.contains("8.3"), "php version: {body}");
+    assert!(body.contains("active"), "status: {body}");
+    assert!(body.contains("admin"), "owner: {body}");
+    assert!(
+        body.contains("hx-confirm"),
+        "delete requires confirmation: {body}"
+    );
+}
+
+/// `POST /sites` with a valid form creates the site and validates CSRF (1.6).
+#[tokio::test]
+async fn web_sites_create_valid_form() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let csrf = csrf_token_from_html(&authed_get(&server, &cookie, "/sites").await);
+
+    let resp = server
+        .client()
+        .post(format!("{}/sites", server.base_url()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[
+            ("_csrf", csrf.as_str()),
+            ("primary_domain", "new-site.test"),
+            ("owner_id", ""),
+            ("aliases", "www.new-site.test"),
+            ("php_enabled", "on"),
+            ("php_version", "8.2"),
+            ("document_root", ""),
+        ])
+        .send()
+        .await
+        .expect("POST /sites");
+    assert_eq!(resp.status(), 303, "create redirects to list");
+
+    let body = authed_get(&server, &cookie, "/sites").await;
+    assert!(body.contains("new-site.test"), "created site: {body}");
+    assert!(body.contains("8.2"), "php version: {body}");
+}
+
+/// `POST /sites` with a wrong CSRF token is rejected with 403 (1.6).
+#[tokio::test]
+async fn web_sites_create_bad_csrf_rejected() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+
+    let resp = server
+        .client()
+        .post(format!("{}/sites", server.base_url()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[
+            ("_csrf", "not-the-token"),
+            ("primary_domain", "csrf-test.test"),
+            ("owner_id", ""),
+        ])
+        .send()
+        .await
+        .expect("POST /sites bad csrf");
+    assert_eq!(resp.status(), 403, "bad csrf rejected");
+
+    let body = authed_get(&server, &cookie, "/sites").await;
+    assert!(!body.contains("csrf-test.test"), "nothing created: {body}");
+}
+
+/// A duplicate-domain create shows the inline error and creates nothing (1.7).
+#[tokio::test]
+async fn web_sites_duplicate_domain_shows_inline_error() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let csrf = csrf_token_from_html(&authed_get(&server, &cookie, "/sites").await);
+
+    let create = |domain: &str| {
+        let client = server.client();
+        client
+            .post(format!("{}/sites", server.base_url()))
+            .header(reqwest::header::COOKIE, &cookie)
+            .form(&[
+                ("_csrf", csrf.as_str()),
+                ("primary_domain", domain),
+                ("owner_id", ""),
+            ])
+    };
+    assert_eq!(
+        create("dup.test")
+            .send()
+            .await
+            .expect("first create")
+            .status(),
+        303,
+        "first create succeeds"
+    );
+
+    let dup = create("dup.test")
+        .send()
+        .await
+        .expect("duplicate create")
+        .text()
+        .await
+        .expect("dup body");
+    assert!(
+        dup.contains("duplicate domain: dup.test"),
+        "inline error rendered: {dup}"
+    );
+
+    let body = authed_get(&server, &cookie, "/sites").await;
+    let rows = body.matches("class=\"status\"").count();
+    assert_eq!(rows, 1, "exactly one site row: {body}");
+    assert!(
+        !body.contains("duplicate domain"),
+        "list page itself is clean: {body}"
+    );
+}
+
+/// Enable/disable flips the site status in the list (1.8).
+#[tokio::test]
+async fn web_sites_enable_disable_flips_status() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let csrf = csrf_token_from_html(&authed_get(&server, &cookie, "/sites").await);
+
+    let admin = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list users")
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .expect("admin user");
+    let site = server
+        .sites()
+        .create_site(&admin, admin.id(), "toggle.test", vec![], false, None, None)
+        .await
+        .expect("create site");
+
+    let disable = server
+        .client()
+        .post(format!("{}/sites/{}/disable", server.base_url(), site.id()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", csrf.as_str())])
+        .send()
+        .await
+        .expect("POST disable");
+    assert_eq!(disable.status(), 200, "disable swaps list");
+    let body = authed_get(&server, &cookie, "/sites").await;
+    assert!(body.contains("disabled"), "site shows disabled: {body}");
+
+    let enable = server
+        .client()
+        .post(format!("{}/sites/{}/enable", server.base_url(), site.id()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", csrf.as_str())])
+        .send()
+        .await
+        .expect("POST enable");
+    assert_eq!(enable.status(), 200, "enable swaps list");
+    let body = authed_get(&server, &cookie, "/sites").await;
+    assert!(body.contains("active"), "site shows active: {body}");
+}
+
+/// Delete requires confirmation (`hx-confirm`) and removes the site (1.9).
+#[tokio::test]
+async fn web_sites_delete_removes_site() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let csrf = csrf_token_from_html(&authed_get(&server, &cookie, "/sites").await);
+
+    let admin = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list users")
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .expect("admin user");
+    let site = server
+        .sites()
+        .create_site(
+            &admin,
+            admin.id(),
+            "delete-me.test",
+            vec![],
+            false,
+            None,
+            None,
+        )
+        .await
+        .expect("create site");
+
+    let listed = authed_get(&server, &cookie, "/sites").await;
+    assert!(
+        listed.contains(&format!("hx-delete=\"/sites/{}\"", site.id()))
+            && listed.contains("hx-confirm"),
+        "delete row is confirmable: {listed}"
+    );
+
+    let del = server
+        .client()
+        .delete(format!("{}/sites/{}", server.base_url(), site.id()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", csrf.as_str())])
+        .send()
+        .await
+        .expect("DELETE site");
+    assert_eq!(del.status(), 200, "delete swaps list");
+
+    let body = authed_get(&server, &cookie, "/sites").await;
+    assert!(
+        !body.contains("delete-me.test"),
+        "site removed from list: {body}"
+    );
+}
+
+/// A non-owner sees only their own sites and no create/delete actions (1.10).
+#[tokio::test]
+async fn web_sites_non_owner_sees_own_sites_only() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+
+    // Second user with the plain `user` role.
+    let alice = server
+        .identity()
+        .create_user(
+            "alice",
+            "alice@example.com",
+            "alice-password-1",
+            openpanel_domain::Role::User,
+            "test",
+        )
+        .await
+        .expect("create alice");
+    let admin = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list users")
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .expect("admin user");
+
+    // Admin creates one site for alice and one for themselves.
+    server
+        .sites()
+        .create_site(
+            &admin,
+            alice.id(),
+            "alice-site.test",
+            vec![],
+            false,
+            None,
+            None,
+        )
+        .await
+        .expect("alice's site");
+    server
+        .sites()
+        .create_site(
+            &admin,
+            admin.id(),
+            "admin-site.test",
+            vec![],
+            false,
+            None,
+            None,
+        )
+        .await
+        .expect("admin's site");
+
+    let cookie = login(&server, "alice", "alice-password-1").await;
+    let body = authed_get(&server, &cookie, "/sites").await;
+    assert!(body.contains("alice-site.test"), "own site shown: {body}");
+    assert!(
+        !body.contains("admin-site.test"),
+        "other's site hidden: {body}"
+    );
+    assert!(
+        !body.contains("href=\"/sites/new\""),
+        "no create action for non-owner: {body}"
+    );
+    assert!(!body.contains("Delete"), "no delete action: {body}");
+    assert!(!body.contains("hx-confirm"), "no confirm dialogs: {body}");
+
+    // The new-site page itself is forbidden for non-owners.
+    let new_page = server
+        .client()
+        .get(format!("{}/sites/new", server.base_url()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .send()
+        .await
+        .expect("GET /sites/new as non-owner");
+    assert_eq!(new_page.status(), 403, "new-site forbidden");
+}

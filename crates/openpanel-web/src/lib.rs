@@ -15,5 +15,6 @@ pub mod dashboard;
 pub mod layout;
 pub mod login;
 pub mod router;
+pub mod sites;
 
 pub use router::{WebState, router};

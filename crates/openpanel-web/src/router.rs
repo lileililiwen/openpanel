@@ -23,7 +23,7 @@ use openpanel_domain::{Session, SessionToken, User};
 use crate::{
     assets,
     csrf::{CsrfStore, ValidateCsrf},
-    dashboard, login,
+    dashboard, login, sites,
 };
 
 /// Shared state for every web handler.
@@ -134,6 +134,11 @@ pub fn router(
             get(login::login_page_handler).post(login::login_handler),
         )
         .route("/logout", post(logout))
+        .route("/sites", get(sites::list).post(sites::create))
+        .route("/sites/new", get(sites::new_form))
+        .route("/sites/{id}", get(sites::detail).delete(sites::delete))
+        .route("/sites/{id}/enable", post(sites::enable))
+        .route("/sites/{id}/disable", post(sites::disable))
         .route("/assets/htmx.min.js", get(assets::htmx_min_js))
         .route("/assets/app.css", get(assets::app_css))
         .layer(from_fn_with_state(identity, session_middleware))
