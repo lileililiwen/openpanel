@@ -114,6 +114,8 @@ pub enum AuditAction {
     FirewallChanged,
     /// A login-abuse block was created or ended.
     SecurityBlockChanged,
+    /// A registered host service lifecycle action completed.
+    ServiceChanged,
 }
 
 impl AuditAction {
@@ -158,6 +160,7 @@ impl AuditAction {
             AuditAction::LogDownloaded => "log_downloaded",
             AuditAction::FirewallChanged => "firewall_changed",
             AuditAction::SecurityBlockChanged => "security_block_changed",
+            AuditAction::ServiceChanged => "service_changed",
         }
     }
 }
@@ -347,6 +350,7 @@ impl AuditService for SqliteAuditService {
                 "log_downloaded" => AuditAction::LogDownloaded,
                 "firewall_changed" => AuditAction::FirewallChanged,
                 "security_block_changed" => AuditAction::SecurityBlockChanged,
+                "service_changed" => AuditAction::ServiceChanged,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

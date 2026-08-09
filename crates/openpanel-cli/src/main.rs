@@ -4,7 +4,8 @@ use clap::Parser;
 use openpanel_cli::{
     BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, Command, CronCommand,
     DatabaseCommand, FileCommand, LogsCommand, MonitoringCommand, SecurityAllowlistCommand,
-    SecurityCommand, SecurityRuleCommand, SiteCommand, SslCommand, UserCommand, handlers,
+    SecurityCommand, SecurityRuleCommand, ServicesCommand, SiteCommand, SslCommand, UserCommand,
+    handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -240,6 +241,33 @@ async fn main() -> anyhow::Result<()> {
                 }
             },
             SecurityCommand::Unblock { key } => handlers::security_unblock(config, key).await,
+        },
+        Command::Services { action } => match action {
+            ServicesCommand::List => handlers::services_list(config).await,
+            ServicesCommand::Status { id } => handlers::services_status(config, id).await,
+            ServicesCommand::Preview { id, action } => {
+                handlers::services_preview(config, id, action).await
+            }
+            ServicesCommand::Start { id } => {
+                handlers::services_action(config, id, "start".into(), false).await
+            }
+            ServicesCommand::Stop { id, confirm } => {
+                handlers::services_action(config, id, "stop".into(), confirm).await
+            }
+            ServicesCommand::Restart { id, confirm } => {
+                handlers::services_action(config, id, "restart".into(), confirm).await
+            }
+            ServicesCommand::Reload { id } => {
+                handlers::services_action(config, id, "reload".into(), false).await
+            }
+            ServicesCommand::Enable { id } => {
+                handlers::services_action(config, id, "enable".into(), false).await
+            }
+            ServicesCommand::Disable { id } => {
+                handlers::services_action(config, id, "disable".into(), false).await
+            }
+            ServicesCommand::History { id } => handlers::services_history(config, id).await,
+            ServicesCommand::Logs { id, limit } => handlers::services_logs(config, id, limit).await,
         },
     }
 }

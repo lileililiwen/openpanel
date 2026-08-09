@@ -22,3 +22,5 @@ pub const BACKUPS_V001: &str = include_str!("backups/V001__init.sql");
 pub const LOGS_V001: &str = include_str!("logs/V001__init.sql");
 /// SQL for managed firewall drafts, login failures, and temporary blocks.
 pub const SECURITY_V001: &str = include_str!("security/V001__init.sql");
+/// System-service health history schema.
+pub const SYSTEM_SERVICES_V001: &str = include_str!("system_services/V001__init.sql");

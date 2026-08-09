@@ -19,6 +19,7 @@ use openpanel_api::{
 use openpanel_app::{
     BackupService, CronService, DatabasesService, FilesService, IdentityService, LogService,
     MonitoringService, SecurityService, SitesService, SslService, security::LoginThrottleService,
+    system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
 use openpanel_domain::{Session, SessionToken, User};
@@ -94,6 +95,8 @@ pub struct WebState {
     pub security: Arc<SecurityService>,
     /// Durable pre-authentication abuse protection.
     pub login_throttle: Arc<LoginThrottleService>,
+    /// Allowlisted host-service manager.
+    pub system_services: Arc<ServiceManager>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -202,6 +205,7 @@ pub fn router(
     logs: Arc<LogService>,
     security_service: Arc<SecurityService>,
     login_throttle: Arc<LoginThrottleService>,
+    system_services_service: Arc<ServiceManager>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -219,6 +223,7 @@ pub fn router(
         logs,
         security: security_service,
         login_throttle,
+        system_services: system_services_service,
         csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
@@ -255,6 +260,11 @@ pub fn router(
         .route("/logs/entries", get(logs::entries))
         .route("/security", get(security::page))
         .route("/security/rules", post(security::create))
+        .route("/services", get(crate::system_services::page))
+        .route(
+            "/services/{id}/actions",
+            post(crate::system_services::action),
+        )
         .route("/sites", get(sites::list).post(sites::create))
         .route("/sites/new", get(sites::new_form))
         .route("/sites/{id}", get(sites::detail).delete(sites::delete))

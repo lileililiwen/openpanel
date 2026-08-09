@@ -80,6 +80,67 @@ pub enum Command {
         #[command(subcommand)]
         action: SecurityCommand,
     },
+    /// Inspect and control registered system services.
+    Services {
+        /// Service operation.
+        #[command(subcommand)]
+        action: ServicesCommand,
+    },
+}
+
+/// Registered system-service operations.
+#[derive(Debug, Subcommand)]
+#[allow(missing_docs)]
+pub enum ServicesCommand {
+    List,
+    Status {
+        #[arg(long)]
+        id: String,
+    },
+    Preview {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        action: String,
+    },
+    Start {
+        #[arg(long)]
+        id: String,
+    },
+    Stop {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        confirm: bool,
+    },
+    Restart {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        confirm: bool,
+    },
+    Reload {
+        #[arg(long)]
+        id: String,
+    },
+    Enable {
+        #[arg(long)]
+        id: String,
+    },
+    Disable {
+        #[arg(long)]
+        id: String,
+    },
+    History {
+        #[arg(long)]
+        id: String,
+    },
+    Logs {
+        #[arg(long)]
+        id: String,
+        #[arg(long, default_value_t = 100)]
+        limit: usize,
+    },
 }
 
 /// Host-security subcommands.

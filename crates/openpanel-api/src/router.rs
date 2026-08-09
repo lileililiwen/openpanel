@@ -6,6 +6,7 @@ use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
 use openpanel_app::{
     BackupService, CronService, DatabasesService, FilesService, IdentityService, LogService,
     MonitoringService, SecurityService, SitesService, SslService, security::LoginThrottleService,
+    system_services::ServiceManager,
 };
 
 use crate::{
@@ -16,6 +17,7 @@ use crate::{
         identity::router as identity_router, logs::router as logs_router,
         monitoring::router as monitoring_router, security::router as security_router,
         sites::router as sites_router, ssl::router as ssl_router,
+        system_services::router as system_services_router,
     },
 };
 
@@ -36,6 +38,7 @@ pub fn build_router(
     logs: Arc<LogService>,
     security: Arc<SecurityService>,
     login_throttle: Arc<LoginThrottleService>,
+    system_services: Arc<ServiceManager>,
 ) -> Router {
     let identity_for_layer = identity.clone();
 
@@ -50,6 +53,7 @@ pub fn build_router(
         .nest("/backups", backups_router(backups))
         .nest("/logs", logs_router(logs))
         .nest("/security", security_router(security))
+        .nest("/services", system_services_router(system_services))
         .layer(from_fn_with_state(identity_for_layer, session_middleware));
 
     Router::new()

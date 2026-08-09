@@ -25,6 +25,7 @@ pub mod security;
 pub mod settings;
 pub mod sites;
 pub mod ssl;
+pub mod system_services;
 pub mod users;
 
 pub use router::{WebRuntime, WebState, router};

@@ -18,4 +18,5 @@ mod security;
 mod sites;
 mod smoke;
 mod ssl;
+mod system_services;
 mod web_ui;

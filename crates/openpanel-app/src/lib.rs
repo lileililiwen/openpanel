@@ -18,6 +18,7 @@ pub mod prelude;
 pub mod security;
 pub mod sites;
 pub mod ssl;
+pub mod system_services;
 
 pub use backups::{BackupService, BackupsModule};
 pub use cron::{CronModule, CronService};
@@ -36,3 +37,4 @@ pub use ssl::{
     AcmeEndpoint, SslModule, SslPaths, SslService, challenge_server::AcmeHttpServer,
     module::CHALLENGE_SERVER_PORT,
 };
+pub use system_services::{ServiceManager, SystemServicesModule};

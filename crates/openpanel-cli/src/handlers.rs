@@ -9,7 +9,7 @@ use openpanel_api::build_router;
 use openpanel_app::{
     AcmeEndpoint, BackupsModule, CronModule, DatabasesModule, FilesModule, IdentityModule,
     LogService, LogsModule, MonitoringModule, SecurityModule, SecurityService, SitesModule,
-    SslModule, SslPaths, databases::crypto as db_crypto,
+    SslModule, SslPaths, SystemServicesModule, databases::crypto as db_crypto,
 };
 use openpanel_core::{
     AppContext, Config, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
@@ -58,6 +58,9 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let security_module = SecurityModule::new(&ctx)
         .await
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let system_services_module = SystemServicesModule::new(&ctx)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
 
     let runner = MigrationRunner::for_sqlite(pool.clone());
     runner
@@ -96,6 +99,13 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .apply_module(security_module.name(), &security_module.migrations())
         .await
         .context("apply security migrations")?;
+    runner
+        .apply_module(
+            system_services_module.name(),
+            &system_services_module.migrations(),
+        )
+        .await
+        .context("apply system services migrations")?;
 
     let identity_svc = identity_module.service();
     let sites_svc = sites_module.service();
@@ -108,6 +118,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let logs_svc = logs_module.service();
     let security_svc = security_module.service();
     let login_throttle = security_module.login_service();
+    let system_services_svc = system_services_module.service();
     let app = build_router(
         identity_svc.clone(),
         sites_svc.clone(),
@@ -120,6 +131,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         logs_svc.clone(),
         security_svc.clone(),
         login_throttle.clone(),
+        system_services_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -133,12 +145,14 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         logs_svc,
         security_svc,
         login_throttle,
+        system_services_svc,
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
                 .with("backups")
                 .with("logs")
-                .with("host-security"),
+                .with("host-security")
+                .with("system-services"),
         ),
     ));
 
@@ -290,6 +304,115 @@ async fn build_security(config: Arc<Config>) -> anyhow::Result<Arc<SecurityServi
 
 fn security_actor() -> uuid::Uuid {
     uuid::Uuid::nil()
+}
+
+async fn build_system_services(
+    config: Arc<Config>,
+) -> anyhow::Result<Arc<openpanel_app::ServiceManager>> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    sqlx::query(include_str!("audit.sql"))
+        .execute(&pool)
+        .await
+        .context("ensure audit schema")?;
+    let ctx = AppContext::new(config, db, audit);
+    let module = SystemServicesModule::new(&ctx)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    MigrationRunner::for_sqlite(pool)
+        .apply_module(module.name(), &module.migrations())
+        .await?;
+    Ok(module.service())
+}
+fn parse_service_action(
+    value: &str,
+) -> anyhow::Result<openpanel_domain::system_services::ServiceAction> {
+    use openpanel_domain::system_services::ServiceAction;
+    match value {
+        "start" => Ok(ServiceAction::Start),
+        "stop" => Ok(ServiceAction::Stop),
+        "restart" => Ok(ServiceAction::Restart),
+        "reload" => Ok(ServiceAction::Reload),
+        "enable" => Ok(ServiceAction::Enable),
+        "disable" => Ok(ServiceAction::Disable),
+        _ => Err(anyhow::anyhow!("unknown service action")),
+    }
+}
+/// List registered system services.
+pub async fn services_list(config: Arc<Config>) -> anyhow::Result<()> {
+    for value in build_system_services(config).await?.inventory().await? {
+        println!(
+            "{} {}",
+            value.descriptor.id().as_str(),
+            value.status.active_state
+        );
+    }
+    Ok(())
+}
+/// Show one registered system service.
+pub async fn services_status(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let value = build_system_services(config).await?.status(&id).await?;
+    println!(
+        "{} {}",
+        value.descriptor.id().as_str(),
+        value.status.active_state
+    );
+    Ok(())
+}
+/// Preview dependent capability impact.
+pub async fn services_preview(
+    config: Arc<Config>,
+    id: String,
+    action: String,
+) -> anyhow::Result<()> {
+    let value = build_system_services(config)
+        .await?
+        .preview(&id, parse_service_action(&action)?)?;
+    println!("{}", serde_json::to_string(&value)?);
+    Ok(())
+}
+/// Perform one typed local-Owner service action.
+pub async fn services_action(
+    config: Arc<Config>,
+    id: String,
+    action: String,
+    confirmed: bool,
+) -> anyhow::Result<()> {
+    let value = build_system_services(config)
+        .await?
+        .perform(
+            uuid::Uuid::nil(),
+            Role::Owner,
+            &id,
+            parse_service_action(&action)?,
+            confirmed,
+        )
+        .await?;
+    println!("{}", value.status.active_state);
+    Ok(())
+}
+/// Print bounded health history.
+pub async fn services_history(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    println!(
+        "{}",
+        serde_json::to_string(
+            &build_system_services(config)
+                .await?
+                .history(&id, 100)
+                .await?
+        )?
+    );
+    Ok(())
+}
+/// Print bounded redacted journal entries.
+pub async fn services_logs(config: Arc<Config>, id: String, limit: usize) -> anyhow::Result<()> {
+    for line in build_system_services(config)
+        .await?
+        .logs(&id, limit)
+        .await?
+    {
+        println!("{line}");
+    }
+    Ok(())
 }
 
 /// Report host-firewall adapter support.

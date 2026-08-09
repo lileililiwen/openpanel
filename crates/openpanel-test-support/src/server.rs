@@ -12,7 +12,7 @@ use openpanel_app::{
     BackupService, BackupsModule, CronModule, CronService, DatabasesModule, DatabasesService,
     FilesModule, FilesService, IdentityModule, IdentityService, LogService, LogsModule,
     MonitoringModule, MonitoringService, SecurityModule, SecurityService, SitesModule,
-    SitesService, SslModule, SslPaths, SslService, security::MemoryFirewall,
+    SitesService, SslModule, SslPaths, SslService, SystemServicesModule, security::MemoryFirewall,
     sites::nginx::NginxPaths,
 };
 use openpanel_core::{
@@ -39,6 +39,7 @@ pub struct TestServer {
     backups: Arc<BackupService>,
     logs: Arc<LogService>,
     security: Arc<SecurityService>,
+    system_services: Arc<openpanel_app::ServiceManager>,
     audit: Arc<dyn AuditService>,
     settings_path: PathBuf,
     _handle: JoinHandle<()>,
@@ -132,6 +133,9 @@ impl TestServer {
             SecurityModule::with_firewall(&ctx, Arc::new(MemoryFirewall::default()))
                 .await
                 .expect("security module");
+        let system_services_module = SystemServicesModule::memory(&ctx)
+            .await
+            .expect("system services module");
         runner
             .apply_module(monitoring_module.name(), &monitoring_module.migrations())
             .await
@@ -152,6 +156,13 @@ impl TestServer {
             .apply_module(security_module.name(), &security_module.migrations())
             .await
             .expect("security migrations");
+        runner
+            .apply_module(
+                system_services_module.name(),
+                &system_services_module.migrations(),
+            )
+            .await
+            .expect("system services migrations");
 
         let identity_svc = identity_module.service();
         let sites_svc = sites_module.service();
@@ -164,6 +175,7 @@ impl TestServer {
         let logs_svc = logs_module.service();
         let security_svc = security_module.service();
         let login_throttle = security_module.login_service();
+        let system_services_svc = system_services_module.service();
 
         let settings_path = sandbox.path().join("web-preferences.json");
         let app = build_router(
@@ -178,6 +190,7 @@ impl TestServer {
             logs_svc.clone(),
             security_svc.clone(),
             login_throttle.clone(),
+            system_services_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -191,6 +204,7 @@ impl TestServer {
             logs_svc.clone(),
             security_svc.clone(),
             login_throttle,
+            system_services_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -207,7 +221,8 @@ impl TestServer {
                     .with("cron")
                     .with("backups")
                     .with("logs")
-                    .with("host-security"),
+                    .with("host-security")
+                    .with("system-services"),
             ),
         ));
 
@@ -243,6 +258,7 @@ impl TestServer {
             backups: backups_svc,
             logs: logs_svc,
             security: security_svc,
+            system_services: system_services_svc,
             audit,
             settings_path,
             _handle: handle,
@@ -309,6 +325,11 @@ impl TestServer {
     /// The host-security service handle.
     pub fn security(&self) -> Arc<SecurityService> {
         self.security.clone()
+    }
+
+    /// The allowlisted system-service manager.
+    pub fn system_services(&self) -> Arc<openpanel_app::ServiceManager> {
+        self.system_services.clone()
     }
 
     /// Path used by the web preference store.

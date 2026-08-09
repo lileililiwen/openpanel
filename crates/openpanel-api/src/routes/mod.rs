@@ -20,3 +20,5 @@ pub mod security;
 pub mod sites;
 /// SSL resource routes (`/ssl`).
 pub mod ssl;
+/// Allowlisted system-service routes (`/services`).
+pub mod system_services;
