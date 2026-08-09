@@ -14,6 +14,8 @@ pub mod identity;
 pub mod logs;
 /// Monitoring resource routes (`/monitoring`).
 pub mod monitoring;
+/// Host firewall and login-abuse routes (`/security`).
+pub mod security;
 /// Sites resource routes (`/sites`).
 pub mod sites;
 /// SSL resource routes (`/ssl`).

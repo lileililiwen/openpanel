@@ -74,6 +74,107 @@ pub enum Command {
         #[command(subcommand)]
         action: LogsCommand,
     },
+    /// Manage the isolated host firewall and login blocks.
+    Security {
+        /// Security operation.
+        #[command(subcommand)]
+        action: SecurityCommand,
+    },
+}
+
+/// Host-security subcommands.
+#[derive(Debug, Subcommand)]
+pub enum SecurityCommand {
+    /// Report nftables support and managed scope.
+    Status,
+    /// Manage firewall rules.
+    Rule {
+        /// Rule operation.
+        #[command(subcommand)]
+        action: SecurityRuleCommand,
+    },
+    /// Print the complete candidate ruleset.
+    Preview,
+    /// Syntax-check and apply saved rules.
+    Apply,
+    /// Restore last-known-good rules.
+    Rollback,
+    /// List login abuse blocks.
+    Blocks,
+    /// Manage login address allowlists.
+    Allowlist {
+        /// Allowlist operation.
+        #[command(subcommand)]
+        action: SecurityAllowlistCommand,
+    },
+    /// End a login abuse block.
+    Unblock {
+        /// Durable account: or ip: key.
+        #[arg(long)]
+        key: String,
+    },
+}
+
+/// Login address allowlist CRUD.
+#[derive(Debug, Subcommand)]
+pub enum SecurityAllowlistCommand {
+    /// List canonical networks.
+    List,
+    /// Add a network.
+    Add {
+        /// IPv4 or IPv6 CIDR.
+        #[arg(long)]
+        network: String,
+    },
+    /// Delete a network.
+    Delete {
+        /// IPv4 or IPv6 CIDR.
+        #[arg(long)]
+        network: String,
+    },
+}
+
+/// Firewall rule CRUD.
+#[derive(Debug, Subcommand)]
+#[allow(missing_docs)]
+pub enum SecurityRuleCommand {
+    /// Add an enabled rule.
+    Add {
+        #[arg(long)]
+        protocol: String,
+        #[arg(long)]
+        port: u16,
+        #[arg(long)]
+        source: String,
+        #[arg(long)]
+        action: String,
+        #[arg(long)]
+        comment: String,
+    },
+    /// List rules.
+    List,
+    /// Change a rule comment.
+    Update {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        comment: String,
+    },
+    /// Enable a rule.
+    Enable {
+        #[arg(long)]
+        id: String,
+    },
+    /// Disable a rule.
+    Disable {
+        #[arg(long)]
+        id: String,
+    },
+    /// Delete a rule.
+    Delete {
+        #[arg(long)]
+        id: String,
+    },
 }
 
 /// Log browsing and export subcommands.

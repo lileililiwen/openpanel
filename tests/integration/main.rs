@@ -14,6 +14,7 @@ mod identity;
 mod logs;
 mod monitoring;
 mod quality;
+mod security;
 mod sites;
 mod smoke;
 mod ssl;

@@ -3,8 +3,8 @@
 use clap::Parser;
 use openpanel_cli::{
     BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, Command, CronCommand,
-    DatabaseCommand, FileCommand, LogsCommand, MonitoringCommand, SiteCommand, SslCommand,
-    UserCommand, handlers,
+    DatabaseCommand, FileCommand, LogsCommand, MonitoringCommand, SecurityAllowlistCommand,
+    SecurityCommand, SecurityRuleCommand, SiteCommand, SslCommand, UserCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -198,6 +198,48 @@ async fn main() -> anyhow::Result<()> {
             LogsCommand::Export { source, output } => {
                 handlers::logs_export(config, source, output).await
             }
+        },
+        Command::Security { action } => match action {
+            SecurityCommand::Status => handlers::security_status(config).await,
+            SecurityCommand::Rule { action } => match action {
+                SecurityRuleCommand::Add {
+                    protocol,
+                    port,
+                    source,
+                    action,
+                    comment,
+                } => {
+                    handlers::security_rule_add(config, protocol, port, source, action, comment)
+                        .await
+                }
+                SecurityRuleCommand::List => handlers::security_rule_list(config).await,
+                SecurityRuleCommand::Update { id, comment } => {
+                    handlers::security_rule_update(config, id, comment).await
+                }
+                SecurityRuleCommand::Enable { id } => {
+                    handlers::security_rule_enabled(config, id, true).await
+                }
+                SecurityRuleCommand::Disable { id } => {
+                    handlers::security_rule_enabled(config, id, false).await
+                }
+                SecurityRuleCommand::Delete { id } => {
+                    handlers::security_rule_delete(config, id).await
+                }
+            },
+            SecurityCommand::Preview => handlers::security_preview(config).await,
+            SecurityCommand::Apply => handlers::security_apply(config).await,
+            SecurityCommand::Rollback => handlers::security_rollback(config).await,
+            SecurityCommand::Blocks => handlers::security_blocks(config).await,
+            SecurityCommand::Allowlist { action } => match action {
+                SecurityAllowlistCommand::List => handlers::security_allowlist_list(config).await,
+                SecurityAllowlistCommand::Add { network } => {
+                    handlers::security_allowlist_add(config, network).await
+                }
+                SecurityAllowlistCommand::Delete { network } => {
+                    handlers::security_allowlist_delete(config, network).await
+                }
+            },
+            SecurityCommand::Unblock { key } => handlers::security_unblock(config, key).await,
         },
     }
 }

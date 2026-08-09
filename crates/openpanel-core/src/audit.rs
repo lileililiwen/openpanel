@@ -110,6 +110,10 @@ pub enum AuditAction {
     BackupRestore,
     /// An authorized bounded log export was downloaded.
     LogDownloaded,
+    /// OpenPanel firewall rules were applied or rolled back.
+    FirewallChanged,
+    /// A login-abuse block was created or ended.
+    SecurityBlockChanged,
 }
 
 impl AuditAction {
@@ -152,6 +156,8 @@ impl AuditAction {
             AuditAction::BackupRun => "backup_run",
             AuditAction::BackupRestore => "backup_restore",
             AuditAction::LogDownloaded => "log_downloaded",
+            AuditAction::FirewallChanged => "firewall_changed",
+            AuditAction::SecurityBlockChanged => "security_block_changed",
         }
     }
 }
@@ -339,6 +345,8 @@ impl AuditService for SqliteAuditService {
                 "backup_run" => AuditAction::BackupRun,
                 "backup_restore" => AuditAction::BackupRestore,
                 "log_downloaded" => AuditAction::LogDownloaded,
+                "firewall_changed" => AuditAction::FirewallChanged,
+                "security_block_changed" => AuditAction::SecurityBlockChanged,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

@@ -1,15 +1,18 @@
 //! Identity HTTP routes: login, logout, me, user CRUD.
 
-use std::sync::Arc;
+use std::{
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+};
 
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{ConnectInfo, Path, State},
     http::{HeaderMap, HeaderValue, header::SET_COOKIE},
     response::IntoResponse,
     routing::{delete, get, post},
 };
-use openpanel_app::IdentityService;
+use openpanel_app::{IdentityService, security::LoginThrottleService};
 use openpanel_domain::IdentityError;
 use uuid::Uuid;
 
@@ -24,7 +27,14 @@ use crate::{
 };
 
 /// Builds the Axum sub-router for `/identity` routes (login, logout, me, user CRUD).
-pub fn router(svc: Arc<IdentityService>) -> Router {
+#[derive(Clone)]
+struct IdentityRouteState {
+    identity: Arc<IdentityService>,
+    throttle: Arc<LoginThrottleService>,
+}
+
+/// Build identity routes with durable pre-authentication throttling.
+pub fn router(svc: Arc<IdentityService>, throttle: Arc<LoginThrottleService>) -> Router {
     Router::new()
         .route("/login", post(login))
         .route("/logout", post(logout))
@@ -33,19 +43,55 @@ pub fn router(svc: Arc<IdentityService>) -> Router {
         .route("/users/{id}", delete(delete_user).patch(change_role))
         .route("/users/{id}/disable", post(disable_user))
         .route("/users/{id}/password", post(change_password))
-        .with_state(svc)
+        .with_state(IdentityRouteState {
+            identity: svc,
+            throttle,
+        })
 }
 
 async fn login(
-    State(svc): State<Arc<IdentityService>>,
+    State(state): State<IdentityRouteState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers_in: HeaderMap,
     Json(req): Json<LoginRequest>,
 ) -> ApiResult<impl IntoResponse> {
-    let ip = client_ip(&headers_in);
+    let peer = peer.ip();
+    let forwarded = forwarded_ip(&headers_in);
+    if let Some(decision) = state
+        .throttle
+        .check(&req.username_or_email, peer, forwarded)
+        .await
+        .map_err(|error| ApiError::Internal(error.to_string()))?
+    {
+        return Err(rate_limited(decision.retry_after_seconds));
+    }
+    let ip = Some(peer.to_string());
     let ua = user_agent(&headers_in);
-    let (user, token) = svc
+    let login = state
+        .identity
         .login(&req.username_or_email, &req.password, ip, ua)
-        .await?;
+        .await;
+    let (user, token) = match login {
+        Ok(value) => {
+            state
+                .throttle
+                .record_success(&req.username_or_email)
+                .await
+                .map_err(|error| ApiError::Internal(error.to_string()))?;
+            value
+        }
+        Err(error) => {
+            let decision = state
+                .throttle
+                .record_failure(&req.username_or_email, peer, forwarded)
+                .await
+                .map_err(|failure| ApiError::Internal(failure.to_string()))?;
+            if decision.retry_after_seconds.is_some() {
+                return Err(rate_limited(decision.retry_after_seconds));
+            }
+            return Err(ApiError::Identity(error));
+        }
+    };
     let expires_at = chrono::Utc::now() + chrono::Duration::hours(24);
 
     let cookie = format!(
@@ -69,7 +115,7 @@ async fn login(
 }
 
 async fn logout(
-    State(svc): State<Arc<IdentityService>>,
+    State(state): State<IdentityRouteState>,
     AuthUser(user, _session): AuthUser,
     headers_in: HeaderMap,
 ) -> ApiResult<impl IntoResponse> {
@@ -96,7 +142,10 @@ async fn logout(
 
     let token = openpanel_domain::SessionToken::from_string(token_str)
         .map_err(|_| ApiError::Unauthorized)?;
-    svc.logout(&token, user.username().as_str()).await?;
+    state
+        .identity
+        .logout(&token, user.username().as_str())
+        .await?;
     Ok(Json(serde_json::json!({"ok": true})))
 }
 
@@ -105,20 +154,21 @@ async fn me(AuthUser(user, _): AuthUser) -> Json<UserDto> {
 }
 
 async fn list_users(
-    State(svc): State<Arc<IdentityService>>,
+    State(state): State<IdentityRouteState>,
     AuthUser(_user, _session): AuthUser,
 ) -> ApiResult<Json<Vec<UserDto>>> {
-    let users = svc.list_users().await?;
+    let users = state.identity.list_users().await?;
     Ok(Json(users.iter().map(UserDto::from_user).collect()))
 }
 
 async fn create_user(
-    State(svc): State<Arc<IdentityService>>,
+    State(state): State<IdentityRouteState>,
     RequireOwner: RequireOwner,
     Json(req): Json<CreateUserRequest>,
 ) -> ApiResult<Json<UserDto>> {
     let actor = "owner"; // Could pull from request extensions
-    let user = svc
+    let user = state
+        .identity
         .create_user(&req.username, &req.email, &req.password, req.role, actor)
         .await
         .map_err(map_identity_err)?;
@@ -126,44 +176,47 @@ async fn create_user(
 }
 
 async fn change_role(
-    State(svc): State<Arc<IdentityService>>,
+    State(state): State<IdentityRouteState>,
     RequireOwner: RequireOwner,
     Path(id): Path<Uuid>,
     Json(req): Json<ChangeRoleRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let actor = "owner";
-    svc.change_role(id, req.role, actor).await?;
+    state.identity.change_role(id, req.role, actor).await?;
     Ok(Json(serde_json::json!({"ok": true})))
 }
 
 async fn disable_user(
-    State(svc): State<Arc<IdentityService>>,
+    State(state): State<IdentityRouteState>,
     RequireOwner: RequireOwner,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let actor = "owner";
-    svc.disable_user(id, actor).await?;
+    state.identity.disable_user(id, actor).await?;
     Ok(Json(serde_json::json!({"ok": true})))
 }
 
 async fn delete_user(
-    State(svc): State<Arc<IdentityService>>,
+    State(state): State<IdentityRouteState>,
     RequireOwner: RequireOwner,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let actor = "owner";
-    svc.delete_user(id, actor).await?;
+    state.identity.delete_user(id, actor).await?;
     Ok(Json(serde_json::json!({"ok": true})))
 }
 
 async fn change_password(
-    State(svc): State<Arc<IdentityService>>,
+    State(state): State<IdentityRouteState>,
     AuthUser(_user, _session): AuthUser,
     Path(id): Path<Uuid>,
     Json(req): Json<ChangePasswordRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let actor = "self";
-    svc.change_password(id, &req.new_password, actor).await?;
+    state
+        .identity
+        .change_password(id, &req.new_password, actor)
+        .await?;
     Ok(Json(serde_json::json!({"ok": true})))
 }
 
@@ -177,6 +230,14 @@ fn client_ip(headers: &HeaderMap) -> Option<String> {
         .or_else(|| headers.get("x-real-ip"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
+}
+
+fn forwarded_ip(headers: &HeaderMap) -> Option<IpAddr> {
+    client_ip(headers).and_then(|value| value.parse().ok())
+}
+
+fn rate_limited(retry_after: Option<u64>) -> ApiError {
+    ApiError::LoginThrottled(retry_after.unwrap_or(1))
 }
 
 fn user_agent(headers: &HeaderMap) -> Option<String> {

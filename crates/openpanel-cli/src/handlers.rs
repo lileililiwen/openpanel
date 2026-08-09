@@ -8,13 +8,16 @@ use base64::Engine;
 use openpanel_api::build_router;
 use openpanel_app::{
     AcmeEndpoint, BackupsModule, CronModule, DatabasesModule, FilesModule, IdentityModule,
-    LogService, LogsModule, MonitoringModule, SitesModule, SslModule, SslPaths,
-    databases::crypto as db_crypto,
+    LogService, LogsModule, MonitoringModule, SecurityModule, SecurityService, SitesModule,
+    SslModule, SslPaths, databases::crypto as db_crypto,
 };
 use openpanel_core::{
     AppContext, Config, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
 };
-use openpanel_domain::Role;
+use openpanel_domain::{
+    Role,
+    security::{FirewallRule, LoginKey, NetworkCidr, PortRange, Protocol, RuleAction},
+};
 use tokio::net::TcpListener;
 
 /// Bootstraps persistence, runs all module migrations, and serves the OpenPanel
@@ -52,6 +55,9 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::path::PathBuf::from("/var/log/openpanel"));
     let logs_module = LogsModule::with_root(&ctx, log_root).await;
+    let security_module = SecurityModule::new(&ctx)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
 
     let runner = MigrationRunner::for_sqlite(pool.clone());
     runner
@@ -86,6 +92,10 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .apply_module(logs_module.name(), &logs_module.migrations())
         .await
         .context("apply logs migrations")?;
+    runner
+        .apply_module(security_module.name(), &security_module.migrations())
+        .await
+        .context("apply security migrations")?;
 
     let identity_svc = identity_module.service();
     let sites_svc = sites_module.service();
@@ -96,6 +106,8 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let cron_svc = cron_module.service();
     let backups_svc = backups_module.service();
     let logs_svc = logs_module.service();
+    let security_svc = security_module.service();
+    let login_throttle = security_module.login_service();
     let app = build_router(
         identity_svc.clone(),
         sites_svc.clone(),
@@ -106,6 +118,8 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         cron_svc.clone(),
         backups_svc.clone(),
         logs_svc.clone(),
+        security_svc.clone(),
+        login_throttle.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -117,11 +131,14 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         cron_svc,
         backups_svc,
         logs_svc,
+        security_svc,
+        login_throttle,
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
                 .with("backups")
-                .with("logs"),
+                .with("logs")
+                .with("host-security"),
         ),
     ));
 
@@ -130,7 +147,11 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .await
         .with_context(|| format!("bind {addr}"))?;
     tracing::info!(%addr, "openpanel listening on http://{addr}");
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }
 
@@ -249,6 +270,208 @@ async fn build_logs(config: Arc<Config>) -> anyhow::Result<Arc<LogService>> {
 
 fn logs_actor() -> openpanel_app::logs::LogActor {
     openpanel_app::logs::LogActor::new(uuid::Uuid::nil(), openpanel_domain::Role::Owner)
+}
+
+async fn build_security(config: Arc<Config>) -> anyhow::Result<Arc<SecurityService>> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    sqlx::query(include_str!("audit.sql"))
+        .execute(&pool)
+        .await
+        .context("ensure audit schema")?;
+    let ctx = AppContext::new(config, db, audit);
+    let module = SecurityModule::new(&ctx)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    MigrationRunner::for_sqlite(pool)
+        .apply_module(module.name(), &module.migrations())
+        .await?;
+    Ok(module.service())
+}
+
+fn security_actor() -> uuid::Uuid {
+    uuid::Uuid::nil()
+}
+
+/// Report host-firewall adapter support.
+pub async fn security_status(config: Arc<Config>) -> anyhow::Result<()> {
+    let supported = build_security(config).await?.supported().await?;
+    println!("supported={supported} table=inet openpanel");
+    Ok(())
+}
+
+/// Add one validated enabled firewall rule.
+pub async fn security_rule_add(
+    config: Arc<Config>,
+    protocol: String,
+    port: u16,
+    source: String,
+    action: String,
+    comment: String,
+) -> anyhow::Result<()> {
+    let protocol = match protocol.as_str() {
+        "tcp" => Protocol::Tcp,
+        "udp" => Protocol::Udp,
+        _ => return Err(anyhow::anyhow!("protocol must be tcp or udp")),
+    };
+    let action = match action.as_str() {
+        "allow" => RuleAction::Allow,
+        "deny" => RuleAction::Deny,
+        _ => return Err(anyhow::anyhow!("action must be allow or deny")),
+    };
+    let rule = FirewallRule::new(
+        uuid::Uuid::new_v4(),
+        protocol,
+        PortRange::new(port, port)?,
+        NetworkCidr::parse(&source)?,
+        action,
+        comment,
+        true,
+    )?;
+    let id = rule.id();
+    build_security(config).await?.save_rule(rule).await?;
+    println!("created security rule {id}");
+    Ok(())
+}
+
+/// List managed firewall rules.
+pub async fn security_rule_list(config: Arc<Config>) -> anyhow::Result<()> {
+    for rule in build_security(config).await?.rules().await? {
+        println!(
+            "{} {:?} {} {} {:?} {}",
+            rule.id(),
+            rule.protocol(),
+            rule.ports(),
+            rule.source(),
+            rule.action(),
+            rule.comment()
+        );
+    }
+    Ok(())
+}
+
+/// Update one rule comment while retaining validated fields.
+pub async fn security_rule_update(
+    config: Arc<Config>,
+    id: String,
+    comment: String,
+) -> anyhow::Result<()> {
+    let service = build_security(config).await?;
+    let id = uuid::Uuid::parse_str(&id)?;
+    let old = service.rule(id).await?;
+    let rule = FirewallRule::new(
+        id,
+        old.protocol(),
+        old.ports(),
+        old.source(),
+        old.action(),
+        comment,
+        old.enabled(),
+    )?;
+    service.save_rule(rule).await?;
+    println!("updated {id}");
+    Ok(())
+}
+
+/// Enable or disable one rule.
+pub async fn security_rule_enabled(
+    config: Arc<Config>,
+    id: String,
+    enabled: bool,
+) -> anyhow::Result<()> {
+    let id = uuid::Uuid::parse_str(&id)?;
+    build_security(config)
+        .await?
+        .set_rule_enabled(id, enabled)
+        .await?;
+    println!("{} {id}", if enabled { "enabled" } else { "disabled" });
+    Ok(())
+}
+
+/// Delete one rule.
+pub async fn security_rule_delete(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let id = uuid::Uuid::parse_str(&id)?;
+    build_security(config).await?.delete_rule(id).await?;
+    println!("deleted {id}");
+    Ok(())
+}
+
+/// Print the complete nftables candidate.
+pub async fn security_preview(config: Arc<Config>) -> anyhow::Result<()> {
+    print!(
+        "{}",
+        build_security(config).await?.preview_saved(None).await?
+    );
+    Ok(())
+}
+
+/// Apply the complete saved candidate transactionally.
+pub async fn security_apply(config: Arc<Config>) -> anyhow::Result<()> {
+    build_security(config)
+        .await?
+        .apply_saved(security_actor(), None)
+        .await?;
+    println!("applied inet openpanel");
+    Ok(())
+}
+
+/// Restore the last-known-good OpenPanel ruleset.
+pub async fn security_rollback(config: Arc<Config>) -> anyhow::Result<()> {
+    build_security(config)
+        .await?
+        .rollback(security_actor())
+        .await?;
+    println!("rolled back inet openpanel");
+    Ok(())
+}
+
+/// List durable login blocks without account metadata beyond the normalized key.
+pub async fn security_blocks(config: Arc<Config>) -> anyhow::Result<()> {
+    for block in build_security(config).await?.blocks().await? {
+        println!("{} {}", block.key().storage_key(), block.expires_at());
+    }
+    Ok(())
+}
+
+/// List canonical login address allowlists.
+pub async fn security_allowlist_list(config: Arc<Config>) -> anyhow::Result<()> {
+    for network in build_security(config).await?.allowlists().await? {
+        println!("{network}");
+    }
+    Ok(())
+}
+
+/// Add a canonical login address allowlist.
+pub async fn security_allowlist_add(config: Arc<Config>, network: String) -> anyhow::Result<()> {
+    let network = NetworkCidr::parse(&network)?;
+    build_security(config)
+        .await?
+        .add_allowlist(security_actor(), network)
+        .await?;
+    println!("allowlisted {network}");
+    Ok(())
+}
+
+/// Delete a canonical login address allowlist.
+pub async fn security_allowlist_delete(config: Arc<Config>, network: String) -> anyhow::Result<()> {
+    let network = NetworkCidr::parse(&network)?;
+    build_security(config)
+        .await?
+        .remove_allowlist(security_actor(), network)
+        .await?;
+    println!("removed {network}");
+    Ok(())
+}
+
+/// End a login block; absence is idempotent for recovery scripts.
+pub async fn security_unblock(config: Arc<Config>, key: String) -> anyhow::Result<()> {
+    let service = build_security(config).await?;
+    let key = LoginKey::stored(&key)?;
+    if service.unblock(security_actor(), key).await.is_ok() {
+        println!("unblocked");
+    } else {
+        println!("already unblocked");
+    }
+    Ok(())
 }
 
 /// List registered log sources visible to the local Owner CLI.

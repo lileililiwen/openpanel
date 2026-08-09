@@ -18,6 +18,7 @@ pub mod files;
 pub mod identity;
 pub mod logs;
 pub mod monitoring;
+pub mod security;
 pub mod sites;
 pub mod ssl;
 

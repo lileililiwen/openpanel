@@ -11,8 +11,9 @@ use openpanel_api::build_router;
 use openpanel_app::{
     BackupService, BackupsModule, CronModule, CronService, DatabasesModule, DatabasesService,
     FilesModule, FilesService, IdentityModule, IdentityService, LogService, LogsModule,
-    MonitoringModule, MonitoringService, SitesModule, SitesService, SslModule, SslPaths,
-    SslService, sites::nginx::NginxPaths,
+    MonitoringModule, MonitoringService, SecurityModule, SecurityService, SitesModule,
+    SitesService, SslModule, SslPaths, SslService, security::MemoryFirewall,
+    sites::nginx::NginxPaths,
 };
 use openpanel_core::{
     AppContext, AuditEvent, AuditService, Config, MigrationRunner, Module, SqliteAuditService,
@@ -37,6 +38,7 @@ pub struct TestServer {
     cron: Arc<CronService>,
     backups: Arc<BackupService>,
     logs: Arc<LogService>,
+    security: Arc<SecurityService>,
     audit: Arc<dyn AuditService>,
     settings_path: PathBuf,
     _handle: JoinHandle<()>,
@@ -126,6 +128,10 @@ impl TestServer {
         )
         .await;
         let logs_module = LogsModule::with_root(&ctx, sandbox.path().join("logs")).await;
+        let security_module =
+            SecurityModule::with_firewall(&ctx, Arc::new(MemoryFirewall::default()))
+                .await
+                .expect("security module");
         runner
             .apply_module(monitoring_module.name(), &monitoring_module.migrations())
             .await
@@ -142,6 +148,10 @@ impl TestServer {
             .apply_module(logs_module.name(), &logs_module.migrations())
             .await
             .expect("logs migrations");
+        runner
+            .apply_module(security_module.name(), &security_module.migrations())
+            .await
+            .expect("security migrations");
 
         let identity_svc = identity_module.service();
         let sites_svc = sites_module.service();
@@ -152,6 +162,8 @@ impl TestServer {
         let cron_svc = cron_module.service();
         let backups_svc = backups_module.service();
         let logs_svc = logs_module.service();
+        let security_svc = security_module.service();
+        let login_throttle = security_module.login_service();
 
         let settings_path = sandbox.path().join("web-preferences.json");
         let app = build_router(
@@ -164,6 +176,8 @@ impl TestServer {
             cron_svc.clone(),
             backups_svc.clone(),
             logs_svc.clone(),
+            security_svc.clone(),
+            login_throttle.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -175,6 +189,8 @@ impl TestServer {
             cron_svc.clone(),
             backups_svc.clone(),
             logs_svc.clone(),
+            security_svc.clone(),
+            login_throttle,
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -190,7 +206,8 @@ impl TestServer {
                 openpanel_web::layout::CapabilitySet::shipped()
                     .with("cron")
                     .with("backups")
-                    .with("logs"),
+                    .with("logs")
+                    .with("host-security"),
             ),
         ));
 
@@ -200,7 +217,12 @@ impl TestServer {
         let addr = listener.local_addr().expect("local addr").to_string();
 
         let handle = tokio::spawn(async move {
-            axum::serve(listener, app).await.expect("server error");
+            axum::serve(
+                listener,
+                app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+            )
+            .await
+            .expect("server error");
         });
 
         let client = reqwest::Client::builder()
@@ -220,6 +242,7 @@ impl TestServer {
             cron: cron_svc,
             backups: backups_svc,
             logs: logs_svc,
+            security: security_svc,
             audit,
             settings_path,
             _handle: handle,
@@ -281,6 +304,11 @@ impl TestServer {
     /// The authorized log browsing service handle.
     pub fn logs(&self) -> Arc<LogService> {
         self.logs.clone()
+    }
+
+    /// The host-security service handle.
+    pub fn security(&self) -> Arc<SecurityService> {
+        self.security.clone()
     }
 
     /// Path used by the web preference store.

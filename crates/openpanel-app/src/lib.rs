@@ -15,6 +15,7 @@ pub mod logs;
 pub mod migrations;
 pub mod monitoring;
 pub mod prelude;
+pub mod security;
 pub mod sites;
 pub mod ssl;
 
@@ -25,6 +26,7 @@ pub use files::{FilesModule, service::FilesService};
 pub use identity::{IdentityModule, service::IdentityService};
 pub use logs::{LogService, LogsModule};
 pub use monitoring::{MonitoringModule, service::MonitoringService};
+pub use security::{SecurityModule, SecurityService};
 pub use sites::{
     SitesModule,
     nginx::{NginxConfigGenerator, NginxPaths},

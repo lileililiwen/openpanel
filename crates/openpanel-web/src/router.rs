@@ -18,7 +18,7 @@ use openpanel_api::{
 };
 use openpanel_app::{
     BackupService, CronService, DatabasesService, FilesService, IdentityService, LogService,
-    MonitoringService, SitesService, SslService,
+    MonitoringService, SecurityService, SitesService, SslService, security::LoginThrottleService,
 };
 use openpanel_core::{AuditService, Config};
 use openpanel_domain::{Session, SessionToken, User};
@@ -28,7 +28,7 @@ use crate::{
     csrf::{CsrfStore, ValidateCsrf},
     dashboard, databases, files,
     layout::CapabilitySet,
-    login, logs, monitoring, settings,
+    login, logs, monitoring, security, settings,
     settings::{InstallationInfo, PanelPreferences, SettingsStore},
     sites, ssl, users,
 };
@@ -90,6 +90,10 @@ pub struct WebState {
     pub backups: Arc<BackupService>,
     /// Authorized log browsing service.
     pub logs: Arc<LogService>,
+    /// Host firewall and login-abuse service.
+    pub security: Arc<SecurityService>,
+    /// Durable pre-authentication abuse protection.
+    pub login_throttle: Arc<LoginThrottleService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -196,6 +200,8 @@ pub fn router(
     cron: Arc<CronService>,
     backups: Arc<BackupService>,
     logs: Arc<LogService>,
+    security_service: Arc<SecurityService>,
+    login_throttle: Arc<LoginThrottleService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -211,6 +217,8 @@ pub fn router(
         cron,
         backups,
         logs,
+        security: security_service,
+        login_throttle,
         csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
@@ -245,6 +253,8 @@ pub fn router(
         .route("/backups/plans", post(backups::create))
         .route("/logs", get(logs::page))
         .route("/logs/entries", get(logs::entries))
+        .route("/security", get(security::page))
+        .route("/security/rules", post(security::create))
         .route("/sites", get(sites::list).post(sites::create))
         .route("/sites/new", get(sites::new_form))
         .route("/sites/{id}", get(sites::detail).delete(sites::delete))

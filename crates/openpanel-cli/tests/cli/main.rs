@@ -13,6 +13,7 @@ mod database;
 mod file;
 mod logs;
 mod monitoring;
+mod security;
 mod serve;
 mod site;
 mod ssl;

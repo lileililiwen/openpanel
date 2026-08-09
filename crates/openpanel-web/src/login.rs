@@ -4,9 +4,11 @@
 //! CSRF token to yet), so it accepts a plain form POST. Successful login sets
 //! the `openpanel_session` cookie; failures render the page with a 401.
 
+use std::net::{IpAddr, SocketAddr};
+
 use axum::{
-    extract::{Form, State},
-    http::{HeaderMap, HeaderValue, StatusCode},
+    extract::{ConnectInfo, Form, State},
+    http::{HeaderMap, HeaderValue, StatusCode, header::RETRY_AFTER},
     response::{IntoResponse, Redirect, Response},
 };
 use maud::{DOCTYPE, Markup, html};
@@ -62,10 +64,22 @@ pub async fn login_page_handler() -> Markup {
 /// POST /login — authenticate and set the session cookie.
 pub async fn login_handler(
     State(state): State<WebState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
     headers: HeaderMap,
     Form(form): Form<LoginForm>,
 ) -> Response {
-    let ip = client_ip(&headers);
+    let peer = peer.ip();
+    let forwarded = forwarded_ip(&headers);
+    match state
+        .login_throttle
+        .check(&form.username_or_email, peer, forwarded)
+        .await
+    {
+        Ok(Some(decision)) => return denied(decision.retry_after_seconds),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        Ok(None) => {}
+    }
+    let ip = Some(peer.to_string());
     let ua = user_agent(&headers);
     match state
         .identity
@@ -73,6 +87,14 @@ pub async fn login_handler(
         .await
     {
         Ok((_user, token)) => {
+            if state
+                .login_throttle
+                .record_success(&form.username_or_email)
+                .await
+                .is_err()
+            {
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
             let mut resp = Redirect::to("/").into_response();
             let cookie = format!(
                 "{SESSION_COOKIE}={}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400",
@@ -84,7 +106,14 @@ pub async fn login_handler(
             }
             resp
         }
-        Err(e) => (StatusCode::UNAUTHORIZED, login_page(Some(&e.to_string()))).into_response(),
+        Err(_) => match state
+            .login_throttle
+            .record_failure(&form.username_or_email, peer, forwarded)
+            .await
+        {
+            Ok(decision) => denied(decision.retry_after_seconds),
+            Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+        },
     }
 }
 
@@ -94,6 +123,24 @@ fn client_ip(headers: &HeaderMap) -> Option<String> {
         .or_else(|| headers.get("x-real-ip"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.split(',').next().unwrap_or(s).trim().to_string())
+}
+
+fn forwarded_ip(headers: &HeaderMap) -> Option<IpAddr> {
+    client_ip(headers).and_then(|value| value.parse().ok())
+}
+
+fn denied(retry_after: Option<u64>) -> Response {
+    let mut response = (
+        StatusCode::UNAUTHORIZED,
+        login_page(Some("invalid credentials")),
+    )
+        .into_response();
+    if let Some(seconds) = retry_after
+        && let Ok(value) = HeaderValue::from_str(&seconds.to_string())
+    {
+        response.headers_mut().insert(RETRY_AFTER, value);
+    }
+    response
 }
 
 fn user_agent(headers: &HeaderMap) -> Option<String> {

@@ -2,7 +2,7 @@
 
 use axum::{
     Json,
-    http::StatusCode,
+    http::{HeaderValue, StatusCode, header::RETRY_AFTER},
     response::{IntoResponse, Response},
 };
 use openpanel_domain::{IdentityError, MonitoringError, SslError};
@@ -44,6 +44,10 @@ pub enum ApiError {
     #[error("unauthorized")]
     Unauthorized,
 
+    /// Login failed generically while a temporary abuse block is active.
+    #[error("invalid credentials")]
+    LoginThrottled(u64),
+
     /// The caller is authenticated but lacks the required permission.
     #[error("forbidden")]
     Forbidden,
@@ -64,6 +68,17 @@ pub enum ApiError {
 impl IntoResponse for ApiError {
     /// Converts this error into a stable `(<status>, <machine_code>)` JSON response.
     fn into_response(self) -> Response {
+        if let ApiError::LoginThrottled(seconds) = self {
+            let mut response = (
+                StatusCode::UNAUTHORIZED,
+                Json(ErrorBody::new("invalid_credentials")),
+            )
+                .into_response();
+            if let Ok(value) = HeaderValue::from_str(&seconds.to_string()) {
+                response.headers_mut().insert(RETRY_AFTER, value);
+            }
+            return response;
+        }
         let (status, code) = match &self {
             ApiError::Identity(e) => match e {
                 IdentityError::InvalidCredentials => {
@@ -109,6 +124,7 @@ impl IntoResponse for ApiError {
             ApiError::Unprocessable(_) => (StatusCode::UNPROCESSABLE_ENTITY, "validation_failed"),
             ApiError::NotFound(_) => (StatusCode::NOT_FOUND, "not_found"),
             ApiError::Unauthorized => (StatusCode::UNAUTHORIZED, "unauthorized"),
+            ApiError::LoginThrottled(_) => (StatusCode::UNAUTHORIZED, "invalid_credentials"),
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             ApiError::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
             ApiError::PayloadTooLarge(_) => (StatusCode::PAYLOAD_TOO_LARGE, "payload_too_large"),
