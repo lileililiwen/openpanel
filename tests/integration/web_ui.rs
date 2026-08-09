@@ -1461,3 +1461,409 @@ async fn web_ssl_bad_csrf_rejected() {
         .expect("POST revoke bad csrf");
     assert_eq!(resp.status(), 403, "bad csrf rejected");
 }
+
+// =====================================================================
+// File manager pages
+// =====================================================================
+
+/// Unauthenticated `GET /sites/{id}/files` redirects to `/login` (1.9).
+#[tokio::test]
+async fn web_unauthenticated_files_redirects_to_login() {
+    let server = TestServer::new().await;
+    let resp = server
+        .client()
+        .get(format!(
+            "{}/sites/00000000-0000-0000-0000-000000000000/files",
+            server.base_url()
+        ))
+        .send()
+        .await
+        .expect("GET files");
+    assert_eq!(resp.status(), 302);
+    assert_eq!(
+        resp.headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok()),
+        Some("/login")
+    );
+}
+
+/// Listing + read + write + mkdir + rename + chmod + delete via the web (1.4).
+#[tokio::test]
+async fn web_files_full_workflow() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let admin = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list")
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .expect("admin");
+    let doc_root = server.sandbox_path("web-files-test");
+    let site = server
+        .sites()
+        .create_site(
+            &admin,
+            admin.id(),
+            "files-test.example",
+            vec![],
+            false,
+            None,
+            Some(doc_root.clone()),
+        )
+        .await
+        .expect("create site");
+    let csrf = csrf_token_from_html(
+        &authed_get(&server, &cookie, &format!("/sites/{}/files", site.id())).await,
+    );
+
+    // Write file
+    let write = server
+        .client()
+        .post(format!(
+            "{}/sites/{}/files/write",
+            server.base_url(),
+            site.id()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[
+            ("_csrf", csrf.as_str()),
+            ("path", "hello.txt"),
+            ("contents", "hello world"),
+        ])
+        .send()
+        .await
+        .expect("POST write");
+    assert_eq!(write.status(), 200, "write returns refreshed listing");
+
+    // Listing shows the file
+    let listing = authed_get(&server, &cookie, &format!("/sites/{}/files", site.id())).await;
+    assert!(listing.contains("hello.txt"), "file listed: {listing}");
+
+    // Read file
+    let read = server
+        .client()
+        .get(format!(
+            "{}/sites/{}/files/read?path=hello.txt",
+            server.base_url(),
+            site.id()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .send()
+        .await
+        .expect("GET read");
+    assert_eq!(read.status(), 200, "read ok");
+    let body = read.text().await.expect("read body");
+    assert!(body.contains("hello world"), "contents rendered: {body}");
+
+    // mkdir
+    let csrf = csrf_token_from_html(
+        &authed_get(&server, &cookie, &format!("/sites/{}/files", site.id())).await,
+    );
+    let mkdir = server
+        .client()
+        .post(format!(
+            "{}/sites/{}/files/mkdir",
+            server.base_url(),
+            site.id()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", csrf.as_str()), ("path", "subdir")])
+        .send()
+        .await
+        .expect("POST mkdir");
+    assert_eq!(mkdir.status(), 200, "mkdir ok");
+
+    // rename
+    let csrf = csrf_token_from_html(
+        &authed_get(&server, &cookie, &format!("/sites/{}/files", site.id())).await,
+    );
+    let rename = server
+        .client()
+        .post(format!(
+            "{}/sites/{}/files/rename",
+            server.base_url(),
+            site.id()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[
+            ("_csrf", csrf.as_str()),
+            ("from", "hello.txt"),
+            ("to", "renamed.txt"),
+        ])
+        .send()
+        .await
+        .expect("POST rename");
+    assert_eq!(rename.status(), 200, "rename ok");
+
+    // chmod
+    let csrf = csrf_token_from_html(
+        &authed_get(&server, &cookie, &format!("/sites/{}/files", site.id())).await,
+    );
+    let chmod = server
+        .client()
+        .post(format!(
+            "{}/sites/{}/files/chmod",
+            server.base_url(),
+            site.id()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[
+            ("_csrf", csrf.as_str()),
+            ("path", "renamed.txt"),
+            ("mode", "600"),
+        ])
+        .send()
+        .await
+        .expect("POST chmod");
+    assert_eq!(chmod.status(), 200, "chmod ok");
+
+    // delete (with confirmation hint visible in listing)
+    let listed = authed_get(&server, &cookie, &format!("/sites/{}/files", site.id())).await;
+    assert!(
+        listed.contains("hx-confirm") && listed.contains("hx-delete="),
+        "delete is confirmable: {listed}"
+    );
+
+    let csrf = csrf_token_from_html(
+        &authed_get(&server, &cookie, &format!("/sites/{}/files", site.id())).await,
+    );
+    let del = server
+        .client()
+        .delete(format!(
+            "{}/sites/{}/files/remove",
+            server.base_url(),
+            site.id()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", csrf.as_str()), ("path", "renamed.txt")])
+        .send()
+        .await
+        .expect("DELETE remove");
+    assert_eq!(del.status(), 200, "delete ok");
+
+    let final_listing = authed_get(&server, &cookie, &format!("/sites/{}/files", site.id())).await;
+    assert!(
+        !final_listing.contains("renamed.txt"),
+        "renamed file removed: {final_listing}"
+    );
+}
+
+/// `..` escape attempt rejected by the service and shown inline (1.5).
+#[tokio::test]
+async fn web_files_escape_attempt_rejected() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let admin = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list")
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .expect("admin");
+    let doc_root = server.sandbox_path("web-files-escape");
+    let site = server
+        .sites()
+        .create_site(
+            &admin,
+            admin.id(),
+            "escape-test.example",
+            vec![],
+            false,
+            None,
+            Some(doc_root),
+        )
+        .await
+        .expect("create site");
+    let resp = server
+        .client()
+        .get(format!(
+            "{}/sites/{}/files?path=..",
+            server.base_url(),
+            site.id()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .send()
+        .await
+        .expect("GET files with ..");
+    assert_eq!(resp.status(), 200);
+    let body = resp.text().await.expect("body");
+    assert!(
+        body.contains("`..` not allowed") || body.contains("invalid path"),
+        "service error rendered: {body}"
+    );
+}
+
+/// CSRF mismatch on a files mutation returns 403 (1.8).
+#[tokio::test]
+async fn web_files_bad_csrf_rejected() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let admin = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list")
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .expect("admin");
+    let doc_root = server.sandbox_path("web-files-csrf");
+    let site = server
+        .sites()
+        .create_site(
+            &admin,
+            admin.id(),
+            "csrf-test.example",
+            vec![],
+            false,
+            None,
+            Some(doc_root),
+        )
+        .await
+        .expect("create site");
+    let resp = server
+        .client()
+        .post(format!(
+            "{}/sites/{}/files/mkdir",
+            server.base_url(),
+            site.id()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", "not-the-token"), ("path", "subdir")])
+        .send()
+        .await
+        .expect("POST mkdir bad csrf");
+    assert_eq!(resp.status(), 403, "bad csrf rejected");
+}
+
+/// A non-owner user cannot access another user's site files (1.10).
+#[tokio::test]
+async fn web_files_rbac_blocks_other_user() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let admin = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list")
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .expect("admin");
+    let doc_root = server.sandbox_path("web-files-rbac");
+    let site = server
+        .sites()
+        .create_site(
+            &admin,
+            admin.id(),
+            "rbac-test.example",
+            vec![],
+            false,
+            None,
+            Some(doc_root),
+        )
+        .await
+        .expect("create site");
+    server
+        .identity()
+        .create_user(
+            "mallory",
+            "mallory@example.com",
+            "mallory-password-1",
+            openpanel_domain::Role::User,
+            "test",
+        )
+        .await
+        .expect("create mallory");
+    let cookie = login(&server, "mallory", "mallory-password-1").await;
+    let resp = server
+        .client()
+        .get(format!("{}/sites/{}/files", server.base_url(), site.id()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .send()
+        .await
+        .expect("GET files as other user");
+    // RBAC: non-owner user is forbidden.
+    assert_eq!(
+        resp.status(),
+        403,
+        "non-owner user blocked: {}",
+        resp.text().await.unwrap_or_default()
+    );
+}
+
+/// Upload a file and confirm it appears in the listing (1.6).
+#[tokio::test]
+async fn web_files_upload_appears_in_listing() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let admin = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list")
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .expect("admin");
+    let doc_root = server.sandbox_path("web-files-upload");
+    let site = server
+        .sites()
+        .create_site(
+            &admin,
+            admin.id(),
+            "upload-test.example",
+            vec![],
+            false,
+            None,
+            Some(doc_root),
+        )
+        .await
+        .expect("create site");
+    let csrf = csrf_token_from_html(
+        &authed_get(&server, &cookie, &format!("/sites/{}/files", site.id())).await,
+    );
+
+    let form = reqwest::multipart::Form::new()
+        .text("_csrf", csrf.clone())
+        .text("path", "")
+        .text("filename", "upload.txt")
+        .part(
+            "file",
+            reqwest::multipart::Part::text("uploaded body")
+                .file_name("upload.txt")
+                .mime_str("text/plain")
+                .expect("mime"),
+        );
+    let resp = server
+        .client()
+        .post(format!(
+            "{}/sites/{}/files/upload",
+            server.base_url(),
+            site.id()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .multipart(form)
+        .send()
+        .await
+        .expect("POST upload");
+    assert_eq!(resp.status(), 200, "upload returns refreshed listing");
+
+    let body = authed_get(&server, &cookie, &format!("/sites/{}/files", site.id())).await;
+    assert!(body.contains("upload.txt"), "uploaded file listed: {body}");
+}

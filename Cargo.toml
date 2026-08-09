@@ -133,7 +133,7 @@ openpanel-cli = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
 uuid = { workspace = true }
-reqwest = { workspace = true }
+reqwest = { workspace = true, features = ["multipart"] }
 tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 sqlx = { workspace = true }

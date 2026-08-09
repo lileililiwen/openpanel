@@ -23,7 +23,7 @@ use openpanel_domain::{Session, SessionToken, User};
 use crate::{
     assets,
     csrf::{CsrfStore, ValidateCsrf},
-    dashboard, login, monitoring, sites, ssl, users,
+    dashboard, files, login, monitoring, sites, ssl, users,
 };
 
 /// Shared state for every web handler.
@@ -159,6 +159,20 @@ pub fn router(
         .route("/ssl/{domain}/renew", post(ssl::renew))
         .route("/ssl/{domain}/revoke", post(ssl::revoke))
         .route("/ssl/{domain}", get(ssl::detail))
+        .route(
+            "/sites/{site_id}/files",
+            get(files::list).post(files::write),
+        )
+        .route("/sites/{site_id}/files/read", get(files::read))
+        .route("/sites/{site_id}/files/write", post(files::write))
+        .route("/sites/{site_id}/files/mkdir", post(files::mkdir))
+        .route("/sites/{site_id}/files/rename", post(files::rename))
+        .route("/sites/{site_id}/files/chmod", post(files::chmod))
+        .route(
+            "/sites/{site_id}/files/remove",
+            axum::routing::delete(files::remove),
+        )
+        .route("/sites/{site_id}/files/upload", post(files::upload))
         .route("/assets/htmx.min.js", get(assets::htmx_min_js))
         .route("/assets/app.css", get(assets::app_css))
         .layer(from_fn_with_state(identity, session_middleware))
