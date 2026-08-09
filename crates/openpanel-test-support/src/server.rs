@@ -5,7 +5,7 @@
 //! returns the bound address plus a preconfigured `reqwest::Client`.
 //! `Drop` aborts the server task.
 
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use openpanel_api::build_router;
 use openpanel_app::{
@@ -13,7 +13,10 @@ use openpanel_app::{
     MonitoringModule, MonitoringService, SitesModule, SitesService, SslModule, SslPaths,
     SslService, sites::nginx::NginxPaths,
 };
-use openpanel_core::{AppContext, Config, MigrationRunner, Module, NoopAuditService, SqliteDriver};
+use openpanel_core::{
+    AppContext, AuditEvent, AuditService, Config, MigrationRunner, Module, SqliteAuditService,
+    SqliteDriver,
+};
 use tempfile::TempDir;
 use tokio::{net::TcpListener, task::JoinHandle};
 
@@ -30,6 +33,8 @@ pub struct TestServer {
     files: Arc<FilesService>,
     ssl: Arc<SslService>,
     monitoring: Arc<MonitoringService>,
+    audit: Arc<dyn AuditService>,
+    settings_path: PathBuf,
     _handle: JoinHandle<()>,
     _db: TestDb,
     /// Temp directory for sandboxed nginx configs and document roots.
@@ -47,10 +52,10 @@ impl TestServer {
         let _ = driver.connect().await;
         let driver: Arc<dyn openpanel_core::DatabaseDriver> = Arc::new(driver);
 
-        let audit: Arc<dyn openpanel_core::AuditService> = Arc::new(NoopAuditService);
+        let audit: Arc<dyn AuditService> = Arc::new(SqliteAuditService::new(pool.clone()));
         let config = Arc::new(Config::default());
 
-        let ctx = AppContext::new(config, driver, audit);
+        let ctx = AppContext::new(config.clone(), driver, audit.clone());
 
         // Run audit schema
         sqlx::query(include_str!("migrations/000_audit.sql"))
@@ -120,6 +125,7 @@ impl TestServer {
         let ssl_svc = ssl_module.service();
         let monitoring_svc = monitoring_module.service();
 
+        let settings_path = sandbox.path().join("web-preferences.json");
         let app = build_router(
             identity_svc.clone(),
             sites_svc.clone(),
@@ -135,6 +141,17 @@ impl TestServer {
             files_svc.clone(),
             ssl_svc.clone(),
             monitoring_svc.clone(),
+            openpanel_web::WebRuntime::new(
+                config,
+                audit.clone(),
+                settings_path.clone(),
+                sandbox.path().to_string_lossy().into_owned(),
+                sandbox
+                    .path()
+                    .join("openpanel.toml")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
         ));
 
         let listener = TcpListener::bind("127.0.0.1:0")
@@ -160,6 +177,8 @@ impl TestServer {
             files: files_svc,
             ssl: ssl_svc,
             monitoring: monitoring_svc,
+            audit,
+            settings_path,
             _handle: handle,
             _db: db,
             sandbox,
@@ -204,6 +223,16 @@ impl TestServer {
     /// The monitoring service handle.
     pub fn monitoring(&self) -> Arc<MonitoringService> {
         self.monitoring.clone()
+    }
+
+    /// Path used by the web preference store.
+    pub fn settings_path(&self) -> PathBuf {
+        self.settings_path.clone()
+    }
+
+    /// Return recent audit events, newest first.
+    pub async fn audit_events(&self) -> Vec<AuditEvent> {
+        self.audit.recent(100).await.expect("recent audit events")
     }
 
     /// Resolve a sandboxed absolute path under this server's temp directory.

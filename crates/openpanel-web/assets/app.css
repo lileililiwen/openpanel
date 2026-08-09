@@ -18,20 +18,47 @@ body {
   color: var(--text);
 }
 
+html[data-theme="light"] {
+  --bg: #f5f7fb;
+  --panel: #ffffff;
+  --border: #d8deea;
+  --text: #182033;
+  --muted: #64708a;
+  --accent: #2869dc;
+}
+
 .layout {
   display: grid;
   grid-template-columns: 220px 1fr;
   min-height: 100vh;
 }
 
-.sidebar {
+.nav-disclosure {
+  min-width: 0;
   background: var(--panel);
   border-right: 1px solid var(--border);
+}
+
+.nav-disclosure > summary { display: none; }
+
+.sidebar {
   padding: 1rem 0.5rem;
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
 }
+
+.nav-section h2 {
+  margin: 1rem 0.9rem 0.35rem;
+  color: var(--muted);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.nav-section:first-child h2 { margin-top: 0; }
+
+.nav-section { display: flex; flex-direction: column; }
 
 .sidebar a {
   color: var(--muted);
@@ -42,7 +69,13 @@ body {
 
 .sidebar a:hover { color: var(--text); background: rgba(79, 140, 255, 0.1); }
 
-.main { display: flex; flex-direction: column; }
+.sidebar a[aria-current="page"] {
+  color: var(--text);
+  background: rgba(79, 140, 255, 0.16);
+  box-shadow: inset 3px 0 var(--accent);
+}
+
+.main { display: flex; flex-direction: column; min-width: 0; }
 
 .topbar {
   display: flex;
@@ -67,6 +100,29 @@ body {
 .topbar button:hover { border-color: var(--accent); color: var(--accent); }
 
 #content { padding: 1.5rem; }
+
+.breadcrumbs { color: var(--muted); font-size: 0.85rem; margin-bottom: 1rem; }
+.breadcrumbs a { color: var(--accent); text-decoration: none; }
+
+@media (max-width: 768px) {
+  .layout { grid-template-columns: minmax(0, 1fr); }
+
+  .nav-disclosure {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .nav-disclosure > summary {
+    display: block;
+    padding: 0.8rem 1rem;
+    cursor: pointer;
+    font-weight: 600;
+  }
+
+  .sidebar { max-height: 70vh; overflow-y: auto; }
+  .topbar, #content { padding-left: 1rem; padding-right: 1rem; }
+  #content { overflow-x: auto; }
+}
 
 .login {
   max-width: 360px;
@@ -306,5 +362,4 @@ body {
 .detail .links { margin-top: 1rem; display: flex; gap: 1rem; }
 
 .detail .links a { color: var(--accent); text-decoration: none; }
-
 

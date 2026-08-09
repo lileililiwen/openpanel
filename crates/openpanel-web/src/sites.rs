@@ -18,7 +18,7 @@ use uuid::Uuid;
 
 use crate::{
     csrf::ValidateCsrf,
-    layout::{Shell, csrf_field},
+    layout::csrf_field,
     router::{WebState, WebUser},
 };
 
@@ -72,7 +72,7 @@ pub async fn list(State(state): State<WebState>, WebUser(user, session): WebUser
         h1 { "Sites" }
         (list_fragment(&rows, can_create, &csrf))
     };
-    Shell::new(user.username().as_str(), &csrf, content).render()
+    state.render_shell(&user, &csrf, "/sites", content).await
 }
 
 /// GET /sites/new — the create form.
@@ -86,8 +86,9 @@ pub async fn new_form(State(state): State<WebState>, WebUser(user, session): Web
         h1 { "New site" }
         (create_form(&owners, &csrf, None, None))
     };
-    Shell::new(user.username().as_str(), &csrf, content)
-        .render()
+    state
+        .render_shell(&user, &csrf, "/sites", content)
+        .await
         .into_response()
 }
 
@@ -144,8 +145,9 @@ pub async fn create(
                 h1 { "New site" }
                 (create_form(&owners, &csrf, Some(&e.to_string()), Some(&form)))
             };
-            Shell::new(user.username().as_str(), &csrf, content)
-                .render()
+            state
+                .render_shell(&user, &csrf, "/sites", content)
+                .await
                 .into_response()
         }
     }
@@ -165,8 +167,9 @@ pub async fn detail(
                 h1 { (site.primary_domain()) }
                 (detail_section(&site, &owner))
             };
-            Shell::new(user.username().as_str(), &csrf, content)
-                .render()
+            state
+                .render_shell(&user, &csrf, "/sites", content)
+                .await
                 .into_response()
         }
         Err(_) => (StatusCode::NOT_FOUND, "site not found").into_response(),

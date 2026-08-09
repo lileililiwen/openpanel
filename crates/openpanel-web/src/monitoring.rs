@@ -23,10 +23,7 @@ use openpanel_core::{AuditAction, AuditEvent};
 use openpanel_domain::monitoring::{MetricKind, MetricSample, Unit};
 use serde::Deserialize;
 
-use crate::{
-    layout::Shell,
-    router::{WebState, WebUser},
-};
+use crate::router::{WebState, WebUser};
 
 /// Width of the rendered SVG sparkline in user units.
 const CHART_WIDTH: f64 = 600.0;
@@ -93,8 +90,9 @@ pub async fn landing(State(state): State<WebState>, WebUser(user, session): WebU
             p class="empty" { "Loading alerts…" }
         }
     };
-    Shell::new(user.username().as_str(), &csrf, content)
-        .render()
+    state
+        .render_shell(&user, &csrf, "/monitoring", content)
+        .await
         .into_response()
 }
 

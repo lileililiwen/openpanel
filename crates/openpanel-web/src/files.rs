@@ -24,7 +24,7 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{
-    layout::{Shell, csrf_field},
+    layout::csrf_field,
     router::{WebState, WebUser},
 };
 
@@ -109,6 +109,33 @@ pub struct ChmodForm {
     pub _csrf: String,
 }
 
+/// `GET /files` — choose a visible site before entering its chrooted manager.
+pub async fn landing(State(state): State<WebState>, WebUser(user, session): WebUser) -> Response {
+    let csrf = state.csrf.token_for(session.id());
+    let sites = state.sites.list_sites(&user).await.unwrap_or_default();
+    let content = html! {
+        h1 { "Files" }
+        p { "Choose a site to manage its document root." }
+        @if sites.is_empty() {
+            p class="empty" { "No sites available" }
+        } @else {
+            ul class="resource-links" {
+                @for site in sites {
+                    li {
+                        a href=(format!("/sites/{}/files", site.id())) {
+                            (site.primary_domain())
+                        }
+                    }
+                }
+            }
+        }
+    };
+    state
+        .render_shell(&user, &csrf, "/files", content)
+        .await
+        .into_response()
+}
+
 /// `GET /sites/{site_id}/files?path=` — the directory listing.
 pub async fn list(
     State(state): State<WebState>,
@@ -134,8 +161,9 @@ pub async fn list(
                 }
                 (listing_fragment(site_id, &current, &rows, &csrf))
             };
-            Shell::new(user.username().as_str(), &csrf, content)
-                .render()
+            state
+                .render_shell(&user, &csrf, "/files", content)
+                .await
                 .into_response()
         }
         ListingOutcome::Forbidden => (StatusCode::FORBIDDEN, "forbidden").into_response(),
@@ -175,8 +203,9 @@ pub async fn read(
                     p class="alert" { "Binary or large file — download only." }
                 }
             };
-            Shell::new(user.username().as_str(), &csrf, content)
-                .render()
+            state
+                .render_shell(&user, &csrf, "/files", content)
+                .await
                 .into_response()
         }
         Err(e) => render_read_error(&state, &user, &csrf, site_id, &e.to_string()).await,
@@ -554,17 +583,15 @@ async fn render_read_error(
     site_id: Uuid,
     msg: &str,
 ) -> Response {
-    let _ = state;
-    let _ = user;
     let _ = site_id;
     let content = html! {
         h1 { "Read file" }
         (error_region(msg))
         p { a href=(format!("/sites/{site_id}/files")) { "Back to listing" } }
     };
-    let _ = csrf;
-    Shell::new(user.username().as_str(), csrf, content)
-        .render()
+    state
+        .render_shell(user, csrf, "/files", content)
+        .await
         .into_response()
 }
 

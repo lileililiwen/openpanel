@@ -21,7 +21,7 @@ use tokio::net::TcpListener;
 pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let (pool, audit, db) = bootstrap_persistence(&config).await?;
 
-    let ctx = AppContext::new(config.clone(), db, audit);
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
 
     // Architecture-owned audit schema
     sqlx::query(include_str!("audit.sql"))
@@ -80,6 +80,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         files_svc,
         ssl_svc,
         monitoring_svc,
+        web_runtime(&config, audit),
     ));
 
     let addr = format!("{}:{}", config.server().bind, config.server().port);
@@ -89,6 +90,36 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     tracing::info!(%addr, "openpanel listening on http://{addr}");
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+fn web_runtime(
+    config: &Arc<Config>,
+    audit: Arc<dyn openpanel_core::AuditService>,
+) -> openpanel_web::WebRuntime {
+    let database_path = config
+        .database()
+        .url
+        .strip_prefix("sqlite://")
+        .unwrap_or(&config.database().url);
+    let data_path = std::path::Path::new(database_path)
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .unwrap_or_else(|| std::path::Path::new("/var/lib/openpanel"))
+        .to_path_buf();
+    let config_path = std::env::var("OPENPANEL_CONFIG").unwrap_or_else(|_| {
+        if std::path::Path::new("/etc/openpanel/openpanel.toml").exists() {
+            "/etc/openpanel/openpanel.toml".to_string()
+        } else {
+            "./openpanel.toml".to_string()
+        }
+    });
+    openpanel_web::WebRuntime::new(
+        config.clone(),
+        audit,
+        data_path.join("web-preferences.json"),
+        data_path.to_string_lossy().into_owned(),
+        config_path,
+    )
 }
 
 fn load_master_key(config: &Arc<Config>) -> anyhow::Result<[u8; 32]> {

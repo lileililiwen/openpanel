@@ -1,7 +1,7 @@
 //! Web router: shell, login/logout, and static assets, all behind the same
 //! session middleware used by the API so there is one auth system.
 
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 use axum::{
     Router,
@@ -11,6 +11,7 @@ use axum::{
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
 };
+use maud::Markup;
 use openpanel_api::{
     extract::AuthSession,
     middleware::session::{SESSION_COOKIE, session_middleware},
@@ -18,13 +19,54 @@ use openpanel_api::{
 use openpanel_app::{
     DatabasesService, FilesService, IdentityService, MonitoringService, SitesService, SslService,
 };
+use openpanel_core::{AuditService, Config};
 use openpanel_domain::{Session, SessionToken, User};
 
 use crate::{
     assets,
     csrf::{CsrfStore, ValidateCsrf},
-    dashboard, databases, files, login, monitoring, sites, ssl, users,
+    dashboard, databases, files,
+    layout::CapabilitySet,
+    login, monitoring, settings,
+    settings::{InstallationInfo, PanelPreferences, SettingsStore},
+    sites, ssl, users,
 };
+
+/// Runtime-only dependencies and installation paths used by the web adapter.
+pub struct WebRuntime {
+    config: Arc<Config>,
+    audit: Arc<dyn AuditService>,
+    preferences_path: PathBuf,
+    data_path: String,
+    config_path: String,
+    capabilities: CapabilitySet,
+}
+
+impl WebRuntime {
+    /// Create web runtime context from the composition root.
+    pub fn new(
+        config: Arc<Config>,
+        audit: Arc<dyn AuditService>,
+        preferences_path: PathBuf,
+        data_path: impl Into<String>,
+        config_path: impl Into<String>,
+    ) -> Self {
+        Self {
+            config,
+            audit,
+            preferences_path,
+            data_path: data_path.into(),
+            config_path: config_path.into(),
+            capabilities: CapabilitySet::shipped(),
+        }
+    }
+
+    /// Override registered browser capabilities when composing future modules.
+    pub fn with_capabilities(mut self, capabilities: CapabilitySet) -> Self {
+        self.capabilities = capabilities;
+        self
+    }
+}
 
 /// Shared state for every web handler.
 #[derive(Clone)]
@@ -43,6 +85,34 @@ pub struct WebState {
     pub monitoring: Arc<MonitoringService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
+    /// Atomically persisted allowlisted panel preferences.
+    pub settings: Arc<SettingsStore>,
+    /// Redacted installation metadata for the Owner settings page.
+    pub installation: Arc<InstallationInfo>,
+    /// Capabilities registered in this router composition.
+    pub capabilities: CapabilitySet,
+}
+
+impl WebState {
+    /// Render a full shell using the registered capabilities, caller role, and
+    /// latest persisted display preferences.
+    pub async fn render_shell(
+        &self,
+        user: &User,
+        csrf: &str,
+        path: &str,
+        content: Markup,
+    ) -> Markup {
+        let preferences = self.settings.current().await;
+        crate::layout::Shell::new(user.username().as_str(), csrf, content)
+            .with_navigation(user.role(), path, self.capabilities.clone())
+            .with_preferences(
+                &preferences.theme,
+                &preferences.locale,
+                &preferences.timezone,
+            )
+            .render()
+    }
 }
 
 /// Authenticated web user; rejects unauthenticated requests with a 302 to `/login`.
@@ -115,7 +185,11 @@ pub fn router(
     files: Arc<FilesService>,
     ssl: Arc<SslService>,
     monitoring: Arc<MonitoringService>,
+    runtime: WebRuntime,
 ) -> Router {
+    let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
+    let installation =
+        InstallationInfo::from_config(&runtime.config, &runtime.data_path, &runtime.config_path);
     let state = WebState {
         identity: identity.clone(),
         sites,
@@ -124,6 +198,13 @@ pub fn router(
         ssl,
         monitoring,
         csrf: Arc::new(CsrfStore::new()),
+        settings: Arc::new(SettingsStore::new(
+            runtime.preferences_path,
+            initial_preferences,
+            runtime.audit,
+        )),
+        installation: Arc::new(installation),
+        capabilities: runtime.capabilities,
     };
     Router::new()
         .route("/", get(dashboard::home))
@@ -134,6 +215,7 @@ pub fn router(
             get(login::login_page_handler).post(login::login_handler),
         )
         .route("/logout", post(logout))
+        .route("/settings", get(settings::page).post(settings::update))
         .route("/sites", get(sites::list).post(sites::create))
         .route("/sites/new", get(sites::new_form))
         .route("/sites/{id}", get(sites::detail).delete(sites::delete))
@@ -163,6 +245,7 @@ pub fn router(
             "/sites/{site_id}/files",
             get(files::list).post(files::write),
         )
+        .route("/files", get(files::landing))
         .route("/sites/{site_id}/files/read", get(files::read))
         .route("/sites/{site_id}/files/write", post(files::write))
         .route("/sites/{site_id}/files/mkdir", post(files::mkdir))

@@ -1977,3 +1977,168 @@ async fn web_databases_reveal_endpoint_responds() {
         "panel or error rendered: {body}"
     );
 }
+
+#[tokio::test]
+async fn web_navigation_existing_routes_remain_stable_and_protected() {
+    let server = TestServer::new().await;
+    for path in [
+        "/",
+        "/dashboard",
+        "/sites",
+        "/databases",
+        "/files",
+        "/ssl",
+        "/monitoring",
+        "/users",
+        "/settings",
+    ] {
+        let response = server
+            .client()
+            .get(format!("{}{}", server.base_url(), path))
+            .send()
+            .await
+            .expect("protected route response");
+        assert_eq!(
+            response.status(),
+            302,
+            "route {path} must still exist and redirect"
+        );
+        assert_eq!(
+            response
+                .headers()
+                .get(reqwest::header::LOCATION)
+                .and_then(|value| value.to_str().ok()),
+            Some("/login"),
+            "route {path} redirect target"
+        );
+    }
+}
+
+#[tokio::test]
+async fn web_settings_owner_updates_allowlisted_preferences_and_audits_field_names() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let initial = authed_get(&server, &cookie, "/settings").await;
+    let csrf = csrf_token_from_html(&initial);
+
+    let response = server
+        .client()
+        .post(format!("{}/settings", server.base_url()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[
+            ("_csrf", csrf.as_str()),
+            ("theme", "light"),
+            ("locale", "en-US"),
+            ("timezone", "Asia/Shanghai"),
+        ])
+        .send()
+        .await
+        .expect("POST settings");
+    assert_eq!(response.status(), 200);
+    let body = response.text().await.expect("settings body");
+    assert!(body.contains("Asia/Shanghai"), "updated timezone: {body}");
+
+    let next_page = authed_get(&server, &cookie, "/").await;
+    assert!(
+        next_page.contains("data-theme=\"light\""),
+        "theme on next request"
+    );
+    assert!(
+        next_page.contains("data-timezone=\"Asia/Shanghai\""),
+        "timezone on next request"
+    );
+
+    let persisted = std::fs::read_to_string(server.settings_path()).expect("settings file");
+    assert!(persisted.contains("Asia/Shanghai"));
+    let events = server.audit_events().await;
+    let event = events
+        .iter()
+        .find(|event| event.action.as_str() == "settings_changed")
+        .expect("settings audit event");
+    let metadata = event.metadata.to_string();
+    assert!(
+        metadata.contains("timezone"),
+        "field name audited: {metadata}"
+    );
+    assert!(
+        !metadata.contains("Asia/Shanghai"),
+        "field value not audited: {metadata}"
+    );
+}
+
+#[tokio::test]
+async fn web_settings_rejects_user_invalid_unknown_and_failed_persistence() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    server
+        .identity()
+        .create_user(
+            "alice",
+            "alice@example.com",
+            "correct horse battery staple",
+            openpanel_domain::Role::User,
+            "test",
+        )
+        .await
+        .expect("create user");
+
+    let user_cookie = login(&server, "alice", "correct horse battery staple").await;
+    let forbidden = server
+        .client()
+        .get(format!("{}/settings", server.base_url()))
+        .header(reqwest::header::COOKIE, &user_cookie)
+        .send()
+        .await
+        .expect("GET settings as user");
+    assert_eq!(forbidden.status(), 403);
+
+    let owner_cookie = login(&server, "admin", "correct horse battery staple").await;
+    let page = authed_get(&server, &owner_cookie, "/settings").await;
+    let csrf = csrf_token_from_html(&page);
+    for fields in [
+        vec![
+            ("_csrf", csrf.as_str()),
+            ("theme", "light"),
+            ("locale", "en-US"),
+            ("timezone", "Not/A_Real_Zone"),
+        ],
+        vec![
+            ("_csrf", csrf.as_str()),
+            ("theme", "light"),
+            ("locale", "en-US"),
+            ("timezone", "UTC"),
+            ("database_password", "must-not-be-accepted"),
+        ],
+    ] {
+        let response = server
+            .client()
+            .post(format!("{}/settings", server.base_url()))
+            .header(reqwest::header::COOKIE, &owner_cookie)
+            .form(&fields)
+            .send()
+            .await
+            .expect("invalid settings response");
+        assert_eq!(response.status(), 422);
+    }
+
+    std::fs::create_dir_all(server.settings_path()).expect("block atomic rename with directory");
+    let failed = server
+        .client()
+        .post(format!("{}/settings", server.base_url()))
+        .header(reqwest::header::COOKIE, &owner_cookie)
+        .form(&[
+            ("_csrf", csrf.as_str()),
+            ("theme", "dark"),
+            ("locale", "en-US"),
+            ("timezone", "UTC"),
+        ])
+        .send()
+        .await
+        .expect("failed persistence response");
+    assert_eq!(failed.status(), 500);
+}

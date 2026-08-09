@@ -18,8 +18,9 @@ pub mod layout;
 pub mod login;
 pub mod monitoring;
 pub mod router;
+pub mod settings;
 pub mod sites;
 pub mod ssl;
 pub mod users;
 
-pub use router::{WebState, router};
+pub use router::{WebRuntime, WebState, router};

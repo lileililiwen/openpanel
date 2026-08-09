@@ -16,10 +16,7 @@ use openpanel_domain::{
     monitoring::{DiskReading, SystemSnapshot},
 };
 
-use crate::{
-    layout::Shell,
-    router::{WebState, WebUser},
-};
+use crate::router::{WebState, WebUser};
 
 /// Counts backing the five quick-count cards.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,7 +59,7 @@ pub async fn home(State(state): State<WebState>, WebUser(user, session): WebUser
         (cards_section(&counts))
         (alerts_section(&alerts))
     };
-    Shell::new(user.username().as_str(), &csrf, content).render()
+    state.render_shell(&user, &csrf, "/", content).await
 }
 
 /// GET /dashboard/gauges — the auto-refreshed `#host-gauges` partial.

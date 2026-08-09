@@ -23,7 +23,7 @@ use uuid::Uuid;
 
 use crate::{
     csrf::ValidateCsrf,
-    layout::{Shell, csrf_field},
+    layout::csrf_field,
     router::{WebState, WebUser},
 };
 
@@ -88,7 +88,9 @@ pub struct PasswordResetForm {
 pub async fn list(State(state): State<WebState>, WebUser(user, session): WebUser) -> Response {
     let csrf = state.csrf.token_for(session.id());
     if !user.role().can_manage_users() {
-        let body = Shell::new(user.username().as_str(), &csrf, forbidden_page()).render();
+        let body = state
+            .render_shell(&user, &csrf, "/users", forbidden_page())
+            .await;
         return body.into_response();
     }
     let users = state.identity.list_users().await.unwrap_or_default();
@@ -97,8 +99,9 @@ pub async fn list(State(state): State<WebState>, WebUser(user, session): WebUser
         h1 { "Users" }
         (list_fragment(&rows, &csrf))
     };
-    Shell::new(user.username().as_str(), &csrf, content)
-        .render()
+    state
+        .render_shell(&user, &csrf, "/users", content)
+        .await
         .into_response()
 }
 
@@ -112,8 +115,9 @@ pub async fn new_form(State(state): State<WebState>, WebUser(user, session): Web
         h1 { "New user" }
         (create_form(&csrf, None, None))
     };
-    Shell::new(user.username().as_str(), &csrf, content)
-        .render()
+    state
+        .render_shell(&user, &csrf, "/users", content)
+        .await
         .into_response()
 }
 
@@ -316,10 +320,9 @@ async fn render_create_error(
         h1 { "New user" }
         (create_form(csrf, Some(msg), Some(form)))
     };
-    let _ = state;
-    let _ = user;
-    Shell::new(user.username().as_str(), csrf, content)
-        .render()
+    state
+        .render_shell(user, csrf, "/users", content)
+        .await
         .into_response()
 }
 

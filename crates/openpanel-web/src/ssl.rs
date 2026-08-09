@@ -22,7 +22,7 @@ use serde::Deserialize;
 
 use crate::{
     csrf::ValidateCsrf,
-    layout::{Shell, csrf_field},
+    layout::csrf_field,
     router::{WebState, WebUser},
 };
 
@@ -94,8 +94,9 @@ pub async fn list(State(state): State<WebState>, WebUser(user, session): WebUser
         h1 { "SSL" }
         (list_fragment(&rows, &csrf))
     };
-    Shell::new(user.username().as_str(), &csrf, content)
-        .render()
+    state
+        .render_shell(&user, &csrf, "/ssl", content)
+        .await
         .into_response()
 }
 
@@ -106,8 +107,9 @@ pub async fn new_form(State(state): State<WebState>, WebUser(user, session): Web
         h1 { "Issue certificate" }
         (issue_form(&csrf, None, None))
     };
-    Shell::new(user.username().as_str(), &csrf, content)
-        .render()
+    state
+        .render_shell(&user, &csrf, "/ssl", content)
+        .await
         .into_response()
 }
 
@@ -273,8 +275,9 @@ pub async fn detail(
                 h1 { (cert.domain) }
                 (detail_section(&cert, &csrf))
             };
-            Shell::new(user.username().as_str(), &csrf, content)
-                .render()
+            state
+                .render_shell(&user, &csrf, "/ssl", content)
+                .await
                 .into_response()
         }
         Err(_) => (StatusCode::NOT_FOUND, "certificate not found").into_response(),
@@ -313,8 +316,6 @@ async fn render_issue_error(
     msg: &str,
     form: &IssueForm,
 ) -> Response {
-    let _ = state;
-    let _ = user;
     let safe_form = SafeForm {
         source: &form.source,
         domain: &form.domain,
@@ -325,8 +326,9 @@ async fn render_issue_error(
         h1 { "Issue certificate" }
         (issue_form(csrf, Some(msg), Some(&safe_form)))
     };
-    Shell::new(user.username().as_str(), csrf, content)
-        .render()
+    state
+        .render_shell(user, csrf, "/ssl", content)
+        .await
         .into_response()
 }
 

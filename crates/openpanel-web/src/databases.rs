@@ -20,7 +20,7 @@ use uuid::Uuid;
 
 use crate::{
     csrf::ValidateCsrf,
-    layout::{Shell, csrf_field},
+    layout::csrf_field,
     router::{WebState, WebUser},
 };
 
@@ -78,8 +78,9 @@ pub async fn list(State(state): State<WebState>, WebUser(user, session): WebUser
         h1 { "Databases" }
         (list_fragment(&rows, user.role().can_manage_databases(), &csrf))
     };
-    Shell::new(user.username().as_str(), &csrf, content)
-        .render()
+    state
+        .render_shell(&user, &csrf, "/databases", content)
+        .await
         .into_response()
 }
 
@@ -93,8 +94,9 @@ pub async fn new_form(State(state): State<WebState>, WebUser(user, session): Web
         h1 { "New database" }
         (create_form(&csrf, None, None))
     };
-    Shell::new(user.username().as_str(), &csrf, content)
-        .render()
+    state
+        .render_shell(&user, &csrf, "/databases", content)
+        .await
         .into_response()
 }
 
@@ -146,8 +148,9 @@ pub async fn detail(
                 h1 { (db.name()) }
                 (detail_section(&db, &owner, &csrf, user.role().can_manage_databases()))
             };
-            Shell::new(user.username().as_str(), &csrf, content)
-                .render()
+            state
+                .render_shell(&user, &csrf, "/databases", content)
+                .await
                 .into_response()
         }
         Err(_) => (StatusCode::NOT_FOUND, "database not found").into_response(),
@@ -262,8 +265,6 @@ async fn render_create_error(
     msg: &str,
     form: &CreateDbForm,
 ) -> Response {
-    let _ = state;
-    let _ = user;
     let safe_form = SafeCreateForm {
         owner_id: &form.owner_id,
         owner_username: &form.owner_username,
@@ -274,8 +275,9 @@ async fn render_create_error(
         h1 { "New database" }
         (create_form(csrf, Some(msg), Some(&safe_form)))
     };
-    Shell::new(user.username().as_str(), csrf, content)
-        .render()
+    state
+        .render_shell(user, csrf, "/databases", content)
+        .await
         .into_response()
 }
 

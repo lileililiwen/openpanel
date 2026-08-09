@@ -96,6 +96,8 @@ pub enum AuditAction {
     FileDeleted,
     /// A monitoring alert threshold was crossed.
     AlertFired,
+    /// Allowlisted panel preferences were changed.
+    SettingsChanged,
 }
 
 impl AuditAction {
@@ -131,6 +133,7 @@ impl AuditAction {
             AuditAction::FileModeChanged => "file_mode_changed",
             AuditAction::FileDeleted => "file_deleted",
             AuditAction::AlertFired => "alert_fired",
+            AuditAction::SettingsChanged => "settings_changed",
         }
     }
 }
@@ -311,6 +314,7 @@ impl AuditService for SqliteAuditService {
                 "file_mode_changed" => AuditAction::FileModeChanged,
                 "file_deleted" => AuditAction::FileDeleted,
                 "alert_fired" => AuditAction::AlertFired,
+                "settings_changed" => AuditAction::SettingsChanged,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;
