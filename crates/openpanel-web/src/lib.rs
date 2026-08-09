@@ -17,6 +17,7 @@ pub mod login;
 pub mod monitoring;
 pub mod router;
 pub mod sites;
+pub mod ssl;
 pub mod users;
 
 pub use router::{WebState, router};

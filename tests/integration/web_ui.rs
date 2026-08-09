@@ -1266,3 +1266,198 @@ async fn web_monitoring_alerts_feed_renders_empty_state() {
     // Empty state: no alert events recorded yet.
     assert!(body.contains("No alerts"), "empty state: {body}");
 }
+
+// =====================================================================
+// SSL pages
+// =====================================================================
+
+/// Unauthenticated `GET /ssl` redirects to `/login` (1.9).
+#[tokio::test]
+async fn web_unauthenticated_ssl_redirects_to_login() {
+    let server = TestServer::new().await;
+    let resp = server
+        .client()
+        .get(format!("{}/ssl", server.base_url()))
+        .send()
+        .await
+        .expect("GET /ssl");
+    assert_eq!(resp.status(), 302);
+    assert_eq!(
+        resp.headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok()),
+        Some("/login")
+    );
+}
+
+/// Empty `GET /ssl` renders the empty state.
+#[tokio::test]
+async fn web_ssl_empty_list_renders() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let body = authed_get(&server, &cookie, "/ssl").await;
+    assert!(
+        body.contains("No certificates") || body.contains("no certificates"),
+        "empty state: {body}"
+    );
+    assert!(body.contains("Issue"), "issue action: {body}");
+}
+
+/// Self-signed create → certificate appears in `GET /ssl` (1.5).
+#[tokio::test]
+async fn web_ssl_self_signed_appears_in_list() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+
+    server
+        .ssl()
+        .generate_self_signed("example.com", 30)
+        .await
+        .expect("self-signed");
+    let body = authed_get(&server, &cookie, "/ssl").await;
+    assert!(body.contains("example.com"), "domain: {body}");
+    assert!(body.contains("self_signed"), "source: {body}");
+}
+
+/// No rendered SSL page contains the bytes `PRIVATE KEY` (1.4).
+#[tokio::test]
+async fn web_ssl_metadata_only_no_private_key_leak() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+
+    server
+        .ssl()
+        .generate_self_signed("leaktest.example", 30)
+        .await
+        .expect("self-signed");
+
+    for path in ["/ssl", "/ssl/new", "/ssl/leaktest.example"] {
+        let body = authed_get(&server, &cookie, path).await;
+        assert!(
+            !body.contains("PRIVATE KEY"),
+            "page {path} leaks PRIVATE KEY: {body}"
+        );
+    }
+}
+
+/// Force-https toggle flips the row state (1.6).
+#[tokio::test]
+async fn web_ssl_force_https_toggle() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let csrf = csrf_token_from_html(&authed_get(&server, &cookie, "/ssl").await);
+
+    server
+        .ssl()
+        .generate_self_signed("forcetest.example", 30)
+        .await
+        .expect("self-signed");
+
+    let listed = authed_get(&server, &cookie, "/ssl").await;
+    let initial = server
+        .ssl()
+        .get("forcetest.example")
+        .await
+        .expect("get cert")
+        .force_https;
+    assert!(initial, "force_https default true");
+    assert!(
+        listed.contains("class=\"force-https\">on<"),
+        "row shows initial force-https: {listed}"
+    );
+
+    let toggle = server
+        .client()
+        .patch(format!(
+            "{}/ssl/forcetest.example/force-https",
+            server.base_url()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", csrf.as_str()), ("on", "false")])
+        .send()
+        .await
+        .expect("PATCH force-https");
+    assert_eq!(toggle.status(), 200, "toggle swaps row");
+    let after = server
+        .ssl()
+        .get("forcetest.example")
+        .await
+        .expect("get cert after toggle")
+        .force_https;
+    assert!(!after, "force_https flipped off");
+}
+
+/// Revoke with confirmation removes the row (1.7).
+#[tokio::test]
+async fn web_ssl_revoke_removes_row() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let csrf = csrf_token_from_html(&authed_get(&server, &cookie, "/ssl").await);
+
+    server
+        .ssl()
+        .generate_self_signed("revoketest.example", 30)
+        .await
+        .expect("self-signed");
+
+    let listed = authed_get(&server, &cookie, "/ssl").await;
+    assert!(
+        listed.contains("hx-confirm")
+            && listed.contains("hx-post=\"/ssl/revoketest.example/revoke\""),
+        "row has confirmable revoke: {listed}"
+    );
+
+    let del = server
+        .client()
+        .post(format!(
+            "{}/ssl/revoketest.example/revoke",
+            server.base_url()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", csrf.as_str())])
+        .send()
+        .await
+        .expect("POST revoke");
+    assert_eq!(del.status(), 200, "revoke swaps row");
+
+    let body = authed_get(&server, &cookie, "/ssl").await;
+    assert!(!body.contains("revoketest.example"), "row removed: {body}");
+}
+
+/// CSRF mismatch on a state-changing POST returns 403 (1.8).
+#[tokio::test]
+async fn web_ssl_bad_csrf_rejected() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+
+    let resp = server
+        .client()
+        .post(format!(
+            "{}/ssl/some-domain.example/revoke",
+            server.base_url()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", "not-the-token")])
+        .send()
+        .await
+        .expect("POST revoke bad csrf");
+    assert_eq!(resp.status(), 403, "bad csrf rejected");
+}
