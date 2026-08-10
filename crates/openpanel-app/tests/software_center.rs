@@ -601,3 +601,239 @@ async fn cancellation_waits_for_package_checkpoint_then_rolls_back() {
     assert_eq!(cancelled.state, "cancelled");
     assert!(packages.rolled_back.load(Ordering::SeqCst));
 }
+
+// ---------------------------------------------------------------------------
+// Aggregator tests — exercise the new `source`, `seed`, and `store` modules.
+// ---------------------------------------------------------------------------
+
+use openpanel_app::software_center::{
+    CatalogQuery, CatalogSource, CompatibilityHost, EmbeddedCatalogSource, HttpCatalogSource,
+    HttpSourceConfig, SoftwareCatalogStore, StaticCatalogSource, default_catalog_url,
+    seed::embedded_manifest,
+};
+use openpanel_test_support::TestDb;
+
+async fn build_store() -> (SoftwareCatalogStore, TestDb) {
+    let db = TestDb::new().await;
+    // TestDb only runs the core migrations; run the software-center
+    // V001 + V002 migrations so the aggregator store has its tables.
+    let pool = db.pool();
+    sqlx::query(openpanel_app::migrations::SOFTWARE_CENTER_V001)
+        .execute(&pool)
+        .await
+        .expect("software_center V001");
+    sqlx::query(openpanel_app::migrations::SOFTWARE_CENTER_V002)
+        .execute(&pool)
+        .await
+        .expect("software_center V002");
+    let store = SoftwareCatalogStore::new(Some(pool));
+    (store, db)
+}
+#[tokio::test]
+async fn embedded_seed_materializes_into_the_store_on_first_boot() {
+    let (store, _db) = build_store().await;
+    assert!(!store.has_active_snapshot().await);
+    let embedded = EmbeddedCatalogSource::new(default_catalog_url());
+    let activation = store
+        .materialize_seed_if_empty(&embedded)
+        .await
+        .unwrap()
+        .expect("seed materializes on empty store");
+    assert!(activation.embedded);
+    assert!(activation.entry_count >= 25);
+    assert!(store.has_active_snapshot().await);
+}
+
+#[tokio::test]
+async fn materializing_a_second_time_is_a_no_op() {
+    let (store, _db) = build_store().await;
+    let embedded = EmbeddedCatalogSource::new(default_catalog_url());
+    assert!(
+        store
+            .materialize_seed_if_empty(&embedded)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    assert!(
+        store
+            .materialize_seed_if_empty(&embedded)
+            .await
+            .unwrap()
+            .is_none()
+    );
+}
+
+#[tokio::test]
+async fn search_filters_by_text_category_and_tag() {
+    let (store, _db) = build_store().await;
+    let embedded = EmbeddedCatalogSource::new(default_catalog_url());
+    store.materialize_seed_if_empty(&embedded).await.unwrap();
+    let query = CatalogQuery {
+        text: Some("redis".into()),
+        ..CatalogQuery::default()
+    };
+    let page = store.search(&query).await.unwrap();
+    let ids: Vec<_> = page.hits.iter().map(|hit| hit.id.as_str()).collect();
+    assert!(ids.contains(&"redis"));
+    let query = CatalogQuery {
+        categories: vec![openpanel_domain::software_center::Category::Database],
+        ..CatalogQuery::default()
+    };
+    let page = store.search(&query).await.unwrap();
+    assert!(page.hits.iter().all(|hit| matches!(
+        hit.category,
+        openpanel_domain::software_center::Category::Database
+    )));
+    let query = CatalogQuery {
+        tags: vec![openpanel_domain::software_center::Tag::new("php").unwrap()],
+        ..CatalogQuery::default()
+    };
+    let page = store.search(&query).await.unwrap();
+    assert!(
+        !page.hits.is_empty(),
+        "expected at least one hit for tag 'php', got {page:?}"
+    );
+    assert!(
+        page.hits
+            .iter()
+            .all(|hit| hit.tags.contains(&"php".to_string()))
+    );
+}
+
+#[tokio::test]
+async fn entry_lookup_returns_versions_tags_and_provenance() {
+    let (store, _db) = build_store().await;
+    let embedded = EmbeddedCatalogSource::new(default_catalog_url());
+    store.materialize_seed_if_empty(&embedded).await.unwrap();
+    let entry = store
+        .get_entry("nginx")
+        .await
+        .unwrap()
+        .expect("nginx must be present");
+    assert_eq!(entry.id, "nginx");
+    assert!(!entry.versions.is_empty());
+    assert!(!entry.tags.is_empty());
+    assert!(entry.provenance.embedded);
+    assert!(entry.provenance.entry_count >= 25);
+    assert!(store.get_entry("does-not-exist").await.unwrap().is_none());
+}
+
+#[tokio::test]
+async fn compatibility_report_rejects_missing_php_runtime() {
+    let (store, _db) = build_store().await;
+    let embedded = EmbeddedCatalogSource::new(default_catalog_url());
+    store.materialize_seed_if_empty(&embedded).await.unwrap();
+    let host = CompatibilityHost::default();
+    let report = store
+        .compatibility_for("nextcloud", "29.0.1", &host, &[], &[("mysql".into(), true)])
+        .await
+        .unwrap();
+    assert!(
+        !report.is_compatible(),
+        "expected compatibility errors, got {report:?}"
+    );
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|issue| issue.code == "missing_php_runtime")
+    );
+}
+
+#[tokio::test]
+async fn compatibility_report_rejects_conflict_when_already_managed() {
+    let (store, _db) = build_store().await;
+    let embedded = EmbeddedCatalogSource::new(default_catalog_url());
+    store.materialize_seed_if_empty(&embedded).await.unwrap();
+    let host = CompatibilityHost::default();
+    let report = store
+        .compatibility_for("mariadb", "10.11.6", &host, &[], &[("mysql".into(), true)])
+        .await
+        .unwrap();
+    assert!(
+        report
+            .errors
+            .iter()
+            .any(|issue| issue.code == "conflict_installed")
+    );
+}
+
+#[tokio::test]
+async fn static_source_returns_its_manifest() {
+    let manifest = embedded_manifest().unwrap();
+    let source = StaticCatalogSource::new("https://example.com/manifest.json", manifest);
+    let fetched = source.fetch(0).await.unwrap();
+    assert_eq!(fetched.source_url, "https://example.com/manifest.json");
+    assert!(!fetched.manifest.entries.is_empty());
+}
+
+#[tokio::test]
+async fn http_source_rejects_off_allowlist_origin() {
+    let config = HttpSourceConfig::new(
+        "https://evil.example.com/manifest.json",
+        std::collections::BTreeSet::from(["catalog.openpanel.dev".to_string()]),
+    );
+    let source = HttpCatalogSource::new(config).unwrap();
+    let result = source.fetch(0).await;
+    assert!(matches!(
+        result,
+        Err(openpanel_app::software_center::SoftwareCenterError::Invalid)
+    ));
+}
+
+#[tokio::test]
+async fn diagnostics_reflect_last_refresh_attempt() {
+    let (store, _db) = build_store().await;
+    let embedded = EmbeddedCatalogSource::new(default_catalog_url());
+    store.materialize_seed_if_empty(&embedded).await.unwrap();
+    store
+        .record_refresh(
+            "https://catalog.openpanel.dev/v1/manifest.json",
+            "success",
+            Some("digest"),
+            None,
+        )
+        .await
+        .unwrap();
+    let diag = store.diagnostics().await.unwrap();
+    assert_eq!(diag.source_id, "embedded");
+    assert!(diag.entry_count >= 25);
+    assert!(diag.last_refresh.is_some());
+    assert_eq!(diag.last_refresh.as_ref().unwrap().outcome, "success");
+}
+
+#[tokio::test]
+async fn search_respects_installed_only_toggle() {
+    let (store, _db) = build_store().await;
+    let embedded = EmbeddedCatalogSource::new(default_catalog_url());
+    store.materialize_seed_if_empty(&embedded).await.unwrap();
+    sqlx::query("INSERT INTO software_components(id, version, status, managed, state_digest, updated_at) VALUES(?,?,?,?,?,?)")
+        .bind("nginx")
+        .bind("1.24.0")
+        .bind("installed")
+        .bind(1_i64)
+        .bind("digest")
+        .bind("2024-01-01T00:00:00Z")
+        .execute(&_db.pool())
+        .await
+        .unwrap();
+    let query = CatalogQuery {
+        installed_only: true,
+        ..CatalogQuery::default()
+    };
+    let page = store.search(&query).await.unwrap();
+    let ids: Vec<_> = page.hits.iter().map(|hit| hit.id.as_str()).collect();
+    assert!(ids.contains(&"nginx"));
+}
+
+#[test]
+fn catalog_sort_label_is_stable() {
+    use openpanel_domain::software_center::{CatalogSearchPage, CatalogSort};
+    let query = CatalogQuery {
+        sort: CatalogSort::Recent,
+        ..CatalogQuery::default()
+    };
+    let page = CatalogSearchPage::empty(&query);
+    assert_eq!(page.sort, "recent");
+}

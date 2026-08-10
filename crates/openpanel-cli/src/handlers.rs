@@ -1051,12 +1051,82 @@ pub async fn software_rollback(config: Arc<Config>, job: String) -> anyhow::Resu
 
 /// Print aggregate Software Center diagnostics as secret-free JSON.
 pub async fn software_diagnostics(config: Arc<Config>) -> anyhow::Result<()> {
-    let diagnostics = build_software_center(config)
-        .await?
-        .diagnostics(Role::Owner)
+    let service = build_software_center(config).await?;
+    let software = service
+        .catalog_diagnostics(Role::Owner)
         .await
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
-    println!("{}", serde_json::to_string_pretty(&diagnostics)?);
+    let jobs = service
+        .jobs(Role::Owner)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let combined = serde_json::json!({
+        "software": software,
+        "jobs": jobs,
+    });
+    println!("{}", serde_json::to_string_pretty(&combined)?);
+    Ok(())
+}
+
+/// Trigger a manual catalog refresh.
+pub async fn software_refresh(config: Arc<Config>) -> anyhow::Result<()> {
+    let outcome = build_software_center(config)
+        .await?
+        .refresh_catalog(uuid::Uuid::nil(), Role::Owner)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    println!("{}", serde_json::to_string_pretty(&outcome)?);
+    Ok(())
+}
+
+/// Search the active catalog snapshot.
+#[allow(clippy::too_many_arguments)]
+pub async fn software_search(
+    config: Arc<Config>,
+    query: Option<String>,
+    category: Option<String>,
+    tag: Option<String>,
+    installed_only: bool,
+    update_available_only: bool,
+    page: usize,
+    page_size: usize,
+) -> anyhow::Result<()> {
+    use openpanel_app::software_center::CatalogQuery;
+    let mut builder = CatalogQuery {
+        page,
+        page_size,
+        ..CatalogQuery::default()
+    };
+    builder.text = query;
+    if let Some(category) = category
+        && let Ok(parsed) = category.parse()
+    {
+        builder.categories.push(parsed);
+    }
+    if let Some(tag) = tag
+        && let Ok(parsed) = openpanel_domain::software_center::Tag::new(&tag)
+    {
+        builder.tags.push(parsed);
+    }
+    builder.installed_only = installed_only;
+    builder.update_available_only = update_available_only;
+    let page = build_software_center(config)
+        .await?
+        .search(Role::Owner, builder)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    println!("{}", serde_json::to_string_pretty(&page)?);
+    Ok(())
+}
+
+/// Print a single catalog entry as secret-free JSON.
+pub async fn software_show(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let entry = build_software_center(config)
+        .await?
+        .entry(Role::Owner, &id)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    println!("{}", serde_json::to_string_pretty(&entry)?);
     Ok(())
 }
 

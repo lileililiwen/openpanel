@@ -30,3 +30,5 @@ pub const DNS_V001: &str = include_str!("dns/V001__init.sql");
 pub const MAIL_V001: &str = include_str!("mail/V001__init.sql");
 /// Trusted Software Center catalogs, plans, jobs, locks, and deployments.
 pub const SOFTWARE_CENTER_V001: &str = include_str!("software_center/V001__init.sql");
+/// Normalized Software Center catalog tables for the aggregator model.
+pub const SOFTWARE_CENTER_V002: &str = include_str!("software_center/V002__normalized.sql");

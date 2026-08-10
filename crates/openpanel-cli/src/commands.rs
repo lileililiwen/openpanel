@@ -112,6 +112,28 @@ pub enum Command {
 pub enum SoftwareCommand {
     Catalog,
     Inventory,
+    Diagnostics,
+    Refresh,
+    Search {
+        #[arg(long)]
+        query: Option<String>,
+        #[arg(long)]
+        category: Option<String>,
+        #[arg(long)]
+        tag: Option<String>,
+        #[arg(long)]
+        installed_only: bool,
+        #[arg(long)]
+        update_available_only: bool,
+        #[arg(long, default_value_t = 0)]
+        page: usize,
+        #[arg(long, default_value_t = 60)]
+        page_size: usize,
+    },
+    Show {
+        #[arg(long)]
+        id: String,
+    },
     Preview {
         #[arg(long)]
         id: String,
@@ -125,6 +147,8 @@ pub enum SoftwareCommand {
     Install {
         #[arg(long)]
         id: String,
+        #[arg(long)]
+        version: Option<String>,
     },
     Adopt {
         #[arg(long)]
@@ -160,7 +184,6 @@ pub enum SoftwareCommand {
         #[arg(long)]
         job: String,
     },
-    Diagnostics,
     Jobs,
 }
 

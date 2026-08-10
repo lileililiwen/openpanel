@@ -1,10 +1,16 @@
 //! Pure domain invariants for the curated Software Center.
 
+mod recipe;
+
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
     path::{Component, Path},
 };
 
+pub use recipe::{
+    ArtifactPin, CatalogEntryRecipe, CatalogHit, CatalogManifest, CatalogQuery, CatalogSearchPage,
+    CatalogSort, Category, EntryKind, Homepage, License, Provenance, RecipeError, Tag, VersionSpec,
+};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use thiserror::Error;

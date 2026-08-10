@@ -5,6 +5,9 @@ mod artifact;
 mod catalog;
 mod integrated;
 mod module;
+pub mod seed;
+mod source;
+mod store;
 
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
@@ -24,6 +27,7 @@ pub use integrated::{
 };
 pub use module::{FakeApplicationDeployer, FakePackageManager, SoftwareCenterModule};
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
+pub use openpanel_domain::software_center::{CatalogQuery, CatalogSearchPage};
 use openpanel_domain::{
     Role,
     software_center::{
@@ -32,7 +36,15 @@ use openpanel_domain::{
 };
 use serde::{Deserialize, Serialize};
 use sha2::Digest;
+pub use source::{
+    CatalogSource, EmbeddedCatalogSource, FetchedManifest, HttpCatalogSource, HttpSourceConfig,
+    StaticCatalogSource,
+};
 use sqlx::SqlitePool;
+pub use store::{
+    CatalogActivation, CatalogDiagnostics, CompatibilityHost, CompatibilityReport, RefreshOutcome,
+    SoftwareCatalogStore, StorefrontEntry, WizardState, default_catalog_url,
+};
 use thiserror::Error;
 use tokio::sync::{Mutex as AsyncMutex, OnceCell};
 use uuid::Uuid;
@@ -472,6 +484,8 @@ pub struct SoftwareCenterService {
     pool: Option<SqlitePool>,
     reconciled: OnceCell<()>,
     applications_enabled: bool,
+    store: SoftwareCatalogStore,
+    catalog_source: Arc<dyn CatalogSource>,
 }
 impl SoftwareCenterService {
     /// Construct from the fixed package adapter and append-only audit port.
@@ -517,6 +531,9 @@ impl SoftwareCenterService {
         pool: Option<SqlitePool>,
         applications_enabled: bool,
     ) -> Self {
+        let store = SoftwareCatalogStore::new(pool.clone());
+        let catalog_source: Arc<dyn CatalogSource> =
+            Arc::new(EmbeddedCatalogSource::new(default_catalog_url()));
         Self {
             packages,
             applications,
@@ -529,7 +546,19 @@ impl SoftwareCenterService {
             pool,
             reconciled: OnceCell::new(),
             applications_enabled,
+            store,
+            catalog_source,
         }
+    }
+
+    /// Replace the catalog source used by `refresh_catalog`.
+    pub fn set_catalog_source(&mut self, source: Arc<dyn CatalogSource>) {
+        self.catalog_source = source;
+    }
+
+    /// Underlying catalog store, for advanced flows.
+    pub fn store(&self) -> &SoftwareCatalogStore {
+        &self.store
     }
 
     /// List the embedded recovery catalog for an Owner.
@@ -1834,5 +1863,140 @@ fn state_label(state: JobState) -> &'static str {
         JobState::Cancelled => "cancelled",
         JobState::RolledBack => "rolled_back",
         JobState::Interrupted => "interrupted",
+    }
+}
+
+// ============================================================================
+// Aggregator API — exposed by the new `store` and `source` modules.
+// ============================================================================
+impl SoftwareCenterService {
+    /// Lazy materialization of the embedded seed. Called by the public
+    /// search/entry/diagnostics methods so that callers don't have to wait
+    /// for migrations or the embedded bootstrap to complete up front.
+    async fn ensure_seed_materialized(&self) {
+        let embedded = EmbeddedCatalogSource::new(default_catalog_url());
+        let _ = self.store.materialize_seed_if_empty(&embedded).await;
+    }
+
+    /// Search the active catalog snapshot.
+    pub async fn search(
+        &self,
+        role: Role,
+        query: CatalogQuery,
+    ) -> Result<CatalogSearchPage, SoftwareCenterError> {
+        owner(role)?;
+        self.ensure_reconciled().await?;
+        self.ensure_seed_materialized().await;
+        self.store.search(&query).await
+    }
+
+    /// Fetch a single entry with versions, tags, dependencies, conflicts,
+    /// and provenance.
+    pub async fn entry(
+        &self,
+        role: Role,
+        id: &str,
+    ) -> Result<Option<StorefrontEntry>, SoftwareCenterError> {
+        owner(role)?;
+        self.ensure_reconciled().await?;
+        self.ensure_seed_materialized().await;
+        self.store.get_entry(id).await
+    }
+
+    /// Refresh the active snapshot from the configured source. On failure
+    /// the active snapshot is unchanged.
+    pub async fn refresh_catalog(
+        &self,
+        actor: Uuid,
+        role: Role,
+    ) -> Result<RefreshOutcome, SoftwareCenterError> {
+        owner(role)?;
+        self.ensure_reconciled().await?;
+        let source_id = self.catalog_source.source_id();
+        let source_url = self.catalog_source.source_url().to_owned();
+        let now_unix = now()?;
+        match self.catalog_source.fetch(now_unix).await {
+            Ok(fetched) => {
+                let activation = self.store.activate(source_id, &fetched).await?;
+                self.store
+                    .record_refresh(
+                        &source_url,
+                        "success",
+                        Some(&activation.manifest_digest),
+                        None,
+                    )
+                    .await?;
+                self.record_outcome(
+                    actor,
+                    "catalog_refreshed",
+                    &activation.manifest_digest,
+                    AuditOutcome::Success,
+                )
+                .await?;
+                Ok(RefreshOutcome {
+                    manifest_digest: activation.manifest_digest,
+                    entry_count: activation.entry_count,
+                    source_url: activation.source_url,
+                    activated_at: activation.activated_at,
+                })
+            }
+            Err(error) => {
+                let error_text = error.to_string();
+                self.store
+                    .record_refresh(&source_url, "failure", None, Some(&error_text))
+                    .await?;
+                self.record_outcome(
+                    actor,
+                    "catalog_rejected",
+                    &error_text,
+                    AuditOutcome::Failure,
+                )
+                .await?;
+                Err(error)
+            }
+        }
+    }
+
+    /// Build diagnostics for the diagnostics strip / `software diagnostics` CLI.
+    pub async fn catalog_diagnostics(
+        &self,
+        role: Role,
+    ) -> Result<CatalogDiagnostics, SoftwareCenterError> {
+        owner(role)?;
+        self.ensure_reconciled().await?;
+        self.ensure_seed_materialized().await;
+        self.store.diagnostics().await
+    }
+
+    /// Compute the pre-flight compatibility report for an entry/version
+    /// combination against a host context.
+    pub async fn compatibility(
+        &self,
+        role: Role,
+        entry_id: &str,
+        version: &str,
+        host: CompatibilityHost,
+        managed_php_versions: Vec<String>,
+    ) -> Result<CompatibilityReport, SoftwareCenterError> {
+        owner(role)?;
+        self.ensure_reconciled().await?;
+        let snapshot = self.packages.discover().await?;
+        let mut installed_components: Vec<(String, bool)> = snapshot
+            .installed_packages
+            .iter()
+            .map(|package| (package.clone(), false))
+            .collect();
+        for id in self.managed_components().await? {
+            installed_components.push((id, true));
+        }
+        self.store
+            .compatibility_for(
+                entry_id,
+                version,
+                &host,
+                &managed_php_versions,
+                &installed_components,
+            )
+            .await
     }
 }

@@ -183,8 +183,21 @@ async fn software_web_is_owner_only_and_mutations_require_csrf() {
         .unwrap();
     assert_eq!(page.status(), 200);
     let page = page.text().await.unwrap();
-    assert!(page.contains("Deploy application"));
-    assert!(page.contains("WordPress"));
+    if !page.contains("WordPress") {
+        eprintln!("PAGE_LEN: {}", page.len());
+        eprintln!("PAGE_HAS_GRID: {}", page.contains("storefront__grid"));
+        eprintln!("PAGE_HAS_CARDS: {}", page.contains("card__title"));
+        eprintln!("PAGE_HAS_EMPTY: {}", page.contains("empty-state"));
+        let mid = page.len() / 2;
+        eprintln!("PAGE_MID: {}", &page[mid..mid + 2000]);
+    }
+    assert!(
+        page.contains("WordPress"),
+        "page did not contain 'WordPress' (length={})",
+        page.len()
+    );
+    assert!(page.contains("Software Center"));
+    assert!(page.contains("Install"));
     assert_eq!(
         server
             .client()

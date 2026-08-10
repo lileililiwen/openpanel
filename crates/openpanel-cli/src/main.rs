@@ -335,12 +335,38 @@ async fn main() -> anyhow::Result<()> {
         Command::Software { action } => match action {
             SoftwareCommand::Catalog => handlers::software_catalog(config).await,
             SoftwareCommand::Inventory => handlers::software_inventory(config).await,
+            SoftwareCommand::Diagnostics => handlers::software_diagnostics(config).await,
+            SoftwareCommand::Refresh => handlers::software_refresh(config).await,
+            SoftwareCommand::Search {
+                query,
+                category,
+                tag,
+                installed_only,
+                update_available_only,
+                page,
+                page_size,
+            } => {
+                handlers::software_search(
+                    config,
+                    query,
+                    category,
+                    tag,
+                    installed_only,
+                    update_available_only,
+                    page,
+                    page_size,
+                )
+                .await
+            }
+            SoftwareCommand::Show { id } => handlers::software_show(config, id).await,
             SoftwareCommand::Preview { id } => handlers::software_preview(config, id).await,
             SoftwareCommand::Execute {
                 digest,
                 confirmation_token,
             } => handlers::software_execute(config, digest, confirmation_token).await,
-            SoftwareCommand::Install { id } => handlers::software_install(config, id).await,
+            SoftwareCommand::Install { id, version: _ } => {
+                handlers::software_install(config, id).await
+            }
             SoftwareCommand::Adopt { id } => {
                 handlers::software_component_action(
                     config,
@@ -374,7 +400,6 @@ async fn main() -> anyhow::Result<()> {
             SoftwareCommand::Cancel { job } => handlers::software_cancel(config, job).await,
             SoftwareCommand::Retry { job } => handlers::software_retry(config, job).await,
             SoftwareCommand::Rollback { job } => handlers::software_rollback(config, job).await,
-            SoftwareCommand::Diagnostics => handlers::software_diagnostics(config).await,
             SoftwareCommand::Jobs => handlers::software_jobs(config).await,
         },
     }

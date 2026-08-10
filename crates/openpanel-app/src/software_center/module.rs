@@ -176,20 +176,35 @@ impl SoftwareCenterModule {
         applications_enabled: bool,
     ) -> Self {
         let pool = ctx.db.pool().await;
+        let service = SoftwareCenterService::with_persistence(
+            packages,
+            applications,
+            ctx.audit.clone(),
+            pool,
+            applications_enabled,
+        );
+        // Materialize the embedded seed on first boot so the storefront is
+        // never empty before the first remote refresh succeeds.
+        let embedded = crate::software_center::EmbeddedCatalogSource::new(
+            crate::software_center::default_catalog_url(),
+        );
+        let _ = service.store().materialize_seed_if_empty(&embedded).await;
         Self {
-            service: Arc::new(SoftwareCenterService::with_persistence(
-                packages,
-                applications,
-                ctx.audit.clone(),
-                pool,
-                applications_enabled,
-            )),
-            migrations: vec![Migration {
-                module: "software-center",
-                version: "001".into(),
-                description: "trusted catalogs, plans, jobs, locks, and deployments".into(),
-                sql: crate::migrations::SOFTWARE_CENTER_V001.into(),
-            }],
+            service: Arc::new(service),
+            migrations: vec![
+                Migration {
+                    module: "software-center",
+                    version: "001".into(),
+                    description: "trusted catalogs, plans, jobs, locks, and deployments".into(),
+                    sql: crate::migrations::SOFTWARE_CENTER_V001.into(),
+                },
+                Migration {
+                    module: "software-center",
+                    version: "002".into(),
+                    description: "normalized catalog tables for the aggregator model".into(),
+                    sql: crate::migrations::SOFTWARE_CENTER_V002.into(),
+                },
+            ],
         }
     }
 

@@ -308,6 +308,12 @@ pub fn router(
         .route("/mail", get(crate::mail::page))
         .route("/mail/domains", post(crate::mail::create_domain))
         .route("/software", get(crate::software_center::page))
+        .route("/software/refresh", post(crate::software_center::refresh))
+        .route("/software/entries/{id}", get(crate::software_center::entry))
+        .route(
+            "/software/entries/{id}/compatibility",
+            get(crate::software_center::compatibility),
+        )
         .route(
             "/software/components/{id}/preview",
             post(crate::software_center::preview),
