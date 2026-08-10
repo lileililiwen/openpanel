@@ -22,6 +22,8 @@ pub mod monitoring;
 pub mod security;
 /// Sites resource routes (`/sites`).
 pub mod sites;
+/// Curated Software Center routes (`/software`).
+pub mod software_center;
 /// SSL resource routes (`/ssl`).
 pub mod ssl;
 /// Allowlisted system-service routes (`/services`).

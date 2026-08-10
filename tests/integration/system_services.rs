@@ -49,6 +49,15 @@ async fn owner_previews_and_controls_only_registered_services() {
             .iter()
             .any(|service| service["id"] == "nginx")
     );
+    for expected in ["redis", "mariadb", "php-83", "php-84"] {
+        assert!(
+            body.as_array()
+                .unwrap()
+                .iter()
+                .any(|service| service["id"] == expected),
+            "missing {expected}"
+        );
+    }
     assert_eq!(
         server
             .client()

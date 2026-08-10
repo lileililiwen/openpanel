@@ -82,9 +82,10 @@ pub async fn new_form(State(state): State<WebState>, WebUser(user, session): Web
     }
     let csrf = state.csrf.token_for(session.id());
     let owners = owner_options(&state).await;
+    let php_versions = managed_php_versions(&state, &user).await;
     let content = html! {
         h1 { "New site" }
-        (create_form(&owners, &csrf, None, None))
+        (create_form(&owners, &php_versions, &csrf, None, None))
     };
     state
         .render_shell(&user, &csrf, "/sites", content)
@@ -141,9 +142,10 @@ pub async fn create(
         Ok(_) => Redirect::to("/sites").into_response(),
         Err(e) => {
             let owners = owner_options(&state).await;
+            let php_versions = managed_php_versions(&state, &user).await;
             let content = html! {
                 h1 { "New site" }
-                (create_form(&owners, &csrf, Some(&e.to_string()), Some(&form)))
+                (create_form(&owners, &php_versions, &csrf, Some(&e.to_string()), Some(&form)))
             };
             state
                 .render_shell(&user, &csrf, "/sites", content)
@@ -305,6 +307,7 @@ pub fn list_fragment(rows: &[SiteRow], can_create: bool, csrf: &str) -> Markup {
 /// `values` re-populates the form after a validation failure.
 pub fn create_form(
     owners: &[(Uuid, String)],
+    php_versions: &[String],
     csrf: &str,
     error: Option<&str>,
     values: Option<&CreateSiteForm>,
@@ -333,12 +336,31 @@ pub fn create_form(
             label { "PHP" }
             input type="checkbox" name="php_enabled" checked[php_checked];
             label { "PHP version" }
-            input type="text" name="php_version" value=(php_version);
+            select name="php_version" {
+                @if php_versions.is_empty() {
+                    option value="" disabled selected { "Install or adopt PHP in Software Center" }
+                }
+                @for version in php_versions {
+                    option value=(version) selected[version == php_version] { (version) }
+                }
+            }
             label { "Document root (optional)" }
             input type="text" name="document_root" value=(doc_root);
             button type="submit" { "Create site" }
         }
     }
+}
+
+async fn managed_php_versions(state: &WebState, user: &User) -> Vec<String> {
+    state
+        .software_center
+        .inventory(user.role())
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|entry| entry.state == "panel_managed" && entry.id.starts_with("php-"))
+        .filter_map(|entry| entry.id.strip_prefix("php-").map(str::to_owned))
+        .collect()
 }
 
 /// Render the site detail section: domain, aliases, document root, PHP, status,
@@ -496,7 +518,7 @@ mod tests {
     #[test]
     fn create_form_renders_all_fields() {
         let owners = vec![(Uuid::new_v4(), "admin".to_string())];
-        let out = create_form(&owners, "tok", None, None).into_string();
+        let out = create_form(&owners, &["8.3".into()], "tok", None, None).into_string();
         for needle in [
             "name=\"primary_domain\"",
             "name=\"aliases\"",
@@ -512,8 +534,14 @@ mod tests {
 
     #[test]
     fn create_form_renders_inline_error() {
-        let out =
-            create_form(&[], "tok", Some("duplicate domain: example.com"), None).into_string();
+        let out = create_form(
+            &[],
+            &["8.3".into()],
+            "tok",
+            Some("duplicate domain: example.com"),
+            None,
+        )
+        .into_string();
         assert!(
             out.contains("duplicate domain: example.com"),
             "error: {out}"

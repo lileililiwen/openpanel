@@ -24,6 +24,8 @@ pub mod mail;
 pub mod monitoring;
 pub mod security;
 pub mod sites;
+/// Trusted software catalog, transaction plans, and job lifecycle invariants.
+pub mod software_center;
 pub mod ssl;
 /// Allowlisted host service lifecycle and health domain.
 pub mod system_services;

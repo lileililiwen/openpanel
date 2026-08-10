@@ -12,8 +12,9 @@ use openpanel_app::{
     BackupService, BackupsModule, CronModule, CronService, DatabasesModule, DatabasesService,
     DnsModule, DnsService, FilesModule, FilesService, IdentityModule, IdentityService, LogService,
     LogsModule, MailModule, MailService, MonitoringModule, MonitoringService, SecurityModule,
-    SecurityService, SitesModule, SitesService, SslModule, SslPaths, SslService,
-    SystemServicesModule, security::MemoryFirewall, sites::nginx::NginxPaths,
+    SecurityService, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
+    SslModule, SslPaths, SslService, SystemServicesModule, security::MemoryFirewall,
+    sites::nginx::NginxPaths,
 };
 use openpanel_core::{
     AppContext, AuditEvent, AuditService, Config, MigrationRunner, Module, SqliteAuditService,
@@ -42,6 +43,7 @@ pub struct TestServer {
     system_services: Arc<openpanel_app::ServiceManager>,
     dns: Arc<DnsService>,
     mail: Arc<MailService>,
+    software_center: Arc<SoftwareCenterService>,
     audit: Arc<dyn AuditService>,
     settings_path: PathBuf,
     _handle: JoinHandle<()>,
@@ -140,6 +142,9 @@ impl TestServer {
             .expect("system services module");
         let dns_module = DnsModule::memory(&ctx).await.expect("dns module");
         let mail_module = MailModule::memory(&ctx).await.expect("mail module");
+        let software_center_module = SoftwareCenterModule::memory(&ctx)
+            .await
+            .expect("software center module");
         runner
             .apply_module(monitoring_module.name(), &monitoring_module.migrations())
             .await
@@ -175,6 +180,13 @@ impl TestServer {
             .apply_module(mail_module.name(), &mail_module.migrations())
             .await
             .expect("mail migrations");
+        runner
+            .apply_module(
+                software_center_module.name(),
+                &software_center_module.migrations(),
+            )
+            .await
+            .expect("software center migrations");
 
         let identity_svc = identity_module.service();
         let sites_svc = sites_module.service();
@@ -190,6 +202,7 @@ impl TestServer {
         let system_services_svc = system_services_module.service();
         let dns_svc = dns_module.service();
         let mail_svc = mail_module.service();
+        let software_center_svc = software_center_module.service();
 
         let settings_path = sandbox.path().join("web-preferences.json");
         let app = build_router(
@@ -207,6 +220,7 @@ impl TestServer {
             system_services_svc.clone(),
             dns_svc.clone(),
             mail_svc.clone(),
+            software_center_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -223,6 +237,7 @@ impl TestServer {
             system_services_svc.clone(),
             dns_svc.clone(),
             mail_svc.clone(),
+            software_center_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -242,7 +257,8 @@ impl TestServer {
                     .with("host-security")
                     .with("system-services")
                     .with("dns")
-                    .with("mail"),
+                    .with("mail")
+                    .with("software-center"),
             ),
         ));
 
@@ -281,6 +297,7 @@ impl TestServer {
             system_services: system_services_svc,
             dns: dns_svc,
             mail: mail_svc,
+            software_center: software_center_svc,
             audit,
             settings_path,
             _handle: handle,
@@ -322,6 +339,16 @@ impl TestServer {
     /// The hosted-mail administration service.
     pub fn mail(&self) -> Arc<MailService> {
         self.mail.clone()
+    }
+
+    /// The curated Software Center service.
+    pub fn software_center(&self) -> Arc<SoftwareCenterService> {
+        self.software_center.clone()
+    }
+
+    /// Underlying isolated SQLite pool for persistence assertions.
+    pub fn database_pool(&self) -> sqlx::SqlitePool {
+        self._db.pool()
     }
 
     /// The files service handle.

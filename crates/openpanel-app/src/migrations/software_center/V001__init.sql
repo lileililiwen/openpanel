@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS software_catalog_snapshots(id TEXT PRIMARY KEY,digest TEXT NOT NULL UNIQUE,payload TEXT NOT NULL,signature TEXT,expires_at TEXT,active INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS software_components(id TEXT PRIMARY KEY,version TEXT,status TEXT NOT NULL,managed INTEGER NOT NULL,state_digest TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS software_plans(digest TEXT PRIMARY KEY,payload TEXT NOT NULL,host_state_digest TEXT NOT NULL,token_hash TEXT NOT NULL,expires_at TEXT NOT NULL,consumed INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS software_jobs(id TEXT PRIMARY KEY,plan_digest TEXT NOT NULL,component_id TEXT NOT NULL,state TEXT NOT NULL,events_json TEXT NOT NULL DEFAULT '[]',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS software_deployments(id TEXT PRIMARY KEY,owner_id TEXT NOT NULL,application_id TEXT NOT NULL,version TEXT NOT NULL,site_id TEXT,database_id TEXT,state TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS software_transaction_lock(singleton INTEGER PRIMARY KEY CHECK(singleton=1),job_id TEXT,owner_pid INTEGER NOT NULL,acquired_at TEXT);

@@ -18,6 +18,7 @@ mod monitoring;
 mod security;
 mod serve;
 mod site;
+mod software_center;
 mod ssl;
 mod system_services;
 mod user;

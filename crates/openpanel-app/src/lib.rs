@@ -19,6 +19,7 @@ pub mod monitoring;
 pub mod prelude;
 pub mod security;
 pub mod sites;
+pub mod software_center;
 pub mod ssl;
 pub mod system_services;
 
@@ -37,6 +38,7 @@ pub use sites::{
     nginx::{NginxConfigGenerator, NginxPaths},
     service::SitesService,
 };
+pub use software_center::{SoftwareCenterModule, SoftwareCenterService};
 pub use ssl::{
     AcmeEndpoint, SslModule, SslPaths, SslService, challenge_server::AcmeHttpServer,
     module::CHALLENGE_SERVER_PORT,

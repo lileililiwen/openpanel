@@ -127,6 +127,28 @@ impl NginxConfigGenerator {
         let access_log = format!("/var/log/openpanel/{}.access.log", site.id());
         let error_log = format!("/var/log/openpanel/{}.error.log", site.id());
         let site_id = site.id();
+        let php_socket = match (site.php_enabled(), site.php_version()) {
+            (true, Some("8.3")) => Some("/run/php/php8.3-fpm.sock"),
+            (true, Some("8.4")) => Some("/run/php/php8.4-fpm.sock"),
+            _ => None,
+        };
+        let application_route = if php_socket.is_some() {
+            "try_files $uri $uri/ /index.php?$query_string;"
+        } else {
+            "try_files $uri $uri/ =404;"
+        };
+        let php_location = php_socket.map_or_else(String::new, |socket| {
+            format!(
+                r#"
+    location ~ \.php$ {{
+        try_files $uri =404;
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+        fastcgi_pass unix:{socket};
+    }}
+"#,
+            )
+        });
 
         let force_https = tls.is_some() && Self::force_https_for(site);
         let acme_block = match acme_challenge_upstream {
@@ -177,8 +199,9 @@ server {{
     client_max_body_size 100M;
 {acme_block}
     location / {{
-        try_files $uri $uri/ =404;
+        {application_route}
     }}
+{php_location}
 
     location ~ /\.(?!well-known) {{ deny all; }}
 }}
@@ -219,8 +242,9 @@ server {{
     client_max_body_size 100M;
 
     location / {{
-        try_files $uri $uri/ =404;
+        {application_route}
     }}
+{php_location}
 
     location ~ /\.(?!well-known) {{ deny all; }}
 }}
@@ -494,6 +518,10 @@ mod tests {
         );
         let out = NginxConfigGenerator::render(&restored);
         assert!(out.contains("index.php"));
+        assert!(out.contains("try_files $uri $uri/ /index.php?$query_string;"));
+        assert!(out.contains("location ~ \\.php$"));
+        assert!(out.contains("fastcgi_pass unix:/run/php/php8.3-fpm.sock;"));
+        assert!(out.contains("fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;"));
     }
 
     #[test]

@@ -18,8 +18,9 @@ use openpanel_api::{
 };
 use openpanel_app::{
     BackupService, CronService, DatabasesService, DnsService, FilesService, IdentityService,
-    LogService, MailService, MonitoringService, SecurityService, SitesService, SslService,
-    security::LoginThrottleService, system_services::ServiceManager,
+    LogService, MailService, MonitoringService, SecurityService, SitesService,
+    SoftwareCenterService, SslService, security::LoginThrottleService,
+    system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
 use openpanel_domain::{Session, SessionToken, User};
@@ -101,6 +102,8 @@ pub struct WebState {
     pub dns: Arc<DnsService>,
     /// Hosted mail administration service.
     pub mail: Arc<MailService>,
+    /// Curated Software Center service.
+    pub software_center: Arc<SoftwareCenterService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -212,6 +215,7 @@ pub fn router(
     system_services_service: Arc<ServiceManager>,
     dns_service: Arc<DnsService>,
     mail_service: Arc<MailService>,
+    software_center_service: Arc<SoftwareCenterService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -232,6 +236,7 @@ pub fn router(
         system_services: system_services_service,
         dns: dns_service,
         mail: mail_service,
+        software_center: software_center_service,
         csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
@@ -302,6 +307,39 @@ pub fn router(
         .route("/dns/zones/{id}/check", post(crate::dns::check_zone))
         .route("/mail", get(crate::mail::page))
         .route("/mail/domains", post(crate::mail::create_domain))
+        .route("/software", get(crate::software_center::page))
+        .route(
+            "/software/components/{id}/preview",
+            post(crate::software_center::preview),
+        )
+        .route(
+            "/software/components/{id}/{action}/preview",
+            post(crate::software_center::preview_component_action),
+        )
+        .route(
+            "/software/applications/preview",
+            post(crate::software_center::preview_deployment),
+        )
+        .route(
+            "/software/applications/plans/{digest}/execute",
+            post(crate::software_center::execute_deployment),
+        )
+        .route(
+            "/software/plans/{digest}/execute",
+            post(crate::software_center::execute),
+        )
+        .route(
+            "/software/jobs/{id}/cancel",
+            post(crate::software_center::cancel),
+        )
+        .route(
+            "/software/jobs/{id}/retry",
+            post(crate::software_center::retry),
+        )
+        .route(
+            "/software/jobs/{id}/rollback",
+            post(crate::software_center::rollback),
+        )
         .route("/sites", get(sites::list).post(sites::create))
         .route("/sites/new", get(sites::new_form))
         .route("/sites/{id}", get(sites::detail).delete(sites::delete))

@@ -120,6 +120,8 @@ pub enum AuditAction {
     DnsChanged,
     /// A hosted mail domain, mailbox, alias, or credential changed.
     MailChanged,
+    /// A Software Center plan or installation job changed host state.
+    SoftwareChanged,
 }
 
 impl AuditAction {
@@ -167,6 +169,7 @@ impl AuditAction {
             AuditAction::ServiceChanged => "service_changed",
             AuditAction::DnsChanged => "dns_changed",
             AuditAction::MailChanged => "mail_changed",
+            AuditAction::SoftwareChanged => "software_changed",
         }
     }
 }

@@ -9,7 +9,7 @@ use openpanel_api::build_router;
 use openpanel_app::{
     AcmeEndpoint, BackupsModule, CronModule, DatabasesModule, DnsModule, FilesModule,
     IdentityModule, LogService, LogsModule, MailModule, MonitoringModule, SecurityModule,
-    SecurityService, SitesModule, SslModule, SslPaths, SystemServicesModule,
+    SecurityService, SitesModule, SoftwareCenterModule, SslModule, SslPaths, SystemServicesModule,
     databases::crypto as db_crypto,
 };
 use openpanel_core::{
@@ -68,6 +68,10 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let mail_module = MailModule::new(&ctx)
         .await
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let software_center_module =
+        SoftwareCenterModule::new(&ctx, sites_module.service(), databases_module.service())
+            .await
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
 
     let runner = MigrationRunner::for_sqlite(pool.clone());
     runner
@@ -121,6 +125,13 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .apply_module(mail_module.name(), &mail_module.migrations())
         .await
         .context("apply mail migrations")?;
+    runner
+        .apply_module(
+            software_center_module.name(),
+            &software_center_module.migrations(),
+        )
+        .await
+        .context("apply software center migrations")?;
 
     let identity_svc = identity_module.service();
     let sites_svc = sites_module.service();
@@ -136,6 +147,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let system_services_svc = system_services_module.service();
     let dns_svc = dns_module.service();
     let mail_svc = mail_module.service();
+    let software_center_svc = software_center_module.service();
     let app = build_router(
         identity_svc.clone(),
         sites_svc.clone(),
@@ -151,6 +163,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         system_services_svc.clone(),
         dns_svc.clone(),
         mail_svc.clone(),
+        software_center_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -167,6 +180,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         system_services_svc,
         dns_svc,
         mail_svc,
+        software_center_svc,
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
@@ -175,7 +189,8 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
                 .with("host-security")
                 .with("system-services")
                 .with("dns")
-                .with("mail"),
+                .with("mail")
+                .with("software-center"),
         ),
     ));
 
@@ -825,6 +840,223 @@ pub async fn mail_status(config: Arc<Config>) -> anyhow::Result<()> {
         "{}",
         serde_json::to_string(&build_mail(config).await?.status().await?)?
     );
+    Ok(())
+}
+
+async fn build_software_center(
+    config: Arc<Config>,
+) -> anyhow::Result<Arc<openpanel_app::SoftwareCenterService>> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    sqlx::query(include_str!("audit.sql"))
+        .execute(&pool)
+        .await
+        .context("ensure audit schema")?;
+    let ctx = AppContext::new(config, db, audit);
+    let sites_module = SitesModule::new(&ctx).await;
+    let master_key = if std::env::var("OPENPANEL__SOFTWARE__ADAPTER").as_deref() == Ok("fake") {
+        [0_u8; 32]
+    } else {
+        load_master_key(&ctx.config)?
+    };
+    let databases_module = DatabasesModule::new(&ctx, master_key).await;
+    let module =
+        SoftwareCenterModule::new(&ctx, sites_module.service(), databases_module.service())
+            .await
+            .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let runner = MigrationRunner::for_sqlite(pool);
+    runner
+        .apply_module(sites_module.name(), &sites_module.migrations())
+        .await?;
+    runner
+        .apply_module(databases_module.name(), &databases_module.migrations())
+        .await?;
+    runner
+        .apply_module(module.name(), &module.migrations())
+        .await?;
+    Ok(module.service())
+}
+
+/// Print the trusted recovery catalog as secret-free JSON.
+pub async fn software_catalog(config: Arc<Config>) -> anyhow::Result<()> {
+    let catalog = build_software_center(config)
+        .await?
+        .catalog(Role::Owner)
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    println!("{}", serde_json::to_string_pretty(&catalog)?);
+    Ok(())
+}
+
+/// Discover catalog component lifecycle state as secret-free JSON.
+pub async fn software_inventory(config: Arc<Config>) -> anyhow::Result<()> {
+    let inventory = build_software_center(config)
+        .await?
+        .inventory(Role::Owner)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    println!("{}", serde_json::to_string_pretty(&inventory)?);
+    Ok(())
+}
+
+/// Print an immutable installation preview as secret-free JSON.
+pub async fn software_preview(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let preview = build_software_center(config)
+        .await?
+        .preview_install(uuid::Uuid::nil(), Role::Owner, &id)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    println!("{}", serde_json::to_string_pretty(&preview)?);
+    Ok(())
+}
+
+/// Execute a persisted fresh preview by exact digest and one-use confirmation token.
+pub async fn software_execute(
+    config: Arc<Config>,
+    digest: String,
+    confirmation_token: String,
+) -> anyhow::Result<()> {
+    let job = build_software_center(config)
+        .await?
+        .execute(uuid::Uuid::nil(), Role::Owner, &digest, &confirmation_token)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    println!("{}", serde_json::to_string_pretty(&job)?);
+    Ok(())
+}
+
+/// Preview and execute one catalog installation.
+pub async fn software_install(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let service = build_software_center(config).await?;
+    let preview = service
+        .preview_install(uuid::Uuid::nil(), Role::Owner, &id)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let job = service
+        .execute(
+            uuid::Uuid::nil(),
+            Role::Owner,
+            preview.plan.digest(),
+            &preview.confirmation_token,
+        )
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    println!("{}", serde_json::to_string_pretty(&job)?);
+    Ok(())
+}
+
+/// Preview and execute one adoption, update, or uninstall transaction.
+pub async fn software_component_action(
+    config: Arc<Config>,
+    id: String,
+    action: openpanel_app::software_center::ComponentAction,
+) -> anyhow::Result<()> {
+    let service = build_software_center(config).await?;
+    let preview = service
+        .preview_component(uuid::Uuid::nil(), Role::Owner, &id, action)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let job = service
+        .execute(
+            uuid::Uuid::nil(),
+            Role::Owner,
+            preview.plan.digest(),
+            &preview.confirmation_token,
+        )
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    println!("{}", serde_json::to_string_pretty(&job)?);
+    Ok(())
+}
+
+/// Preview and execute one transactional WordPress or Drupal deployment.
+pub async fn software_deploy(
+    config: Arc<Config>,
+    application: String,
+    domain: String,
+    php_version: String,
+    locale: String,
+) -> anyhow::Result<()> {
+    let service = build_software_center(config).await?;
+    let preview = service
+        .preview_deployment(
+            uuid::Uuid::nil(),
+            Role::Owner,
+            openpanel_app::software_center::ApplicationDeploymentInput {
+                application,
+                domain,
+                php_version,
+                locale,
+                enable_dns: false,
+                enable_tls: false,
+                enable_backups: false,
+            },
+        )
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let deployment = service
+        .execute_deployment(
+            uuid::Uuid::nil(),
+            Role::Owner,
+            preview.plan.digest(),
+            &preview.confirmation_token,
+        )
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    println!("{}", serde_json::to_string_pretty(&deployment)?);
+    Ok(())
+}
+
+/// Print bounded Software Center jobs as secret-free JSON.
+pub async fn software_jobs(config: Arc<Config>) -> anyhow::Result<()> {
+    let jobs = build_software_center(config)
+        .await?
+        .jobs(Role::Owner)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    println!("{}", serde_json::to_string_pretty(&jobs)?);
+    Ok(())
+}
+
+/// Request safe-checkpoint cancellation for an active job.
+pub async fn software_cancel(config: Arc<Config>, job: String) -> anyhow::Result<()> {
+    let job = build_software_center(config)
+        .await?
+        .cancel(uuid::Uuid::nil(), Role::Owner, uuid::Uuid::parse_str(&job)?)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    println!("{}", serde_json::to_string_pretty(&job)?);
+    Ok(())
+}
+
+/// Generate a fresh confirmation for an interrupted transaction retry.
+pub async fn software_retry(config: Arc<Config>, job: String) -> anyhow::Result<()> {
+    let preview = build_software_center(config)
+        .await?
+        .retry_preview(uuid::Uuid::nil(), Role::Owner, uuid::Uuid::parse_str(&job)?)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    println!("{}", serde_json::to_string_pretty(&preview)?);
+    Ok(())
+}
+
+/// Run recipe-supported rollback for an interrupted component installation.
+pub async fn software_rollback(config: Arc<Config>, job: String) -> anyhow::Result<()> {
+    let rolled_back = build_software_center(config)
+        .await?
+        .rollback_interrupted(uuid::Uuid::nil(), Role::Owner, uuid::Uuid::parse_str(&job)?)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    println!("{}", serde_json::to_string_pretty(&rolled_back)?);
+    Ok(())
+}
+
+/// Print aggregate Software Center diagnostics as secret-free JSON.
+pub async fn software_diagnostics(config: Arc<Config>) -> anyhow::Result<()> {
+    let diagnostics = build_software_center(config)
+        .await?
+        .diagnostics(Role::Owner)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    println!("{}", serde_json::to_string_pretty(&diagnostics)?);
     Ok(())
 }
 

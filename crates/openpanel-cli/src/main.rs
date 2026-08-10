@@ -5,7 +5,7 @@ use openpanel_cli::{
     BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, Command, CronCommand,
     DatabaseCommand, DnsCommand, FileCommand, LogsCommand, MailCommand, MonitoringCommand,
     SecurityAllowlistCommand, SecurityCommand, SecurityRuleCommand, ServicesCommand, SiteCommand,
-    SslCommand, UserCommand, handlers,
+    SoftwareCommand, SslCommand, UserCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -331,6 +331,51 @@ async fn main() -> anyhow::Result<()> {
                 handlers::mail_password(config, address, password).await
             }
             MailCommand::Status => handlers::mail_status(config).await,
+        },
+        Command::Software { action } => match action {
+            SoftwareCommand::Catalog => handlers::software_catalog(config).await,
+            SoftwareCommand::Inventory => handlers::software_inventory(config).await,
+            SoftwareCommand::Preview { id } => handlers::software_preview(config, id).await,
+            SoftwareCommand::Execute {
+                digest,
+                confirmation_token,
+            } => handlers::software_execute(config, digest, confirmation_token).await,
+            SoftwareCommand::Install { id } => handlers::software_install(config, id).await,
+            SoftwareCommand::Adopt { id } => {
+                handlers::software_component_action(
+                    config,
+                    id,
+                    openpanel_app::software_center::ComponentAction::Adopt,
+                )
+                .await
+            }
+            SoftwareCommand::Update { id } => {
+                handlers::software_component_action(
+                    config,
+                    id,
+                    openpanel_app::software_center::ComponentAction::Update,
+                )
+                .await
+            }
+            SoftwareCommand::Uninstall { id } => {
+                handlers::software_component_action(
+                    config,
+                    id,
+                    openpanel_app::software_center::ComponentAction::Remove,
+                )
+                .await
+            }
+            SoftwareCommand::Deploy {
+                application,
+                domain,
+                php_version,
+                locale,
+            } => handlers::software_deploy(config, application, domain, php_version, locale).await,
+            SoftwareCommand::Cancel { job } => handlers::software_cancel(config, job).await,
+            SoftwareCommand::Retry { job } => handlers::software_retry(config, job).await,
+            SoftwareCommand::Rollback { job } => handlers::software_rollback(config, job).await,
+            SoftwareCommand::Diagnostics => handlers::software_diagnostics(config).await,
+            SoftwareCommand::Jobs => handlers::software_jobs(config).await,
         },
     }
 }

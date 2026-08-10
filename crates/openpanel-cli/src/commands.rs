@@ -98,6 +98,70 @@ pub enum Command {
         #[command(subcommand)]
         action: MailCommand,
     },
+    /// Browse and install curated system software and applications.
+    Software {
+        /// Software Center operation.
+        #[command(subcommand)]
+        action: SoftwareCommand,
+    },
+}
+
+/// Curated Software Center operations.
+#[derive(Debug, Subcommand)]
+#[allow(missing_docs)]
+pub enum SoftwareCommand {
+    Catalog,
+    Inventory,
+    Preview {
+        #[arg(long)]
+        id: String,
+    },
+    Execute {
+        #[arg(long)]
+        digest: String,
+        #[arg(long)]
+        confirmation_token: String,
+    },
+    Install {
+        #[arg(long)]
+        id: String,
+    },
+    Adopt {
+        #[arg(long)]
+        id: String,
+    },
+    Update {
+        #[arg(long)]
+        id: String,
+    },
+    Uninstall {
+        #[arg(long)]
+        id: String,
+    },
+    Deploy {
+        #[arg(long)]
+        application: String,
+        #[arg(long)]
+        domain: String,
+        #[arg(long)]
+        php_version: String,
+        #[arg(long, default_value = "en_US")]
+        locale: String,
+    },
+    Cancel {
+        #[arg(long)]
+        job: String,
+    },
+    Retry {
+        #[arg(long)]
+        job: String,
+    },
+    Rollback {
+        #[arg(long)]
+        job: String,
+    },
+    Diagnostics,
+    Jobs,
 }
 
 /// Hosted-mail operations.

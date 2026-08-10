@@ -133,6 +133,65 @@ fn descriptors() -> Result<Vec<ServiceDescriptor>, ServiceManagerError> {
             vec!["databases".into()],
         )
         .map_err(|_| ServiceManagerError::Controller)?,
+        ServiceDescriptor::new(
+            ServiceId::new("mariadb").map_err(|_| ServiceManagerError::Controller)?,
+            "MariaDB",
+            "mariadb.service",
+            vec![
+                ServiceAction::Start,
+                ServiceAction::Stop,
+                ServiceAction::Restart,
+                ServiceAction::Reload,
+                ServiceAction::Enable,
+                ServiceAction::Disable,
+            ],
+            vec!["databases".into()],
+        )
+        .map_err(|_| ServiceManagerError::Controller)?,
+        ServiceDescriptor::new(
+            ServiceId::new("redis").map_err(|_| ServiceManagerError::Controller)?,
+            "Redis",
+            "redis-server.service",
+            vec![
+                ServiceAction::Start,
+                ServiceAction::Stop,
+                ServiceAction::Restart,
+                ServiceAction::Enable,
+                ServiceAction::Disable,
+            ],
+            vec!["sites".into()],
+        )
+        .map_err(|_| ServiceManagerError::Controller)?,
+        ServiceDescriptor::new(
+            ServiceId::new("php-83").map_err(|_| ServiceManagerError::Controller)?,
+            "PHP-FPM 8.3",
+            "php8.3-fpm.service",
+            vec![
+                ServiceAction::Start,
+                ServiceAction::Stop,
+                ServiceAction::Restart,
+                ServiceAction::Reload,
+                ServiceAction::Enable,
+                ServiceAction::Disable,
+            ],
+            vec!["sites".into()],
+        )
+        .map_err(|_| ServiceManagerError::Controller)?,
+        ServiceDescriptor::new(
+            ServiceId::new("php-84").map_err(|_| ServiceManagerError::Controller)?,
+            "PHP-FPM 8.4",
+            "php8.4-fpm.service",
+            vec![
+                ServiceAction::Start,
+                ServiceAction::Stop,
+                ServiceAction::Restart,
+                ServiceAction::Reload,
+                ServiceAction::Enable,
+                ServiceAction::Disable,
+            ],
+            vec!["sites".into()],
+        )
+        .map_err(|_| ServiceManagerError::Controller)?,
     ])
 }
 impl Module for SystemServicesModule {

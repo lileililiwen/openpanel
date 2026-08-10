@@ -26,6 +26,7 @@ pub mod router;
 pub mod security;
 pub mod settings;
 pub mod sites;
+pub mod software_center;
 pub mod ssl;
 pub mod system_services;
 pub mod users;

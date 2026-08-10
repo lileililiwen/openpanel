@@ -64,7 +64,9 @@ compile time by Rust's type system and at runtime by axum middleware.
 Layer boundaries are enforced as separate crates — `cargo` refuses to
 build if `openpanel-domain` accidentally imports `sqlx`. Adding a new
 bounded context (sites, ssl, databases, files, monitoring, cron) is a
-single `register()` call on the `ModuleRegistry`.## Spec-first development
+single `register()` call on the `ModuleRegistry`.
+
+## Spec-first development
 
 This project uses [OpenSpec](https://github.com/Fission-AI/OpenSpec).
 Specs live in `openspec/`:
@@ -166,6 +168,10 @@ failing path.
   series with a rolling retention window (default 7 days),
   config-driven alert thresholds with hysteresis (audit-log events in
   v0.1), and a background collector task.
+- **Software Center** — Owner-only trusted catalog, host discovery,
+  reviewable Nginx/PHP/MySQL/MariaDB/Redis lifecycle plans, durable jobs,
+  safe cancellation/retry/rollback, and pinned WordPress/Drupal deployment
+  recipes. See [the operator guide](docs/software-center.md).
 - **HTTP API** — `/api/v1/identity/*`, `/api/v1/sites/*`,
   `/api/v1/databases/*`, `/api/v1/files/*`, `/api/v1/monitoring/*`,
   `/health`. Bearer + cookie auth.

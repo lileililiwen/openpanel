@@ -1,0 +1,1838 @@
+//! Trusted embedded catalog and package transaction orchestration.
+
+mod apt;
+mod artifact;
+mod catalog;
+mod integrated;
+mod module;
+
+use std::{
+    collections::{BTreeMap, BTreeSet, HashMap},
+    sync::{Arc, Mutex},
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+pub use apt::{AptPackageManager, CommandResult, PackageCommand, TokioPackageCommand};
+pub use artifact::{
+    ArtifactDigest, ArtifactDownloader, PinnedArtifact, SafeArtifactInstaller, pinned_artifact,
+};
+use async_trait::async_trait;
+pub use catalog::{CatalogVerifier, SignedCatalogEnvelope, VerifiedCatalog};
+pub use integrated::{
+    ApplicationDeploymentResources, CreatedApplicationDatabase, CreatedApplicationSite,
+    IntegratedApplicationDeployer, OpenPanelApplicationResources,
+};
+pub use module::{FakeApplicationDeployer, FakePackageManager, SoftwareCenterModule};
+use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
+use openpanel_domain::{
+    Role,
+    software_center::{
+        JobState, PackageId, PlanAction, SoftwareJob, SoftwarePlan, SupportedPlatform,
+    },
+};
+use serde::{Deserialize, Serialize};
+use sha2::Digest;
+use sqlx::SqlitePool;
+use thiserror::Error;
+use tokio::sync::{Mutex as AsyncMutex, OnceCell};
+use uuid::Uuid;
+
+/// Software Center application error with bounded diagnostics.
+#[derive(Debug, Error, Clone, PartialEq, Eq)]
+pub enum SoftwareCenterError {
+    /// Caller is not an Owner.
+    #[error("software operation forbidden")]
+    Forbidden,
+    /// Catalog entry, plan, or input is invalid.
+    #[error("invalid software request")]
+    Invalid,
+    /// Host or catalog state differs from the preview.
+    #[error("software plan conflict")]
+    Conflict,
+    /// Managed resources still require the component.
+    #[error("software component has {0} managed dependents")]
+    Dependencies(u64),
+    /// Component validation failed.
+    #[error("software validation failed")]
+    Validation,
+    /// Package adapter failed with a redacted error.
+    #[error("software package operation failed")]
+    Package,
+    /// A catalog item is visible but its required deployment adapter is unavailable.
+    #[error("software deployment adapter unavailable")]
+    Unsupported,
+    /// Internal state persistence failed.
+    #[error("software state unavailable")]
+    Repository,
+}
+
+/// Discovered host state used to bind a preview to execution.
+#[derive(Debug, Clone)]
+pub struct HostSnapshot {
+    /// Exact supported platform.
+    pub platform: SupportedPlatform,
+    /// Stable digest of relevant package and repository state.
+    pub state_digest: String,
+    /// Package identifiers reported as installed by the native manager.
+    pub installed_packages: BTreeSet<String>,
+}
+impl HostSnapshot {
+    /// Deterministic Ubuntu snapshot for adapter tests.
+    pub fn test(state_digest: &str) -> Self {
+        let platform = match SupportedPlatform::new("ubuntu", "24.04", "x86_64") {
+            Ok(value) => value,
+            Err(_) => std::process::abort(),
+        };
+        Self {
+            platform,
+            state_digest: state_digest.to_owned(),
+            installed_packages: BTreeSet::new(),
+        }
+    }
+}
+
+/// Typed package-manager boundary. Implementations own every executable and argument.
+#[async_trait]
+pub trait PackageManager: Send + Sync {
+    /// Discover the platform and relevant package state.
+    async fn discover(&self) -> Result<HostSnapshot, SoftwareCenterError>;
+    /// Apply the fixed package actions from a confirmed plan.
+    async fn apply(&self, actions: &[PlanAction]) -> Result<(), SoftwareCenterError>;
+    /// Validate component configuration and readiness.
+    async fn validate(&self, component: &str) -> Result<(), SoftwareCenterError>;
+    /// Restore recipe-supported package/configuration state.
+    async fn rollback(&self, actions: &[PlanAction]) -> Result<(), SoftwareCenterError>;
+}
+
+/// Validated one-click application choices supplied by an Owner.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ApplicationDeploymentInput {
+    /// `wordpress` or `drupal`.
+    pub application: String,
+    /// Unused primary DNS name reserved for the new site.
+    pub domain: String,
+    /// Supported PHP minor version (`8.3` or `8.4`).
+    pub php_version: String,
+    /// Installation locale passed as data, never command syntax.
+    pub locale: String,
+    /// Request DNS integration after the application is healthy.
+    pub enable_dns: bool,
+    /// Request TLS integration after DNS/site provisioning.
+    pub enable_tls: bool,
+    /// Register the resulting site in backups.
+    pub enable_backups: bool,
+}
+impl ApplicationDeploymentInput {
+    /// Deterministic input for adapter tests.
+    pub fn test(application: &str, domain: &str, php_version: &str) -> Self {
+        Self {
+            application: application.to_owned(),
+            domain: domain.to_owned(),
+            php_version: php_version.to_owned(),
+            locale: "en_US".to_owned(),
+            enable_dns: false,
+            enable_tls: false,
+            enable_backups: false,
+        }
+    }
+}
+
+/// Resources created by an application adapter plus one-time credentials.
+#[derive(Debug, Clone)]
+pub struct ProvisionedApplication {
+    /// Stable deployment identifier.
+    pub id: Uuid,
+    /// Adapter-owned rollback handles in creation order.
+    pub resources: Vec<String>,
+    resource_receipts: Vec<ApplicationResource>,
+    admin_username: String,
+    admin_password: String,
+}
+impl ProvisionedApplication {
+    /// Deterministic receipt for service tests.
+    pub fn test(resources: Vec<&str>, username: &str, password: &str) -> Self {
+        Self {
+            id: Uuid::new_v4(),
+            resources: resources.into_iter().map(str::to_owned).collect(),
+            resource_receipts: Vec::new(),
+            admin_username: username.to_owned(),
+            admin_password: password.to_owned(),
+        }
+    }
+}
+
+/// Typed rollback receipt for a resource created by an application transaction.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ApplicationResource {
+    /// OpenPanel site aggregate and its exact document root.
+    Site {
+        /// Site aggregate identifier.
+        id: Uuid,
+        /// Exact document root allocated by the site service.
+        document_root: String,
+    },
+    /// OpenPanel database aggregate.
+    Database {
+        /// Database aggregate identifier.
+        id: Uuid,
+    },
+    /// Verified application files staged below the site's document root.
+    Artifact {
+        /// Catalog application identifier.
+        application: String,
+        /// Primary site domain.
+        domain: String,
+        /// Selected PHP runtime version.
+        php_version: String,
+        /// Exact managed document root.
+        document_root: String,
+    },
+    /// Optional DNS integration receipt.
+    Dns {
+        /// Provider record or lease identifier.
+        id: String,
+    },
+    /// Optional TLS integration receipt.
+    Tls {
+        /// Certificate domain.
+        domain: String,
+    },
+    /// Optional backup-plan integration receipt.
+    Backup {
+        /// Backup plan identifier.
+        id: Uuid,
+    },
+}
+
+/// Typed transactional boundary for site/database/artifact integrations.
+#[async_trait]
+pub trait ApplicationDeployer: Send + Sync {
+    /// Optional integration capabilities available before any package mutation.
+    fn capabilities(&self) -> ApplicationCapabilities {
+        ApplicationCapabilities::default()
+    }
+    /// Create only the resources declared by a confirmed deployment plan.
+    async fn provision(
+        &self,
+        actor: Uuid,
+        input: &ApplicationDeploymentInput,
+    ) -> Result<ProvisionedApplication, SoftwareCenterError>;
+    /// Validate the installed application's health.
+    async fn validate(
+        &self,
+        deployment: &ProvisionedApplication,
+    ) -> Result<(), SoftwareCenterError>;
+    /// Delete only receipt resources, in reverse creation order.
+    async fn rollback(
+        &self,
+        deployment: &ProvisionedApplication,
+    ) -> Result<(), SoftwareCenterError>;
+}
+
+/// Optional integrations implemented by an application deployment adapter.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ApplicationCapabilities {
+    /// Provider-backed DNS record creation and rollback.
+    pub dns: bool,
+    /// Certificate issuance and rollback.
+    pub tls: bool,
+    /// Backup plan creation and rollback.
+    pub backups: bool,
+}
+
+pub(crate) struct UnavailableApplicationDeployer;
+#[async_trait]
+impl ApplicationDeployer for UnavailableApplicationDeployer {
+    async fn provision(
+        &self,
+        _actor: Uuid,
+        _input: &ApplicationDeploymentInput,
+    ) -> Result<ProvisionedApplication, SoftwareCenterError> {
+        Err(SoftwareCenterError::Package)
+    }
+
+    async fn validate(
+        &self,
+        _deployment: &ProvisionedApplication,
+    ) -> Result<(), SoftwareCenterError> {
+        Err(SoftwareCenterError::Validation)
+    }
+
+    async fn rollback(
+        &self,
+        _deployment: &ProvisionedApplication,
+    ) -> Result<(), SoftwareCenterError> {
+        Ok(())
+    }
+}
+
+/// Catalog entry kind.
+#[derive(Debug, Clone, Copy, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CatalogKind {
+    /// Host package or runtime.
+    SystemComponent,
+    /// Deployable site application.
+    WebApplication,
+}
+
+/// Supported component lifecycle mutation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ComponentAction {
+    /// Install an available component.
+    Install,
+    /// Validate and take management ownership of an external component.
+    Adopt,
+    /// Upgrade a panel-managed component within its recipe.
+    Update,
+    /// Remove a panel-managed component when no dependency blocks it.
+    Remove,
+}
+
+/// Public, secret-free recovery catalog entry.
+#[derive(Debug, Clone, Serialize)]
+pub struct CatalogEntry {
+    /// Stable identifier.
+    pub id: String,
+    /// Display label.
+    pub name: String,
+    /// Human-readable purpose without executable content.
+    pub description: String,
+    /// Stable display category.
+    pub category: String,
+    /// Typed recipe kind.
+    pub kind: CatalogKind,
+    /// SPDX-style license label.
+    pub license: String,
+    /// Selectable supported upstream versions.
+    pub versions: Vec<String>,
+    /// Exact supported host tuples.
+    pub platforms: Vec<SupportedPlatform>,
+    /// Logical component identifiers required by this entry.
+    pub dependencies: Vec<String>,
+    /// Catalog source shown to the operator.
+    pub provenance: String,
+    /// Fixed distro packages owned by the recipe.
+    pub packages: Vec<PackageId>,
+    /// Catalog-level availability before host discovery.
+    pub lifecycle_state: String,
+}
+
+/// Discovered catalog lifecycle without implicit ownership changes.
+#[derive(Debug, Clone, Serialize)]
+pub struct ComponentInventory {
+    /// Catalog identifier.
+    pub id: String,
+    /// `available` or `externally_managed` in the recovery catalog.
+    pub state: String,
+}
+
+/// Reviewable installation preview with a one-time confirmation.
+#[derive(Debug, Serialize)]
+pub struct InstallPreview {
+    /// Immutable, digest-bound package plan.
+    pub plan: SoftwarePlan,
+    /// Opaque one-use confirmation token.
+    pub confirmation_token: String,
+    /// Aggregate affected service labels.
+    pub affected_services: Vec<String>,
+    /// Fixed package identifiers expected to be downloaded or changed.
+    pub packages: Vec<String>,
+    /// Native manager estimate when available.
+    pub estimated_download_bytes: Option<u64>,
+    /// Native manager disk delta when available.
+    pub estimated_disk_delta_bytes: Option<i64>,
+    /// OpenPanel-owned configuration roots affected by the recipe.
+    pub configuration_paths: Vec<String>,
+    /// Whether the recipe can automatically reverse this action.
+    pub rollback_supported: bool,
+    /// Exact aggregate dependent counts discovered during planning.
+    pub dependency_counts: BTreeMap<String, u64>,
+    /// Typed conflict explanations; never command output.
+    pub conflicts: Vec<String>,
+}
+
+#[derive(Clone)]
+struct StoredPreview {
+    kind: PreviewKind,
+    actions: Vec<PlanAction>,
+    host_state_digest: String,
+    confirmation_token: String,
+    expires_at: u64,
+}
+
+struct DurableTransactionLock {
+    pool: Option<SqlitePool>,
+    job_id: Uuid,
+}
+impl DurableTransactionLock {
+    async fn release(mut self) -> Result<(), SoftwareCenterError> {
+        if let Some(pool) = self.pool.take() {
+            sqlx::query("DELETE FROM software_transaction_lock WHERE singleton=1 AND job_id=?")
+                .bind(self.job_id.to_string())
+                .execute(&pool)
+                .await
+                .map_err(|_| SoftwareCenterError::Repository)?;
+        }
+        Ok(())
+    }
+}
+impl Drop for DurableTransactionLock {
+    fn drop(&mut self) {
+        let Some(pool) = self.pool.take() else {
+            return;
+        };
+        let job_id = self.job_id.to_string();
+        if let Ok(runtime) = tokio::runtime::Handle::try_current() {
+            runtime.spawn(async move {
+                let _ = sqlx::query(
+                    "DELETE FROM software_transaction_lock WHERE singleton=1 AND job_id=?",
+                )
+                .bind(job_id)
+                .execute(&pool)
+                .await;
+            });
+        }
+    }
+}
+
+#[derive(Clone, Serialize, Deserialize)]
+enum PreviewKind {
+    Component { id: String, action: ComponentAction },
+    Application(ApplicationDeploymentInput),
+}
+
+#[derive(Serialize, Deserialize)]
+struct PersistedPreview {
+    kind: PreviewKind,
+    actions: Vec<PlanAction>,
+}
+
+/// Public bounded job projection.
+#[derive(Debug, Clone, Serialize)]
+pub struct SoftwareJobView {
+    /// Stable job ID.
+    pub id: Uuid,
+    /// Plan digest without command details.
+    pub plan_digest: String,
+    /// Redacted lifecycle state.
+    pub state: String,
+}
+
+/// Secret-free aggregate health and ownership counts.
+#[derive(Debug, Clone, Serialize)]
+pub struct SoftwareDiagnostics {
+    /// Trusted entries currently available.
+    pub catalog_entries: usize,
+    /// Components explicitly managed by OpenPanel.
+    pub managed_components: usize,
+    /// Compatible components detected outside OpenPanel ownership.
+    pub external_components: usize,
+    /// Non-terminal package/application jobs.
+    pub active_jobs: usize,
+    /// Jobs reconciled after interruption.
+    pub interrupted_jobs: usize,
+}
+
+/// Fresh confirmation generated for a recipe-supported interrupted-job retry.
+#[derive(Debug, Clone, Serialize)]
+pub struct RetryPreview {
+    /// Original immutable plan digest.
+    pub plan_digest: String,
+    /// New one-use confirmation token.
+    pub confirmation_token: String,
+    /// Fixed packages retained from the original plan.
+    pub packages: Vec<String>,
+}
+
+/// Successful application deployment with credentials returned exactly once.
+#[derive(Debug, Serialize)]
+pub struct ApplicationDeploymentResult {
+    /// Completed transaction job.
+    pub job: SoftwareJobView,
+    /// Application deployment identifier.
+    pub deployment_id: Uuid,
+    /// Generated administrator username.
+    pub admin_username: String,
+    /// Generated administrator password; never persisted in job history.
+    pub admin_password: String,
+}
+
+/// Owner-only Software Center service.
+pub struct SoftwareCenterService {
+    packages: Arc<dyn PackageManager>,
+    applications: Arc<dyn ApplicationDeployer>,
+    audit: Arc<dyn AuditService>,
+    previews: Mutex<HashMap<String, StoredPreview>>,
+    jobs: Mutex<Vec<SoftwareJobView>>,
+    owned_components: Mutex<BTreeSet<String>>,
+    cancellation_requests: Mutex<BTreeSet<Uuid>>,
+    transaction: AsyncMutex<()>,
+    pool: Option<SqlitePool>,
+    reconciled: OnceCell<()>,
+    applications_enabled: bool,
+}
+impl SoftwareCenterService {
+    /// Construct from the fixed package adapter and append-only audit port.
+    pub fn new(packages: Arc<dyn PackageManager>, audit: Arc<dyn AuditService>) -> Self {
+        Self::compose(
+            packages,
+            Arc::new(UnavailableApplicationDeployer),
+            audit,
+            None,
+            false,
+        )
+    }
+
+    /// Construct with an explicit application deployment adapter.
+    pub fn with_deployer(
+        packages: Arc<dyn PackageManager>,
+        applications: Arc<dyn ApplicationDeployer>,
+        audit: Arc<dyn AuditService>,
+    ) -> Self {
+        Self::compose(packages, applications, audit, None, true)
+    }
+
+    pub(crate) fn with_persistence(
+        packages: Arc<dyn PackageManager>,
+        applications: Arc<dyn ApplicationDeployer>,
+        audit: Arc<dyn AuditService>,
+        pool: SqlitePool,
+        applications_enabled: bool,
+    ) -> Self {
+        Self::compose(
+            packages,
+            applications,
+            audit,
+            Some(pool),
+            applications_enabled,
+        )
+    }
+
+    fn compose(
+        packages: Arc<dyn PackageManager>,
+        applications: Arc<dyn ApplicationDeployer>,
+        audit: Arc<dyn AuditService>,
+        pool: Option<SqlitePool>,
+        applications_enabled: bool,
+    ) -> Self {
+        Self {
+            packages,
+            applications,
+            audit,
+            previews: Mutex::new(HashMap::new()),
+            jobs: Mutex::new(Vec::new()),
+            owned_components: Mutex::new(BTreeSet::new()),
+            cancellation_requests: Mutex::new(BTreeSet::new()),
+            transaction: AsyncMutex::new(()),
+            pool,
+            reconciled: OnceCell::new(),
+            applications_enabled,
+        }
+    }
+
+    /// List the embedded recovery catalog for an Owner.
+    pub fn catalog(&self, role: Role) -> Result<Vec<CatalogEntry>, SoftwareCenterError> {
+        owner(role)?;
+        let mut entries = recovery_catalog()?;
+        if !self.applications_enabled {
+            for entry in &mut entries {
+                if matches!(entry.kind, CatalogKind::WebApplication) {
+                    entry.lifecycle_state = "adapter_unavailable".to_owned();
+                }
+            }
+        }
+        Ok(entries)
+    }
+
+    /// Verify and atomically activate a remote data-only catalog snapshot.
+    pub async fn activate_catalog(
+        &self,
+        actor: Uuid,
+        role: Role,
+        verifier: &CatalogVerifier,
+        envelope: &SignedCatalogEnvelope,
+        now: u64,
+    ) -> Result<VerifiedCatalog, SoftwareCenterError> {
+        owner(role)?;
+        let verified = match verifier.verify(envelope, now) {
+            Ok(value) => value,
+            Err(error) => {
+                self.audit
+                    .record(
+                        AuditEvent::new(
+                            actor.to_string(),
+                            AuditAction::SoftwareChanged,
+                            AuditOutcome::Failure,
+                        )
+                        .target("catalog-refresh")
+                        .metadata(serde_json::json!({"operation":"catalog_rejected"})),
+                    )
+                    .await
+                    .map_err(|_| SoftwareCenterError::Repository)?;
+                return Err(error);
+            }
+        };
+        let pool = self.pool.as_ref().ok_or(SoftwareCenterError::Repository)?;
+        let mut transaction = pool
+            .begin()
+            .await
+            .map_err(|_| SoftwareCenterError::Repository)?;
+        sqlx::query("UPDATE software_catalog_snapshots SET active=0 WHERE active=1")
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| SoftwareCenterError::Repository)?;
+        sqlx::query("INSERT INTO software_catalog_snapshots(id,digest,payload,signature,expires_at,active,created_at) VALUES(?,?,?,?,?,1,?) ON CONFLICT(digest) DO UPDATE SET active=1")
+            .bind(Uuid::new_v4().to_string())
+            .bind(&verified.digest)
+            .bind(&envelope.payload)
+            .bind(&envelope.signature)
+            .bind(envelope.expires_at.to_string())
+            .bind(chrono::Utc::now().to_rfc3339())
+            .execute(&mut *transaction)
+            .await
+            .map_err(|_| SoftwareCenterError::Repository)?;
+        transaction
+            .commit()
+            .await
+            .map_err(|_| SoftwareCenterError::Repository)?;
+        self.record(actor, "catalog_activated", &verified.digest)
+            .await?;
+        Ok(verified)
+    }
+
+    /// Discover installed packages and classify them without adopting them.
+    pub async fn inventory(
+        &self,
+        role: Role,
+    ) -> Result<Vec<ComponentInventory>, SoftwareCenterError> {
+        owner(role)?;
+        self.ensure_reconciled().await?;
+        let snapshot = self.packages.discover().await?;
+        let owned = self.managed_components().await?;
+        Ok(recovery_catalog()?
+            .into_iter()
+            .filter(|entry| matches!(entry.kind, CatalogKind::SystemComponent))
+            .map(|entry| {
+                let supported = entry.platforms.contains(&snapshot.platform);
+                let installed = !entry.packages.is_empty()
+                    && entry
+                        .packages
+                        .iter()
+                        .all(|package| snapshot.installed_packages.contains(package.as_str()));
+                let managed = owned.contains(&entry.id);
+                ComponentInventory {
+                    id: entry.id,
+                    state: if !supported {
+                        "unsupported".to_owned()
+                    } else if installed && managed {
+                        "panel_managed".to_owned()
+                    } else if installed {
+                        "externally_managed".to_owned()
+                    } else {
+                        "available".to_owned()
+                    },
+                }
+            })
+            .collect())
+    }
+
+    /// Preview installation against a discovered host snapshot.
+    pub async fn preview_install(
+        &self,
+        actor: Uuid,
+        role: Role,
+        component: &str,
+    ) -> Result<InstallPreview, SoftwareCenterError> {
+        self.preview_component(actor, role, component, ComponentAction::Install)
+            .await
+    }
+
+    /// Preview one typed component lifecycle action.
+    pub async fn preview_component(
+        &self,
+        actor: Uuid,
+        role: Role,
+        component: &str,
+        action: ComponentAction,
+    ) -> Result<InstallPreview, SoftwareCenterError> {
+        owner(role)?;
+        self.ensure_reconciled().await?;
+        let entry = recovery_catalog()?
+            .into_iter()
+            .find(|entry| entry.id == component)
+            .ok_or(SoftwareCenterError::Invalid)?;
+        if !matches!(entry.kind, CatalogKind::SystemComponent) || entry.packages.is_empty() {
+            return Err(SoftwareCenterError::Invalid);
+        }
+        let snapshot = self.packages.discover().await?;
+        if !entry.platforms.contains(&snapshot.platform) {
+            return Err(SoftwareCenterError::Unsupported);
+        }
+        let installed = entry
+            .packages
+            .iter()
+            .all(|package| snapshot.installed_packages.contains(package.as_str()));
+        let managed = self.managed_components().await?.contains(component);
+        match action {
+            ComponentAction::Install if installed => return Err(SoftwareCenterError::Conflict),
+            ComponentAction::Adopt if !installed || managed => {
+                return Err(SoftwareCenterError::Conflict);
+            }
+            ComponentAction::Update | ComponentAction::Remove if !installed || !managed => {
+                return Err(SoftwareCenterError::Conflict);
+            }
+            _ => {}
+        }
+        if action == ComponentAction::Remove {
+            let dependents = self.dependency_count(component).await?;
+            if dependents > 0 {
+                return Err(SoftwareCenterError::Dependencies(dependents));
+            }
+        }
+        if (component == "mysql" && snapshot.installed_packages.contains("mariadb-server"))
+            || (component == "mariadb" && snapshot.installed_packages.contains("mysql-server"))
+        {
+            return Err(SoftwareCenterError::Conflict);
+        }
+        let actions: Vec<_> = match action {
+            ComponentAction::Install => entry
+                .packages
+                .iter()
+                .filter(|package| !snapshot.installed_packages.contains(package.as_str()))
+                .cloned()
+                .map(PlanAction::Install)
+                .collect(),
+            ComponentAction::Update => entry
+                .packages
+                .iter()
+                .cloned()
+                .map(PlanAction::Update)
+                .collect(),
+            ComponentAction::Remove => entry
+                .packages
+                .iter()
+                .cloned()
+                .map(PlanAction::Remove)
+                .collect(),
+            ComponentAction::Adopt => Vec::new(),
+        };
+        let plan = SoftwarePlan::new(
+            format!("embedded-v1-{component}-{action:?}"),
+            snapshot.platform,
+            actions.clone(),
+        )
+        .map_err(|_| SoftwareCenterError::Invalid)?;
+        let confirmation_token = Uuid::new_v4().to_string();
+        let expires_at = now()?
+            .checked_add(300)
+            .ok_or(SoftwareCenterError::Invalid)?;
+        let stored = StoredPreview {
+            kind: PreviewKind::Component {
+                id: entry.id.clone(),
+                action,
+            },
+            actions: actions.clone(),
+            host_state_digest: snapshot.state_digest,
+            confirmation_token: confirmation_token.clone(),
+            expires_at,
+        };
+        self.persist_plan(plan.digest(), &stored).await?;
+        self.previews
+            .lock()
+            .map_err(|_| SoftwareCenterError::Repository)?
+            .insert(plan.digest().to_owned(), stored);
+        self.record(actor, "component_previewed", plan.digest())
+            .await?;
+        let (download_bytes, installed_bytes) = component_estimate(component);
+        let (estimated_download_bytes, estimated_disk_delta_bytes) = match action {
+            ComponentAction::Install | ComponentAction::Update => {
+                (Some(download_bytes), Some(installed_bytes))
+            }
+            ComponentAction::Remove => (Some(0), Some(-installed_bytes)),
+            ComponentAction::Adopt => (Some(0), Some(0)),
+        };
+        Ok(InstallPreview {
+            plan,
+            confirmation_token,
+            affected_services: vec![entry.id],
+            packages: actions
+                .iter()
+                .map(|action| match action {
+                    PlanAction::Install(package)
+                    | PlanAction::Update(package)
+                    | PlanAction::Remove(package) => package.as_str().to_owned(),
+                })
+                .collect(),
+            estimated_download_bytes,
+            estimated_disk_delta_bytes,
+            configuration_paths: vec![format!("/etc/openpanel/software/{component}")],
+            rollback_supported: matches!(action, ComponentAction::Install | ComponentAction::Adopt),
+            dependency_counts: BTreeMap::new(),
+            conflicts: Vec::new(),
+        })
+    }
+
+    /// Execute one fresh preview under the exclusive package transaction lock.
+    pub async fn execute(
+        &self,
+        actor: Uuid,
+        role: Role,
+        plan_digest: &str,
+        confirmation_token: &str,
+    ) -> Result<SoftwareJobView, SoftwareCenterError> {
+        owner(role)?;
+        self.ensure_reconciled().await?;
+        let _transaction = self.transaction.lock().await;
+        let preview = self.take_preview(plan_digest, confirmation_token).await?;
+        let current = self.packages.discover().await?;
+        if current.state_digest != preview.host_state_digest {
+            return Err(SoftwareCenterError::Conflict);
+        }
+        let id = Uuid::new_v4();
+        let durable_lock = self.acquire_durable_lock(id).await?;
+        let mut aggregate =
+            SoftwareJob::new(id, plan_digest).map_err(|_| SoftwareCenterError::Invalid)?;
+        aggregate
+            .start()
+            .map_err(|_| SoftwareCenterError::Repository)?;
+        self.push_job(id, plan_digest, aggregate.state()).await?;
+        if !preview.actions.is_empty()
+            && let Err(error) = self.packages.apply(&preview.actions).await
+        {
+            let _ = aggregate.fail();
+            self.push_job(id, plan_digest, aggregate.state()).await?;
+            self.record_failure(actor, "package_failed", plan_digest)
+                .await?;
+            return Err(error);
+        }
+        if self.take_cancellation(id)? {
+            let _ = self.packages.rollback(&preview.actions).await;
+            let view = self.push_job(id, plan_digest, JobState::Cancelled).await?;
+            durable_lock.release().await?;
+            self.record(actor, "cancelled", plan_digest).await?;
+            return Ok(view);
+        }
+        aggregate
+            .validate()
+            .map_err(|_| SoftwareCenterError::Repository)?;
+        self.push_job(id, plan_digest, aggregate.state()).await?;
+        let (component, action) = match preview.kind {
+            PreviewKind::Component { id, action } => (id, action),
+            PreviewKind::Application(_) => return Err(SoftwareCenterError::Invalid),
+        };
+        if action != ComponentAction::Remove
+            && let Err(error) = self.packages.validate(&component).await
+        {
+            let _ = self.packages.rollback(&preview.actions).await;
+            let _ = aggregate.fail();
+            self.push_job(id, plan_digest, aggregate.state()).await?;
+            self.record_failure(actor, "validation_failed", plan_digest)
+                .await?;
+            return Err(error);
+        }
+        if self.take_cancellation(id)? {
+            let _ = self.packages.rollback(&preview.actions).await;
+            let view = self.push_job(id, plan_digest, JobState::Cancelled).await?;
+            durable_lock.release().await?;
+            self.record(actor, "cancelled", plan_digest).await?;
+            return Ok(view);
+        }
+        self.set_managed(
+            &component,
+            action != ComponentAction::Remove,
+            &current.state_digest,
+        )
+        .await?;
+        aggregate
+            .succeed()
+            .map_err(|_| SoftwareCenterError::Repository)?;
+        let view = self.push_job(id, plan_digest, aggregate.state()).await?;
+        durable_lock.release().await?;
+        self.record(actor, "installed", plan_digest).await?;
+        Ok(view)
+    }
+
+    /// Preview a WordPress or Drupal deployment and its complete stack dependencies.
+    pub async fn preview_deployment(
+        &self,
+        actor: Uuid,
+        role: Role,
+        input: ApplicationDeploymentInput,
+    ) -> Result<InstallPreview, SoftwareCenterError> {
+        owner(role)?;
+        self.ensure_reconciled().await?;
+        if !self.applications_enabled {
+            return Err(SoftwareCenterError::Unsupported);
+        }
+        validate_deployment_input(&input)?;
+        let capabilities = self.applications.capabilities();
+        if (input.enable_dns && !capabilities.dns)
+            || (input.enable_tls && !capabilities.tls)
+            || (input.enable_backups && !capabilities.backups)
+        {
+            return Err(SoftwareCenterError::Unsupported);
+        }
+        let snapshot = self.packages.discover().await?;
+        let catalog = recovery_catalog()?;
+        let php_id = format!("php-{}", input.php_version);
+        let mut actions = Vec::new();
+        for id in ["nginx", php_id.as_str(), "mysql"] {
+            let entry = catalog
+                .iter()
+                .find(|entry| entry.id == id)
+                .ok_or(SoftwareCenterError::Invalid)?;
+            if !entry.platforms.contains(&snapshot.platform) {
+                return Err(SoftwareCenterError::Unsupported);
+            }
+            actions.extend(
+                entry
+                    .packages
+                    .iter()
+                    .filter(|package| !snapshot.installed_packages.contains(package.as_str()))
+                    .cloned()
+                    .map(PlanAction::install),
+            );
+        }
+        let input_bytes = serde_json::to_vec(&input).map_err(|_| SoftwareCenterError::Invalid)?;
+        let target_digest = hex::encode(sha2::Sha256::digest(input_bytes));
+        let plan = SoftwarePlan::new(
+            format!("embedded-v1-{target_digest}"),
+            snapshot.platform,
+            actions.clone(),
+        )
+        .map_err(|_| SoftwareCenterError::Invalid)?;
+        let confirmation_token = Uuid::new_v4().to_string();
+        let expires_at = now()?
+            .checked_add(300)
+            .ok_or(SoftwareCenterError::Invalid)?;
+        let stored = StoredPreview {
+            kind: PreviewKind::Application(input.clone()),
+            actions: actions.clone(),
+            host_state_digest: snapshot.state_digest,
+            confirmation_token: confirmation_token.clone(),
+            expires_at,
+        };
+        self.persist_plan(plan.digest(), &stored).await?;
+        self.previews
+            .lock()
+            .map_err(|_| SoftwareCenterError::Repository)?
+            .insert(plan.digest().to_owned(), stored);
+        self.record(actor, "deployment_previewed", plan.digest())
+            .await?;
+        let php_component = format!("php-{}", input.php_version);
+        let estimates = ["nginx", php_component.as_str(), "mysql"]
+            .into_iter()
+            .map(component_estimate)
+            .fold((0_u64, 0_i64), |total, value| {
+                (
+                    total.0.saturating_add(value.0),
+                    total.1.saturating_add(value.1),
+                )
+            });
+        Ok(InstallPreview {
+            plan,
+            confirmation_token,
+            affected_services: vec!["nginx".into(), "php-fpm".into(), "mysql".into()],
+            packages: actions
+                .iter()
+                .map(|action| match action {
+                    PlanAction::Install(package)
+                    | PlanAction::Update(package)
+                    | PlanAction::Remove(package) => package.as_str().to_owned(),
+                })
+                .collect(),
+            estimated_download_bytes: Some(estimates.0),
+            estimated_disk_delta_bytes: Some(estimates.1),
+            configuration_paths: vec![
+                format!("/etc/openpanel/software/{}", input.application),
+                format!("/var/www/{}/public_html", input.domain),
+            ],
+            rollback_supported: true,
+            dependency_counts: BTreeMap::new(),
+            conflicts: Vec::new(),
+        })
+    }
+
+    /// Execute one confirmed application transaction and return credentials once.
+    pub async fn execute_deployment(
+        &self,
+        actor: Uuid,
+        role: Role,
+        plan_digest: &str,
+        confirmation_token: &str,
+    ) -> Result<ApplicationDeploymentResult, SoftwareCenterError> {
+        owner(role)?;
+        self.ensure_reconciled().await?;
+        let _transaction = self.transaction.lock().await;
+        let preview = self.take_preview(plan_digest, confirmation_token).await?;
+        let input = match preview.kind {
+            PreviewKind::Application(input) => input,
+            PreviewKind::Component { .. } => return Err(SoftwareCenterError::Invalid),
+        };
+        if self.packages.discover().await?.state_digest != preview.host_state_digest {
+            return Err(SoftwareCenterError::Conflict);
+        }
+        let id = Uuid::new_v4();
+        let durable_lock = self.acquire_durable_lock(id).await?;
+        self.push_job(id, plan_digest, JobState::Running).await?;
+        if let Err(error) = self.packages.apply(&preview.actions).await {
+            self.push_job(id, plan_digest, JobState::Failed).await?;
+            self.record_failure(actor, "package_failed", plan_digest)
+                .await?;
+            return Err(error);
+        }
+        if self.take_cancellation(id)? {
+            let _ = self.packages.rollback(&preview.actions).await;
+            let view = self.push_job(id, plan_digest, JobState::Cancelled).await?;
+            durable_lock.release().await?;
+            self.record(actor, "cancelled", plan_digest).await?;
+            return Ok(ApplicationDeploymentResult {
+                job: view,
+                deployment_id: Uuid::nil(),
+                admin_username: String::new(),
+                admin_password: String::new(),
+            });
+        }
+        let deployment = match self.applications.provision(actor, &input).await {
+            Ok(value) => value,
+            Err(error) => {
+                let _ = self.packages.rollback(&preview.actions).await;
+                self.push_job(id, plan_digest, JobState::Failed).await?;
+                self.record_failure(actor, "deployment_failed", plan_digest)
+                    .await?;
+                return Err(error);
+            }
+        };
+        if self.take_cancellation(id)? {
+            let _ = self.applications.rollback(&deployment).await;
+            let _ = self.packages.rollback(&preview.actions).await;
+            let view = self.push_job(id, plan_digest, JobState::Cancelled).await?;
+            durable_lock.release().await?;
+            self.record(actor, "cancelled", plan_digest).await?;
+            return Ok(ApplicationDeploymentResult {
+                job: view,
+                deployment_id: Uuid::nil(),
+                admin_username: String::new(),
+                admin_password: String::new(),
+            });
+        }
+        self.push_job(id, plan_digest, JobState::Validating).await?;
+        if let Err(error) = self.applications.validate(&deployment).await {
+            let _ = self.applications.rollback(&deployment).await;
+            let _ = self.packages.rollback(&preview.actions).await;
+            self.push_job(id, plan_digest, JobState::Failed).await?;
+            self.record_failure(actor, "deployment_failed", plan_digest)
+                .await?;
+            return Err(error);
+        }
+        if self.take_cancellation(id)? {
+            let _ = self.applications.rollback(&deployment).await;
+            let _ = self.packages.rollback(&preview.actions).await;
+            let view = self.push_job(id, plan_digest, JobState::Cancelled).await?;
+            durable_lock.release().await?;
+            self.record(actor, "cancelled", plan_digest).await?;
+            return Ok(ApplicationDeploymentResult {
+                job: view,
+                deployment_id: Uuid::nil(),
+                admin_username: String::new(),
+                admin_password: String::new(),
+            });
+        }
+        let job = self.push_job(id, plan_digest, JobState::Succeeded).await?;
+        self.persist_deployment(actor, &input, deployment.id)
+            .await?;
+        durable_lock.release().await?;
+        self.record(actor, "deployed", plan_digest).await?;
+        Ok(ApplicationDeploymentResult {
+            job,
+            deployment_id: deployment.id,
+            admin_username: deployment.admin_username,
+            admin_password: deployment.admin_password,
+        })
+    }
+
+    async fn persist_plan(
+        &self,
+        plan_digest: &str,
+        preview: &StoredPreview,
+    ) -> Result<(), SoftwareCenterError> {
+        let Some(pool) = &self.pool else {
+            return Ok(());
+        };
+        let payload = serde_json::to_string(&PersistedPreview {
+            kind: preview.kind.clone(),
+            actions: preview.actions.clone(),
+        })
+        .map_err(|_| SoftwareCenterError::Repository)?;
+        sqlx::query("INSERT INTO software_plans(digest,payload,host_state_digest,token_hash,expires_at,consumed,created_at) VALUES(?,?,?,?,?,0,?) ON CONFLICT(digest) DO UPDATE SET payload=excluded.payload,host_state_digest=excluded.host_state_digest,token_hash=excluded.token_hash,expires_at=excluded.expires_at,consumed=0,created_at=excluded.created_at")
+            .bind(plan_digest)
+            .bind(payload)
+            .bind(&preview.host_state_digest)
+            .bind(token_hash(&preview.confirmation_token))
+            .bind(preview.expires_at.to_string())
+            .bind(chrono::Utc::now().to_rfc3339())
+            .execute(pool)
+            .await
+            .map_err(|_| SoftwareCenterError::Repository)?;
+        Ok(())
+    }
+
+    async fn take_preview(
+        &self,
+        plan_digest: &str,
+        confirmation_token: &str,
+    ) -> Result<StoredPreview, SoftwareCenterError> {
+        let memory = {
+            let mut previews = self
+                .previews
+                .lock()
+                .map_err(|_| SoftwareCenterError::Repository)?;
+            match previews.get(plan_digest) {
+                Some(preview)
+                    if preview.confirmation_token == confirmation_token
+                        && now()? <= preview.expires_at =>
+                {
+                    previews.remove(plan_digest)
+                }
+                Some(_) => return Err(SoftwareCenterError::Invalid),
+                None => None,
+            }
+        };
+        let Some(pool) = &self.pool else {
+            return memory.ok_or(SoftwareCenterError::Invalid);
+        };
+        let row = sqlx::query_as::<_, (String, String, String, String, i64)>(
+            "SELECT payload,host_state_digest,token_hash,expires_at,consumed FROM software_plans WHERE digest=?",
+        )
+        .bind(plan_digest)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| SoftwareCenterError::Repository)?
+        .ok_or(SoftwareCenterError::Invalid)?;
+        let expires_at = row
+            .3
+            .parse::<u64>()
+            .map_err(|_| SoftwareCenterError::Repository)?;
+        if row.4 != 0 || row.2 != token_hash(confirmation_token) || now()? > expires_at {
+            return Err(SoftwareCenterError::Invalid);
+        }
+        let consumed = sqlx::query(
+            "UPDATE software_plans SET consumed=1 WHERE digest=? AND consumed=0 AND token_hash=?",
+        )
+        .bind(plan_digest)
+        .bind(token_hash(confirmation_token))
+        .execute(pool)
+        .await
+        .map_err(|_| SoftwareCenterError::Repository)?;
+        if consumed.rows_affected() != 1 {
+            return Err(SoftwareCenterError::Invalid);
+        }
+        if let Some(preview) = memory {
+            return Ok(preview);
+        }
+        let persisted: PersistedPreview =
+            serde_json::from_str(&row.0).map_err(|_| SoftwareCenterError::Repository)?;
+        Ok(StoredPreview {
+            kind: persisted.kind,
+            actions: persisted.actions,
+            host_state_digest: row.1,
+            confirmation_token: String::new(),
+            expires_at,
+        })
+    }
+
+    /// List bounded job projections for an Owner.
+    pub async fn jobs(&self, role: Role) -> Result<Vec<SoftwareJobView>, SoftwareCenterError> {
+        owner(role)?;
+        self.ensure_reconciled().await?;
+        if let Some(pool) = &self.pool {
+            let rows = sqlx::query_as::<_, (String, String, String)>(
+                "SELECT id,plan_digest,state FROM software_jobs ORDER BY created_at DESC LIMIT 200",
+            )
+            .fetch_all(pool)
+            .await
+            .map_err(|_| SoftwareCenterError::Repository)?;
+            return rows
+                .into_iter()
+                .map(|(id, plan_digest, state)| {
+                    Ok(SoftwareJobView {
+                        id: Uuid::parse_str(&id).map_err(|_| SoftwareCenterError::Repository)?,
+                        plan_digest,
+                        state,
+                    })
+                })
+                .collect();
+        }
+        self.jobs
+            .lock()
+            .map(|jobs| jobs.clone())
+            .map_err(|_| SoftwareCenterError::Repository)
+    }
+
+    /// Aggregate catalog, ownership, and recovery state without commands or credentials.
+    pub async fn diagnostics(
+        &self,
+        role: Role,
+    ) -> Result<SoftwareDiagnostics, SoftwareCenterError> {
+        owner(role)?;
+        let catalog_entries = self.catalog(role)?.len();
+        let inventory = self.inventory(role).await?;
+        let jobs = self.jobs(role).await?;
+        Ok(SoftwareDiagnostics {
+            catalog_entries,
+            managed_components: inventory
+                .iter()
+                .filter(|entry| entry.state == "panel_managed")
+                .count(),
+            external_components: inventory
+                .iter()
+                .filter(|entry| entry.state == "externally_managed")
+                .count(),
+            active_jobs: jobs
+                .iter()
+                .filter(|job| matches!(job.state.as_str(), "queued" | "running" | "validating"))
+                .count(),
+            interrupted_jobs: jobs.iter().filter(|job| job.state == "interrupted").count(),
+        })
+    }
+
+    /// Request cancellation; execution observes it at the next recipe-safe checkpoint.
+    pub async fn cancel(
+        &self,
+        actor: Uuid,
+        role: Role,
+        job_id: Uuid,
+    ) -> Result<SoftwareJobView, SoftwareCenterError> {
+        owner(role)?;
+        let job = self
+            .jobs(role)
+            .await?
+            .into_iter()
+            .find(|job| job.id == job_id)
+            .ok_or(SoftwareCenterError::Invalid)?;
+        if !matches!(job.state.as_str(), "queued" | "running" | "validating") {
+            return Err(SoftwareCenterError::Conflict);
+        }
+        self.cancellation_requests
+            .lock()
+            .map_err(|_| SoftwareCenterError::Repository)?
+            .insert(job_id);
+        self.record(actor, "cancellation_requested", &job.plan_digest)
+            .await?;
+        Ok(SoftwareJobView {
+            state: "cancellation_pending".to_owned(),
+            ..job
+        })
+    }
+
+    /// Re-plan an interrupted transaction against current host state.
+    pub async fn retry_preview(
+        &self,
+        actor: Uuid,
+        role: Role,
+        job_id: Uuid,
+    ) -> Result<RetryPreview, SoftwareCenterError> {
+        owner(role)?;
+        let job = self
+            .jobs(role)
+            .await?
+            .into_iter()
+            .find(|job| job.id == job_id && job.state == "interrupted")
+            .ok_or(SoftwareCenterError::Conflict)?;
+        let pool = self.pool.as_ref().ok_or(SoftwareCenterError::Repository)?;
+        let (payload,): (String,) =
+            sqlx::query_as("SELECT payload FROM software_plans WHERE digest=?")
+                .bind(&job.plan_digest)
+                .fetch_one(pool)
+                .await
+                .map_err(|_| SoftwareCenterError::Repository)?;
+        let persisted: PersistedPreview =
+            serde_json::from_str(&payload).map_err(|_| SoftwareCenterError::Repository)?;
+        let snapshot = self.packages.discover().await?;
+        let confirmation_token = Uuid::new_v4().to_string();
+        let stored = StoredPreview {
+            kind: persisted.kind,
+            actions: persisted.actions,
+            host_state_digest: snapshot.state_digest,
+            confirmation_token: confirmation_token.clone(),
+            expires_at: now()?
+                .checked_add(300)
+                .ok_or(SoftwareCenterError::Invalid)?,
+        };
+        self.persist_plan(&job.plan_digest, &stored).await?;
+        self.previews
+            .lock()
+            .map_err(|_| SoftwareCenterError::Repository)?
+            .insert(job.plan_digest.clone(), stored.clone());
+        self.record(actor, "retry_previewed", &job.plan_digest)
+            .await?;
+        Ok(RetryPreview {
+            plan_digest: job.plan_digest,
+            confirmation_token,
+            packages: stored
+                .actions
+                .iter()
+                .map(|action| match action {
+                    PlanAction::Install(package)
+                    | PlanAction::Update(package)
+                    | PlanAction::Remove(package) => package.as_str().to_owned(),
+                })
+                .collect(),
+        })
+    }
+
+    /// Roll back an interrupted component install when its recipe is reversible.
+    pub async fn rollback_interrupted(
+        &self,
+        actor: Uuid,
+        role: Role,
+        job_id: Uuid,
+    ) -> Result<SoftwareJobView, SoftwareCenterError> {
+        owner(role)?;
+        let job = self
+            .jobs(role)
+            .await?
+            .into_iter()
+            .find(|job| job.id == job_id && job.state == "interrupted")
+            .ok_or(SoftwareCenterError::Conflict)?;
+        let pool = self.pool.as_ref().ok_or(SoftwareCenterError::Repository)?;
+        let (payload,): (String,) =
+            sqlx::query_as("SELECT payload FROM software_plans WHERE digest=?")
+                .bind(&job.plan_digest)
+                .fetch_one(pool)
+                .await
+                .map_err(|_| SoftwareCenterError::Repository)?;
+        let persisted: PersistedPreview =
+            serde_json::from_str(&payload).map_err(|_| SoftwareCenterError::Repository)?;
+        if !matches!(
+            persisted.kind,
+            PreviewKind::Component {
+                action: ComponentAction::Install,
+                ..
+            }
+        ) || persisted
+            .actions
+            .iter()
+            .any(|action| !matches!(action, PlanAction::Install(_)))
+        {
+            return Err(SoftwareCenterError::Unsupported);
+        }
+        let _transaction = self.transaction.lock().await;
+        let durable_lock = self.acquire_durable_lock(job_id).await?;
+        self.push_job(job_id, &job.plan_digest, JobState::RollingBack)
+            .await?;
+        if let Err(error) = self.packages.rollback(&persisted.actions).await {
+            self.push_job(job_id, &job.plan_digest, JobState::Failed)
+                .await?;
+            self.record_failure(actor, "rollback_failed", &job.plan_digest)
+                .await?;
+            return Err(error);
+        }
+        let completed = self
+            .push_job(job_id, &job.plan_digest, JobState::RolledBack)
+            .await?;
+        durable_lock.release().await?;
+        self.record(actor, "rolled_back", &job.plan_digest).await?;
+        Ok(completed)
+    }
+
+    fn take_cancellation(&self, job_id: Uuid) -> Result<bool, SoftwareCenterError> {
+        Ok(self
+            .cancellation_requests
+            .lock()
+            .map_err(|_| SoftwareCenterError::Repository)?
+            .remove(&job_id))
+    }
+
+    async fn push_job(
+        &self,
+        id: Uuid,
+        plan_digest: &str,
+        state: JobState,
+    ) -> Result<SoftwareJobView, SoftwareCenterError> {
+        let view = SoftwareJobView {
+            id,
+            plan_digest: plan_digest.to_owned(),
+            state: state_label(state).to_owned(),
+        };
+        if let Some(pool) = &self.pool {
+            let now = chrono::Utc::now().to_rfc3339();
+            sqlx::query("INSERT INTO software_jobs(id,plan_digest,component_id,state,events_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET state=excluded.state,updated_at=excluded.updated_at")
+                .bind(id.to_string())
+                .bind(plan_digest)
+                .bind("")
+                .bind(&view.state)
+                .bind("[]")
+                .bind(&now)
+                .bind(&now)
+                .execute(pool)
+                .await
+                .map_err(|_| SoftwareCenterError::Repository)?;
+        }
+        let mut jobs = self
+            .jobs
+            .lock()
+            .map_err(|_| SoftwareCenterError::Repository)?;
+        if let Some(existing) = jobs.iter_mut().find(|job| job.id == id) {
+            *existing = view.clone();
+        } else {
+            jobs.push(view.clone());
+        }
+        Ok(view)
+    }
+
+    async fn managed_components(&self) -> Result<BTreeSet<String>, SoftwareCenterError> {
+        let mut managed = self
+            .owned_components
+            .lock()
+            .map_err(|_| SoftwareCenterError::Repository)?
+            .clone();
+        if let Some(pool) = &self.pool {
+            let rows = sqlx::query_scalar::<_, String>(
+                "SELECT id FROM software_components WHERE managed=1",
+            )
+            .fetch_all(pool)
+            .await
+            .map_err(|_| SoftwareCenterError::Repository)?;
+            managed.extend(rows);
+        }
+        Ok(managed)
+    }
+
+    async fn persist_deployment(
+        &self,
+        owner_id: Uuid,
+        input: &ApplicationDeploymentInput,
+        deployment_id: Uuid,
+    ) -> Result<(), SoftwareCenterError> {
+        let Some(pool) = &self.pool else {
+            return Ok(());
+        };
+        let version = recovery_catalog()?
+            .into_iter()
+            .find(|entry| entry.id == input.application)
+            .and_then(|entry| entry.versions.into_iter().next())
+            .ok_or(SoftwareCenterError::Invalid)?;
+        let now = chrono::Utc::now().to_rfc3339();
+        sqlx::query("INSERT INTO software_deployments(id,owner_id,application_id,version,site_id,database_id,state,created_at,updated_at) VALUES(?,?,?,?,NULL,NULL,'healthy',?,?)")
+            .bind(deployment_id.to_string())
+            .bind(owner_id.to_string())
+            .bind(&input.application)
+            .bind(version)
+            .bind(&now)
+            .bind(&now)
+            .execute(pool)
+            .await
+            .map_err(|_| SoftwareCenterError::Repository)?;
+        Ok(())
+    }
+
+    async fn acquire_durable_lock(
+        &self,
+        job_id: Uuid,
+    ) -> Result<DurableTransactionLock, SoftwareCenterError> {
+        let Some(pool) = &self.pool else {
+            return Ok(DurableTransactionLock { pool: None, job_id });
+        };
+        let result = sqlx::query(
+            "INSERT INTO software_transaction_lock(singleton,job_id,owner_pid,acquired_at) VALUES(1,?,?,?) ON CONFLICT(singleton) DO NOTHING",
+        )
+        .bind(job_id.to_string())
+        .bind(i64::from(std::process::id()))
+        .bind(chrono::Utc::now().to_rfc3339())
+        .execute(pool)
+        .await
+        .map_err(|_| SoftwareCenterError::Repository)?;
+        if result.rows_affected() != 1 {
+            return Err(SoftwareCenterError::Conflict);
+        }
+        Ok(DurableTransactionLock {
+            pool: Some(pool.clone()),
+            job_id,
+        })
+    }
+
+    async fn dependency_count(&self, component: &str) -> Result<u64, SoftwareCenterError> {
+        let Some(pool) = &self.pool else {
+            return Ok(0);
+        };
+        let count = match component {
+            "nginx" => {
+                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM sites")
+                    .fetch_one(pool)
+                    .await
+            }
+            "php-8.3" => {
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM sites WHERE php_enabled=1 AND php_version='8.3'",
+                )
+                .fetch_one(pool)
+                .await
+            }
+            "php-8.4" => {
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM sites WHERE php_enabled=1 AND php_version='8.4'",
+                )
+                .fetch_one(pool)
+                .await
+            }
+            "mysql" | "mariadb" => {
+                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM databases")
+                    .fetch_one(pool)
+                    .await
+            }
+            _ => Ok(0),
+        }
+        .map_err(|_| SoftwareCenterError::Repository)?;
+        u64::try_from(count).map_err(|_| SoftwareCenterError::Repository)
+    }
+
+    async fn ensure_reconciled(&self) -> Result<(), SoftwareCenterError> {
+        self.reconciled
+            .get_or_try_init(|| async {
+                if let Some(pool) = &self.pool {
+                    let lock = sqlx::query_as::<_, (String, i64)>(
+                        "SELECT job_id,owner_pid FROM software_transaction_lock WHERE singleton=1",
+                    )
+                    .fetch_optional(pool)
+                    .await
+                    .map_err(|_| SoftwareCenterError::Repository)?;
+                    if lock.as_ref().is_some_and(|(_, pid)| {
+                        std::path::Path::new(&format!("/proc/{pid}")).exists()
+                    }) {
+                        return Ok(());
+                    }
+                    sqlx::query("UPDATE software_jobs SET state='interrupted',updated_at=? WHERE state IN ('queued','running','validating','rolling_back')")
+                        .bind(chrono::Utc::now().to_rfc3339())
+                        .execute(pool)
+                        .await
+                        .map_err(|_| SoftwareCenterError::Repository)?;
+                    sqlx::query("DELETE FROM software_transaction_lock WHERE singleton=1")
+                        .execute(pool)
+                        .await
+                        .map_err(|_| SoftwareCenterError::Repository)?;
+                }
+                Ok(())
+            })
+            .await
+            .map(|_| ())
+    }
+
+    async fn set_managed(
+        &self,
+        component: &str,
+        managed: bool,
+        state_digest: &str,
+    ) -> Result<(), SoftwareCenterError> {
+        {
+            let mut owned = self
+                .owned_components
+                .lock()
+                .map_err(|_| SoftwareCenterError::Repository)?;
+            if managed {
+                owned.insert(component.to_owned());
+            } else {
+                owned.remove(component);
+            }
+        }
+        if let Some(pool) = &self.pool {
+            sqlx::query("INSERT INTO software_components(id,version,status,managed,state_digest,updated_at) VALUES(?,NULL,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,managed=excluded.managed,state_digest=excluded.state_digest,updated_at=excluded.updated_at")
+                .bind(component)
+                .bind(if managed { "installed" } else { "available" })
+                .bind(if managed { 1_i64 } else { 0_i64 })
+                .bind(state_digest)
+                .bind(chrono::Utc::now().to_rfc3339())
+                .execute(pool)
+                .await
+                .map_err(|_| SoftwareCenterError::Repository)?;
+        }
+        Ok(())
+    }
+
+    async fn record(
+        &self,
+        actor: Uuid,
+        operation: &str,
+        plan_digest: &str,
+    ) -> Result<(), SoftwareCenterError> {
+        self.record_outcome(actor, operation, plan_digest, AuditOutcome::Success)
+            .await
+    }
+
+    async fn record_failure(
+        &self,
+        actor: Uuid,
+        operation: &str,
+        plan_digest: &str,
+    ) -> Result<(), SoftwareCenterError> {
+        self.record_outcome(actor, operation, plan_digest, AuditOutcome::Failure)
+            .await
+    }
+
+    async fn record_outcome(
+        &self,
+        actor: Uuid,
+        operation: &str,
+        plan_digest: &str,
+        outcome: AuditOutcome,
+    ) -> Result<(), SoftwareCenterError> {
+        self.audit
+            .record(
+                AuditEvent::new(actor.to_string(), AuditAction::SoftwareChanged, outcome)
+                    .target(plan_digest)
+                    .metadata(serde_json::json!({"operation":operation})),
+            )
+            .await
+            .map_err(|_| SoftwareCenterError::Repository)
+    }
+}
+
+fn recovery_catalog() -> Result<Vec<CatalogEntry>, SoftwareCenterError> {
+    let platforms = supported_platforms()?;
+    let component = |id: &str,
+                     name: &str,
+                     description: &str,
+                     license: &str,
+                     versions: &[&str],
+                     packages: &[&str]|
+     -> Result<CatalogEntry, SoftwareCenterError> {
+        Ok(CatalogEntry {
+            id: id.to_owned(),
+            name: name.to_owned(),
+            description: description.to_owned(),
+            category: match id {
+                "php-8.3" | "php-8.4" => "Runtimes",
+                "mysql" | "mariadb" => "Databases",
+                "redis" => "Caching",
+                _ => "Web stack",
+            }
+            .to_owned(),
+            kind: CatalogKind::SystemComponent,
+            license: license.to_owned(),
+            versions: versions.iter().map(|value| (*value).to_owned()).collect(),
+            platforms: match id {
+                "php-8.3" => platforms
+                    .iter()
+                    .filter(|platform| {
+                        platform.distribution() == "ubuntu" && platform.release() == "24.04"
+                    })
+                    .cloned()
+                    .collect(),
+                "php-8.4" => Vec::new(),
+                _ => platforms.clone(),
+            },
+            dependencies: Vec::new(),
+            provenance: "OpenPanel embedded recovery catalog".to_owned(),
+            packages: packages
+                .iter()
+                .map(PackageId::new)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_| SoftwareCenterError::Invalid)?,
+            lifecycle_state: "discoverable".to_owned(),
+        })
+    };
+    let application = |id: &str,
+                       name: &str,
+                       description: &str,
+                       version: &str,
+                       dependencies: &[&str]|
+     -> CatalogEntry {
+        CatalogEntry {
+            id: id.to_owned(),
+            name: name.to_owned(),
+            description: description.to_owned(),
+            category: "Content management".to_owned(),
+            kind: CatalogKind::WebApplication,
+            license: "GPL-2.0-or-later".to_owned(),
+            versions: vec![version.to_owned()],
+            platforms: platforms.clone(),
+            dependencies: dependencies
+                .iter()
+                .map(|value| (*value).to_owned())
+                .collect(),
+            provenance: "OpenPanel embedded recovery catalog".to_owned(),
+            packages: Vec::new(),
+            lifecycle_state: "available".to_owned(),
+        }
+    };
+    Ok(vec![
+        component(
+            "nginx",
+            "Nginx",
+            "High-performance HTTP and reverse proxy server",
+            "BSD-2-Clause",
+            &["1.x"],
+            &["nginx"],
+        )?,
+        component(
+            "php-8.3",
+            "PHP 8.3",
+            "PHP-FPM runtime with common CMS extensions",
+            "PHP-3.01",
+            &["8.3"],
+            &[
+                "php8.3-fpm",
+                "php8.3-cli",
+                "php8.3-curl",
+                "php8.3-gd",
+                "php8.3-intl",
+                "php8.3-mbstring",
+                "php8.3-mysql",
+                "php8.3-xml",
+                "php8.3-zip",
+            ],
+        )?,
+        component(
+            "php-8.4",
+            "PHP 8.4",
+            "PHP-FPM runtime with common CMS extensions",
+            "PHP-3.01",
+            &["8.4"],
+            &[
+                "php8.4-fpm",
+                "php8.4-cli",
+                "php8.4-curl",
+                "php8.4-gd",
+                "php8.4-intl",
+                "php8.4-mbstring",
+                "php8.4-mysql",
+                "php8.4-xml",
+                "php8.4-zip",
+            ],
+        )?,
+        component(
+            "mysql",
+            "MySQL",
+            "MySQL relational database server",
+            "GPL-2.0-only",
+            &["8.0"],
+            &["mysql-server"],
+        )?,
+        component(
+            "mariadb",
+            "MariaDB",
+            "MariaDB relational database server",
+            "GPL-2.0-only",
+            &["10.x", "11.x"],
+            &["mariadb-server"],
+        )?,
+        component(
+            "redis",
+            "Redis",
+            "In-memory cache and data store",
+            "RSALv2/SSPLv1",
+            &["7.x"],
+            &["redis-server"],
+        )?,
+        application(
+            "wordpress",
+            "WordPress",
+            "Pinned WordPress publishing application",
+            "7.0.3",
+            &["nginx", "php", "database"],
+        ),
+        application(
+            "drupal",
+            "Drupal",
+            "Pinned Drupal content-management application",
+            "11.3.12",
+            &["nginx", "php", "database"],
+        ),
+    ])
+}
+
+fn component_estimate(component: &str) -> (u64, i64) {
+    const MIB: u64 = 1024 * 1024;
+    let (download, installed) = match component {
+        "nginx" => (4, 14),
+        "php-8.3" | "php-8.4" => (32, 118),
+        "mysql" | "mariadb" => (42, 190),
+        "redis" => (2, 7),
+        _ => (0, 0),
+    };
+    (download * MIB, (installed * MIB) as i64)
+}
+
+fn supported_platforms() -> Result<Vec<SupportedPlatform>, SoftwareCenterError> {
+    [
+        ("ubuntu", "22.04", "x86_64"),
+        ("ubuntu", "22.04", "aarch64"),
+        ("ubuntu", "24.04", "x86_64"),
+        ("ubuntu", "24.04", "aarch64"),
+        ("debian", "12", "x86_64"),
+        ("debian", "12", "aarch64"),
+    ]
+    .into_iter()
+    .map(|(distribution, release, architecture)| {
+        SupportedPlatform::new(distribution, release, architecture)
+            .map_err(|_| SoftwareCenterError::Invalid)
+    })
+    .collect()
+}
+
+fn owner(role: Role) -> Result<(), SoftwareCenterError> {
+    if role == Role::Owner {
+        Ok(())
+    } else {
+        Err(SoftwareCenterError::Forbidden)
+    }
+}
+
+fn validate_deployment_input(
+    input: &ApplicationDeploymentInput,
+) -> Result<(), SoftwareCenterError> {
+    if !matches!(input.application.as_str(), "wordpress" | "drupal")
+        || !matches!(input.php_version.as_str(), "8.3" | "8.4")
+        || input.locale.is_empty()
+        || input.locale.len() > 32
+        || !input
+            .locale
+            .bytes()
+            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
+    {
+        return Err(SoftwareCenterError::Invalid);
+    }
+    let labels: Vec<_> = input.domain.split('.').collect();
+    if input.domain.len() > 253
+        || labels.len() < 2
+        || labels.iter().any(|label| {
+            label.is_empty()
+                || label.len() > 63
+                || label.starts_with('-')
+                || label.ends_with('-')
+                || !label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        })
+    {
+        return Err(SoftwareCenterError::Invalid);
+    }
+    Ok(())
+}
+
+fn now() -> Result<u64, SoftwareCenterError> {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs())
+        .map_err(|_| SoftwareCenterError::Repository)
+}
+
+fn token_hash(token: &str) -> String {
+    hex::encode(sha2::Sha256::digest(token.as_bytes()))
+}
+
+fn state_label(state: JobState) -> &'static str {
+    match state {
+        JobState::Queued => "queued",
+        JobState::Running => "running",
+        JobState::Validating => "validating",
+        JobState::RollingBack => "rolling_back",
+        JobState::Succeeded => "succeeded",
+        JobState::Failed => "failed",
+        JobState::Cancelled => "cancelled",
+        JobState::RolledBack => "rolled_back",
+        JobState::Interrupted => "interrupted",
+    }
+}

@@ -28,3 +28,5 @@ pub const SYSTEM_SERVICES_V001: &str = include_str!("system_services/V001__init.
 pub const DNS_V001: &str = include_str!("dns/V001__init.sql");
 /// Hosted mail domains, mailboxes, aliases, and DKIM custody.
 pub const MAIL_V001: &str = include_str!("mail/V001__init.sql");
+/// Trusted Software Center catalogs, plans, jobs, locks, and deployments.
+pub const SOFTWARE_CENTER_V001: &str = include_str!("software_center/V001__init.sql");

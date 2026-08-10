@@ -5,8 +5,9 @@ use std::sync::Arc;
 use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
 use openpanel_app::{
     BackupService, CronService, DatabasesService, DnsService, FilesService, IdentityService,
-    LogService, MailService, MonitoringService, SecurityService, SitesService, SslService,
-    security::LoginThrottleService, system_services::ServiceManager,
+    LogService, MailService, MonitoringService, SecurityService, SitesService,
+    SoftwareCenterService, SslService, security::LoginThrottleService,
+    system_services::ServiceManager,
 };
 
 use crate::{
@@ -17,8 +18,8 @@ use crate::{
         files::router as files_router, identity::router as identity_router,
         logs::router as logs_router, mail::router as mail_router,
         monitoring::router as monitoring_router, security::router as security_router,
-        sites::router as sites_router, ssl::router as ssl_router,
-        system_services::router as system_services_router,
+        sites::router as sites_router, software_center::router as software_center_router,
+        ssl::router as ssl_router, system_services::router as system_services_router,
     },
 };
 
@@ -42,6 +43,7 @@ pub fn build_router(
     system_services: Arc<ServiceManager>,
     dns: Arc<DnsService>,
     mail: Arc<MailService>,
+    software_center: Arc<SoftwareCenterService>,
 ) -> Router {
     let identity_for_layer = identity.clone();
 
@@ -59,6 +61,7 @@ pub fn build_router(
         .nest("/services", system_services_router(system_services))
         .nest("/dns", dns_router(dns))
         .nest("/mail", mail_router(mail))
+        .nest("/software", software_center_router(software_center))
         .layer(from_fn_with_state(identity_for_layer, session_middleware));
 
     Router::new()

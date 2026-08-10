@@ -19,6 +19,7 @@ mod quality;
 mod security;
 mod sites;
 mod smoke;
+mod software_center;
 mod ssl;
 mod system_services;
 mod web_ui;
