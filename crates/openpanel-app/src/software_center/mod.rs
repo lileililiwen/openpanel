@@ -43,7 +43,7 @@ pub use source::{
 use sqlx::SqlitePool;
 pub use store::{
     CatalogActivation, CatalogDiagnostics, CompatibilityHost, CompatibilityReport, RefreshOutcome,
-    SoftwareCatalogStore, StorefrontEntry, WizardState, default_catalog_url,
+    SoftwareCatalogStore, StorefrontEntry, StorefrontVersion, WizardState, default_catalog_url,
 };
 use thiserror::Error;
 use tokio::sync::{Mutex as AsyncMutex, OnceCell};
@@ -286,6 +286,8 @@ pub enum CatalogKind {
     SystemComponent,
     /// Deployable site application.
     WebApplication,
+    /// Operator tool — system install surfaced under the Tools category.
+    Tool,
 }
 
 /// Supported component lifecycle mutation.
@@ -561,10 +563,26 @@ impl SoftwareCenterService {
         &self.store
     }
 
-    /// List the embedded recovery catalog for an Owner.
-    pub fn catalog(&self, role: Role) -> Result<Vec<CatalogEntry>, SoftwareCenterError> {
+    /// List the embedded recovery catalog for an Owner. Reads from the
+    /// aggregator store (which is materialized from the new production
+    /// seed) and projects the entries to the legacy `CatalogEntry`
+    /// shape that the existing API and CLI depend on.
+    pub async fn catalog(&self, role: Role) -> Result<Vec<CatalogEntry>, SoftwareCenterError> {
         owner(role)?;
-        let mut entries = recovery_catalog()?;
+        self.ensure_reconciled().await?;
+        self.ensure_seed_materialized().await;
+        let query = CatalogQuery {
+            page_size: 60,
+            ..CatalogQuery::default()
+        };
+        let page = self.store.search(&query).await?;
+        let mut entries: Vec<CatalogEntry> = Vec::with_capacity(page.hits.len());
+        for hit in page.hits {
+            let detail = self.store.get_entry(&hit.id).await?;
+            if let Some(entry) = detail {
+                entries.push(project_entry(&entry, self.applications_enabled));
+            }
+        }
         if !self.applications_enabled {
             for entry in &mut entries {
                 if matches!(entry.kind, CatalogKind::WebApplication) {
@@ -638,33 +656,52 @@ impl SoftwareCenterService {
     ) -> Result<Vec<ComponentInventory>, SoftwareCenterError> {
         owner(role)?;
         self.ensure_reconciled().await?;
+        self.ensure_seed_materialized().await;
         let snapshot = self.packages.discover().await?;
         let owned = self.managed_components().await?;
-        Ok(recovery_catalog()?
-            .into_iter()
-            .filter(|entry| matches!(entry.kind, CatalogKind::SystemComponent))
-            .map(|entry| {
-                let supported = entry.platforms.contains(&snapshot.platform);
-                let installed = !entry.packages.is_empty()
-                    && entry
-                        .packages
-                        .iter()
-                        .all(|package| snapshot.installed_packages.contains(package.as_str()));
-                let managed = owned.contains(&entry.id);
-                ComponentInventory {
-                    id: entry.id,
-                    state: if !supported {
-                        "unsupported".to_owned()
-                    } else if installed && managed {
-                        "panel_managed".to_owned()
-                    } else if installed {
-                        "externally_managed".to_owned()
-                    } else {
-                        "available".to_owned()
-                    },
-                }
-            })
-            .collect())
+        let mut query = CatalogQuery {
+            page_size: 60,
+            ..CatalogQuery::default()
+        };
+        // Only system and tool entries are installable; web apps deploy
+        // through the application deployer.
+        query.kind = Some(openpanel_domain::software_center::EntryKind::System);
+        let page = self.store.search(&query).await?;
+        let mut out = Vec::with_capacity(page.hits.len());
+        for hit in page.hits {
+            let detail = self.store.get_entry(&hit.id).await?;
+            let Some(entry) = detail else { continue };
+            let supported = !entry.versions.is_empty();
+            let latest = entry
+                .versions
+                .iter()
+                .find(|v| v.is_latest)
+                .or(entry.versions.first());
+            let installed = latest
+                .map(|version| {
+                    !version.packages.is_empty()
+                        && version
+                            .packages
+                            .iter()
+                            .all(|package| snapshot.installed_packages.contains(package))
+                })
+                .unwrap_or(false);
+            let managed = owned.contains(&entry.id);
+            let state = if !supported {
+                "unsupported".to_owned()
+            } else if installed && managed {
+                "panel_managed".to_owned()
+            } else if installed {
+                "externally_managed".to_owned()
+            } else {
+                "available".to_owned()
+            };
+            out.push(ComponentInventory {
+                id: entry.id,
+                state,
+            });
+        }
+        Ok(out)
     }
 
     /// Preview installation against a discovered host snapshot.
@@ -688,19 +725,55 @@ impl SoftwareCenterService {
     ) -> Result<InstallPreview, SoftwareCenterError> {
         owner(role)?;
         self.ensure_reconciled().await?;
-        let entry = recovery_catalog()?
-            .into_iter()
-            .find(|entry| entry.id == component)
+        self.ensure_seed_materialized().await;
+        // Read the entry from the aggregator store, not the legacy
+        // hardcoded recovery list — the storefront and the new seed
+        // both serve the new store, so the install plan must come from
+        // the same source.
+        let entry = self
+            .store
+            .get_entry(component)
+            .await?
             .ok_or(SoftwareCenterError::Invalid)?;
-        if !matches!(entry.kind, CatalogKind::SystemComponent) || entry.packages.is_empty() {
+        if !matches!(
+            entry.kind,
+            openpanel_domain::software_center::EntryKind::System
+        ) || entry.versions.is_empty()
+        {
+            return Err(SoftwareCenterError::Invalid);
+        }
+        let latest = entry
+            .versions
+            .iter()
+            .find(|version| version.is_latest)
+            .cloned()
+            .or_else(|| entry.versions.first().cloned())
+            .ok_or(SoftwareCenterError::Invalid)?;
+        if !latest.packages.is_empty() {
+            // system entries have packages, not artifacts
+        }
+        let entry_packages: Vec<PackageId> = latest
+            .packages
+            .iter()
+            .map(|name| PackageId::new(name).map_err(|_| SoftwareCenterError::Invalid))
+            .collect::<Result<Vec<_>, _>>()?;
+        if entry_packages.is_empty() {
             return Err(SoftwareCenterError::Invalid);
         }
         let snapshot = self.packages.discover().await?;
-        if !entry.platforms.contains(&snapshot.platform) {
+        let entry_platforms: Vec<SupportedPlatform> = self
+            .store
+            .platforms_for(component)
+            .await?
+            .ok_or(SoftwareCenterError::Invalid)?;
+        if !entry_platforms.iter().any(|platform| {
+            platform.distribution() == snapshot.platform.distribution()
+                && platform.release() == snapshot.platform.release()
+                && platform.architecture() == snapshot.platform.architecture()
+        }) {
             return Err(SoftwareCenterError::Unsupported);
         }
-        let installed = entry
-            .packages
+        let installed = entry_packages
             .iter()
             .all(|package| snapshot.installed_packages.contains(package.as_str()));
         let managed = self.managed_components().await?.contains(component);
@@ -726,21 +799,18 @@ impl SoftwareCenterService {
             return Err(SoftwareCenterError::Conflict);
         }
         let actions: Vec<_> = match action {
-            ComponentAction::Install => entry
-                .packages
+            ComponentAction::Install => entry_packages
                 .iter()
                 .filter(|package| !snapshot.installed_packages.contains(package.as_str()))
                 .cloned()
                 .map(PlanAction::Install)
                 .collect(),
-            ComponentAction::Update => entry
-                .packages
+            ComponentAction::Update => entry_packages
                 .iter()
                 .cloned()
                 .map(PlanAction::Update)
                 .collect(),
-            ComponentAction::Remove => entry
-                .packages
+            ComponentAction::Remove => entry_packages
                 .iter()
                 .cloned()
                 .map(PlanAction::Remove)
@@ -892,6 +962,7 @@ impl SoftwareCenterService {
     ) -> Result<InstallPreview, SoftwareCenterError> {
         owner(role)?;
         self.ensure_reconciled().await?;
+        self.ensure_seed_materialized().await;
         if !self.applications_enabled {
             return Err(SoftwareCenterError::Unsupported);
         }
@@ -904,34 +975,51 @@ impl SoftwareCenterService {
             return Err(SoftwareCenterError::Unsupported);
         }
         let snapshot = self.packages.discover().await?;
-        let catalog = recovery_catalog()?;
         let php_id = format!("php-{}", input.php_version);
         let mut actions = Vec::new();
         for id in ["nginx", php_id.as_str(), "mysql"] {
-            let entry = catalog
-                .iter()
-                .find(|entry| entry.id == id)
+            let entry = self
+                .store
+                .get_entry(id)
+                .await?
                 .ok_or(SoftwareCenterError::Invalid)?;
-            if !entry.platforms.contains(&snapshot.platform) {
+            let platforms = self
+                .store
+                .platforms_for(id)
+                .await?
+                .ok_or(SoftwareCenterError::Invalid)?;
+            if !platforms.iter().any(|platform| {
+                platform.distribution() == snapshot.platform.distribution()
+                    && platform.release() == snapshot.platform.release()
+                    && platform.architecture() == snapshot.platform.architecture()
+            }) {
                 return Err(SoftwareCenterError::Unsupported);
             }
+            let latest = entry
+                .versions
+                .first()
+                .cloned()
+                .ok_or(SoftwareCenterError::Invalid)?;
             actions.extend(
-                entry
+                latest
                     .packages
                     .iter()
                     .filter(|package| !snapshot.installed_packages.contains(package.as_str()))
-                    .cloned()
-                    .map(PlanAction::install),
+                    .filter_map(|name| {
+                        // The seed catalog only carries validated
+                        // package identifiers, so the conversion is
+                        // expected to succeed; fall back to a no-op on
+                        // an unexpected failure rather than panicking.
+                        PackageId::new(name).ok().map(PlanAction::install)
+                    })
+                    .collect::<Vec<_>>(),
             );
         }
         let input_bytes = serde_json::to_vec(&input).map_err(|_| SoftwareCenterError::Invalid)?;
         let target_digest = hex::encode(sha2::Sha256::digest(input_bytes));
-        let plan = SoftwarePlan::new(
-            format!("embedded-v1-{target_digest}"),
-            snapshot.platform,
-            actions.clone(),
-        )
-        .map_err(|_| SoftwareCenterError::Invalid)?;
+        let plan_digest_str = format!("embedded-v1-{target_digest}");
+        let plan = SoftwarePlan::new(plan_digest_str, snapshot.platform, actions.clone())
+            .map_err(|_| SoftwareCenterError::Invalid)?;
         let confirmation_token = Uuid::new_v4().to_string();
         let expires_at = now()?
             .checked_add(300)
@@ -1206,7 +1294,7 @@ impl SoftwareCenterService {
         role: Role,
     ) -> Result<SoftwareDiagnostics, SoftwareCenterError> {
         owner(role)?;
-        let catalog_entries = self.catalog(role)?.len();
+        let catalog_entries = self.catalog(role).await?.len();
         let inventory = self.inventory(role).await?;
         let jobs = self.jobs(role).await?;
         Ok(SoftwareDiagnostics {
@@ -1770,6 +1858,52 @@ fn recovery_catalog() -> Result<Vec<CatalogEntry>, SoftwareCenterError> {
             &["nginx", "php", "database"],
         ),
     ])
+}
+
+/// Project a normalized `StorefrontEntry` to the legacy `CatalogEntry`
+/// shape used by the existing API and CLI. The aggregator store is the
+/// source of truth; this projection exists only for backward compatibility.
+fn project_entry(entry: &StorefrontEntry, _applications_enabled: bool) -> CatalogEntry {
+    let kind = match entry.kind {
+        openpanel_domain::software_center::EntryKind::System => CatalogKind::SystemComponent,
+        openpanel_domain::software_center::EntryKind::Web => CatalogKind::WebApplication,
+        openpanel_domain::software_center::EntryKind::Tool => CatalogKind::Tool,
+    };
+    let latest = entry
+        .versions
+        .iter()
+        .find(|version| version.is_latest)
+        .or(entry.versions.first())
+        .cloned()
+        .unwrap_or_else(|| StorefrontVersion {
+            version: String::new(),
+            size_bytes: 0,
+            supports_php: Vec::new(),
+            released_at: None,
+            changelog_url: None,
+            is_latest: true,
+            packages: Vec::new(),
+        });
+    let packages: Vec<PackageId> = latest
+        .packages
+        .iter()
+        .map(|name| PackageId::new(name).map_err(|_| SoftwareCenterError::Invalid))
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap_or_default();
+    CatalogEntry {
+        id: entry.id.clone(),
+        name: entry.name.clone(),
+        description: entry.description.clone(),
+        category: entry.category.label().to_owned(),
+        kind,
+        license: entry.license.clone(),
+        versions: entry.versions.iter().map(|v| v.version.clone()).collect(),
+        platforms: Vec::new(),
+        dependencies: entry.dependencies.clone(),
+        provenance: entry.provenance.source_url.clone(),
+        packages,
+        lifecycle_state: "discoverable".to_owned(),
+    }
 }
 
 fn component_estimate(component: &str) -> (u64, i64) {

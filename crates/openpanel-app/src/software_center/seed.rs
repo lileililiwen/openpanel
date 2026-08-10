@@ -21,8 +21,8 @@
 #![allow(clippy::expect_used, clippy::too_many_arguments, missing_docs)]
 
 use openpanel_domain::software_center::{
-    ArtifactPin, CatalogEntryRecipe, CatalogManifest, Category, EntryKind, Homepage, License, Tag,
-    VersionSpec,
+    ArtifactPin, CatalogEntryRecipe, CatalogManifest, Category, EntryKind, Homepage, License,
+    SupportedPlatform, Tag, VersionSpec,
 };
 
 /// Maximum disk delta estimate for a typical install. Used as a fallback
@@ -60,6 +60,29 @@ fn version(
     }
 }
 
+/// Build the default platform list for a seed entry. Most entries
+/// support every host OpenPanel recognizes. Specific entries can
+/// override by passing a non-empty `platforms` list.
+fn default_platforms() -> Vec<SupportedPlatform> {
+    [
+        "ubuntu 22.04 x86_64",
+        "ubuntu 22.04 aarch64",
+        "ubuntu 24.04 x86_64",
+        "ubuntu 24.04 aarch64",
+        "debian 12 x86_64",
+        "debian 12 aarch64",
+    ]
+    .iter()
+    .filter_map(|value| {
+        let mut parts = value.split_whitespace();
+        let distribution = parts.next()?;
+        let release = parts.next()?;
+        let architecture = parts.next()?;
+        SupportedPlatform::new(distribution, release, architecture).ok()
+    })
+    .collect()
+}
+
 fn entry(
     id: &str,
     name: &str,
@@ -76,6 +99,42 @@ fn entry(
     conflicts: Vec<&str>,
     icon: Option<&str>,
 ) -> CatalogEntryRecipe {
+    entry_with_platforms(
+        id,
+        name,
+        description,
+        long,
+        category,
+        kind,
+        tags,
+        license,
+        developer,
+        homepage,
+        versions,
+        dependencies,
+        conflicts,
+        icon,
+        default_platforms(),
+    )
+}
+
+fn entry_with_platforms(
+    id: &str,
+    name: &str,
+    description: &str,
+    long: &str,
+    category: Category,
+    kind: EntryKind,
+    tags: &[&str],
+    license: &str,
+    developer: &str,
+    homepage: &str,
+    versions: Vec<VersionSpec>,
+    dependencies: Vec<&str>,
+    conflicts: Vec<&str>,
+    icon: Option<&str>,
+    platforms: Vec<SupportedPlatform>,
+) -> CatalogEntryRecipe {
     CatalogEntryRecipe {
         id: id.to_owned(),
         name: name.to_owned(),
@@ -91,6 +150,7 @@ fn entry(
         developer: developer.to_owned(),
         homepage: Homepage::new(homepage).expect("seed homepage must validate"),
         versions,
+        platforms,
         dependencies: dependencies.into_iter().map(str::to_owned).collect(),
         conflicts: conflicts.into_iter().map(str::to_owned).collect(),
         icon: icon.map(str::to_owned),

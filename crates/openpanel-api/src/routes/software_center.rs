@@ -81,7 +81,7 @@ async fn catalog(
     State(service): State<Arc<SoftwareCenterService>>,
     AuthUser(user, _): AuthUser,
 ) -> ApiResult<Json<Vec<CatalogEntry>>> {
-    Ok(Json(service.catalog(user.role()).map_err(map)?))
+    Ok(Json(service.catalog(user.role()).await.map_err(map)?))
 }
 
 async fn preview(

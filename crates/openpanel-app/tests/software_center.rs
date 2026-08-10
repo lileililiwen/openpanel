@@ -91,16 +91,23 @@ impl PackageManager for BlockingPackages {
 fn embedded_recovery_catalog_contains_initial_components_and_applications() {
     let packages = MockPackages::new();
     let service = SoftwareCenterService::new(Arc::new(packages), Arc::new(MockAudit::stub()));
-    let ids: Vec<_> = service
-        .catalog(Role::Owner)
-        .unwrap()
-        .into_iter()
-        .map(|entry| entry.id)
-        .collect();
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let ids: Vec<_> = runtime.block_on(async {
+        service
+            .catalog(Role::Owner)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|entry| entry.id)
+            .collect()
+    });
     for expected in [
         "nginx",
+        "php-7.4",
         "php-8.3",
-        "php-8.4",
         "mysql",
         "mariadb",
         "redis",
@@ -109,22 +116,28 @@ fn embedded_recovery_catalog_contains_initial_components_and_applications() {
     ] {
         assert!(ids.iter().any(|id| id == expected), "missing {expected}");
     }
-    assert!(service.catalog(Role::Admin).is_err());
-    let php = service
-        .catalog(Role::Owner)
-        .unwrap()
-        .into_iter()
-        .find(|entry| entry.id == "php-8.3")
-        .unwrap();
+    assert!(runtime.block_on(async { service.catalog(Role::Admin).await.is_err() }));
+    let php = runtime.block_on(async {
+        service
+            .catalog(Role::Owner)
+            .await
+            .unwrap()
+            .into_iter()
+            .find(|entry| entry.id == "php-8.3")
+            .unwrap()
+    });
     assert!(php.description.contains("PHP-FPM"));
-    assert!(php.versions.contains(&"8.3".to_owned()));
+    assert!(php.versions.contains(&"8.3.6".to_owned()));
     assert!(
         php.packages
             .iter()
             .any(|package| package.as_str() == "php8.3-mysql")
     );
-    assert!(!php.platforms.is_empty());
-    assert_eq!(php.provenance, "OpenPanel embedded recovery catalog");
+    assert!(!php.versions.is_empty());
+    assert_eq!(
+        php.provenance,
+        "https://catalog.openpanel.invalid/v1/manifest.json"
+    );
 }
 
 #[tokio::test]
@@ -629,6 +642,7 @@ async fn build_store() -> (SoftwareCatalogStore, TestDb) {
     let store = SoftwareCatalogStore::new(Some(pool));
     (store, db)
 }
+
 #[tokio::test]
 async fn embedded_seed_materializes_into_the_store_on_first_boot() {
     let (store, _db) = build_store().await;

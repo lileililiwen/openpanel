@@ -183,14 +183,6 @@ async fn software_web_is_owner_only_and_mutations_require_csrf() {
         .unwrap();
     assert_eq!(page.status(), 200);
     let page = page.text().await.unwrap();
-    if !page.contains("WordPress") {
-        eprintln!("PAGE_LEN: {}", page.len());
-        eprintln!("PAGE_HAS_GRID: {}", page.contains("storefront__grid"));
-        eprintln!("PAGE_HAS_CARDS: {}", page.contains("card__title"));
-        eprintln!("PAGE_HAS_EMPTY: {}", page.contains("empty-state"));
-        let mid = page.len() / 2;
-        eprintln!("PAGE_MID: {}", &page[mid..mid + 2000]);
-    }
     assert!(
         page.contains("WordPress"),
         "page did not contain 'WordPress' (length={})",
@@ -241,8 +233,9 @@ async fn owner_can_deploy_wordpress_and_credentials_are_returned_once() {
         .send()
         .await
         .unwrap();
-    assert_eq!(preview.status(), 200);
+    let preview_status = preview.status();
     let preview: serde_json::Value = preview.json().await.unwrap();
+    assert_eq!(preview_status, 200);
     let digest = preview["plan"]["digest"].as_str().unwrap();
     let confirmation = preview["confirmation_token"].as_str().unwrap();
     let deployed = server

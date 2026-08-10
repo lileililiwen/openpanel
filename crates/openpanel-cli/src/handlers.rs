@@ -881,6 +881,7 @@ pub async fn software_catalog(config: Arc<Config>) -> anyhow::Result<()> {
     let catalog = build_software_center(config)
         .await?
         .catalog(Role::Owner)
+        .await
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     println!("{}", serde_json::to_string_pretty(&catalog)?);
     Ok(())

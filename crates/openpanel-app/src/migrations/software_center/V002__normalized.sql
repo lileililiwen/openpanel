@@ -15,7 +15,8 @@ CREATE TABLE IF NOT EXISTS software_entries(
     activated_at TEXT NOT NULL,
     source_url TEXT NOT NULL,
     manifest_digest TEXT NOT NULL,
-    embedded INTEGER NOT NULL DEFAULT 0
+    embedded INTEGER NOT NULL DEFAULT 0,
+    platforms_json TEXT NOT NULL DEFAULT '[]'
 );
 
 CREATE INDEX IF NOT EXISTS software_entries_category_idx ON software_entries(category);

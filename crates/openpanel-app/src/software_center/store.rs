@@ -10,12 +10,13 @@
 
 use std::{
     collections::BTreeMap,
+    sync::{Arc, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 use openpanel_domain::software_center::{
     CatalogEntryRecipe, CatalogHit, CatalogManifest, CatalogQuery, CatalogSearchPage, Category,
-    EntryKind, Homepage, Provenance, RecipeError,
+    EntryKind, Homepage, Provenance, RecipeError, SupportedPlatform,
 };
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqlitePool};
@@ -183,12 +184,16 @@ pub struct StorefrontVersion {
     pub released_at: Option<String>,
     pub changelog_url: Option<String>,
     pub is_latest: bool,
+    pub packages: Vec<String>,
 }
 
 /// Persisted catalog store. Constructed once per service instance.
 pub struct SoftwareCatalogStore {
     pool: Option<SqlitePool>,
     staleness_threshold: i64,
+    /// Lazily-parsed embedded recovery seed. Serves the read-only path
+    /// when the store is built without a pool (tests, embeddable use).
+    seed: OnceLock<Option<Arc<CatalogManifest>>>,
 }
 
 impl SoftwareCatalogStore {
@@ -202,13 +207,24 @@ impl SoftwareCatalogStore {
         Self {
             pool,
             staleness_threshold: staleness,
+            seed: OnceLock::new(),
         }
     }
 
-    /// True when the store has an active snapshot in SQLite.
+    /// The embedded recovery seed, parsed on first use. `None` means the
+    /// seed failed to build (a developer-authored seed bug), which the
+    /// caller surfaces as an Invalid error.
+    fn embedded_seed(&self) -> Option<&Arc<CatalogManifest>> {
+        self.seed
+            .get_or_init(|| super::seed::embedded_manifest().ok().map(Arc::new))
+            .as_ref()
+    }
+
+    /// True when the store has an active snapshot (SQLite, or the
+    /// in-memory seed when no pool is configured).
     pub async fn has_active_snapshot(&self) -> bool {
         let Some(pool) = &self.pool else {
-            return false;
+            return self.embedded_seed().is_some();
         };
         let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM software_entries")
             .fetch_one(pool)
@@ -239,8 +255,22 @@ impl SoftwareCatalogStore {
             let latest = entry.latest_version();
             let search_text = build_search_text(entry);
             let size_bytes: i64 = latest.size_bytes.try_into().unwrap_or(0);
+            let platforms_json = serde_json::to_string(
+                &entry
+                    .platforms
+                    .iter()
+                    .map(|p| {
+                        serde_json::json!({
+                            "distribution": p.distribution(),
+                            "release": p.release(),
+                            "architecture": p.architecture(),
+                        })
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .map_err(|_| SoftwareCenterError::Repository)?;
             sqlx::query(
-                "INSERT INTO software_entries(id, name, description, long_description, category, kind, license, developer, homepage, icon, size_bytes, latest_version, search_text, activated_at, source_url, manifest_digest, embedded) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                "INSERT INTO software_entries(id, name, description, long_description, category, kind, license, developer, homepage, icon, size_bytes, latest_version, search_text, activated_at, source_url, manifest_digest, embedded, platforms_json) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             )
             .bind(&entry.id)
             .bind(&entry.name)
@@ -259,6 +289,7 @@ impl SoftwareCatalogStore {
             .bind(&fetched.source_url)
             .bind(fetched.manifest.digest())
             .bind(if source_id == "embedded" { 1_i64 } else { 0_i64 })
+            .bind(&platforms_json)
             .execute(&mut *transaction)
             .await
             .map_err(|_| SoftwareCenterError::Repository)?;
@@ -366,6 +397,9 @@ impl SoftwareCatalogStore {
         &self,
         query: &CatalogQuery,
     ) -> Result<CatalogSearchPage, SoftwareCenterError> {
+        if self.pool.is_none() {
+            return self.search_seed(query);
+        }
         use sqlx::QueryBuilder;
         let pool = self.pool.as_ref().ok_or(SoftwareCenterError::Repository)?;
 
@@ -464,6 +498,84 @@ impl SoftwareCatalogStore {
         })
     }
 
+    /// In-memory search against the embedded recovery seed. Used when the
+    /// store has no SQLite pool; the seed is always present, so this is
+    /// the read-only fallback path.
+    fn search_seed(&self, query: &CatalogQuery) -> Result<CatalogSearchPage, SoftwareCenterError> {
+        let Some(manifest) = self.embedded_seed() else {
+            return Err(SoftwareCenterError::Invalid);
+        };
+        let needle = query
+            .text
+            .as_ref()
+            .map(|value| value.trim().to_ascii_lowercase())
+            .filter(|value| !value.is_empty());
+        let mut hits = manifest
+            .entries
+            .iter()
+            .filter(|entry| {
+                if let Some(kind) = query.kind
+                    && entry.kind != kind
+                {
+                    return false;
+                }
+                if !query.categories.is_empty() && !query.categories.contains(&entry.category) {
+                    return false;
+                }
+                if let Some(needle) = &needle
+                    && !entry.name.to_ascii_lowercase().contains(needle)
+                    && !entry.description.to_ascii_lowercase().contains(needle)
+                {
+                    return false;
+                }
+                true
+            })
+            .map(|entry| {
+                let latest = entry.latest_version();
+                CatalogHit {
+                    id: entry.id.clone(),
+                    name: entry.name.clone(),
+                    description: entry.description.clone(),
+                    category: entry.category,
+                    kind: entry.kind,
+                    license: entry.license.as_str().to_owned(),
+                    developer: entry.developer.clone(),
+                    latest_version: latest.version.clone(),
+                    tags: entry
+                        .tags
+                        .iter()
+                        .map(|tag| tag.as_str().to_owned())
+                        .collect(),
+                    install_state: "available".to_owned(),
+                    icon: entry.icon.clone(),
+                    size_bytes: latest.size_bytes,
+                }
+            })
+            .collect::<Vec<_>>();
+        match query.sort {
+            CatalogSort::Name => {
+                hits.sort_by_key(|a| a.name.to_lowercase());
+            }
+            CatalogSort::Recent | CatalogSort::Size => {
+                hits.sort_by_key(|b| std::cmp::Reverse(b.size_bytes));
+            }
+        }
+        let total = hits.len();
+        let page = query.page.min(100);
+        let page_size = query.page_size.clamp(1, 60);
+        let start = (page * page_size).min(total);
+        let end = (start + page_size).min(total);
+        hits.truncate(end);
+        let hits = hits.split_off(start);
+        Ok(CatalogSearchPage {
+            total,
+            page,
+            page_size,
+            sort: sort_label(query.sort),
+            hits,
+        })
+    }
+
     fn apply_filters(qb: &mut sqlx::QueryBuilder<'_, sqlx::Sqlite>, query: &CatalogQuery) {
         if let Some(text) = query.text.as_ref().filter(|value| !value.trim().is_empty()) {
             let needle = format!("%{}%", text.trim().to_ascii_lowercase());
@@ -510,6 +622,9 @@ impl SoftwareCatalogStore {
         &self,
         id: &str,
     ) -> Result<Option<StorefrontEntry>, SoftwareCenterError> {
+        if self.pool.is_none() {
+            return Ok(self.get_entry_seed(id));
+        }
         let pool = self.pool.as_ref().ok_or(SoftwareCenterError::Repository)?;
         let row = sqlx::query(
             "SELECT id, name, description, long_description, category, kind, license, developer, homepage, icon, size_bytes, latest_version, activated_at, source_url, manifest_digest, embedded FROM software_entries WHERE id = ?",
@@ -590,6 +705,63 @@ impl SoftwareCatalogStore {
                 embedded: embedded != 0,
             },
         }))
+    }
+
+    /// In-memory entry lookup against the embedded recovery seed. Used
+    /// when the store has no SQLite pool.
+    fn get_entry_seed(&self, id: &str) -> Option<StorefrontEntry> {
+        let manifest = self.embedded_seed()?;
+        let recipe = manifest.entries.iter().find(|entry| entry.id == id)?;
+        let latest = recipe.latest_version();
+        let versions = recipe
+            .versions
+            .iter()
+            .enumerate()
+            .map(|(index, version)| StorefrontVersion {
+                version: version.version.clone(),
+                size_bytes: version.size_bytes,
+                supports_php: version.supports_php.clone(),
+                released_at: version.released_at.clone(),
+                changelog_url: version
+                    .changelog_url
+                    .as_ref()
+                    .map(Homepage::as_str)
+                    .map(str::to_owned),
+                is_latest: index == 0,
+                packages: version.packages.clone(),
+            })
+            .collect();
+        Some(StorefrontEntry {
+            id: recipe.id.clone(),
+            name: recipe.name.clone(),
+            description: recipe.description.clone(),
+            long_description: recipe.long_description.clone(),
+            category: recipe.category,
+            kind: recipe.kind,
+            license: recipe.license.as_str().to_owned(),
+            developer: recipe.developer.clone(),
+            homepage: recipe.homepage.as_str().to_owned(),
+            icon: recipe.icon.clone(),
+            latest_version: latest.version.clone(),
+            versions,
+            tags: recipe
+                .tags
+                .iter()
+                .map(|tag| tag.as_str().to_owned())
+                .collect(),
+            dependencies: recipe.dependencies.clone(),
+            conflicts: recipe.conflicts.clone(),
+            install_state: "available".to_owned(),
+            installed_version: None,
+            size_bytes: latest.size_bytes,
+            provenance: Provenance {
+                source_url: manifest.source_url.clone(),
+                manifest_digest: manifest.digest(),
+                activated_at: manifest.issued_at.clone(),
+                entry_count: manifest.entries.len(),
+                embedded: true,
+            },
+        })
     }
 
     /// Compute the pre-flight compatibility report for a given entry,
@@ -689,6 +861,9 @@ impl SoftwareCatalogStore {
 
     /// Build diagnostics for the diagnostics strip / CLI.
     pub async fn diagnostics(&self) -> Result<CatalogDiagnostics, SoftwareCenterError> {
+        if self.pool.is_none() {
+            return self.diagnostics_seed();
+        }
         let pool = self.pool.as_ref().ok_or(SoftwareCenterError::Repository)?;
         let row = sqlx::query(
             "SELECT activated_at, source_url, manifest_digest, embedded FROM software_entries LIMIT 1",
@@ -742,6 +917,24 @@ impl SoftwareCatalogStore {
         })
     }
 
+    /// In-memory diagnostics for the embedded recovery seed.
+    fn diagnostics_seed(&self) -> Result<CatalogDiagnostics, SoftwareCenterError> {
+        let Some(manifest) = self.embedded_seed() else {
+            return Err(SoftwareCenterError::Invalid);
+        };
+        Ok(CatalogDiagnostics {
+            source_url: manifest.source_url.clone(),
+            source_id: "embedded".to_owned(),
+            manifest_digest: manifest.digest(),
+            entry_count: manifest.entries.len(),
+            activated_at: manifest.issued_at.clone(),
+            age_seconds: 0,
+            last_refresh: None,
+            staleness_threshold_seconds: self.staleness_threshold,
+            stale: false,
+        })
+    }
+
     /// Record a refresh attempt outcome.
     pub async fn record_refresh(
         &self,
@@ -763,6 +956,56 @@ impl SoftwareCatalogStore {
         .await
         .map_err(|_| SoftwareCenterError::Repository)?;
         Ok(())
+    }
+
+    /// Public read of the supported platforms for an entry.
+    pub async fn platforms_for(
+        &self,
+        id: &str,
+    ) -> Result<Option<Vec<SupportedPlatform>>, SoftwareCenterError> {
+        if self.pool.is_none() {
+            let manifest = self.embedded_seed().ok_or(SoftwareCenterError::Invalid)?;
+            return Ok(manifest
+                .entries
+                .iter()
+                .find(|entry| entry.id == id)
+                .map(|entry| entry.platforms.clone()));
+        }
+        let pool = self.pool.as_ref().ok_or(SoftwareCenterError::Repository)?;
+        let row = sqlx::query("SELECT platforms_json FROM software_entries WHERE id = ?")
+            .bind(id)
+            .fetch_optional(pool)
+            .await
+            .map_err(|_| SoftwareCenterError::Repository)?;
+        let Some(row) = row else { return Ok(None) };
+        let raw: String = row
+            .try_get("platforms_json")
+            .map_err(|_| SoftwareCenterError::Repository)?;
+        if raw.trim().is_empty() || raw == "[]" {
+            return Ok(Some(Vec::new()));
+        }
+        let entries: Vec<serde_json::Value> =
+            serde_json::from_str(&raw).map_err(|_| SoftwareCenterError::Repository)?;
+        let mut out = Vec::with_capacity(entries.len());
+        for entry in entries {
+            let distribution = entry
+                .get("distribution")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            let release = entry
+                .get("release")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            let architecture = entry
+                .get("architecture")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("");
+            match SupportedPlatform::new(distribution, release, architecture) {
+                Ok(platform) => out.push(platform),
+                Err(_) => continue,
+            }
+        }
+        Ok(Some(out))
     }
 
     async fn tags_for(&self, id: &str) -> Result<Vec<String>, SoftwareCenterError> {
@@ -818,7 +1061,7 @@ impl SoftwareCatalogStore {
     async fn versions_for(&self, id: &str) -> Result<Vec<StorefrontVersion>, SoftwareCenterError> {
         let pool = self.pool.as_ref().ok_or(SoftwareCenterError::Repository)?;
         let rows = sqlx::query(
-            "SELECT version, size_bytes, changelog_url, supports_php_json, released_at, is_latest FROM software_entry_versions WHERE entry_id = ? ORDER BY is_latest DESC, version DESC",
+            "SELECT version, size_bytes, changelog_url, supports_php_json, released_at, is_latest, packages_json FROM software_entry_versions WHERE entry_id = ? ORDER BY is_latest DESC, version DESC",
         )
         .bind(id)
         .fetch_all(pool)
@@ -828,6 +1071,12 @@ impl SoftwareCatalogStore {
         for row in rows {
             let supports_php: Vec<String> = serde_json::from_str(
                 row.try_get::<String, _>("supports_php_json")
+                    .map_err(|_| SoftwareCenterError::Repository)?
+                    .as_str(),
+            )
+            .map_err(|_| SoftwareCenterError::Repository)?;
+            let packages: Vec<String> = serde_json::from_str(
+                row.try_get::<String, _>("packages_json")
                     .map_err(|_| SoftwareCenterError::Repository)?
                     .as_str(),
             )
@@ -851,6 +1100,7 @@ impl SoftwareCatalogStore {
                     .try_get::<i64, _>("is_latest")
                     .map_err(|_| SoftwareCenterError::Repository)?
                     != 0,
+                packages,
             });
         }
         Ok(out)

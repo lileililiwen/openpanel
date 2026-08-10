@@ -17,6 +17,8 @@ use std::{
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
+use super::SupportedPlatform;
+
 /// Soft error used across recipe validation.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RecipeError {
@@ -443,6 +445,10 @@ pub struct CatalogEntryRecipe {
     pub homepage: Homepage,
     /// At least one version. The first is treated as `latest`.
     pub versions: Vec<VersionSpec>,
+    /// Supported host tuples for this entry. An empty list is
+    /// interpreted as "supported on every host OpenPanel recognizes".
+    #[serde(default)]
+    pub platforms: Vec<SupportedPlatform>,
     /// Entry IDs this entry depends on.
     #[serde(default)]
     pub dependencies: Vec<String>,
