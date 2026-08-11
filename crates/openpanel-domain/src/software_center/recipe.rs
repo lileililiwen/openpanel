@@ -390,21 +390,26 @@ pub struct ArtifactPin {
 impl ArtifactPin {
     /// Validate the artifact pin.
     pub fn validate(&self) -> Result<(), RecipeError> {
-        if self.archive_root.is_empty()
-            || self.archive_root.len() > 128
-            || self.archive_root.contains('/')
-            || self.archive_root.contains('\\')
-            || self
-                .archive_root
-                .bytes()
-                .any(|byte| byte.is_ascii_control())
-            || Path::new(&self.archive_root)
-                .components()
-                .any(|component| !matches!(component, Component::Normal(_)))
+        let is_single_file = self.archive_type == "file";
+        if !is_single_file
+            && (self.archive_root.is_empty()
+                || self.archive_root.len() > 128
+                || self.archive_root.contains('/')
+                || self.archive_root.contains('\\')
+                || self
+                    .archive_root
+                    .bytes()
+                    .any(|byte| byte.is_ascii_control())
+                || Path::new(&self.archive_root)
+                    .components()
+                    .any(|component| !matches!(component, Component::Normal(_))))
         {
             return Err(RecipeError::Invalid("archive_root"));
         }
-        if self.archive_type != "tar.gz" {
+        if !matches!(
+            self.archive_type.as_str(),
+            "tar.gz" | "tar.bz2" | "zip" | "file"
+        ) {
             return Err(RecipeError::Invalid("archive_type"));
         }
         if self.sha256.len() != 64 || !self.sha256.bytes().all(|byte| byte.is_ascii_hexdigit()) {

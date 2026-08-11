@@ -226,7 +226,7 @@ fn web_entry_requires_artifact_pin_and_sha256() {
     bad.versions[0].artifact.as_mut().unwrap().sha256 = "not-hex".into();
     assert!(bad.validate(&known).is_err());
     let mut bad = entry.clone();
-    bad.versions[0].artifact.as_mut().unwrap().archive_type = "zip".into();
+    bad.versions[0].artifact.as_mut().unwrap().archive_type = "exe".into();
     assert!(bad.validate(&known).is_err());
     let mut bad = entry.clone();
     bad.versions[0].artifact.as_mut().unwrap().archive_root = "../etc".into();

@@ -323,6 +323,10 @@ pub fn router(
             get(crate::software_center::deploy_form),
         )
         .route(
+            "/software/components/{id}/install",
+            post(crate::software_center::install_artifact),
+        )
+        .route(
             "/software/components/{id}/{action}/preview",
             post(crate::software_center::preview_component_action),
         )

@@ -14,9 +14,10 @@ use sha2::{Digest, Sha256};
 use super::{
     ApplicationDeployer, ApplicationDeploymentInput, AptPackageManager, HostSnapshot,
     IntegratedApplicationDeployer, OpenPanelApplicationResources, PackageManager,
-    ProvisionedApplication, SoftwareCenterError, SoftwareCenterService, TokioPackageCommand,
+    ProvisionedApplication, ReqwestArtifactFetcher, SoftwareCenterError, SoftwareCenterService,
+    TokioPackageCommand, default_webapps_root,
 };
-use crate::{DatabasesService, SitesService};
+use crate::{DatabasesService, SitesService, software_center::ArtifactFetcher};
 
 /// Deterministic in-memory package manager for tests and development.
 #[derive(Default)]
@@ -160,11 +161,29 @@ impl SoftwareCenterModule {
 
     /// Compose the deterministic in-memory adapter.
     pub async fn memory(ctx: &AppContext) -> Result<Self, SoftwareCenterError> {
-        Ok(Self::compose(
+        Self::memory_with_artifact(
+            ctx,
+            Arc::new(ReqwestArtifactFetcher::default()),
+            default_webapps_root(),
+        )
+        .await
+    }
+
+    /// Compose the deterministic in-memory adapter with an injected
+    /// artifact fetcher and a custom webapps root. The integration test
+    /// uses this with a `MemoryArtifactFetcher` and a per-test temp dir.
+    pub async fn memory_with_artifact(
+        ctx: &AppContext,
+        fetcher: Arc<dyn ArtifactFetcher>,
+        webapps_root: std::path::PathBuf,
+    ) -> Result<Self, SoftwareCenterError> {
+        Ok(Self::compose_with_artifact(
             ctx,
             Arc::new(FakePackageManager::default()),
             Arc::new(FakeApplicationDeployer),
             true,
+            fetcher,
+            webapps_root,
         )
         .await)
     }
@@ -175,13 +194,34 @@ impl SoftwareCenterModule {
         applications: Arc<dyn ApplicationDeployer>,
         applications_enabled: bool,
     ) -> Self {
+        Self::compose_with_artifact(
+            ctx,
+            packages,
+            applications,
+            applications_enabled,
+            Arc::new(ReqwestArtifactFetcher::default()),
+            default_webapps_root(),
+        )
+        .await
+    }
+
+    async fn compose_with_artifact(
+        ctx: &AppContext,
+        packages: Arc<dyn PackageManager>,
+        applications: Arc<dyn ApplicationDeployer>,
+        applications_enabled: bool,
+        fetcher: Arc<dyn ArtifactFetcher>,
+        webapps_root: std::path::PathBuf,
+    ) -> Self {
         let pool = ctx.db.pool().await;
-        let service = SoftwareCenterService::with_persistence(
+        let service = SoftwareCenterService::with_artifact_pipeline(
             packages,
             applications,
             ctx.audit.clone(),
-            pool,
+            Some(pool),
             applications_enabled,
+            fetcher,
+            webapps_root,
         );
         // Materialize the embedded seed on first boot so the storefront is
         // never empty before the first remote refresh succeeds.

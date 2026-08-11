@@ -14,10 +14,11 @@ use base64::Engine;
 use ed25519_dalek::{Signer, SigningKey};
 use openpanel_app::software_center::{
     ApplicationDeployer, ApplicationDeploymentInput, ApplicationDeploymentResources,
-    ApplicationResource, AptPackageManager, ArtifactDigest, CatalogVerifier, CommandResult,
-    ComponentAction, CreatedApplicationDatabase, CreatedApplicationSite, HostSnapshot,
-    IntegratedApplicationDeployer, PackageCommand, PackageManager, ProvisionedApplication,
-    SafeArtifactInstaller, SignedCatalogEnvelope, SoftwareCenterError, SoftwareCenterService,
+    ApplicationResource, AptPackageManager, ArtifactDigest, ArtifactFetcher, CatalogVerifier,
+    CommandResult, ComponentAction, CreatedApplicationDatabase, CreatedApplicationSite,
+    HostSnapshot, IntegratedApplicationDeployer, PackageCommand, PackageManager,
+    ProvisionedApplication, SafeArtifactInstaller, SignedCatalogEnvelope, SoftwareCenterError,
+    SoftwareCenterService,
 };
 use openpanel_core::{AuditAction, AuditOutcome};
 use openpanel_domain::{
@@ -894,4 +895,116 @@ fn catalog_sort_label_is_stable() {
     };
     let page = CatalogSearchPage::empty(&query);
     assert_eq!(page.sort, "recent");
+}
+
+/// Test double that returns a pre-baked byte stream for one URL and
+/// records the requests it served. Used by the `install_artifact` end
+/// to end test to prove the file lands on disk without hitting the
+/// network.
+struct MemoryArtifactFetcher {
+    bytes: Vec<u8>,
+    requested: std::sync::Mutex<Vec<String>>,
+}
+
+#[async_trait]
+impl ArtifactFetcher for MemoryArtifactFetcher {
+    async fn fetch(&self, url: &str) -> Result<Vec<u8>, SoftwareCenterError> {
+        self.requested.lock().expect("lock").push(url.to_owned());
+        Ok(self.bytes.clone())
+    }
+}
+
+#[test]
+fn install_artifact_downloads_and_places_adminer_under_webapps_root() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let sandbox = tempfile::tempdir().expect("tempdir");
+        let webapps_root = sandbox.path().join("webapps");
+        let bytes = b"<?php // adminer 4.8.1 placeholder".to_vec();
+        let fetcher = Arc::new(MemoryArtifactFetcher {
+            bytes: bytes.clone(),
+            requested: std::sync::Mutex::new(Vec::new()),
+        });
+        let packages = MockPackages::new();
+        let applications = MockApplications::new();
+        let service = SoftwareCenterService::with_artifact_pipeline(
+            Arc::new(packages),
+            Arc::new(applications),
+            Arc::new(MockAudit::stub()),
+            None,
+            true,
+            fetcher.clone(),
+            webapps_root.clone(),
+        );
+        let result = service
+            .install_artifact(Uuid::new_v4(), Role::Owner, "adminer")
+            .await
+            .expect("install_artifact succeeds for adminer");
+        assert_eq!(result.entry_id, "adminer");
+        assert_eq!(result.entry_name, "Adminer 4");
+        assert_eq!(result.version, "4.8.1");
+        assert_eq!(result.archive_type, "file");
+        assert_eq!(result.bytes, bytes.len() as u64);
+        assert!(
+            !result.digest_verified,
+            "adminer seed ships a placeholder digest"
+        );
+        let filename = result
+            .filename
+            .expect("file install must report a filename");
+        let placed = result.destination.clone();
+        assert!(
+            placed.is_file(),
+            "placed path should be a regular file: {placed:?}"
+        );
+        let read_back = std::fs::read(&placed).expect("read placed file");
+        assert_eq!(
+            read_back, bytes,
+            "placed bytes must match what the fetcher returned"
+        );
+        assert!(
+            filename.ends_with(".php"),
+            "adminer filename should be a .php file"
+        );
+        assert_eq!(
+            fetcher.requested.lock().expect("lock").as_slice(),
+            &["https://github.com/vrana/adminer/releases/download/v4.8.1/adminer-4.8.1-en.php"],
+            "fetcher must receive the exact URL the adminer recipe pins",
+        );
+    });
+}
+
+#[test]
+fn install_artifact_rejects_non_web_entries() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let sandbox = tempfile::tempdir().expect("tempdir");
+        let webapps_root = sandbox.path().join("webapps");
+        let fetcher = Arc::new(MemoryArtifactFetcher {
+            bytes: Vec::new(),
+            requested: std::sync::Mutex::new(Vec::new()),
+        });
+        let packages = MockPackages::new();
+        let applications = MockApplications::new();
+        let service = SoftwareCenterService::with_artifact_pipeline(
+            Arc::new(packages),
+            Arc::new(applications),
+            Arc::new(MockAudit::stub()),
+            None,
+            true,
+            fetcher,
+            webapps_root,
+        );
+        let error = service
+            .install_artifact(Uuid::new_v4(), Role::Owner, "nginx")
+            .await
+            .expect_err("system entries must be rejected by install_artifact");
+        assert!(matches!(error, SoftwareCenterError::Invalid));
+    });
 }

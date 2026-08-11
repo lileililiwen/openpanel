@@ -4,8 +4,16 @@
 //! from `openpanel_api::build_router` on a random local port, and
 //! returns the bound address plus a preconfigured `reqwest::Client`.
 //! `Drop` aborts the server task.
+//!
+//! The Software Center module always uses a `MemoryArtifactFetcher`
+//! bound to a per-test sandbox directory; tests can stage pre-canned
+//! bytes for a URL via [`TestServer::stage_artifact`].
 
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::{Arc, Mutex},
+};
 
 use openpanel_api::build_router;
 use openpanel_app::{
@@ -14,8 +22,37 @@ use openpanel_app::{
     LogsModule, MailModule, MailService, MonitoringModule, MonitoringService, SecurityModule,
     SecurityService, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
     SslModule, SslPaths, SslService, SystemServicesModule, security::MemoryFirewall,
-    sites::nginx::NginxPaths,
+    sites::nginx::NginxPaths, software_center::ArtifactFetcher,
 };
+
+/// In-process artifact fetcher used by the test server. Bytes are
+/// staged per URL via [`TestServer::stage_artifact`]. Anything not
+/// staged is rejected with `SoftwareCenterError::Package`, so a test
+/// that forgets to stage the bytes fails loudly instead of hanging on a
+/// real network call.
+struct StagedArtifactFetcher {
+    bytes: Arc<Mutex<HashMap<String, Vec<u8>>>>,
+    served: Arc<Mutex<Vec<String>>>,
+}
+
+#[async_trait::async_trait]
+impl ArtifactFetcher for StagedArtifactFetcher {
+    async fn fetch(
+        &self,
+        url: &str,
+    ) -> Result<Vec<u8>, openpanel_app::software_center::SoftwareCenterError> {
+        self.served
+            .lock()
+            .expect("served lock")
+            .push(url.to_owned());
+        self.bytes
+            .lock()
+            .expect("bytes lock")
+            .get(url)
+            .cloned()
+            .ok_or(openpanel_app::software_center::SoftwareCenterError::Package)
+    }
+}
 use openpanel_core::{
     AppContext, AuditEvent, AuditService, Config, MigrationRunner, Module, SqliteAuditService,
     SqliteDriver,
@@ -50,6 +87,36 @@ pub struct TestServer {
     _db: TestDb,
     /// Temp directory for sandboxed nginx configs and document roots.
     sandbox: Arc<TempDir>,
+    /// Sandbox directory downloaded artifacts are placed at.
+    webapps_root: PathBuf,
+    /// Pre-canned bytes keyed by URL for the in-process artifact fetcher.
+    staged_artifacts: Arc<Mutex<HashMap<String, Vec<u8>>>>,
+    /// URLs the in-process fetcher served during the test.
+    fetched_urls: Arc<Mutex<Vec<String>>>,
+}
+
+impl TestServer {
+    /// Stage a pre-baked byte stream that the in-process artifact
+    /// fetcher will return when the Software Center requests `url`.
+    /// Tests use this instead of mocking the network: one staging call
+    /// per artifact the install flow needs.
+    pub fn stage_artifact(&self, url: &str, bytes: Vec<u8>) {
+        self.staged_artifacts
+            .lock()
+            .expect("staged artifacts lock")
+            .insert(url.to_owned(), bytes);
+    }
+
+    /// URLs the artifact fetcher served during the test, in call order.
+    pub fn fetched_artifacts(&self) -> Vec<String> {
+        self.fetched_urls.lock().expect("fetched lock").clone()
+    }
+
+    /// Sandbox directory the Software Center drops downloaded artifacts
+    /// into. The default is `<sandbox>/webapps`.
+    pub fn webapps_root(&self) -> &std::path::Path {
+        &self.webapps_root
+    }
 }
 
 impl TestServer {
@@ -142,9 +209,18 @@ impl TestServer {
             .expect("system services module");
         let dns_module = DnsModule::memory(&ctx).await.expect("dns module");
         let mail_module = MailModule::memory(&ctx).await.expect("mail module");
-        let software_center_module = SoftwareCenterModule::memory(&ctx)
-            .await
-            .expect("software center module");
+        let webapps_root = sandbox.path().join("webapps");
+        let staged_artifacts: Arc<Mutex<HashMap<String, Vec<u8>>>> =
+            Arc::new(Mutex::new(HashMap::new()));
+        let fetched_urls: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
+        let fetcher: Arc<dyn ArtifactFetcher> = Arc::new(StagedArtifactFetcher {
+            bytes: staged_artifacts.clone(),
+            served: fetched_urls.clone(),
+        });
+        let software_center_module =
+            SoftwareCenterModule::memory_with_artifact(&ctx, fetcher, webapps_root.clone())
+                .await
+                .expect("software center module");
         runner
             .apply_module(monitoring_module.name(), &monitoring_module.migrations())
             .await
@@ -303,6 +379,9 @@ impl TestServer {
             _handle: handle,
             _db: db,
             sandbox,
+            webapps_root,
+            staged_artifacts,
+            fetched_urls,
         }
     }
 

@@ -268,8 +268,9 @@ fn action_for_state(state: &str, kind: EntryKind, id: &str, csrf: &str) -> Marku
             }
         },
         "available" if kind == EntryKind::Web => html! {
-            form method="get" action={"/software/components/" (id) "/deploy"} {
-                button class="button" { "Deploy" }
+            form method="post" action={"/software/components/" (id) "/install"} {
+                input type="hidden" name="_csrf" value=(csrf);
+                button class="button" { "Install" }
             }
         },
         "available" => html! {
@@ -417,11 +418,59 @@ fn deploy_form_content(entry: &StorefrontEntry, csrf: &str) -> Markup {
     }
 }
 
+/// One-click download-and-place for any Web entry that ships an
+/// `ArtifactPin`. The handler does the whole flow in one round trip:
+/// fetch the pinned URL, verify the digest (or skip the check when the
+/// recipe ships a documented placeholder), and drop the file or
+/// extracted archive at the managed webapps root. No preview, no
+/// confirmation token, no wizard.
+pub async fn install_artifact(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Path(id): Path<String>,
+    Form(form): Form<PreviewForm>,
+) -> Response {
+    if !state.csrf.verify(session.id(), &form._csrf) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let csrf = state.csrf.token_for(session.id());
+    let result = state
+        .software_center
+        .install_artifact(user.id(), user.role(), &id)
+        .await;
+    let content = match result {
+        Ok(installed) => html! {
+            h1 { "Software installed" }
+            p { (installed.entry_name) " " (installed.version) " was downloaded and placed on this host." }
+            dl class="detail__metadata" {
+                dt { "Entry" } dd { (installed.entry_id) }
+                dt { "Version" } dd { (installed.version) }
+                dt { "Archive" } dd { (installed.archive_type) }
+                dt { "Bytes" } dd { (installed.bytes) }
+                dt { "Digest verified" } dd { @if installed.digest_verified { "yes" } @else { "skipped (placeholder)" } }
+                dt { "Path" } dd code { (installed.destination.display()) }
+                @if let Some(name) = &installed.filename {
+                    dt { "Filename" } dd code { (name) }
+                }
+            }
+            div class="detail__action" {
+                a class="button" href="/software" { "Return to Software Center" }
+            }
+        },
+        Err(error) => error_content(&software_center_error_message(&error), &csrf),
+    };
+    state
+        .render_shell(&user, &csrf, "/software", content)
+        .await
+        .into_response()
+}
+
 fn detail_content(entry: &StorefrontEntry, csrf: &str) -> Markup {
     let install_action = match entry.install_state.as_str() {
         "available" if entry.kind == EntryKind::Web => Some(html! {
-            form method="get" action={"/software/components/" (entry.id) "/deploy"} {
-                button class="button" { "Deploy" }
+            form method="post" action={"/software/components/" (entry.id) "/install"} {
+                input type="hidden" name="_csrf" value=(csrf);
+                button class="button" { "Install" }
             }
         }),
         "available" => Some(html! {

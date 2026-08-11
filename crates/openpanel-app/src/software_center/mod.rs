@@ -11,13 +11,15 @@ mod store;
 
 use std::{
     collections::{BTreeMap, BTreeSet, HashMap},
+    path::PathBuf,
     sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
 
 pub use apt::{AptPackageManager, CommandResult, PackageCommand, TokioPackageCommand};
 pub use artifact::{
-    ArtifactDigest, ArtifactDownloader, PinnedArtifact, SafeArtifactInstaller, pinned_artifact,
+    ArtifactDigest, ArtifactDownloader, ArtifactFetcher, PinnedArtifact, PlacedArtifact,
+    ReqwestArtifactFetcher, SafeArtifactInstaller, pinned_artifact, place_artifact,
 };
 use async_trait::async_trait;
 pub use catalog::{CatalogVerifier, SignedCatalogEnvelope, VerifiedCatalog};
@@ -460,6 +462,28 @@ pub struct RetryPreview {
     pub packages: Vec<String>,
 }
 
+/// Outcome of a one-step artifact install (no plan, no confirmation).
+#[derive(Debug, Clone, Serialize)]
+pub struct ArtifactInstallResult {
+    /// Stable entry id from the catalog.
+    pub entry_id: String,
+    /// Display name from the catalog.
+    pub entry_name: String,
+    /// Installed version string.
+    pub version: String,
+    /// Archive type from the recipe (`tar.gz`, `file`, ...).
+    pub archive_type: String,
+    /// Absolute path the artifact was placed at.
+    pub destination: std::path::PathBuf,
+    /// Filename for single-file artifacts; `None` for extracted archives.
+    pub filename: Option<String>,
+    /// Bytes downloaded and written.
+    pub bytes: u64,
+    /// Whether the digest was checked. False when the recipe ships a
+    /// documented placeholder (the recovery seed for adminer, etc.).
+    pub digest_verified: bool,
+}
+
 /// Successful application deployment with credentials returned exactly once.
 #[derive(Debug, Serialize)]
 pub struct ApplicationDeploymentResult {
@@ -488,6 +512,8 @@ pub struct SoftwareCenterService {
     applications_enabled: bool,
     store: SoftwareCatalogStore,
     catalog_source: Arc<dyn CatalogSource>,
+    artifact_fetcher: Arc<dyn ArtifactFetcher>,
+    webapps_root: PathBuf,
 }
 impl SoftwareCenterService {
     /// Construct from the fixed package adapter and append-only audit port.
@@ -498,6 +524,8 @@ impl SoftwareCenterService {
             audit,
             None,
             false,
+            Arc::new(ReqwestArtifactFetcher::default()),
+            default_webapps_root(),
         )
     }
 
@@ -507,22 +535,37 @@ impl SoftwareCenterService {
         applications: Arc<dyn ApplicationDeployer>,
         audit: Arc<dyn AuditService>,
     ) -> Self {
-        Self::compose(packages, applications, audit, None, true)
+        Self::compose(
+            packages,
+            applications,
+            audit,
+            None,
+            true,
+            Arc::new(ReqwestArtifactFetcher::default()),
+            default_webapps_root(),
+        )
     }
 
-    pub(crate) fn with_persistence(
+    /// Compose the service with an explicit artifact fetcher and a custom
+    /// webapps root. Used by the integration test that swaps in a
+    /// `MemoryArtifactFetcher` and a per-test temp directory.
+    pub fn with_artifact_pipeline(
         packages: Arc<dyn PackageManager>,
         applications: Arc<dyn ApplicationDeployer>,
         audit: Arc<dyn AuditService>,
-        pool: SqlitePool,
+        pool: Option<SqlitePool>,
         applications_enabled: bool,
+        fetcher: Arc<dyn ArtifactFetcher>,
+        webapps_root: PathBuf,
     ) -> Self {
         Self::compose(
             packages,
             applications,
             audit,
-            Some(pool),
+            pool,
             applications_enabled,
+            fetcher,
+            webapps_root,
         )
     }
 
@@ -532,6 +575,8 @@ impl SoftwareCenterService {
         audit: Arc<dyn AuditService>,
         pool: Option<SqlitePool>,
         applications_enabled: bool,
+        fetcher: Arc<dyn ArtifactFetcher>,
+        webapps_root: PathBuf,
     ) -> Self {
         let store = SoftwareCatalogStore::new(pool.clone());
         let catalog_source: Arc<dyn CatalogSource> =
@@ -550,6 +595,8 @@ impl SoftwareCenterService {
             applications_enabled,
             store,
             catalog_source,
+            artifact_fetcher: fetcher,
+            webapps_root,
         }
     }
 
@@ -870,6 +917,61 @@ impl SoftwareCenterService {
             rollback_supported: matches!(action, ComponentAction::Install | ComponentAction::Adopt),
             dependency_counts: BTreeMap::new(),
             conflicts: Vec::new(),
+        })
+    }
+
+    /// Download the pinned artifact for one Web entry and place its files
+    /// under the managed webapps root. The full operation is one step:
+    /// no preview, no confirmation token, no wizard. This is the path the
+    /// web Install button drives for any Web entry that carries an
+    /// `ArtifactPin` (adminer, phpmyadmin, joomla, ghost, typecho, ...).
+    pub async fn install_artifact(
+        &self,
+        actor: Uuid,
+        role: Role,
+        entry_id: &str,
+    ) -> Result<ArtifactInstallResult, SoftwareCenterError> {
+        owner(role)?;
+        self.ensure_seed_materialized().await;
+        let entry = self
+            .store
+            .get_entry(entry_id)
+            .await?
+            .ok_or(SoftwareCenterError::Invalid)?;
+        if !matches!(
+            entry.kind,
+            openpanel_domain::software_center::EntryKind::Web
+        ) {
+            return Err(SoftwareCenterError::Invalid);
+        }
+        let version = entry
+            .versions
+            .iter()
+            .find(|version| version.is_latest)
+            .cloned()
+            .or_else(|| entry.versions.first().cloned())
+            .ok_or(SoftwareCenterError::Invalid)?;
+        let pin = version
+            .artifact
+            .clone()
+            .ok_or(SoftwareCenterError::Invalid)?;
+        let url = pin.url.as_str().to_owned();
+        let bytes = self.artifact_fetcher.fetch(&url).await?;
+        if let Some(parent) = self.webapps_root.parent() {
+            std::fs::create_dir_all(parent).map_err(|_| SoftwareCenterError::Package)?;
+        }
+        std::fs::create_dir_all(&self.webapps_root).map_err(|_| SoftwareCenterError::Package)?;
+        let placed = place_artifact(&pin, &bytes, &self.webapps_root)?;
+        self.record(actor, "artifact_installed", entry_id).await?;
+        Ok(ArtifactInstallResult {
+            entry_id: entry.id,
+            entry_name: entry.name,
+            version: version.version,
+            archive_type: pin.archive_type,
+            destination: placed.path,
+            filename: placed.filename,
+            bytes: bytes.len() as u64,
+            digest_verified: placed.digest_verified,
         })
     }
 
@@ -1883,6 +1985,7 @@ fn project_entry(entry: &StorefrontEntry, _applications_enabled: bool) -> Catalo
             changelog_url: None,
             is_latest: true,
             packages: Vec::new(),
+            artifact: None,
         });
     let packages: Vec<PackageId> = latest
         .packages
@@ -1933,6 +2036,13 @@ fn supported_platforms() -> Result<Vec<SupportedPlatform>, SoftwareCenterError> 
             .map_err(|_| SoftwareCenterError::Invalid)
     })
     .collect()
+}
+
+/// Default managed base directory for downloaded web application
+/// artifacts. Each install drops its files under
+/// `{webapps_root}/{entry_id}/{version}/`.
+fn default_webapps_root() -> PathBuf {
+    PathBuf::from("/var/lib/openpanel/webapps")
 }
 
 fn owner(role: Role) -> Result<(), SoftwareCenterError> {

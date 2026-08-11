@@ -185,6 +185,9 @@ pub struct StorefrontVersion {
     pub changelog_url: Option<String>,
     pub is_latest: bool,
     pub packages: Vec<String>,
+    /// Pinned artifact metadata, if the version is delivered as a
+    /// downloadable archive or single file (used by Web entries).
+    pub artifact: Option<openpanel_domain::software_center::ArtifactPin>,
 }
 
 /// Persisted catalog store. Constructed once per service instance.
@@ -753,6 +756,7 @@ impl SoftwareCatalogStore {
                     .map(str::to_owned),
                 is_latest: index == 0,
                 packages: version.packages.clone(),
+                artifact: version.artifact.clone(),
             })
             .collect();
         Some(StorefrontEntry {
@@ -1085,7 +1089,7 @@ impl SoftwareCatalogStore {
     async fn versions_for(&self, id: &str) -> Result<Vec<StorefrontVersion>, SoftwareCenterError> {
         let pool = self.pool.as_ref().ok_or(SoftwareCenterError::Repository)?;
         let rows = sqlx::query(
-            "SELECT version, size_bytes, changelog_url, supports_php_json, released_at, is_latest, packages_json FROM software_entry_versions WHERE entry_id = ? ORDER BY is_latest DESC, version DESC",
+            "SELECT version, size_bytes, changelog_url, supports_php_json, released_at, is_latest, packages_json, artifact_json FROM software_entry_versions WHERE entry_id = ? ORDER BY is_latest DESC, version DESC",
         )
         .bind(id)
         .fetch_all(pool)
@@ -1105,6 +1109,13 @@ impl SoftwareCatalogStore {
                     .as_str(),
             )
             .map_err(|_| SoftwareCenterError::Repository)?;
+            let artifact: Option<openpanel_domain::software_center::ArtifactPin> = row
+                .try_get::<Option<String>, _>("artifact_json")
+                .map_err(|_| SoftwareCenterError::Repository)?
+                .as_deref()
+                .map(serde_json::from_str)
+                .transpose()
+                .map_err(|_| SoftwareCenterError::Repository)?;
             out.push(StorefrontVersion {
                 version: row
                     .try_get("version")
@@ -1125,6 +1136,7 @@ impl SoftwareCatalogStore {
                     .map_err(|_| SoftwareCenterError::Repository)?
                     != 0,
                 packages,
+                artifact,
             });
         }
         Ok(out)

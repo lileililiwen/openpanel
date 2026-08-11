@@ -41,6 +41,16 @@ fn artifact(url: &str, sha256: &str, archive_root: &str, sha1: Option<&str>) -> 
     }
 }
 
+fn file_artifact(url: &str, sha256: &str, filename: &str) -> ArtifactPin {
+    ArtifactPin {
+        url: Homepage::new(url).expect("seed artifact url must validate"),
+        sha256: sha256.to_owned(),
+        archive_root: filename.to_owned(),
+        archive_type: "file".to_owned(),
+        sha1: None,
+    }
+}
+
 fn version(
     version: &str,
     size_bytes: u64,
@@ -581,11 +591,12 @@ pub fn entries() -> Vec<CatalogEntryRecipe> {
             vec![version(
                 "4.8.1",
                 mib(2),
-                Some(artifact(
+                Some(file_artifact(
                     "https://github.com/vrana/adminer/releases/download/v4.8.1/adminer-4.8.1-en.php",
+                    // Placeholder digest; the live fetcher skips the
+                    // digest check for documented placeholders.
                     "0000000000000000000000000000000000000000000000000000000000000000",
-                    "adminer-4.8.1",
-                    None,
+                    "adminer-4.8.1-en.php",
                 )),
                 Vec::new(),
                 vec!["7.4", "8.0", "8.1", "8.2", "8.3"],

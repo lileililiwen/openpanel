@@ -149,6 +149,8 @@ sqlx = { workspace = true }
 tempfile = "3"
 cargo-audit = "0.22"
 chrono = { workspace = true }
+flate2 = "1"
+tar = "0.4"
 base64 = { workspace = true }
 ed25519-dalek = { workspace = true }
 

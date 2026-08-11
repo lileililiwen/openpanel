@@ -208,11 +208,15 @@ async fn software_web_is_owner_only_and_mutations_require_csrf() {
 }
 
 #[tokio::test]
-async fn web_entries_render_deploy_form_and_posting_advances_to_preview() {
+async fn web_install_button_for_a_tar_gz_web_entry_also_lands_on_disk() {
     let server = TestServer::new().await;
     server
         .bootstrap_owner("owner", "correct horse battery staple")
         .await;
+    let phpmyadmin_url =
+        "https://files.phpmyadmin.net/phpMyAdmin/5.2.2/phpMyAdmin-5.2.2-all-languages.tar.gz";
+    server.stage_artifact(phpmyadmin_url, build_tar_gz_fixture());
+
     let login = server
         .client()
         .post(format!("{}/login", server.base_url()))
@@ -231,68 +235,64 @@ async fn web_entries_render_deploy_form_and_posting_advances_to_preview() {
         .unwrap()
         .to_owned();
 
-    let page = server
+    let storefront = server
         .client()
         .get(format!("{}/software", server.base_url()))
         .header("cookie", &cookie)
         .send()
         .await
         .unwrap();
-    assert_eq!(page.status(), 200);
-    let body = page.text().await.unwrap();
+    let storefront_body = storefront.text().await.unwrap();
     assert!(
-        body.contains(r#"action="/software/components/wordpress/deploy""#),
-        "storefront did not render the Deploy link for the WordPress entry"
+        storefront_body.contains(r#"action="/software/components/phpmyadmin/install""#),
+        "storefront should render an Install button that POSTs to the new install route for phpmyadmin"
     );
-    assert!(
-        body.contains(">Deploy<"),
-        "storefront did not render a Deploy button"
-    );
+    let csrf = extract_csrf(&storefront_body);
 
-    let form_page = server
-        .client()
-        .get(format!(
-            "{}/software/components/wordpress/deploy",
-            server.base_url()
-        ))
-        .header("cookie", &cookie)
-        .send()
-        .await
-        .unwrap();
-    assert_eq!(form_page.status(), 200);
-    let form_body = form_page.text().await.unwrap();
-    assert!(form_body.contains(r#"action="/software/applications/preview""#));
-    assert!(form_body.contains(r#"name="application" value="wordpress""#));
-    assert!(form_body.contains(r#"name="domain""#));
-    assert!(form_body.contains(r#"name="php_version""#));
-    assert!(form_body.contains(r#"name="locale""#));
-
-    let csrf = extract_csrf(&form_body);
-
-    let submit = server
+    let install = server
         .client()
         .post(format!(
-            "{}/software/applications/preview",
+            "{}/software/components/phpmyadmin/install",
             server.base_url()
         ))
         .header("cookie", &cookie)
-        .form(&[
-            ("_csrf", csrf.as_str()),
-            ("application", "wordpress"),
-            ("domain", "example.test"),
-            ("php_version", "8.3"),
-            ("locale", "en_US"),
-        ])
+        .form(&[("_csrf", csrf.as_str())])
         .send()
         .await
         .unwrap();
-    assert_eq!(submit.status(), 200, "deploy preview should not 422");
-    let submit_body = submit.text().await.unwrap();
-    assert!(
-        submit_body.contains("Review application deployment"),
-        "expected the digest-bound confirmation page"
+    assert_eq!(install.status(), 200, "tar.gz install should not 422");
+    let body = install.text().await.unwrap();
+    assert!(body.contains("Software installed"), "body={body}");
+    let fetched = server.fetched_artifacts();
+    assert_eq!(fetched, vec![phpmyadmin_url.to_owned()]);
+    let placed = walk_files(server.webapps_root())
+        .into_iter()
+        .find(|path| path.is_file() && path.file_name().is_some_and(|n| n == "index.html"))
+        .expect("tar.gz install should extract the test fixture into the webapps root");
+    assert_eq!(
+        std::fs::read_to_string(placed).unwrap(),
+        "<p>phpmyadmin fixture</p>"
     );
-    assert!(submit_body.contains("Confirm deployment"));
+}
+
+/// Build a tiny but valid `tar.gz` fixture with the structure the
+/// installer expects: one top-level directory named after `archive_root`
+/// and a single file inside it.
+fn build_tar_gz_fixture() -> Vec<u8> {
+    use flate2::{Compression, write::GzEncoder};
+    let encoder = GzEncoder::new(Vec::new(), Compression::default());
+    let mut builder = tar::Builder::new(encoder);
+    let body = b"<p>phpmyadmin fixture</p>";
+    let mut header = tar::Header::new_gnu();
+    header
+        .set_path("phpMyAdmin-5.2.2-all-languages/index.html")
+        .expect("path");
+    header.set_size(body.len() as u64);
+    header.set_mode(0o644);
+    header.set_cksum();
+    builder.append(&header, &body[..]).expect("append");
+    let encoder = builder.into_inner().expect("finish builder");
+    encoder.finish().expect("finish gzip")
 }
 
 #[tokio::test]
@@ -589,4 +589,109 @@ async fn invalid_catalog_refresh_retains_the_last_known_good_snapshot() {
     .await
     .unwrap();
     assert_eq!(active, activated.digest);
+}
+
+#[tokio::test]
+async fn web_install_button_for_adminer_downloads_and_places_the_php_file() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("owner", "correct horse battery staple")
+        .await;
+    let adminer_url =
+        "https://github.com/vrana/adminer/releases/download/v4.8.1/adminer-4.8.1-en.php";
+    let staged = b"<?php // staged adminer bytes for the install test".to_vec();
+    server.stage_artifact(adminer_url, staged.clone());
+
+    let login = server
+        .client()
+        .post(format!("{}/login", server.base_url()))
+        .form(&[
+            ("username_or_email", "owner"),
+            ("password", "correct horse battery staple"),
+        ])
+        .send()
+        .await
+        .unwrap();
+    let cookie = login.headers()[reqwest::header::SET_COOKIE]
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_owned();
+
+    let storefront = server
+        .client()
+        .get(format!("{}/software", server.base_url()))
+        .header("cookie", &cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(storefront.status(), 200);
+    let storefront_body = storefront.text().await.unwrap();
+    assert!(
+        storefront_body.contains(r#"action="/software/components/adminer/install""#),
+        "storefront should render an Install button that POSTs to the new install route, body={storefront_body}"
+    );
+    let csrf = extract_csrf(&storefront_body);
+
+    let install = server
+        .client()
+        .post(format!(
+            "{}/software/components/adminer/install",
+            server.base_url()
+        ))
+        .header("cookie", &cookie)
+        .form(&[("_csrf", csrf.as_str())])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(install.status(), 200, "install should not 422");
+    let install_body = install.text().await.unwrap();
+    assert!(
+        install_body.contains("Software installed"),
+        "expected the success page, body={install_body}"
+    );
+    assert!(
+        install_body.contains(adminer_url) || install_body.contains("adminer-4.8.1-en.php"),
+        "success page should name the URL or the placed file, body={install_body}"
+    );
+
+    let fetched = server.fetched_artifacts();
+    assert_eq!(
+        fetched,
+        vec![adminer_url.to_owned()],
+        "the in-process fetcher must receive the exact URL the adminer recipe pins"
+    );
+
+    let webapps_root = server.webapps_root().to_path_buf();
+    let placed_root_searched = walk_files(&webapps_root);
+    let placed = placed_root_searched
+        .iter()
+        .find(|path| path.extension().and_then(|ext| ext.to_str()) == Some("php"))
+        .expect("the downloaded adminer file should land somewhere under the webapps root");
+    let read_back = std::fs::read(placed).expect("read placed file");
+    assert_eq!(
+        read_back, staged,
+        "placed bytes must match the staged payload"
+    );
+}
+
+fn walk_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let mut out = Vec::new();
+    let mut stack = vec![root.to_path_buf()];
+    while let Some(dir) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                stack.push(path);
+            } else if path.is_file() {
+                out.push(path);
+            }
+        }
+    }
+    out
 }
