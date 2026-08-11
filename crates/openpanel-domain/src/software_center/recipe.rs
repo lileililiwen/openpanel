@@ -655,6 +655,12 @@ pub struct CatalogHit {
     pub install_state: String,
     pub icon: Option<String>,
     pub size_bytes: u64,
+    /// `true` when the entry's recipe carries the documented
+    /// placeholder SHA-256 sentinel. The storefront disables the
+    /// Install button for these entries when the fail-closed gate is
+    /// on; operators must run `software refresh` against a remote
+    /// catalog that pins a real digest before installing.
+    pub placeholder_digest: bool,
 }
 
 /// Catalog filter + pagination summary returned to the storefront.

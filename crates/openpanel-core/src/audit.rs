@@ -366,6 +366,8 @@ impl AuditService for SqliteAuditService {
                 "firewall_changed" => AuditAction::FirewallChanged,
                 "security_block_changed" => AuditAction::SecurityBlockChanged,
                 "service_changed" => AuditAction::ServiceChanged,
+                "software_changed" => AuditAction::SoftwareChanged,
+                "software_artifact_installed" => AuditAction::SoftwareArtifactInstalled,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

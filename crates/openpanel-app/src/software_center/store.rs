@@ -21,7 +21,7 @@ use openpanel_domain::software_center::{
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, SqlitePool};
 
-use super::{SoftwareCenterError, source::CatalogSource};
+use super::{PLACEHOLDER_SHA256, SoftwareCenterError, source::CatalogSource};
 
 /// Default catalog URL used when the operator has not configured one.
 /// Points at the open-source catalog hosted on the project CDN; the
@@ -478,6 +478,7 @@ impl SoftwareCatalogStore {
                 .map_err(|_| SoftwareCenterError::Repository)?;
             let tags = self.tags_for(&id).await?;
             let install_state = self.install_state_for(&id).await?;
+            let placeholder_digest = self.entry_has_placeholder_digest(&id).await?;
             hits.push(CatalogHit {
                 id,
                 name: row
@@ -514,6 +515,7 @@ impl SoftwareCatalogStore {
                     .try_get::<i64, _>("size_bytes")
                     .map_err(|_| SoftwareCenterError::Repository)?
                     as u64,
+                placeholder_digest,
             });
         }
         Ok(CatalogSearchPage {
@@ -578,6 +580,11 @@ impl SoftwareCatalogStore {
                     install_state: "available".to_owned(),
                     icon: entry.icon.clone(),
                     size_bytes: latest.size_bytes,
+                    placeholder_digest: latest
+                        .artifact
+                        .as_ref()
+                        .map(|pin| pin.sha256 == PLACEHOLDER_SHA256)
+                        .unwrap_or(false),
                 }
             })
             .collect::<Vec<_>>();
@@ -1146,6 +1153,41 @@ impl SoftwareCatalogStore {
             });
         }
         Ok(out)
+    }
+
+    async fn entry_has_placeholder_digest(&self, id: &str) -> Result<bool, SoftwareCenterError> {
+        let Some(pool) = self.pool.as_ref() else {
+            return self
+                .seed_artifact_digest(id)
+                .map(|digest| digest == PLACEHOLDER_SHA256)
+                .ok_or(SoftwareCenterError::Repository);
+        };
+        let row = sqlx::query(
+            "SELECT artifact_json FROM software_entry_versions WHERE entry_id = ? AND is_latest = 1",
+        )
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| SoftwareCenterError::Repository)?;
+        let Some(row) = row else {
+            return Ok(false);
+        };
+        let raw: Option<String> = row
+            .try_get("artifact_json")
+            .map_err(|_| SoftwareCenterError::Repository)?;
+        let Some(raw) = raw else {
+            return Ok(false);
+        };
+        let pin: openpanel_domain::software_center::ArtifactPin =
+            serde_json::from_str(&raw).map_err(|_| SoftwareCenterError::Repository)?;
+        Ok(pin.sha256 == PLACEHOLDER_SHA256)
+    }
+
+    fn seed_artifact_digest(&self, id: &str) -> Option<String> {
+        let manifest = self.embedded_seed()?;
+        let entry = manifest.entries.iter().find(|entry| entry.id == id)?;
+        let version = entry.versions.first()?;
+        version.artifact.as_ref().map(|pin| pin.sha256.clone())
     }
 
     async fn install_state_for(&self, id: &str) -> Result<String, SoftwareCenterError> {

@@ -1489,3 +1489,176 @@ fn install_artifact_records_audit_with_source_digest_and_platform() {
         );
     });
 }
+
+#[test]
+fn install_artifact_refuses_when_gate_is_on_for_placeholder_entry() {
+    use openpanel_app::software_center::PLACEHOLDER_SHA256;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let sandbox = tempfile::tempdir().expect("tempdir");
+        let webapps_root = sandbox.path().join("webapps");
+        let fetcher = Arc::new(MemoryArtifactFetcher {
+            bytes: b"<?php // adminer".to_vec(),
+            requested: std::sync::Mutex::new(Vec::new()),
+        });
+        let audit = Arc::new(CapturingAudit {
+            events: std::sync::Mutex::new(Vec::new()),
+        });
+        let packages = MockPackages::new();
+        let applications = MockApplications::new();
+        // require_verified_digests = true: the service refuses adminer.
+        let service = SoftwareCenterService::with_artifact_pipeline(
+            Arc::new(packages),
+            Arc::new(applications),
+            audit.clone(),
+            None,
+            true,
+            fetcher,
+            webapps_root,
+            true,
+        );
+        let error = service
+            .install_artifact(Uuid::new_v4(), Role::Owner, "adminer")
+            .await
+            .expect_err("adminer must be refused when the gate is on");
+        let SoftwareCenterError::Invalid(detail) = error else {
+            panic!("expected Invalid, got {error:?}");
+        };
+        assert!(
+            detail.contains("OPENPANEL__SOFTWARE__REQUIRE_VERIFIED_DIGESTS"),
+            "error must name the gate: {detail}"
+        );
+        let events = audit.events.lock().expect("events");
+        let artifact_event = events
+            .iter()
+            .find(|event| event.action == openpanel_core::AuditAction::SoftwareArtifactInstalled);
+        assert!(
+            artifact_event.is_none(),
+            "no install event must be recorded for a refused install"
+        );
+        // Sanity: the placeholder is the value we expect to be reported.
+        assert!(PLACEHOLDER_SHA256.starts_with('0'));
+    });
+}
+
+#[test]
+fn last_install_badge_reports_actor_platform_and_unverified_digest() {
+    use openpanel_app::software_center::InstallBadge;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let sandbox = tempfile::tempdir().expect("tempdir");
+        let webapps_root = sandbox.path().join("webapps");
+        let fetcher = Arc::new(MemoryArtifactFetcher {
+            bytes: b"<?php // adminer".to_vec(),
+            requested: std::sync::Mutex::new(Vec::new()),
+        });
+        let audit = Arc::new(CapturingAudit {
+            events: std::sync::Mutex::new(Vec::new()),
+        });
+        let service = SoftwareCenterService::with_artifact_pipeline(
+            Arc::new(MockPackages::new()),
+            Arc::new(MockApplications::new()),
+            audit.clone(),
+            None,
+            true,
+            fetcher,
+            webapps_root,
+            false,
+        );
+        let actor = Uuid::new_v4();
+        let _ = service
+            .install_artifact(actor, Role::Owner, "adminer")
+            .await
+            .expect("install_artifact");
+        let badge = service
+            .last_install_badge(Role::Owner, "adminer")
+            .await
+            .expect("last_install_badge")
+            .expect("adminer must have a badge after install");
+        assert_eq!(badge.actor, actor.to_string());
+        assert!(
+            badge.digest_unverified,
+            "placeholder digest must render as unverified"
+        );
+        assert_eq!(
+            badge.display(),
+            format!("{actor} · digest unverified"),
+            "display must favour the digest warning over the platform"
+        );
+        let platform = badge
+            .platform
+            .expect("platform must be recorded on the badge");
+        assert!(
+            platform.starts_with("ubuntu"),
+            "badge platform must compose the OS id, got {platform}"
+        );
+        assert_eq!(
+            service
+                .last_install_badge(Role::Owner, "unknown-entry")
+                .await
+                .expect("last_install_badge"),
+            None,
+            "no badge for an entry with no installs"
+        );
+        let _ = InstallBadge {
+            actor: "alice".into(),
+            platform: Some("ubuntu 24.04 x86_64".into()),
+            digest_unverified: false,
+        }
+        .display();
+    });
+}
+
+#[test]
+fn last_install_badge_renders_system_component_with_platform_and_success() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let audit = Arc::new(CapturingAudit {
+            events: std::sync::Mutex::new(vec![
+                openpanel_core::AuditEvent::new(
+                    "alice",
+                    openpanel_core::AuditAction::SoftwareChanged,
+                    openpanel_core::AuditOutcome::Success,
+                )
+                .target("nginx")
+                .metadata(serde_json::json!({
+                    "operation": "installed",
+                    "plan_digest": "digest",
+                    "platform": {"id": "ubuntu", "version_id": "24.04", "arch": "x86_64"},
+                })),
+            ]),
+        });
+        let service = SoftwareCenterService::with_artifact_pipeline(
+            Arc::new(MockPackages::new()),
+            Arc::new(MockApplications::new()),
+            audit.clone(),
+            None,
+            true,
+            Arc::new(MemoryArtifactFetcher {
+                bytes: Vec::new(),
+                requested: std::sync::Mutex::new(Vec::new()),
+            }),
+            std::env::temp_dir(),
+            false,
+        );
+        let badge = service
+            .last_install_badge(Role::Owner, "nginx")
+            .await
+            .expect("last_install_badge")
+            .expect("nginx must have a badge after install");
+        assert_eq!(
+            badge.display(),
+            "alice · ubuntu 24.04 x86_64 · succeeded",
+            "system badge must compose actor, platform, and result"
+        );
+    });
+}

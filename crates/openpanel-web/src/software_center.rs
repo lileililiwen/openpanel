@@ -6,6 +6,8 @@
 //! progress panel for a snappier feel when available.
 #![allow(missing_docs)]
 
+use std::collections::HashMap;
+
 use axum::{
     Form,
     extract::{Path, Query, State},
@@ -14,7 +16,7 @@ use axum::{
 };
 use maud::{Markup, html};
 use openpanel_app::software_center::{
-    CatalogQuery, CatalogSearchPage, CompatibilityHost, StorefrontEntry,
+    CatalogQuery, CatalogSearchPage, CompatibilityHost, InstallBadge, StorefrontEntry,
 };
 use openpanel_domain::software_center::{CatalogHit, EntryKind};
 use serde::Deserialize;
@@ -44,8 +46,32 @@ pub async fn page(
         .await
         .unwrap_or_default();
     let csrf = state.csrf.token_for(session.id());
+    let require_verified_digests = state.software_center.require_verified_digests();
+    let badges = match &page_result {
+        Ok(page) => {
+            let ids = page
+                .hits
+                .iter()
+                .map(|hit| hit.id.as_str())
+                .collect::<Vec<_>>();
+            state
+                .software_center
+                .last_install_badges(user.role(), &ids)
+                .await
+                .unwrap_or_default()
+        }
+        Err(_) => HashMap::new(),
+    };
     let content = match page_result {
-        Ok(page) => storefront_content(&page, &params, diagnostics.as_ref(), &jobs, &csrf),
+        Ok(page) => storefront_content(
+            &page,
+            &params,
+            diagnostics.as_ref(),
+            &jobs,
+            &csrf,
+            require_verified_digests,
+            &badges,
+        ),
         Err(_) => error_content("Failed to load the Software Center catalog.", ""),
     };
     state
@@ -106,6 +132,8 @@ fn storefront_content(
     diagnostics: Option<&openpanel_app::software_center::CatalogDiagnostics>,
     jobs: &[openpanel_app::software_center::SoftwareJobView],
     csrf: &str,
+    require_verified_digests: bool,
+    badges: &HashMap<String, InstallBadge>,
 ) -> Markup {
     let active_category = params.category.as_deref().unwrap_or("all");
     html! {
@@ -188,7 +216,7 @@ fn storefront_content(
             } @else {
                 div class="storefront__grid" {
                     @for hit in &page.hits {
-                        (card(hit, csrf))
+                        (card(hit, csrf, require_verified_digests, badges.get(&hit.id)))
                     }
                 }
             }
@@ -216,7 +244,12 @@ fn storefront_content(
     }
 }
 
-fn card(hit: &CatalogHit, csrf: &str) -> Markup {
+fn card(
+    hit: &CatalogHit,
+    csrf: &str,
+    require_verified_digests: bool,
+    badge: Option<&InstallBadge>,
+) -> Markup {
     let state = hit.install_state.clone();
     let state_label = match state.as_str() {
         "panel_managed" => "Installed",
@@ -232,7 +265,14 @@ fn card(hit: &CatalogHit, csrf: &str) -> Markup {
         "unsupported" => "card__status card__status--warn",
         _ => "card__status",
     };
-    let action = action_for_state(&state, hit.kind, &hit.id, csrf);
+    let action = action_for_state(
+        &state,
+        hit.kind,
+        &hit.id,
+        csrf,
+        require_verified_digests,
+        hit.placeholder_digest,
+    );
     html! {
         article class="card" {
             div class="card__icon" aria-hidden="true" { (category_glyph(hit.category.slug())) }
@@ -241,6 +281,11 @@ fn card(hit: &CatalogHit, csrf: &str) -> Markup {
                 span class="card__meta" { (hit.latest_version) " · " (hit.license) }
             }
             p class="card__description" { (hit.description) }
+            @if let Some(badge) = badge {
+                div class="card__last-install" aria-label="Last install" {
+                    "Last install: " (badge.display())
+                }
+            }
             div class="card__footer" {
                 span class=(state_class) { (state_label) }
                 (action)
@@ -249,7 +294,15 @@ fn card(hit: &CatalogHit, csrf: &str) -> Markup {
     }
 }
 
-fn action_for_state(state: &str, kind: EntryKind, id: &str, csrf: &str) -> Markup {
+fn action_for_state(
+    state: &str,
+    kind: EntryKind,
+    id: &str,
+    csrf: &str,
+    require_verified_digests: bool,
+    placeholder_digest: bool,
+) -> Markup {
+    let install_blocked = require_verified_digests && placeholder_digest && kind == EntryKind::Web;
     match state {
         "panel_managed" => html! {
             form method="post" action={"/software/components/" (id) "/update/preview"} {
@@ -266,6 +319,9 @@ fn action_for_state(state: &str, kind: EntryKind, id: &str, csrf: &str) -> Marku
                 input type="hidden" name="_csrf" value=(csrf);
                 button class="button" { "Adopt" }
             }
+        },
+        "available" if kind == EntryKind::Web && install_blocked => html! {
+            button class="button" disabled="disabled" title="recovery seed ships a placeholder digest; run software refresh against a remote catalog" { "Install (refresh required)" }
         },
         "available" if kind == EntryKind::Web => html! {
             form method="post" action={"/software/components/" (id) "/install"} {
@@ -350,7 +406,14 @@ pub async fn entry(
         Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     };
     let csrf = state.csrf.token_for(session.id());
-    let content = detail_content(&entry, &csrf);
+    let require_verified_digests = state.software_center.require_verified_digests();
+    let badge = state
+        .software_center
+        .last_install_badge(user.role(), &id)
+        .await
+        .ok()
+        .flatten();
+    let content = detail_content(&entry, &csrf, require_verified_digests, badge.as_ref());
     state
         .render_shell(&user, &csrf, &format!("/software/entries/{id}"), content)
         .await
@@ -465,8 +528,28 @@ pub async fn install_artifact(
         .into_response()
 }
 
-fn detail_content(entry: &StorefrontEntry, csrf: &str) -> Markup {
+fn detail_content(
+    entry: &StorefrontEntry,
+    csrf: &str,
+    require_verified_digests: bool,
+    badge: Option<&InstallBadge>,
+) -> Markup {
+    let install_blocked = require_verified_digests
+        && entry.versions.iter().any(|version| {
+            version
+                .artifact
+                .as_ref()
+                .map(|pin| pin.sha256 == openpanel_app::software_center::PLACEHOLDER_SHA256)
+                .unwrap_or(false)
+        })
+        && entry.kind == EntryKind::Web;
     let install_action = match entry.install_state.as_str() {
+        "available" if entry.kind == EntryKind::Web && install_blocked => Some(html! {
+            div class="detail__notice" {
+                p { "This entry is not installed because the recovery seed does not pin a real SHA-256. Run \u{201c}software refresh\u{201d} against a remote catalog that pins a digest, or set OPENPANEL__SOFTWARE__REQUIRE_VERIFIED_DIGESTS=false to opt back into the lenient behavior for air-gapped recovery." }
+            }
+            button class="button" disabled="disabled" { "Install (refresh required)" }
+        }),
         "available" if entry.kind == EntryKind::Web => Some(html! {
             form method="post" action={"/software/components/" (entry.id) "/install"} {
                 input type="hidden" name="_csrf" value=(csrf);
@@ -508,6 +591,11 @@ fn detail_content(entry: &StorefrontEntry, csrf: &str) -> Markup {
                 span class="badge" { (entry.license) }
             }
             p class="detail__lead" { (entry.description) }
+            @if let Some(badge) = badge {
+                div class="detail__last-install" aria-label="Last install" {
+                    "Last install: " (badge.display())
+                }
+            }
             @if let Some(action) = install_action {
                 div class="detail__action" { (action) }
             }

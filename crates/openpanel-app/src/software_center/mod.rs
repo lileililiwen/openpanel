@@ -492,6 +492,28 @@ pub struct ArtifactInstallResult {
     pub digest_verified: bool,
 }
 
+/// Provenance of the most recent successful install for a catalog entry.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstallBadge {
+    /// The actor (user) who performed the install.
+    pub actor: String,
+    /// Host platform captured at install time (`ID VERSION_ID arch`).
+    pub platform: Option<String>,
+    /// True when a Web artifact carried the documented placeholder digest.
+    pub digest_unverified: bool,
+}
+
+impl InstallBadge {
+    /// Render the badge line shown on the storefront and detail page.
+    pub fn display(&self) -> String {
+        match (self.platform.as_deref(), self.digest_unverified) {
+            (_, true) => format!("{} · digest unverified", self.actor),
+            (Some(platform), false) => format!("{} · {} · succeeded", self.actor, platform),
+            (None, false) => format!("{} · succeeded", self.actor),
+        }
+    }
+}
+
 /// Successful application deployment with credentials returned exactly once.
 #[derive(Debug, Serialize)]
 pub struct ApplicationDeploymentResult {
@@ -558,6 +580,13 @@ impl SoftwareCenterService {
             Arc::new(ReqwestArtifactFetcher::default()),
             default_webapps_root(),
         )
+    }
+
+    /// Whether the live install path refuses entries whose recipe
+    /// carries the documented placeholder SHA-256. Used by the web
+    /// shell to disable the Install button for those entries.
+    pub fn require_verified_digests(&self) -> bool {
+        self.require_verified_digests
     }
 
     /// Compose the service with an explicit artifact fetcher, a custom
@@ -1073,6 +1102,81 @@ impl SoftwareCenterService {
         })
     }
 
+    /// Most recent successful install for an entry, newest first.
+    ///
+    /// Surfaces the actor, the host platform captured at install
+    /// time, and whether a Web artifact's digest was verified. Both
+    /// Web artifact installs (`SoftwareArtifactInstalled`) and System
+    /// component installs (`SoftwareChanged` with
+    /// `operation == "installed"`) count.
+    pub async fn last_install_badge(
+        &self,
+        role: Role,
+        entry_id: &str,
+    ) -> Result<Option<InstallBadge>, SoftwareCenterError> {
+        let mut badges = self.last_install_badges(role, &[entry_id]).await?;
+        Ok(badges.remove(entry_id))
+    }
+
+    /// Most recent successful install per entry, in one audit pass.
+    pub async fn last_install_badges(
+        &self,
+        role: Role,
+        entry_ids: &[&str],
+    ) -> Result<HashMap<String, InstallBadge>, SoftwareCenterError> {
+        owner(role)?;
+        if entry_ids.is_empty() {
+            return Ok(HashMap::new());
+        }
+        let events = self
+            .audit
+            .recent(250)
+            .await
+            .map_err(|_| SoftwareCenterError::Repository)?;
+        let mut badges = HashMap::new();
+        for event in events {
+            if event.outcome != AuditOutcome::Success {
+                continue;
+            }
+            let Some(target) = event.target.as_deref() else {
+                continue;
+            };
+            let is_artifact = matches!(event.action, AuditAction::SoftwareArtifactInstalled);
+            let is_component = matches!(event.action, AuditAction::SoftwareChanged)
+                && event.metadata["operation"] == serde_json::json!("installed");
+            if !is_artifact && !is_component {
+                continue;
+            }
+            if !entry_ids.contains(&target) || badges.contains_key(target) {
+                continue;
+            }
+            let platform = {
+                let platform = &event.metadata["platform"];
+                match (
+                    platform.get("id").and_then(|value| value.as_str()),
+                    platform.get("version_id").and_then(|value| value.as_str()),
+                    platform.get("arch").and_then(|value| value.as_str()),
+                ) {
+                    (Some(id), Some(version_id), Some(arch)) => {
+                        Some(format!("{id} {version_id} {arch}"))
+                    }
+                    _ => None,
+                }
+            };
+            let digest_unverified =
+                is_artifact && event.metadata["digest_verified"] != serde_json::json!(true);
+            badges.insert(
+                target.to_owned(),
+                InstallBadge {
+                    actor: event.actor,
+                    platform,
+                    digest_unverified,
+                },
+            );
+        }
+        Ok(badges)
+    }
+
     /// Execute one fresh preview under the exclusive package transaction lock.
     pub async fn execute(
         &self,
@@ -1153,7 +1257,22 @@ impl SoftwareCenterService {
             .map_err(|_| SoftwareCenterError::Repository)?;
         let view = self.push_job(id, plan_digest, aggregate.state()).await?;
         durable_lock.release().await?;
-        self.record(actor, "installed", plan_digest).await?;
+        self.audit
+            .record(
+                AuditEvent::new(
+                    actor.to_string(),
+                    AuditAction::SoftwareChanged,
+                    AuditOutcome::Success,
+                )
+                .target(&component)
+                .metadata(serde_json::json!({
+                    "operation": "installed",
+                    "plan_digest": plan_digest,
+                    "platform": current_platform(),
+                })),
+            )
+            .await
+            .map_err(|_| SoftwareCenterError::Repository)?;
         Ok(view)
     }
 

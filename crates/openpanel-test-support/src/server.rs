@@ -129,8 +129,18 @@ impl TestServer {
 }
 
 impl TestServer {
-    /// Boot a real axum server backed by a fresh `TestDb`.
+    /// Boot a real axum server backed by a fresh `TestDb` with the
+    /// placeholder-SHA-256 gate off (lenient mode). The existing
+    /// adminer / phpmyadmin install tests rely on the lenient mode
+    /// because the recovery seed still ships placeholder digests.
     pub async fn new() -> Self {
+        Self::new_with_gate(false).await
+    }
+
+    /// Boot a real axum server with an explicit placeholder-SHA-256
+    /// gate. The strict gate is the production default; the lenient
+    /// gate is what the existing install tests use.
+    pub async fn new_with_gate(require_verified_digests: bool) -> Self {
         let db = TestDb::new().await;
         let pool = db.pool();
 
@@ -226,10 +236,14 @@ impl TestServer {
             bytes: staged_artifacts.clone(),
             served: fetched_urls.clone(),
         });
-        let software_center_module =
-            SoftwareCenterModule::memory_with_artifact(&ctx, fetcher, webapps_root.clone())
-                .await
-                .expect("software center module");
+        let software_center_module = SoftwareCenterModule::memory_with_artifact_and_gate(
+            &ctx,
+            fetcher,
+            webapps_root.clone(),
+            require_verified_digests,
+        )
+        .await
+        .expect("software center module");
         runner
             .apply_module(monitoring_module.name(), &monitoring_module.migrations())
             .await
@@ -388,7 +402,7 @@ impl TestServer {
             _handle: handle,
             _db: db,
             sandbox,
-            require_verified_digests: false,
+            require_verified_digests,
             webapps_root,
             staged_artifacts,
             fetched_urls,

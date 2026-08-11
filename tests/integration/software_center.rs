@@ -676,6 +676,20 @@ async fn web_install_button_for_adminer_downloads_and_places_the_php_file() {
         read_back, staged,
         "placed bytes must match the staged payload"
     );
+
+    let after = server
+        .client()
+        .get(format!("{}/software", server.base_url()))
+        .header("cookie", &cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(after.status(), 200);
+    let after_body = after.text().await.unwrap();
+    assert!(
+        after_body.contains("Last install:") && after_body.contains("digest unverified"),
+        "storefront should surface the last-install badge after a Web install, body={after_body}"
+    );
 }
 
 fn walk_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
@@ -695,4 +709,62 @@ fn walk_files(root: &std::path::Path) -> Vec<std::path::PathBuf> {
         }
     }
     out
+}
+
+#[tokio::test]
+async fn placeholder_digest_entry_renders_disabled_install_with_explanation() {
+    // Fail-closed mode is the production default; the test_support
+    // default is lenient, so we build the server with the gate on.
+    let server = TestServer::new_with_gate(true).await;
+    server
+        .bootstrap_owner("owner", "correct horse battery staple")
+        .await;
+    let adminer_url =
+        "https://github.com/vrana/adminer/releases/download/v4.8.1/adminer-4.8.1-en.php";
+    let staged = b"<?php // adminer bytes for the gate-on test".to_vec();
+    server.stage_artifact(adminer_url, staged.clone());
+
+    let login = server
+        .client()
+        .post(format!("{}/login", server.base_url()))
+        .form(&[
+            ("username_or_email", "owner"),
+            ("password", "correct horse battery staple"),
+        ])
+        .send()
+        .await
+        .unwrap();
+    let cookie = login.headers()[reqwest::header::SET_COOKIE]
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_owned();
+
+    let storefront = server
+        .client()
+        .get(format!("{}/software", server.base_url()))
+        .header("cookie", &cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(storefront.status(), 200);
+    let body = storefront.text().await.unwrap();
+    assert!(
+        body.contains("adminer"),
+        "storefront should still list adminer: {body}"
+    );
+    assert!(
+        body.contains("Install (refresh required)"),
+        "storefront should render the blocked Install button: {body}"
+    );
+    assert!(
+        body.contains("disabled=\"disabled\""),
+        "the blocked Install button must be disabled: {body}"
+    );
+    assert!(
+        body.contains("recovery seed ships a placeholder digest"),
+        "the blocked Install button must explain the placeholder digest: {body}"
+    );
 }
