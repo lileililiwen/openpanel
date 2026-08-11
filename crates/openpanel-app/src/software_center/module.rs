@@ -14,8 +14,9 @@ use sha2::{Digest, Sha256};
 use super::{
     ApplicationDeployer, ApplicationDeploymentInput, AptPackageManager, HostSnapshot,
     IntegratedApplicationDeployer, OpenPanelApplicationResources, PackageManager,
-    ProvisionedApplication, ReqwestArtifactFetcher, SoftwareCenterError, SoftwareCenterService,
-    TokioPackageCommand, default_webapps_root, host_package_manager::HostPackageManager,
+    PrivilegedCommand, ProvisionedApplication, ReqwestArtifactFetcher, SoftwareCenterError,
+    SoftwareCenterService, TokioPackageCommand, default_webapps_root,
+    host_package_manager::HostPackageManager,
 };
 use crate::{DatabasesService, SitesService, software_center::ArtifactFetcher};
 
@@ -142,7 +143,9 @@ impl SoftwareCenterModule {
         sites: Arc<SitesService>,
         databases: Arc<DatabasesService>,
     ) -> Result<Self, SoftwareCenterError> {
-        let command: Arc<dyn super::PackageCommand> = Arc::new(TokioPackageCommand);
+        let inner_command: Arc<dyn super::PackageCommand> = Arc::new(TokioPackageCommand);
+        let command: Arc<dyn super::PackageCommand> =
+            Arc::new(PrivilegedCommand::new(inner_command));
         let packages: Arc<dyn PackageManager> =
             if std::env::var("OPENPANEL__SOFTWARE__ADAPTER").as_deref() == Ok("fake") {
                 Arc::new(FakePackageManager::default())

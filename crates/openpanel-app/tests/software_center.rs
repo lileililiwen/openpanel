@@ -16,7 +16,7 @@ use openpanel_app::software_center::{
     ApplicationDeployer, ApplicationDeploymentInput, ApplicationDeploymentResources,
     ApplicationResource, AptPackageManager, ArtifactDigest, ArtifactFetcher, CatalogVerifier,
     CommandResult, ComponentAction, CreatedApplicationDatabase, CreatedApplicationSite,
-    HostSnapshot, IntegratedApplicationDeployer, PackageCommand, PackageManager,
+    HostSnapshot, IntegratedApplicationDeployer, PackageCommand, PackageManager, PrivilegedCommand,
     ProvisionedApplication, SafeArtifactInstaller, SignedCatalogEnvelope, SoftwareCenterError,
     SoftwareCenterService, host_package_manager::HostPackageManager,
 };
@@ -1173,4 +1173,152 @@ impl PackageCommand for ForceFailCommand {
         let raw = self.0.run(program, arguments).await?;
         Ok(CommandResult::failure(&raw.output))
     }
+}
+
+struct RecordingCommand {
+    invocations: std::sync::Mutex<Vec<(&'static str, Vec<String>)>>,
+}
+
+#[async_trait]
+impl PackageCommand for RecordingCommand {
+    async fn run(
+        &self,
+        program: &'static str,
+        arguments: &[String],
+    ) -> Result<CommandResult, SoftwareCenterError> {
+        self.invocations
+            .lock()
+            .expect("invocations")
+            .push((program, arguments.to_vec()));
+        if program == "/usr/bin/sudo" {
+            return Ok(CommandResult::failure("sudo: a password is required"));
+        }
+        Ok(CommandResult::success(""))
+    }
+}
+
+#[test]
+fn privileged_command_prepends_sudo_for_privileged_binaries() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let inner = Arc::new(RecordingCommand {
+            invocations: std::sync::Mutex::new(Vec::new()),
+        });
+        let wrapper = PrivilegedCommand::new(inner.clone()).with_root_detector(Box::new(|| false));
+        wrapper
+            .run(
+                "/usr/bin/apt-get",
+                &[
+                    "-y".to_owned(),
+                    "install".to_owned(),
+                    "--".to_owned(),
+                    "apache2".to_owned(),
+                ],
+            )
+            .await
+            .expect_err("sudo rejection must propagate as a Package error");
+        let invocations = inner.invocations.lock().expect("invocations");
+        assert_eq!(invocations.len(), 1, "expected one invocation");
+        let (program, arguments) = &invocations[0];
+        assert_eq!(*program, "/usr/bin/sudo", "must invoke sudo when not root");
+        assert_eq!(
+            arguments[0], "/usr/bin/apt-get",
+            "sudo args carry the original program"
+        );
+        assert!(arguments.contains(&"apache2".to_owned()));
+    });
+}
+
+#[test]
+fn privileged_command_short_circuits_for_read_only_binaries() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let inner = Arc::new(RecordingCommand {
+            invocations: std::sync::Mutex::new(Vec::new()),
+        });
+        let wrapper = PrivilegedCommand::new(inner.clone()).with_root_detector(Box::new(|| false));
+        wrapper
+            .run("/usr/bin/dpkg-query", &["-W".to_owned()])
+            .await
+            .expect("read-only commands must succeed without sudo");
+        let invocations = inner.invocations.lock().expect("invocations");
+        assert_eq!(invocations.len(), 1);
+        let (program, _) = &invocations[0];
+        assert_eq!(
+            *program, "/usr/bin/dpkg-query",
+            "must not invoke sudo for read-only commands"
+        );
+    });
+}
+
+#[test]
+fn privileged_command_short_circuits_when_panel_is_root() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let inner = Arc::new(RecordingCommand {
+            invocations: std::sync::Mutex::new(Vec::new()),
+        });
+        let wrapper = PrivilegedCommand::new(inner.clone()).with_root_detector(Box::new(|| true));
+        wrapper
+            .run("/usr/bin/apt-get", &["-y".to_owned(), "install".to_owned()])
+            .await
+            .expect("root should short-circuit to the inner command");
+        let invocations = inner.invocations.lock().expect("invocations");
+        assert_eq!(invocations.len(), 1);
+        let (program, _) = &invocations[0];
+        assert_eq!(
+            *program, "/usr/bin/apt-get",
+            "root must invoke the program directly, not through sudo"
+        );
+    });
+}
+
+#[test]
+fn privileged_command_surfaces_sudoers_snippet_on_failure() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let inner = Arc::new(RecordingCommand {
+            invocations: std::sync::Mutex::new(Vec::new()),
+        });
+        let wrapper = PrivilegedCommand::new(inner).with_root_detector(Box::new(|| false));
+        let error = wrapper
+            .run(
+                "/usr/bin/dnf",
+                &["-y".to_owned(), "install".to_owned(), "nginx".to_owned()],
+            )
+            .await
+            .expect_err("sudo rejection must be reported as a Package error");
+        let SoftwareCenterError::Package(detail) = error else {
+            panic!("expected Package error, got {error:?}");
+        };
+        assert!(
+            detail.contains("/etc/sudoers.d/openpanel"),
+            "error must name the sudoers file: {detail}"
+        );
+        assert!(
+            detail.contains("visudo -c"),
+            "error must include the sudo reload command: {detail}"
+        );
+        assert!(
+            detail.contains("/usr/bin/apt-get")
+                && detail.contains("/usr/bin/dnf")
+                && detail.contains("/usr/bin/yum")
+                && detail.contains("/usr/bin/zypper")
+                && detail.contains("/usr/bin/pacman")
+                && detail.contains("/sbin/apk"),
+            "error must list every privileged binary: {detail}"
+        );
+    });
 }

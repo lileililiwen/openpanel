@@ -110,6 +110,138 @@ impl PackageCommand for TokioPackageCommand {
     }
 }
 
+/// Run a `PackageCommand` as the current user or, if the current
+/// process is not root, through `sudo -n` (non-interactive) so the
+/// operator can keep the panel unprivileged. Mirrors the pattern used
+/// by Baota (宝塔) and other production server panels: a dedicated
+/// `openpanel` user gets passwordless sudo over a tightly scoped
+/// allowlist of package binaries, and the panel never holds a root
+/// shell. When the allowlist is missing, the wrapper fails with the
+/// exact `/etc/sudoers.d/openpanel` entry the operator must install.
+pub struct PrivilegedCommand {
+    inner: Arc<dyn PackageCommand>,
+    is_root: Box<dyn Fn() -> bool + Send + Sync>,
+}
+
+impl PrivilegedCommand {
+    /// Wrap `inner`. Root detection reads `/proc/self/status`; the
+    /// test seam replaces it via [`PrivilegedCommand::with_root_detector`].
+    pub fn new(inner: Arc<dyn PackageCommand>) -> Self {
+        Self {
+            inner,
+            is_root: Box::new(detect_root_from_proc),
+        }
+    }
+
+    /// Replace the root detector. Used by the test suite to drive
+    /// both branches without running the test as a different user.
+    pub fn with_root_detector(mut self, is_root: Box<dyn Fn() -> bool + Send + Sync>) -> Self {
+        self.is_root = is_root;
+        self
+    }
+
+    /// Construct from a runtime check. Exposed for callers that want
+    /// to decide separately whether to elevate (e.g. a per-binary
+    /// policy that the wrapper cannot derive from the program name).
+    pub fn for_program(
+        program: &'static str,
+        inner: Arc<dyn PackageCommand>,
+    ) -> Arc<dyn PackageCommand> {
+        if needs_privilege(program) && !privileged_root() {
+            Arc::new(Self::new(inner))
+        } else {
+            inner
+        }
+    }
+}
+
+#[async_trait]
+impl PackageCommand for PrivilegedCommand {
+    async fn run(
+        &self,
+        program: &'static str,
+        arguments: &[String],
+    ) -> Result<CommandResult, SoftwareCenterError> {
+        if !needs_privilege(program) || (self.is_root)() {
+            return self.inner.run(program, arguments).await;
+        }
+        let mut wrapped = vec![program.to_owned()];
+        wrapped.extend(arguments.iter().cloned());
+        let sudo = sudo_binary();
+        let result = self.inner.run(sudo, &wrapped).await.map_err(|error| {
+            SoftwareCenterError::Package(format!("failed to spawn {sudo}: {error}"))
+        })?;
+        if result.success {
+            return Ok(result);
+        }
+        Err(SoftwareCenterError::Package(format!(
+            "{sudo} {program} (and its arguments) failed: {}. \
+             The panel is not running as root and `sudo -n` (non-interactive) \
+             rejected the request. Add the following line to \
+             /etc/sudoers.d/openpanel on this host and reload sudo \
+             (visudo -c && systemctl restart sudo):\n\
+             \n\
+             openpanel ALL=(root) NOPASSWD: {}\n\
+             \n\
+             Or run the panel as the root user (not recommended).",
+            first_lines(&result.output, 4),
+            sudoers_allowlist()
+        )))
+    }
+}
+
+/// Programs that must run with elevated privilege to install, remove,
+/// or update packages. The snapshot/list side uses different binaries
+/// (e.g. `/usr/bin/dpkg-query` on apt) that do not need root, so we
+/// skip `sudo` for those.
+pub fn needs_privilege(program: &str) -> bool {
+    matches!(
+        program,
+        "/usr/bin/apt-get"
+            | "/usr/bin/dnf"
+            | "/usr/bin/yum"
+            | "/usr/bin/zypper"
+            | "/usr/bin/pacman"
+            | "/sbin/apk"
+    )
+}
+
+const fn sudo_binary() -> &'static str {
+    "/usr/bin/sudo"
+}
+
+fn privileged_root() -> bool {
+    detect_root_from_proc()
+}
+
+fn detect_root_from_proc() -> bool {
+    let Ok(content) = std::fs::read_to_string("/proc/self/status") else {
+        return false;
+    };
+    for line in content.lines() {
+        if let Some(rest) = line.strip_prefix("Uid:") {
+            let mut fields = rest.split_whitespace();
+            let Some(effective) = fields.next() else {
+                continue;
+            };
+            return effective == "0";
+        }
+    }
+    false
+}
+
+fn sudoers_allowlist() -> String {
+    [
+        "/usr/bin/apt-get",
+        "/usr/bin/dnf",
+        "/usr/bin/yum",
+        "/usr/bin/zypper",
+        "/usr/bin/pacman",
+        "/sbin/apk",
+    ]
+    .join(", ")
+}
+
 /// APT package adapter whose request data can only contain validated package IDs.
 pub struct AptPackageManager {
     command: Arc<dyn PackageCommand>,

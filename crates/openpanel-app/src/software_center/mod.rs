@@ -17,7 +17,10 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-pub use apt::{AptPackageManager, CommandResult, PackageCommand, TokioPackageCommand};
+pub use apt::{
+    AptPackageManager, CommandResult, PackageCommand, PrivilegedCommand, TokioPackageCommand,
+    needs_privilege,
+};
 pub use artifact::{
     ArtifactDigest, ArtifactDownloader, ArtifactFetcher, PinnedArtifact, PlacedArtifact,
     ReqwestArtifactFetcher, SafeArtifactInstaller, pinned_artifact, place_artifact,
