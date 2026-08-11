@@ -437,7 +437,8 @@ async fn web_execute_with_stale_token_renders_an_error_page_not_blank_422() {
     let body = response.text().await.unwrap();
     assert_eq!(status, 200, "error page should render, body={body}");
     assert!(
-        body.contains("Software Center unavailable") && body.contains("confirmation token"),
+        body.contains("Software Center unavailable")
+            && (body.contains("confirmation token") || body.contains("plan is no longer")),
         "stale token error page should explain the cause, got body={body}"
     );
 }

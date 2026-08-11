@@ -186,7 +186,7 @@ async fn rollback(
 fn map(error: SoftwareCenterError) -> ApiError {
     match error {
         SoftwareCenterError::Forbidden => ApiError::Forbidden,
-        SoftwareCenterError::Invalid => ApiError::Unprocessable(error.to_string()),
+        SoftwareCenterError::Invalid(_) => ApiError::Unprocessable(error.to_string()),
         SoftwareCenterError::Conflict | SoftwareCenterError::Dependencies(_) => {
             ApiError::Conflict(error.to_string())
         }

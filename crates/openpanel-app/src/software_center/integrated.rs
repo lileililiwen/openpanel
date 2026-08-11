@@ -369,7 +369,9 @@ impl ApplicationDeploymentResources for OpenPanelApplicationResources {
                 install_wordpress(root, input, database, admin_username, admin_password).await
             }
             "drupal" => install_drupal(root, input, database, admin_password).await,
-            _ => Err(SoftwareCenterError::Invalid),
+            _ => Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            )),
         };
         if result.is_err() {
             let _ = remove_managed_document_root(root);
@@ -409,7 +411,11 @@ impl ApplicationDeploymentResources for OpenPanelApplicationResources {
         let script = match input.application.as_str() {
             "wordpress" => wordpress_health_script(),
             "drupal" => drupal_health_script(),
-            _ => return Err(SoftwareCenterError::Invalid),
+            _ => {
+                return Err(SoftwareCenterError::Invalid(
+                    "invalid software request".into(),
+                ));
+            }
         };
         run_php_script(root, &input.php_version, &script).await
     }
@@ -440,9 +446,10 @@ impl ApplicationDeploymentResources for OpenPanelApplicationResources {
 }
 
 fn service_actor(id: Uuid) -> Result<User, SoftwareCenterError> {
-    let username = Username::new("software").map_err(|_| SoftwareCenterError::Invalid)?;
-    let email =
-        Email::new("software@openpanel.invalid").map_err(|_| SoftwareCenterError::Invalid)?;
+    let username = Username::new("software")
+        .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
+    let email = Email::new("software@openpanel.invalid")
+        .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
     Ok(User::new(
         id,
         username,
@@ -491,7 +498,9 @@ fn validate_managed_document_root(root: &Path) -> Result<(), SoftwareCenterError
             .map(|metadata| metadata.file_type().is_symlink())
             .unwrap_or(true)
     {
-        return Err(SoftwareCenterError::Invalid);
+        return Err(SoftwareCenterError::Invalid(
+            "invalid software request".into(),
+        ));
     }
     Ok(())
 }
@@ -601,7 +610,11 @@ async fn run_php_script(
     let program = match php_version {
         "8.3" => "/usr/bin/php8.3",
         "8.4" => "/usr/bin/php8.4",
-        _ => return Err(SoftwareCenterError::Invalid),
+        _ => {
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
+        }
     };
     let script_path = root.join(format!(".openpanel-install-{}.php", Uuid::new_v4()));
     write_secret_file(&script_path, script)?;
@@ -642,7 +655,8 @@ fn secure_existing_file(path: &Path) -> Result<(), SoftwareCenterError> {
 }
 
 fn php_string(value: &str) -> Result<String, SoftwareCenterError> {
-    serde_json::to_string(value).map_err(|_| SoftwareCenterError::Invalid)
+    serde_json::to_string(value)
+        .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))
 }
 
 fn random_secret(length: usize) -> String {

@@ -18,7 +18,7 @@ use openpanel_app::software_center::{
     CommandResult, ComponentAction, CreatedApplicationDatabase, CreatedApplicationSite,
     HostSnapshot, IntegratedApplicationDeployer, PackageCommand, PackageManager, PrivilegedCommand,
     ProvisionedApplication, SafeArtifactInstaller, SignedCatalogEnvelope, SoftwareCenterError,
-    SoftwareCenterService, host_package_manager::HostPackageManager,
+    SoftwareCenterService, host_package_manager::HostPackageManager, place_artifact_with_gate,
 };
 use openpanel_core::{AuditAction, AuditOutcome};
 use openpanel_domain::{
@@ -837,7 +837,7 @@ async fn http_source_rejects_off_allowlist_origin() {
     let result = source.fetch(0).await;
     assert!(matches!(
         result,
-        Err(openpanel_app::software_center::SoftwareCenterError::Invalid)
+        Err(openpanel_app::software_center::SoftwareCenterError::Invalid(_))
     ));
 }
 
@@ -938,6 +938,7 @@ fn install_artifact_downloads_and_places_adminer_under_webapps_root() {
             true,
             fetcher.clone(),
             webapps_root.clone(),
+            false,
         );
         let result = service
             .install_artifact(Uuid::new_v4(), Role::Owner, "adminer")
@@ -1000,12 +1001,13 @@ fn install_artifact_rejects_non_web_entries() {
             true,
             fetcher,
             webapps_root,
+            false,
         );
         let error = service
             .install_artifact(Uuid::new_v4(), Role::Owner, "nginx")
             .await
             .expect_err("system entries must be rejected by install_artifact");
-        assert!(matches!(error, SoftwareCenterError::Invalid));
+        assert!(matches!(error, SoftwareCenterError::Invalid(_)));
     });
 }
 
@@ -1320,5 +1322,68 @@ fn privileged_command_surfaces_sudoers_snippet_on_failure() {
                 && detail.contains("/sbin/apk"),
             "error must list every privileged binary: {detail}"
         );
+    });
+}
+
+#[test]
+fn place_artifact_refuses_placeholder_digest_when_gate_is_on() {
+    use openpanel_app::software_center::PLACEHOLDER_SHA256;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let pin = openpanel_domain::software_center::ArtifactPin {
+            url: openpanel_domain::software_center::Homepage::new(
+                "https://example.com/adminer.php",
+            )
+            .unwrap(),
+            sha256: PLACEHOLDER_SHA256.to_owned(),
+            archive_root: "adminer.php".to_owned(),
+            archive_type: "file".to_owned(),
+            sha1: None,
+        };
+        let bytes = b"<?php // adminer".to_vec();
+        let temp = tempfile::tempdir().expect("tempdir");
+        let error = place_artifact_with_gate(&pin, &bytes, temp.path(), true)
+            .expect_err("placeholder digest must be refused when the gate is on");
+        let SoftwareCenterError::Invalid(detail) = error else {
+            panic!("expected Invalid, got {error:?}");
+        };
+        assert!(
+            detail.contains("OPENPANEL__SOFTWARE__REQUIRE_VERIFIED_DIGESTS"),
+            "error must name the gate: {detail}"
+        );
+    });
+}
+
+#[test]
+fn place_artifact_allows_placeholder_when_opted_in() {
+    use openpanel_app::software_center::PLACEHOLDER_SHA256;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let pin = openpanel_domain::software_center::ArtifactPin {
+            url: openpanel_domain::software_center::Homepage::new(
+                "https://example.com/adminer.php",
+            )
+            .unwrap(),
+            sha256: PLACEHOLDER_SHA256.to_owned(),
+            archive_root: "adminer.php".to_owned(),
+            archive_type: "file".to_owned(),
+            sha1: None,
+        };
+        let bytes = b"<?php // adminer".to_vec();
+        let temp = tempfile::tempdir().expect("tempdir");
+        let placed = place_artifact_with_gate(&pin, &bytes, temp.path(), false)
+            .expect("placeholder must install when the gate is off");
+        assert!(
+            !placed.digest_verified,
+            "placeholder must report unverified"
+        );
+        let read_back = std::fs::read(&placed.path).expect("read");
+        assert_eq!(read_back, bytes);
     });
 }

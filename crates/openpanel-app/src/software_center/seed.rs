@@ -996,7 +996,7 @@ pub fn embedded_manifest() -> Result<CatalogManifest, super::SoftwareCenterError
     };
     manifest
         .validate()
-        .map_err(|_| super::SoftwareCenterError::Invalid)?;
+        .map_err(|_| super::SoftwareCenterError::Invalid("seed entry invalid".into()))?;
     Ok(manifest)
 }
 

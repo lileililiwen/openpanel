@@ -287,15 +287,21 @@ impl PackageManager for AptPackageManager {
             (distribution.as_str(), version.as_str()),
             ("ubuntu", "22.04" | "24.04") | ("debian", "12")
         ) {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         let architecture = match std::env::consts::ARCH {
             "x86_64" => "x86_64",
             "aarch64" => "aarch64",
-            _ => return Err(SoftwareCenterError::Invalid),
+            _ => {
+                return Err(SoftwareCenterError::Invalid(
+                    "invalid software request".into(),
+                ));
+            }
         };
         let platform = SupportedPlatform::new(distribution, version, architecture)
-            .map_err(|_| SoftwareCenterError::Invalid)?;
+            .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
         let arguments = vec!["-W".to_owned(), "-f=${Package}\t${Version}\n".to_owned()];
         let packages = self.command.run("/usr/bin/dpkg-query", &arguments).await?;
         if !packages.success {
@@ -339,7 +345,11 @@ impl PackageManager for AptPackageManager {
             "php-8.4" => ("/usr/sbin/php-fpm8.4", vec!["-t".into()]),
             "mysql" | "mariadb" => ("/usr/bin/mysqladmin", vec!["ping".into()]),
             "redis" => ("/usr/bin/redis-cli", vec!["ping".into()]),
-            _ => return Err(SoftwareCenterError::Invalid),
+            _ => {
+                return Err(SoftwareCenterError::Invalid(
+                    "invalid software request".into(),
+                ));
+            }
         };
         let result = self.command.run(program, &arguments).await?;
         if result.success {
@@ -371,5 +381,7 @@ fn os_release_value(input: &str, key: &str) -> Result<String, SoftwareCenterErro
         .find_map(|line| line.strip_prefix(&prefix))
         .map(|value| value.trim_matches('"').to_ascii_lowercase())
         .filter(|value| !value.is_empty())
-        .ok_or(SoftwareCenterError::Invalid)
+        .ok_or(SoftwareCenterError::Invalid(
+            "invalid software request".into(),
+        ))
 }

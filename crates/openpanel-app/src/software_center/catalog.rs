@@ -67,34 +67,44 @@ impl CatalogVerifier {
         now: u64,
     ) -> Result<VerifiedCatalog, SoftwareCenterError> {
         if envelope.schema != 1 || now > envelope.expires_at || envelope.payload.len() > 1_048_576 {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         let signature_bytes = base64::engine::general_purpose::STANDARD
             .decode(&envelope.signature)
-            .map_err(|_| SoftwareCenterError::Invalid)?;
-        let signature =
-            Signature::from_slice(&signature_bytes).map_err(|_| SoftwareCenterError::Invalid)?;
+            .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
+        let signature = Signature::from_slice(&signature_bytes)
+            .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
         let signed = format!(
             "{}\n{}\n{}",
             envelope.schema, envelope.expires_at, envelope.payload
         );
         self.trust_root
             .verify(signed.as_bytes(), &signature)
-            .map_err(|_| SoftwareCenterError::Invalid)?;
-        let parsed: RemoteCatalog =
-            serde_json::from_str(&envelope.payload).map_err(|_| SoftwareCenterError::Invalid)?;
-        if serde_json::to_string(&parsed).map_err(|_| SoftwareCenterError::Invalid)?
+            .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
+        let parsed: RemoteCatalog = serde_json::from_str(&envelope.payload)
+            .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
+        if serde_json::to_string(&parsed)
+            .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?
             != envelope.payload
         {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         if parsed.entries.is_empty() || parsed.entries.len() > 1_000 {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         for entry in &parsed.entries {
-            CatalogId::new(&entry.id).map_err(|_| SoftwareCenterError::Invalid)?;
+            CatalogId::new(&entry.id)
+                .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
             if entry.name.trim().is_empty() || entry.name.len() > 128 {
-                return Err(SoftwareCenterError::Invalid);
+                return Err(SoftwareCenterError::Invalid(
+                    "invalid software request".into(),
+                ));
             }
         }
         Ok(VerifiedCatalog {

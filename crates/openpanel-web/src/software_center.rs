@@ -853,8 +853,12 @@ fn software_center_error_message(
         SoftwareCenterError::Forbidden => {
             "Only an Owner may execute this transaction.".to_owned()
         }
-        SoftwareCenterError::Invalid => {
-            "The confirmation token is no longer valid. Open the entry again and confirm the freshly generated plan.".to_owned()
+        SoftwareCenterError::Invalid(detail) => {
+            if detail.is_empty() {
+                "The confirmation token is no longer valid. Open the entry again and confirm the freshly generated plan.".to_owned()
+            } else {
+                detail.clone()
+            }
         }
         SoftwareCenterError::Conflict => {
             "The host changed since the preview was generated. Open the entry to request a fresh plan before retrying.".to_owned()

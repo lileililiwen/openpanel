@@ -51,7 +51,9 @@ impl ArtifactDigest {
         length: usize,
     ) -> Result<Self, SoftwareCenterError> {
         if expected.len() != length || !expected.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         Ok(Self {
             algorithm,
@@ -181,7 +183,9 @@ impl ArtifactFetcher for ReqwestArtifactFetcher {
             let chunk =
                 chunk.map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
             if bytes.len().saturating_add(chunk.len()) > self.maximum_archive_bytes {
-                return Err(SoftwareCenterError::Invalid);
+                return Err(SoftwareCenterError::Invalid(
+                    "invalid software request".into(),
+                ));
             }
             bytes.extend_from_slice(&chunk);
         }
@@ -197,12 +201,36 @@ pub fn place_artifact(
     bytes: &[u8],
     destination_root: &Path,
 ) -> Result<PlacedArtifact, SoftwareCenterError> {
+    place_artifact_with_gate(pin, bytes, destination_root, require_verified_digests())
+}
+
+/// Place a single artifact on disk regardless of its kind. The function
+/// is the only place that knows about archive vs. single-file layout.
+/// `destination_root` is the managed base directory (`/var/lib/openpanel/webapps`).
+///
+/// `require_verified_digests` is the security gate: when `true`, the
+/// install is refused if the recipe's digest is the documented
+/// placeholder. The `place_artifact` wrapper reads the gate from
+/// once at startup; tests can call this function directly to drive
+/// both branches.
+pub fn place_artifact_with_gate(
+    pin: &ArtifactPin,
+    bytes: &[u8],
+    destination_root: &Path,
+    require_verified_digests: bool,
+) -> Result<PlacedArtifact, SoftwareCenterError> {
     if bytes.is_empty() {
-        return Err(SoftwareCenterError::Invalid);
+        return Err(SoftwareCenterError::Invalid("empty payload".into()));
     }
-    let digest_verified = pin.sha256 != PLACEHOLDER_SHA256 && verify_sha256(pin, bytes);
-    if pin.sha256 != PLACEHOLDER_SHA256 && !digest_verified {
-        return Err(SoftwareCenterError::Invalid);
+    let is_placeholder = pin.sha256 == PLACEHOLDER_SHA256;
+    if require_verified_digests && is_placeholder {
+        return Err(SoftwareCenterError::Invalid(
+            "digest placeholder is not allowed when OPENPANEL__SOFTWARE__REQUIRE_VERIFIED_DIGESTS is true. Refresh the catalog against a remote signed manifest that pins a real SHA-256, or set the gate to false for air-gapped recovery.".to_owned(),
+        ));
+    }
+    let digest_verified = !is_placeholder && verify_sha256(pin, bytes);
+    if !is_placeholder && !digest_verified {
+        return Err(SoftwareCenterError::Invalid("digest mismatch".into()));
     }
     let version_dir = destination_root.join(safe_segment(pin.url.as_str())?);
     fs::create_dir_all(&version_dir)
@@ -214,6 +242,18 @@ pub fn place_artifact(
     }
 }
 
+/// Read the placeholder-digest fail-closed gate. The default is
+/// `true` (fail closed). Operators running an air-gapped recovery
+/// install from the embedded seed can set
+/// `OPENPANEL__SOFTWARE__REQUIRE_VERIFIED_DIGESTS=false` to opt back
+/// into the lenient behavior.
+fn require_verified_digests() -> bool {
+    !matches!(
+        std::env::var("OPENPANEL__SOFTWARE__REQUIRE_VERIFIED_DIGESTS").as_deref(),
+        Ok("false") | Ok("0") | Ok("no"),
+    )
+}
+
 fn place_single_file(
     pin: &ArtifactPin,
     bytes: &[u8],
@@ -223,10 +263,14 @@ fn place_single_file(
     let filename = if !pin.archive_root.is_empty() {
         pin.archive_root.clone()
     } else {
-        derive_filename_from_url(pin.url.as_str()).ok_or(SoftwareCenterError::Invalid)?
+        derive_filename_from_url(pin.url.as_str()).ok_or(SoftwareCenterError::Invalid(
+            "invalid software request".into(),
+        ))?
     };
     if filename.contains('/') || filename.contains('\\') || filename.is_empty() {
-        return Err(SoftwareCenterError::Invalid);
+        return Err(SoftwareCenterError::Invalid(
+            "invalid software request".into(),
+        ));
     }
     let target = destination.join(&filename);
     if target.exists() {
@@ -260,21 +304,28 @@ fn place_tar_gz(
     let mut archive = tar::Archive::new(decoder);
     let expected_root = pin.archive_root.as_str();
     if expected_root.is_empty() || expected_root.contains('/') {
-        return Err(SoftwareCenterError::Invalid);
+        return Err(SoftwareCenterError::Invalid(
+            "invalid software request".into(),
+        ));
     }
     let mut expanded_bytes = 0_u64;
     let mut file_count = 0_u64;
-    let policy =
-        ArchivePolicy::new(50_000, 512 * 1024 * 1024).map_err(|_| SoftwareCenterError::Invalid)?;
+    let policy = ArchivePolicy::new(50_000, 512 * 1024 * 1024)
+        .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
     for item in archive
         .entries()
-        .map_err(|_| SoftwareCenterError::Invalid)?
+        .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?
     {
-        let mut entry = item.map_err(|_| SoftwareCenterError::Invalid)?;
-        let path = entry.path().map_err(|_| SoftwareCenterError::Invalid)?;
+        let mut entry =
+            item.map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
+        let path = entry
+            .path()
+            .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
         let mut components = path.components();
         if components.next().and_then(|part| part.as_os_str().to_str()) != Some(expected_root) {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         let relative = components.as_path();
         if relative.as_os_str().is_empty() {
@@ -282,25 +333,39 @@ fn place_tar_gz(
         }
         let kind = entry.header().entry_type();
         if !(kind.is_file() || kind.is_dir()) {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         file_count = file_count
             .checked_add(1)
-            .ok_or(SoftwareCenterError::Invalid)?;
+            .ok_or(SoftwareCenterError::Invalid(
+            "plan is no longer in the queue; it may have been consumed, expired, or never created"
+                .into(),
+        ))?;
         expanded_bytes = expanded_bytes
             .checked_add(entry.size())
-            .ok_or(SoftwareCenterError::Invalid)?;
-        let relative_text = relative.to_str().ok_or(SoftwareCenterError::Invalid)?;
+            .ok_or(SoftwareCenterError::Invalid(
+            "plan is no longer in the queue; it may have been consumed, expired, or never created"
+                .into(),
+        ))?;
+        let relative_text = relative.to_str().ok_or(SoftwareCenterError::Invalid(
+            "plan is no longer in the queue; it may have been consumed, expired, or never created"
+                .into(),
+        ))?;
         policy
             .accept(relative_text, false, expanded_bytes, file_count)
-            .map_err(|_| SoftwareCenterError::Invalid)?;
+            .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
         let output = destination.join(relative);
         if kind.is_dir() {
             fs::create_dir_all(&output)
                 .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
             continue;
         }
-        let parent = output.parent().ok_or(SoftwareCenterError::Invalid)?;
+        let parent = output.parent().ok_or(SoftwareCenterError::Invalid(
+            "plan is no longer in the queue; it may have been consumed, expired, or never created"
+                .into(),
+        ))?;
         fs::create_dir_all(parent)
             .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         let mut file = OpenOptions::new()
@@ -311,7 +376,9 @@ fn place_tar_gz(
         let written = std::io::copy(&mut entry, &mut file)
             .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         if written != entry.size() {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         file.flush()
             .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
@@ -357,7 +424,9 @@ fn safe_segment(url: &str) -> Result<String, SoftwareCenterError> {
         }
     }
     if segment.is_empty() || segment.len() > 128 {
-        return Err(SoftwareCenterError::Invalid);
+        return Err(SoftwareCenterError::Invalid(
+            "invalid software request".into(),
+        ));
     }
     Ok(segment)
 }
@@ -368,7 +437,8 @@ fn unsupported_archive(kind: &str) -> SoftwareCenterError {
 }
 
 fn validate_artifact_url(url: &str) -> Result<(), SoftwareCenterError> {
-    let parsed = reqwest::Url::parse(url).map_err(|_| SoftwareCenterError::Invalid)?;
+    let parsed = reqwest::Url::parse(url)
+        .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
     if !matches!(parsed.scheme(), "https" | "http")
         || !parsed.username().is_empty()
         || parsed.password().is_some()
@@ -376,7 +446,9 @@ fn validate_artifact_url(url: &str) -> Result<(), SoftwareCenterError> {
         || parsed.query().is_some()
         || parsed.fragment().is_some()
     {
-        return Err(SoftwareCenterError::Invalid);
+        return Err(SoftwareCenterError::Invalid(
+            "invalid software request".into(),
+        ));
     }
     Ok(())
 }
@@ -396,7 +468,9 @@ pub fn pinned_artifact(application: &str) -> Result<PinnedArtifact, SoftwareCent
             )?,
             archive_root: "drupal-11.3.12",
         }),
-        _ => Err(SoftwareCenterError::Invalid),
+        _ => Err(SoftwareCenterError::Invalid(
+            "invalid software request".into(),
+        )),
     }
 }
 
@@ -440,12 +514,16 @@ impl ArtifactDownloader {
             let chunk =
                 chunk.map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
             if bytes.len().saturating_add(chunk.len()) > self.maximum_archive_bytes {
-                return Err(SoftwareCenterError::Invalid);
+                return Err(SoftwareCenterError::Invalid(
+                    "invalid software request".into(),
+                ));
             }
             bytes.extend_from_slice(&chunk);
         }
         if !artifact.digest.verify(&bytes) {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         Ok(bytes)
     }
@@ -485,7 +563,9 @@ impl SafeArtifactInstaller {
                 .next()
                 .is_some()
         {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         let decoder = GzDecoder::new(bytes);
         let mut archive = tar::Archive::new(decoder);
@@ -493,13 +573,18 @@ impl SafeArtifactInstaller {
         let mut file_count = 0_u64;
         for item in archive
             .entries()
-            .map_err(|_| SoftwareCenterError::Invalid)?
+            .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?
         {
-            let mut entry = item.map_err(|_| SoftwareCenterError::Invalid)?;
-            let path = entry.path().map_err(|_| SoftwareCenterError::Invalid)?;
+            let mut entry =
+                item.map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
+            let path = entry
+                .path()
+                .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
             let mut components = path.components();
             if components.next().and_then(|part| part.as_os_str().to_str()) != Some(expected_root) {
-                return Err(SoftwareCenterError::Invalid);
+                return Err(SoftwareCenterError::Invalid(
+                    "invalid software request".into(),
+                ));
             }
             let relative = components.as_path();
             if relative.as_os_str().is_empty() {
@@ -507,25 +592,27 @@ impl SafeArtifactInstaller {
             }
             let kind = entry.header().entry_type();
             if !(kind.is_file() || kind.is_dir()) {
-                return Err(SoftwareCenterError::Invalid);
+                return Err(SoftwareCenterError::Invalid(
+                    "invalid software request".into(),
+                ));
             }
             file_count = file_count
                 .checked_add(1)
-                .ok_or(SoftwareCenterError::Invalid)?;
+                .ok_or(SoftwareCenterError::Invalid("plan is no longer in the queue; it may have been consumed, expired, or never created".into()))?;
             expanded_bytes = expanded_bytes
                 .checked_add(entry.size())
-                .ok_or(SoftwareCenterError::Invalid)?;
-            let relative_text = relative.to_str().ok_or(SoftwareCenterError::Invalid)?;
+                .ok_or(SoftwareCenterError::Invalid("plan is no longer in the queue; it may have been consumed, expired, or never created".into()))?;
+            let relative_text = relative.to_str().ok_or(SoftwareCenterError::Invalid("plan is no longer in the queue; it may have been consumed, expired, or never created".into()))?;
             self.archive_policy
                 .accept(relative_text, false, expanded_bytes, file_count)
-                .map_err(|_| SoftwareCenterError::Invalid)?;
+                .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
             let output = destination.join(relative);
             if kind.is_dir() {
                 fs::create_dir_all(&output)
                     .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
                 continue;
             }
-            let parent = output.parent().ok_or(SoftwareCenterError::Invalid)?;
+            let parent = output.parent().ok_or(SoftwareCenterError::Invalid("plan is no longer in the queue; it may have been consumed, expired, or never created".into()))?;
             fs::create_dir_all(parent)
                 .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
             let mut file = OpenOptions::new()
@@ -536,7 +623,9 @@ impl SafeArtifactInstaller {
             let written = std::io::copy(&mut entry, &mut file)
                 .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
             if written != entry.size() {
-                return Err(SoftwareCenterError::Invalid);
+                return Err(SoftwareCenterError::Invalid(
+                    "invalid software request".into(),
+                ));
             }
             file.flush()
                 .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;

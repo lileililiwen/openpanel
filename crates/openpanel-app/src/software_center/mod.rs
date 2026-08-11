@@ -22,8 +22,9 @@ pub use apt::{
     needs_privilege,
 };
 pub use artifact::{
-    ArtifactDigest, ArtifactDownloader, ArtifactFetcher, PinnedArtifact, PlacedArtifact,
-    ReqwestArtifactFetcher, SafeArtifactInstaller, pinned_artifact, place_artifact,
+    ArtifactDigest, ArtifactDownloader, ArtifactFetcher, PLACEHOLDER_SHA256, PinnedArtifact,
+    PlacedArtifact, ReqwestArtifactFetcher, SafeArtifactInstaller, pinned_artifact, place_artifact,
+    place_artifact_with_gate,
 };
 use async_trait::async_trait;
 pub use catalog::{CatalogVerifier, SignedCatalogEnvelope, VerifiedCatalog};
@@ -62,8 +63,8 @@ pub enum SoftwareCenterError {
     #[error("software operation forbidden")]
     Forbidden,
     /// Catalog entry, plan, or input is invalid.
-    #[error("invalid software request")]
-    Invalid,
+    #[error("invalid software request: {0}")]
+    Invalid(String),
     /// Host or catalog state differs from the preview.
     #[error("software plan conflict")]
     Conflict,
@@ -516,6 +517,12 @@ pub struct SoftwareCenterService {
     pool: Option<SqlitePool>,
     reconciled: OnceCell<()>,
     applications_enabled: bool,
+    /// Placeholder-SHA-256 fail-closed gate. When `true` (the
+    /// production default), `install_artifact` refuses any entry whose
+    /// recipe ships the documented placeholder digest. The
+    /// `with_artifact_pipeline` constructor reads the gate from the
+    /// test suite overrides it via the explicit field.
+    require_verified_digests: bool,
     store: SoftwareCatalogStore,
     catalog_source: Arc<dyn CatalogSource>,
     artifact_fetcher: Arc<dyn ArtifactFetcher>,
@@ -552,9 +559,11 @@ impl SoftwareCenterService {
         )
     }
 
-    /// Compose the service with an explicit artifact fetcher and a custom
-    /// webapps root. Used by the integration test that swaps in a
-    /// `MemoryArtifactFetcher` and a per-test temp directory.
+    /// Compose the service with an explicit artifact fetcher, a custom
+    /// webapps root, and an explicit placeholder-digest gate. Used by
+    /// the integration test that swaps in a `MemoryArtifactFetcher`
+    /// and a per-test temp directory.
+    #[allow(clippy::too_many_arguments)]
     pub fn with_artifact_pipeline(
         packages: Arc<dyn PackageManager>,
         applications: Arc<dyn ApplicationDeployer>,
@@ -563,8 +572,9 @@ impl SoftwareCenterService {
         applications_enabled: bool,
         fetcher: Arc<dyn ArtifactFetcher>,
         webapps_root: PathBuf,
+        require_verified_digests: bool,
     ) -> Self {
-        Self::compose(
+        Self::compose_with_gate(
             packages,
             applications,
             audit,
@@ -572,6 +582,7 @@ impl SoftwareCenterService {
             applications_enabled,
             fetcher,
             webapps_root,
+            require_verified_digests,
         )
     }
 
@@ -583,6 +594,33 @@ impl SoftwareCenterService {
         applications_enabled: bool,
         fetcher: Arc<dyn ArtifactFetcher>,
         webapps_root: PathBuf,
+    ) -> Self {
+        let require_verified = !matches!(
+            std::env::var("OPENPANEL__SOFTWARE__REQUIRE_VERIFIED_DIGESTS").as_deref(),
+            Ok("false") | Ok("0") | Ok("no"),
+        );
+        Self::compose_with_gate(
+            packages,
+            applications,
+            audit,
+            pool,
+            applications_enabled,
+            fetcher,
+            webapps_root,
+            require_verified,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn compose_with_gate(
+        packages: Arc<dyn PackageManager>,
+        applications: Arc<dyn ApplicationDeployer>,
+        audit: Arc<dyn AuditService>,
+        pool: Option<SqlitePool>,
+        applications_enabled: bool,
+        fetcher: Arc<dyn ArtifactFetcher>,
+        webapps_root: PathBuf,
+        require_verified_digests: bool,
     ) -> Self {
         let store = SoftwareCatalogStore::new(pool.clone());
         let catalog_source: Arc<dyn CatalogSource> =
@@ -599,6 +637,7 @@ impl SoftwareCenterService {
             pool,
             reconciled: OnceCell::new(),
             applications_enabled,
+            require_verified_digests,
             store,
             catalog_source,
             artifact_fetcher: fetcher,
@@ -787,13 +826,18 @@ impl SoftwareCenterService {
             .store
             .get_entry(component)
             .await?
-            .ok_or(SoftwareCenterError::Invalid)?;
+            .ok_or(SoftwareCenterError::Invalid(
+            "plan is no longer in the queue; it may have been consumed, expired, or never created"
+                .into(),
+        ))?;
         if !matches!(
             entry.kind,
             openpanel_domain::software_center::EntryKind::System
         ) || entry.versions.is_empty()
         {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         let latest = entry
             .versions
@@ -801,24 +845,32 @@ impl SoftwareCenterService {
             .find(|version| version.is_latest)
             .cloned()
             .or_else(|| entry.versions.first().cloned())
-            .ok_or(SoftwareCenterError::Invalid)?;
+            .ok_or(SoftwareCenterError::Invalid("plan is no longer in the queue; it may have been consumed, expired, or never created".into()))?;
         if !latest.packages.is_empty() {
             // system entries have packages, not artifacts
         }
         let entry_packages: Vec<PackageId> = latest
             .packages
             .iter()
-            .map(|name| PackageId::new(name).map_err(|_| SoftwareCenterError::Invalid))
+            .map(|name| {
+                PackageId::new(name)
+                    .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))
+            })
             .collect::<Result<Vec<_>, _>>()?;
         if entry_packages.is_empty() {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         let snapshot = self.packages.discover().await?;
         let entry_platforms: Vec<SupportedPlatform> = self
             .store
             .platforms_for(component)
             .await?
-            .ok_or(SoftwareCenterError::Invalid)?;
+            .ok_or(SoftwareCenterError::Invalid(
+            "plan is no longer in the queue; it may have been consumed, expired, or never created"
+                .into(),
+        ))?;
         if !entry_platforms.iter().any(|platform| {
             platform.distribution() == snapshot.platform.distribution()
                 && platform.release() == snapshot.platform.release()
@@ -875,11 +927,12 @@ impl SoftwareCenterService {
             snapshot.platform,
             actions.clone(),
         )
-        .map_err(|_| SoftwareCenterError::Invalid)?;
+        .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
         let confirmation_token = Uuid::new_v4().to_string();
-        let expires_at = now()?
-            .checked_add(300)
-            .ok_or(SoftwareCenterError::Invalid)?;
+        let expires_at = now()?.checked_add(300).ok_or(SoftwareCenterError::Invalid(
+            "plan is no longer in the queue; it may have been consumed, expired, or never created"
+                .into(),
+        ))?;
         let stored = StoredPreview {
             kind: PreviewKind::Component {
                 id: entry.id.clone(),
@@ -943,12 +996,17 @@ impl SoftwareCenterService {
             .store
             .get_entry(entry_id)
             .await?
-            .ok_or(SoftwareCenterError::Invalid)?;
+            .ok_or(SoftwareCenterError::Invalid(
+            "plan is no longer in the queue; it may have been consumed, expired, or never created"
+                .into(),
+        ))?;
         if !matches!(
             entry.kind,
             openpanel_domain::software_center::EntryKind::Web
         ) {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         let version = entry
             .versions
@@ -956,11 +1014,14 @@ impl SoftwareCenterService {
             .find(|version| version.is_latest)
             .cloned()
             .or_else(|| entry.versions.first().cloned())
-            .ok_or(SoftwareCenterError::Invalid)?;
+            .ok_or(SoftwareCenterError::Invalid("plan is no longer in the queue; it may have been consumed, expired, or never created".into()))?;
         let pin = version
             .artifact
             .clone()
-            .ok_or(SoftwareCenterError::Invalid)?;
+            .ok_or(SoftwareCenterError::Invalid(
+            "plan is no longer in the queue; it may have been consumed, expired, or never created"
+                .into(),
+        ))?;
         let url = pin.url.as_str().to_owned();
         let bytes = self.artifact_fetcher.fetch(&url).await?;
         if let Some(parent) = self.webapps_root.parent() {
@@ -969,7 +1030,12 @@ impl SoftwareCenterService {
         }
         std::fs::create_dir_all(&self.webapps_root)
             .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
-        let placed = place_artifact(&pin, &bytes, &self.webapps_root)?;
+        let placed = place_artifact_with_gate(
+            &pin,
+            &bytes,
+            &self.webapps_root,
+            self.require_verified_digests,
+        )?;
         self.record(actor, "artifact_installed", entry_id).await?;
         Ok(ArtifactInstallResult {
             entry_id: entry.id,
@@ -1001,8 +1067,8 @@ impl SoftwareCenterService {
         }
         let id = Uuid::new_v4();
         let durable_lock = self.acquire_durable_lock(id).await?;
-        let mut aggregate =
-            SoftwareJob::new(id, plan_digest).map_err(|_| SoftwareCenterError::Invalid)?;
+        let mut aggregate = SoftwareJob::new(id, plan_digest)
+            .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
         aggregate
             .start()
             .map_err(|_| SoftwareCenterError::Repository)?;
@@ -1029,7 +1095,11 @@ impl SoftwareCenterService {
         self.push_job(id, plan_digest, aggregate.state()).await?;
         let (component, action) = match preview.kind {
             PreviewKind::Component { id, action } => (id, action),
-            PreviewKind::Application(_) => return Err(SoftwareCenterError::Invalid),
+            PreviewKind::Application(_) => {
+                return Err(SoftwareCenterError::Invalid(
+                    "invalid software request".into(),
+                ));
+            }
         };
         if action != ComponentAction::Remove
             && let Err(error) = self.packages.validate(&component).await
@@ -1092,12 +1162,12 @@ impl SoftwareCenterService {
                 .store
                 .get_entry(id)
                 .await?
-                .ok_or(SoftwareCenterError::Invalid)?;
+                .ok_or(SoftwareCenterError::Invalid("plan is no longer in the queue; it may have been consumed, expired, or never created".into()))?;
             let platforms = self
                 .store
                 .platforms_for(id)
                 .await?
-                .ok_or(SoftwareCenterError::Invalid)?;
+                .ok_or(SoftwareCenterError::Invalid("plan is no longer in the queue; it may have been consumed, expired, or never created".into()))?;
             if !platforms.iter().any(|platform| {
                 platform.distribution() == snapshot.platform.distribution()
                     && platform.release() == snapshot.platform.release()
@@ -1109,7 +1179,7 @@ impl SoftwareCenterService {
                 .versions
                 .first()
                 .cloned()
-                .ok_or(SoftwareCenterError::Invalid)?;
+                .ok_or(SoftwareCenterError::Invalid("plan is no longer in the queue; it may have been consumed, expired, or never created".into()))?;
             actions.extend(
                 latest
                     .packages
@@ -1125,15 +1195,17 @@ impl SoftwareCenterService {
                     .collect::<Vec<_>>(),
             );
         }
-        let input_bytes = serde_json::to_vec(&input).map_err(|_| SoftwareCenterError::Invalid)?;
+        let input_bytes = serde_json::to_vec(&input)
+            .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
         let target_digest = hex::encode(sha2::Sha256::digest(input_bytes));
         let plan_digest_str = format!("embedded-v1-{target_digest}");
         let plan = SoftwarePlan::new(plan_digest_str, snapshot.platform, actions.clone())
-            .map_err(|_| SoftwareCenterError::Invalid)?;
+            .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
         let confirmation_token = Uuid::new_v4().to_string();
-        let expires_at = now()?
-            .checked_add(300)
-            .ok_or(SoftwareCenterError::Invalid)?;
+        let expires_at = now()?.checked_add(300).ok_or(SoftwareCenterError::Invalid(
+            "plan is no longer in the queue; it may have been consumed, expired, or never created"
+                .into(),
+        ))?;
         let stored = StoredPreview {
             kind: PreviewKind::Application(input.clone()),
             actions: actions.clone(),
@@ -1196,7 +1268,11 @@ impl SoftwareCenterService {
         let preview = self.take_preview(plan_digest, confirmation_token).await?;
         let input = match preview.kind {
             PreviewKind::Application(input) => input,
-            PreviewKind::Component { .. } => return Err(SoftwareCenterError::Invalid),
+            PreviewKind::Component { .. } => {
+                return Err(SoftwareCenterError::Invalid(
+                    "invalid software request".into(),
+                ));
+            }
         };
         if self.packages.discover().await?.state_digest != preview.host_state_digest {
             return Err(SoftwareCenterError::Conflict);
@@ -1323,12 +1399,12 @@ impl SoftwareCenterService {
                 {
                     previews.remove(plan_digest)
                 }
-                Some(_) => return Err(SoftwareCenterError::Invalid),
+                Some(_) => return Err(SoftwareCenterError::Invalid("confirmation token is no longer valid for this plan; open the entry again and confirm the freshly generated plan".into())),
                 None => None,
             }
         };
         let Some(pool) = &self.pool else {
-            return memory.ok_or(SoftwareCenterError::Invalid);
+            return memory.ok_or(SoftwareCenterError::Invalid("plan is no longer in the queue; it may have been consumed, expired, or never created".into()));
         };
         let row = sqlx::query_as::<_, (String, String, String, String, i64)>(
             "SELECT payload,host_state_digest,token_hash,expires_at,consumed FROM software_plans WHERE digest=?",
@@ -1337,13 +1413,15 @@ impl SoftwareCenterService {
         .fetch_optional(pool)
         .await
         .map_err(|_| SoftwareCenterError::Repository)?
-        .ok_or(SoftwareCenterError::Invalid)?;
+        .ok_or(SoftwareCenterError::Invalid("plan is no longer in the queue; it may have been consumed, expired, or never created".into()))?;
         let expires_at = row
             .3
             .parse::<u64>()
             .map_err(|_| SoftwareCenterError::Repository)?;
         if row.4 != 0 || row.2 != token_hash(confirmation_token) || now()? > expires_at {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         let consumed = sqlx::query(
             "UPDATE software_plans SET consumed=1 WHERE digest=? AND consumed=0 AND token_hash=?",
@@ -1354,7 +1432,9 @@ impl SoftwareCenterService {
         .await
         .map_err(|_| SoftwareCenterError::Repository)?;
         if consumed.rows_affected() != 1 {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         if let Some(preview) = memory {
             return Ok(preview);
@@ -1438,7 +1518,7 @@ impl SoftwareCenterService {
             .await?
             .into_iter()
             .find(|job| job.id == job_id)
-            .ok_or(SoftwareCenterError::Invalid)?;
+            .ok_or(SoftwareCenterError::Invalid("plan is no longer in the queue; it may have been consumed, expired, or never created".into()))?;
         if !matches!(job.state.as_str(), "queued" | "running" | "validating") {
             return Err(SoftwareCenterError::Conflict);
         }
@@ -1484,9 +1564,9 @@ impl SoftwareCenterService {
             actions: persisted.actions,
             host_state_digest: snapshot.state_digest,
             confirmation_token: confirmation_token.clone(),
-            expires_at: now()?
-                .checked_add(300)
-                .ok_or(SoftwareCenterError::Invalid)?,
+            expires_at: now()?.checked_add(300).ok_or(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ))?,
         };
         self.persist_plan(&job.plan_digest, &stored).await?;
         self.previews
@@ -1641,7 +1721,7 @@ impl SoftwareCenterService {
             .into_iter()
             .find(|entry| entry.id == input.application)
             .and_then(|entry| entry.versions.into_iter().next())
-            .ok_or(SoftwareCenterError::Invalid)?;
+            .ok_or(SoftwareCenterError::Invalid("plan is no longer in the queue; it may have been consumed, expired, or never created".into()))?;
         let now = chrono::Utc::now().to_rfc3339();
         sqlx::query("INSERT INTO software_deployments(id,owner_id,application_id,version,site_id,database_id,state,created_at,updated_at) VALUES(?,?,?,?,NULL,NULL,'healthy',?,?)")
             .bind(deployment_id.to_string())
@@ -1856,7 +1936,7 @@ fn recovery_catalog() -> Result<Vec<CatalogEntry>, SoftwareCenterError> {
                 .iter()
                 .map(PackageId::new)
                 .collect::<Result<Vec<_>, _>>()
-                .map_err(|_| SoftwareCenterError::Invalid)?,
+                .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?,
             lifecycle_state: "discoverable".to_owned(),
         })
     };
@@ -1998,7 +2078,10 @@ fn project_entry(entry: &StorefrontEntry, _applications_enabled: bool) -> Catalo
     let packages: Vec<PackageId> = latest
         .packages
         .iter()
-        .map(|name| PackageId::new(name).map_err(|_| SoftwareCenterError::Invalid))
+        .map(|name| {
+            PackageId::new(name)
+                .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))
+        })
         .collect::<Result<Vec<_>, _>>()
         .unwrap_or_default();
     CatalogEntry {
@@ -2041,7 +2124,7 @@ fn supported_platforms() -> Result<Vec<SupportedPlatform>, SoftwareCenterError> 
     .into_iter()
     .map(|(distribution, release, architecture)| {
         SupportedPlatform::new(distribution, release, architecture)
-            .map_err(|_| SoftwareCenterError::Invalid)
+            .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))
     })
     .collect()
 }
@@ -2073,7 +2156,9 @@ fn validate_deployment_input(
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-'))
     {
-        return Err(SoftwareCenterError::Invalid);
+        return Err(SoftwareCenterError::Invalid(
+            "invalid software request".into(),
+        ));
     }
     let labels: Vec<_> = input.domain.split('.').collect();
     if input.domain.len() > 253
@@ -2088,7 +2173,9 @@ fn validate_deployment_input(
                     .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
         })
     {
-        return Err(SoftwareCenterError::Invalid);
+        return Err(SoftwareCenterError::Invalid(
+            "invalid software request".into(),
+        ));
     }
     Ok(())
 }

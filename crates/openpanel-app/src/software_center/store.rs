@@ -530,7 +530,9 @@ impl SoftwareCatalogStore {
     /// the read-only fallback path.
     fn search_seed(&self, query: &CatalogQuery) -> Result<CatalogSearchPage, SoftwareCenterError> {
         let Some(manifest) = self.embedded_seed() else {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         };
         let needle = query
             .text
@@ -948,7 +950,9 @@ impl SoftwareCatalogStore {
     /// In-memory diagnostics for the embedded recovery seed.
     fn diagnostics_seed(&self) -> Result<CatalogDiagnostics, SoftwareCenterError> {
         let Some(manifest) = self.embedded_seed() else {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         };
         Ok(CatalogDiagnostics {
             source_url: manifest.source_url.clone(),
@@ -992,7 +996,9 @@ impl SoftwareCatalogStore {
         id: &str,
     ) -> Result<Option<Vec<SupportedPlatform>>, SoftwareCenterError> {
         if self.pool.is_none() {
-            let manifest = self.embedded_seed().ok_or(SoftwareCenterError::Invalid)?;
+            let manifest = self.embedded_seed().ok_or_else(|| {
+                SoftwareCenterError::Invalid("embedded recovery seed is unavailable".into())
+            })?;
             return Ok(manifest
                 .entries
                 .iter()
@@ -1255,7 +1261,7 @@ fn build_search_text(entry: &CatalogEntryRecipe) -> String {
 
 fn parse_category(slug: &str) -> Result<Category, SoftwareCenterError> {
     slug.parse::<Category>()
-        .map_err(|_| SoftwareCenterError::Invalid)
+        .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))
 }
 
 fn parse_kind(value: &str) -> Result<EntryKind, SoftwareCenterError> {
@@ -1263,7 +1269,9 @@ fn parse_kind(value: &str) -> Result<EntryKind, SoftwareCenterError> {
         "system" => Ok(EntryKind::System),
         "web" => Ok(EntryKind::Web),
         "tool" => Ok(EntryKind::Tool),
-        _ => Err(SoftwareCenterError::Invalid),
+        _ => Err(SoftwareCenterError::Invalid(
+            "invalid software request".into(),
+        )),
     }
 }
 
@@ -1296,7 +1304,7 @@ fn compute_age_seconds(activated_at: &str) -> i64 {
 
 impl From<RecipeError> for SoftwareCenterError {
     fn from(_: RecipeError) -> Self {
-        SoftwareCenterError::Invalid
+        SoftwareCenterError::Invalid("recipe validation failed".into())
     }
 }
 

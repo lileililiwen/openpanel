@@ -112,14 +112,21 @@ impl HttpCatalogSource {
 #[async_trait]
 impl CatalogSource for HttpCatalogSource {
     async fn fetch(&self, _now_unix: u64) -> Result<FetchedManifest, SoftwareCenterError> {
-        let parsed =
-            reqwest::Url::parse(&self.config.url).map_err(|_| SoftwareCenterError::Invalid)?;
+        let parsed = reqwest::Url::parse(&self.config.url)
+            .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
         if parsed.scheme() != "https" || !parsed.username().is_empty() {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
-        let host = parsed.host_str().ok_or(SoftwareCenterError::Invalid)?;
+        let host = parsed.host_str().ok_or(SoftwareCenterError::Invalid(
+            "plan is no longer in the queue; it may have been consumed, expired, or never created"
+                .into(),
+        ))?;
         if !self.config.allowed_origins.contains(host) {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         let response = self
             .client
@@ -132,23 +139,31 @@ impl CatalogSource for HttpCatalogSource {
         }
         let content_length = response.content_length();
         if content_length.is_some_and(|length| length > MAX_MANIFEST_BYTES as u64) {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         let bytes = response
             .bytes()
             .await
             .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         if bytes.len() > MAX_MANIFEST_BYTES {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
-        let manifest: HttpManifestEnvelope =
-            serde_json::from_slice(&bytes).map_err(|_| SoftwareCenterError::Invalid)?;
+        let manifest: HttpManifestEnvelope = serde_json::from_slice(&bytes)
+            .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
         if manifest.schema != 1 {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         let entries = manifest.entries;
         if entries.is_empty() || entries.len() > MAX_ENTRIES {
-            return Err(SoftwareCenterError::Invalid);
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
         }
         let domain_manifest = CatalogManifest {
             schema: 1,
@@ -158,7 +173,7 @@ impl CatalogSource for HttpCatalogSource {
         };
         domain_manifest
             .validate()
-            .map_err(|_| SoftwareCenterError::Invalid)?;
+            .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
         Ok(FetchedManifest {
             manifest: domain_manifest,
             source_url: parsed.to_string(),

@@ -34,7 +34,7 @@ impl FakePackageManager {
         let canonical = installed.iter().cloned().collect::<Vec<_>>().join("\n");
         Ok(HostSnapshot {
             platform: SupportedPlatform::new("ubuntu", "24.04", "x86_64")
-                .map_err(|_| SoftwareCenterError::Invalid)?,
+                .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?,
             state_digest: hex::encode(Sha256::digest(canonical.as_bytes())),
             installed_packages: installed.clone(),
         })
@@ -177,12 +177,15 @@ impl SoftwareCenterModule {
     }
 
     /// Compose the deterministic in-memory adapter with an injected
-    /// artifact fetcher and a custom webapps root. The integration test
-    /// uses this with a `MemoryArtifactFetcher` and a per-test temp dir.
-    pub async fn memory_with_artifact(
+    /// artifact fetcher, a custom webapps root, and a gate flag. The
+    /// integration tests use this with `require_verified_digests =
+    /// false`; the app-crate tests override the flag for the gate-on
+    /// case.
+    pub async fn memory_with_artifact_and_gate(
         ctx: &AppContext,
         fetcher: Arc<dyn ArtifactFetcher>,
         webapps_root: std::path::PathBuf,
+        require_verified_digests: bool,
     ) -> Result<Self, SoftwareCenterError> {
         Ok(Self::compose_with_artifact(
             ctx,
@@ -191,8 +194,19 @@ impl SoftwareCenterModule {
             true,
             fetcher,
             webapps_root,
+            require_verified_digests,
         )
         .await)
+    }
+
+    /// Backwards-compatible wrapper. Defaults to lenient mode
+    /// (`require_verified_digests = false`) for existing tests.
+    pub async fn memory_with_artifact(
+        ctx: &AppContext,
+        fetcher: Arc<dyn ArtifactFetcher>,
+        webapps_root: std::path::PathBuf,
+    ) -> Result<Self, SoftwareCenterError> {
+        Self::memory_with_artifact_and_gate(ctx, fetcher, webapps_root, false).await
     }
 
     async fn compose(
@@ -208,6 +222,10 @@ impl SoftwareCenterModule {
             applications_enabled,
             Arc::new(ReqwestArtifactFetcher::default()),
             default_webapps_root(),
+            !matches!(
+                std::env::var("OPENPANEL__SOFTWARE__REQUIRE_VERIFIED_DIGESTS").as_deref(),
+                Ok("false") | Ok("0") | Ok("no"),
+            ),
         )
         .await
     }
@@ -219,6 +237,7 @@ impl SoftwareCenterModule {
         applications_enabled: bool,
         fetcher: Arc<dyn ArtifactFetcher>,
         webapps_root: std::path::PathBuf,
+        require_verified_digests: bool,
     ) -> Self {
         let pool = ctx.db.pool().await;
         let service = SoftwareCenterService::with_artifact_pipeline(
@@ -229,6 +248,7 @@ impl SoftwareCenterModule {
             applications_enabled,
             fetcher,
             webapps_root,
+            require_verified_digests,
         );
         // Materialize the embedded seed on first boot so the storefront is
         // never empty before the first remote refresh succeeds.

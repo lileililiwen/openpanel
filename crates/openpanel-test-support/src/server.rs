@@ -89,6 +89,11 @@ pub struct TestServer {
     settings_path: PathBuf,
     _handle: JoinHandle<()>,
     _db: TestDb,
+    /// Whether the Software Center refuses placeholder SHA-256
+    /// digests by default. Tests that exercise the lenient path set
+    /// this to `false`; tests that exercise the gate set it to `true`.
+    #[allow(dead_code)]
+    require_verified_digests: bool,
     /// Temp directory for sandboxed nginx configs and document roots.
     sandbox: Arc<TempDir>,
     /// Sandbox directory downloaded artifacts are placed at.
@@ -383,6 +388,7 @@ impl TestServer {
             _handle: handle,
             _db: db,
             sandbox,
+            require_verified_digests: false,
             webapps_root,
             staged_artifacts,
             fetched_urls,
