@@ -104,7 +104,7 @@ impl HttpCatalogSource {
             .https_only(true)
             .user_agent(concat!("openpanel/", env!("CARGO_PKG_VERSION")))
             .build()
-            .map_err(|_| SoftwareCenterError::Package)?;
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         Ok(Self { config, client })
     }
 }
@@ -126,9 +126,9 @@ impl CatalogSource for HttpCatalogSource {
             .get(parsed.clone())
             .send()
             .await
-            .map_err(|_| SoftwareCenterError::Package)?;
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         if !response.status().is_success() {
-            return Err(SoftwareCenterError::Package);
+            return Err(SoftwareCenterError::Package("operation failed".into()));
         }
         let content_length = response.content_length();
         if content_length.is_some_and(|length| length > MAX_MANIFEST_BYTES as u64) {
@@ -137,7 +137,7 @@ impl CatalogSource for HttpCatalogSource {
         let bytes = response
             .bytes()
             .await
-            .map_err(|_| SoftwareCenterError::Package)?;
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         if bytes.len() > MAX_MANIFEST_BYTES {
             return Err(SoftwareCenterError::Invalid);
         }

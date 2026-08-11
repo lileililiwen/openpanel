@@ -50,7 +50,11 @@ impl ArtifactFetcher for StagedArtifactFetcher {
             .expect("bytes lock")
             .get(url)
             .cloned()
-            .ok_or(openpanel_app::software_center::SoftwareCenterError::Package)
+            .ok_or(
+                openpanel_app::software_center::SoftwareCenterError::Package(
+                    "operation failed".into(),
+                ),
+            )
     }
 }
 use openpanel_core::{

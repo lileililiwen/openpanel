@@ -15,7 +15,7 @@ use super::{
     ApplicationDeployer, ApplicationDeploymentInput, AptPackageManager, HostSnapshot,
     IntegratedApplicationDeployer, OpenPanelApplicationResources, PackageManager,
     ProvisionedApplication, ReqwestArtifactFetcher, SoftwareCenterError, SoftwareCenterService,
-    TokioPackageCommand, default_webapps_root,
+    TokioPackageCommand, default_webapps_root, host_package_manager::HostPackageManager,
 };
 use crate::{DatabasesService, SitesService, software_center::ArtifactFetcher};
 
@@ -142,11 +142,15 @@ impl SoftwareCenterModule {
         sites: Arc<SitesService>,
         databases: Arc<DatabasesService>,
     ) -> Result<Self, SoftwareCenterError> {
+        let command: Arc<dyn super::PackageCommand> = Arc::new(TokioPackageCommand);
         let packages: Arc<dyn PackageManager> =
             if std::env::var("OPENPANEL__SOFTWARE__ADAPTER").as_deref() == Ok("fake") {
                 Arc::new(FakePackageManager::default())
             } else {
-                Arc::new(AptPackageManager::new(Arc::new(TokioPackageCommand)))
+                match HostPackageManager::detect(command.clone()) {
+                    Ok(host) => Arc::new(host),
+                    Err(_) => Arc::new(AptPackageManager::new(command)),
+                }
             };
         let fake = std::env::var("OPENPANEL__SOFTWARE__ADAPTER").as_deref() == Ok("fake");
         let applications: Arc<dyn ApplicationDeployer> = if fake {

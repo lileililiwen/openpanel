@@ -18,7 +18,7 @@ use openpanel_app::software_center::{
     CommandResult, ComponentAction, CreatedApplicationDatabase, CreatedApplicationSite,
     HostSnapshot, IntegratedApplicationDeployer, PackageCommand, PackageManager,
     ProvisionedApplication, SafeArtifactInstaller, SignedCatalogEnvelope, SoftwareCenterError,
-    SoftwareCenterService,
+    SoftwareCenterService, host_package_manager::HostPackageManager,
 };
 use openpanel_core::{AuditAction, AuditOutcome};
 use openpanel_domain::{
@@ -1007,4 +1007,170 @@ fn install_artifact_rejects_non_web_entries() {
             .expect_err("system entries must be rejected by install_artifact");
         assert!(matches!(error, SoftwareCenterError::Invalid));
     });
+}
+
+struct CapturedCommand {
+    invocations: std::sync::Mutex<Vec<(&'static str, Vec<String>)>>,
+    output_for: std::sync::Mutex<std::collections::HashMap<(String, String), String>>,
+}
+
+#[async_trait]
+impl PackageCommand for CapturedCommand {
+    async fn run(
+        &self,
+        program: &'static str,
+        arguments: &[String],
+    ) -> Result<CommandResult, SoftwareCenterError> {
+        let key = (
+            program.to_owned(),
+            arguments.first().cloned().unwrap_or_default(),
+        );
+        let stdout = self
+            .output_for
+            .lock()
+            .expect("output_for")
+            .get(&key)
+            .cloned()
+            .unwrap_or_default();
+        self.invocations
+            .lock()
+            .expect("invocations")
+            .push((program, arguments.to_vec()));
+        Ok(CommandResult::success(&stdout))
+    }
+}
+
+#[test]
+fn host_package_manager_translates_install_for_every_family() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        use openpanel_app::software_center::host_package_manager::Family;
+        use openpanel_domain::software_center::PackageId;
+        let pkg = PackageId::new("htop").expect("package id");
+        for (family, expected_program, expected_first_arg) in [
+            (Family::Apt, "/usr/bin/apt-get", "-y"),
+            (Family::Dnf, "/usr/bin/dnf", "-y"),
+            (Family::Yum, "/usr/bin/yum", "-y"),
+            (Family::Pacman, "/usr/bin/pacman", "--noconfirm"),
+            (Family::Apk, "/sbin/apk", "add"),
+            (Family::Zypper, "/usr/bin/zypper", "--non-interactive"),
+        ] {
+            let captured = Arc::new(CapturedCommand {
+                invocations: std::sync::Mutex::new(Vec::new()),
+                output_for: std::sync::Mutex::new(std::collections::HashMap::new()),
+            });
+            let manager =
+                HostPackageManager::for_family(family, captured.clone()).expect("for_family");
+            manager
+                .apply(&[PlanAction::Install(pkg.clone())])
+                .await
+                .expect("install");
+            let invocations = captured.invocations.lock().expect("invocations");
+            assert_eq!(
+                invocations.len(),
+                1,
+                "expected one command for {family:?}, got {invocations:?}"
+            );
+            let (program, arguments) = &invocations[0];
+            assert_eq!(*program, expected_program, "wrong program for {family:?}");
+            assert_eq!(
+                arguments[0], expected_first_arg,
+                "wrong first arg for {family:?}"
+            );
+            assert!(
+                arguments.iter().any(|arg| arg == "htop"),
+                "package name missing for {family:?}: {arguments:?}"
+            );
+        }
+    });
+}
+
+#[test]
+fn host_package_manager_translates_remove_for_every_family() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        use openpanel_app::software_center::host_package_manager::Family;
+        use openpanel_domain::software_center::PackageId;
+        let pkg = PackageId::new("htop").expect("package id");
+        for (family, expected_program) in [
+            (Family::Apt, "/usr/bin/apt-get"),
+            (Family::Dnf, "/usr/bin/dnf"),
+            (Family::Yum, "/usr/bin/yum"),
+            (Family::Pacman, "/usr/bin/pacman"),
+            (Family::Apk, "/sbin/apk"),
+            (Family::Zypper, "/usr/bin/zypper"),
+        ] {
+            let captured = Arc::new(CapturedCommand {
+                invocations: std::sync::Mutex::new(Vec::new()),
+                output_for: std::sync::Mutex::new(std::collections::HashMap::new()),
+            });
+            let manager =
+                HostPackageManager::for_family(family, captured.clone()).expect("for_family");
+            manager
+                .apply(&[PlanAction::Remove(pkg.clone())])
+                .await
+                .expect("remove");
+            let invocations = captured.invocations.lock().expect("invocations");
+            assert_eq!(invocations.len(), 1, "{family:?} should run one command");
+            let (program, _) = &invocations[0];
+            assert_eq!(*program, expected_program, "wrong program for {family:?}");
+            let _ = expected_program;
+        }
+    });
+}
+
+#[test]
+fn host_package_manager_surfaces_apt_get_failure_with_the_real_stderr() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        use openpanel_app::software_center::host_package_manager::Family;
+        use openpanel_domain::software_center::PackageId;
+        let pkg = PackageId::new("apache2").expect("package id");
+        let mut output_for = std::collections::HashMap::new();
+        output_for.insert(
+            ("/usr/bin/apt-get".to_owned(), "-y".to_owned()),
+            "E: Unable to locate package apache2".to_owned(),
+        );
+        let captured = Arc::new(CapturedCommand {
+            invocations: std::sync::Mutex::new(Vec::new()),
+            output_for: std::sync::Mutex::new(output_for),
+        });
+        // Force the success command to fail.
+        let captured = Arc::new(ForceFailCommand(captured));
+        let manager = HostPackageManager::for_family(Family::Apt, captured).expect("for_family");
+        let error = manager
+            .apply(&[PlanAction::Install(pkg)])
+            .await
+            .expect_err("install should fail when the command returns failure");
+        let SoftwareCenterError::Package(detail) = error else {
+            panic!("expected Package error, got {error:?}");
+        };
+        assert!(
+            detail.contains("apache2"),
+            "package name should be in the diagnostic: {detail}"
+        );
+    });
+}
+
+struct ForceFailCommand(Arc<CapturedCommand>);
+
+#[async_trait]
+impl PackageCommand for ForceFailCommand {
+    async fn run(
+        &self,
+        program: &'static str,
+        arguments: &[String],
+    ) -> Result<CommandResult, SoftwareCenterError> {
+        let raw = self.0.run(program, arguments).await?;
+        Ok(CommandResult::failure(&raw.output))
+    }
 }

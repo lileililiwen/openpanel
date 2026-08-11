@@ -7,7 +7,7 @@ use openpanel_domain::software_center::{PackageId, PlanAction, SupportedPlatform
 use sha2::{Digest, Sha256};
 use tokio::process::Command;
 
-use super::{HostSnapshot, PackageManager, SoftwareCenterError};
+use super::{HostSnapshot, PackageManager, SoftwareCenterError, host_package_manager::first_lines};
 
 const OUTPUT_LIMIT: usize = 8_192;
 
@@ -18,7 +18,7 @@ pub struct CommandResult {
     pub success: bool,
     /// Bounded, control-character-sanitized diagnostic output.
     pub output: String,
-    raw_output: String,
+    pub(crate) raw_output: String,
 }
 impl CommandResult {
     /// Construct a successful deterministic result.
@@ -30,7 +30,8 @@ impl CommandResult {
         }
     }
 
-    fn failure(output: &str) -> Self {
+    /// Construct a failed deterministic result.
+    pub fn failure(output: &str) -> Self {
         Self {
             success: false,
             output: bounded(output),
@@ -95,7 +96,7 @@ impl PackageCommand for TokioPackageCommand {
             .env("DEBIAN_FRONTEND", "noninteractive")
             .output()
             .await
-            .map_err(|_| SoftwareCenterError::Package)?;
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         let diagnostic = if output.status.success() {
             String::from_utf8_lossy(&output.stdout)
         } else {
@@ -133,7 +134,11 @@ impl AptPackageManager {
         if result.success {
             Ok(())
         } else {
-            Err(SoftwareCenterError::Package)
+            Err(SoftwareCenterError::Package(format!(
+                "/usr/bin/apt-get {operation} {} failed: {}",
+                package.as_str(),
+                first_lines(&result.output, 8)
+            )))
         }
     }
 }
@@ -143,7 +148,7 @@ impl PackageManager for AptPackageManager {
     async fn discover(&self) -> Result<HostSnapshot, SoftwareCenterError> {
         let release = tokio::fs::read_to_string("/etc/os-release")
             .await
-            .map_err(|_| SoftwareCenterError::Package)?;
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         let distribution = os_release_value(&release, "ID")?;
         let version = os_release_value(&release, "VERSION_ID")?;
         if !matches!(
@@ -162,7 +167,10 @@ impl PackageManager for AptPackageManager {
         let arguments = vec!["-W".to_owned(), "-f=${Package}\t${Version}\n".to_owned()];
         let packages = self.command.run("/usr/bin/dpkg-query", &arguments).await?;
         if !packages.success {
-            return Err(SoftwareCenterError::Package);
+            return Err(SoftwareCenterError::Package(format!(
+                "dpkg-query list failed: {}",
+                first_lines(&packages.output, 4)
+            )));
         }
         Ok(HostSnapshot {
             platform,
@@ -214,7 +222,9 @@ impl PackageManager for AptPackageManager {
             match action {
                 PlanAction::Install(package) => self.package_action("remove", package, &[]).await?,
                 PlanAction::Update(_) | PlanAction::Remove(_) => {
-                    return Err(SoftwareCenterError::Package);
+                    return Err(SoftwareCenterError::Package(
+                        "cannot roll back an update or remove".into(),
+                    ));
                 }
             }
         }

@@ -3,6 +3,7 @@
 mod apt;
 mod artifact;
 mod catalog;
+pub mod host_package_manager;
 mod integrated;
 mod module;
 pub mod seed;
@@ -69,9 +70,9 @@ pub enum SoftwareCenterError {
     /// Component validation failed.
     #[error("software validation failed")]
     Validation,
-    /// Package adapter failed with a redacted error.
-    #[error("software package operation failed")]
-    Package,
+    /// Package adapter failed with a redacted, bounded diagnostic.
+    #[error("software package operation failed: {0}")]
+    Package(String),
     /// A catalog item is visible but its required deployment adapter is unavailable.
     #[error("software deployment adapter unavailable")]
     Unsupported,
@@ -262,7 +263,9 @@ impl ApplicationDeployer for UnavailableApplicationDeployer {
         _actor: Uuid,
         _input: &ApplicationDeploymentInput,
     ) -> Result<ProvisionedApplication, SoftwareCenterError> {
-        Err(SoftwareCenterError::Package)
+        Err(SoftwareCenterError::Package(
+            "application deployment is unavailable on this host".into(),
+        ))
     }
 
     async fn validate(
@@ -958,9 +961,11 @@ impl SoftwareCenterService {
         let url = pin.url.as_str().to_owned();
         let bytes = self.artifact_fetcher.fetch(&url).await?;
         if let Some(parent) = self.webapps_root.parent() {
-            std::fs::create_dir_all(parent).map_err(|_| SoftwareCenterError::Package)?;
+            std::fs::create_dir_all(parent)
+                .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         }
-        std::fs::create_dir_all(&self.webapps_root).map_err(|_| SoftwareCenterError::Package)?;
+        std::fs::create_dir_all(&self.webapps_root)
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         let placed = place_artifact(&pin, &bytes, &self.webapps_root)?;
         self.record(actor, "artifact_installed", entry_id).await?;
         Ok(ArtifactInstallResult {

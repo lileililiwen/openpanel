@@ -141,7 +141,7 @@ impl ReqwestArtifactFetcher {
             .redirect(reqwest::redirect::Policy::none())
             .https_only(true)
             .build()
-            .map_err(|_| SoftwareCenterError::Package)?;
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         Ok(Self {
             client,
             maximum_archive_bytes: 64 * 1024 * 1024,
@@ -167,18 +167,19 @@ impl ArtifactFetcher for ReqwestArtifactFetcher {
             .get(url)
             .send()
             .await
-            .map_err(|_| SoftwareCenterError::Package)?;
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         if !response.status().is_success()
             || response
                 .content_length()
                 .is_some_and(|length| length > self.maximum_archive_bytes as u64)
         {
-            return Err(SoftwareCenterError::Package);
+            return Err(SoftwareCenterError::Package("operation failed".into()));
         }
         let mut bytes = Vec::new();
         let mut stream = response.bytes_stream();
         while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|_| SoftwareCenterError::Package)?;
+            let chunk =
+                chunk.map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
             if bytes.len().saturating_add(chunk.len()) > self.maximum_archive_bytes {
                 return Err(SoftwareCenterError::Invalid);
             }
@@ -204,7 +205,8 @@ pub fn place_artifact(
         return Err(SoftwareCenterError::Invalid);
     }
     let version_dir = destination_root.join(safe_segment(pin.url.as_str())?);
-    fs::create_dir_all(&version_dir).map_err(|_| SoftwareCenterError::Package)?;
+    fs::create_dir_all(&version_dir)
+        .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
     match pin.archive_type.as_str() {
         "file" => place_single_file(pin, bytes, &version_dir, digest_verified),
         "tar.gz" => place_tar_gz(pin, bytes, &version_dir, digest_verified),
@@ -234,15 +236,16 @@ fn place_single_file(
         .write(true)
         .create_new(true)
         .open(&target)
-        .map_err(|_| SoftwareCenterError::Package)?;
+        .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
     file.write_all(bytes)
-        .map_err(|_| SoftwareCenterError::Package)?;
-    file.flush().map_err(|_| SoftwareCenterError::Package)?;
+        .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
+    file.flush()
+        .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&target, fs::Permissions::from_mode(0o644))
-            .map_err(|_| SoftwareCenterError::Package)?;
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
     }
     Ok(PlacedArtifact::file(target, filename, digest_verified))
 }
@@ -293,27 +296,30 @@ fn place_tar_gz(
             .map_err(|_| SoftwareCenterError::Invalid)?;
         let output = destination.join(relative);
         if kind.is_dir() {
-            fs::create_dir_all(&output).map_err(|_| SoftwareCenterError::Package)?;
+            fs::create_dir_all(&output)
+                .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
             continue;
         }
         let parent = output.parent().ok_or(SoftwareCenterError::Invalid)?;
-        fs::create_dir_all(parent).map_err(|_| SoftwareCenterError::Package)?;
+        fs::create_dir_all(parent)
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         let mut file = OpenOptions::new()
             .write(true)
             .create_new(true)
             .open(&output)
-            .map_err(|_| SoftwareCenterError::Package)?;
-        let written =
-            std::io::copy(&mut entry, &mut file).map_err(|_| SoftwareCenterError::Package)?;
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
+        let written = std::io::copy(&mut entry, &mut file)
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         if written != entry.size() {
             return Err(SoftwareCenterError::Invalid);
         }
-        file.flush().map_err(|_| SoftwareCenterError::Package)?;
+        file.flush()
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
             fs::set_permissions(&output, fs::Permissions::from_mode(0o644))
-                .map_err(|_| SoftwareCenterError::Package)?;
+                .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         }
     }
     Ok(PlacedArtifact::directory(
@@ -406,7 +412,7 @@ impl ArtifactDownloader {
             .redirect(reqwest::redirect::Policy::none())
             .https_only(true)
             .build()
-            .map_err(|_| SoftwareCenterError::Package)?;
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         Ok(Self {
             client,
             maximum_archive_bytes: 64 * 1024 * 1024,
@@ -424,14 +430,15 @@ impl ArtifactDownloader {
             .get(artifact.url)
             .send()
             .await
-            .map_err(|_| SoftwareCenterError::Package)?;
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         if !response.status().is_success() {
-            return Err(SoftwareCenterError::Package);
+            return Err(SoftwareCenterError::Package("operation failed".into()));
         }
         let mut bytes = Vec::new();
         let mut stream = response.bytes_stream();
         while let Some(chunk) = stream.next().await {
-            let chunk = chunk.map_err(|_| SoftwareCenterError::Package)?;
+            let chunk =
+                chunk.map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
             if bytes.len().saturating_add(chunk.len()) > self.maximum_archive_bytes {
                 return Err(SoftwareCenterError::Invalid);
             }
@@ -472,7 +479,9 @@ impl SafeArtifactInstaller {
                 .map(|meta| !meta.is_dir() || meta.file_type().is_symlink())
                 .unwrap_or(true)
             || fs::read_dir(destination)
-                .map_err(|_| SoftwareCenterError::Package)?
+                .map_err(|error| {
+                    SoftwareCenterError::Package(format!("read {}: {error}", destination.display()))
+                })?
                 .next()
                 .is_some()
         {
@@ -512,27 +521,30 @@ impl SafeArtifactInstaller {
                 .map_err(|_| SoftwareCenterError::Invalid)?;
             let output = destination.join(relative);
             if kind.is_dir() {
-                fs::create_dir_all(&output).map_err(|_| SoftwareCenterError::Package)?;
+                fs::create_dir_all(&output)
+                    .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
                 continue;
             }
             let parent = output.parent().ok_or(SoftwareCenterError::Invalid)?;
-            fs::create_dir_all(parent).map_err(|_| SoftwareCenterError::Package)?;
+            fs::create_dir_all(parent)
+                .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
             let mut file = OpenOptions::new()
                 .write(true)
                 .create_new(true)
                 .open(&output)
-                .map_err(|_| SoftwareCenterError::Package)?;
-            let written =
-                std::io::copy(&mut entry, &mut file).map_err(|_| SoftwareCenterError::Package)?;
+                .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
+            let written = std::io::copy(&mut entry, &mut file)
+                .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
             if written != entry.size() {
                 return Err(SoftwareCenterError::Invalid);
             }
-            file.flush().map_err(|_| SoftwareCenterError::Package)?;
+            file.flush()
+                .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
             #[cfg(unix)]
             {
                 use std::os::unix::fs::PermissionsExt;
                 fs::set_permissions(&output, fs::Permissions::from_mode(0o644))
-                    .map_err(|_| SoftwareCenterError::Package)?;
+                    .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
             }
         }
         Ok(())

@@ -191,7 +191,7 @@ fn map(error: SoftwareCenterError) -> ApiError {
             ApiError::Conflict(error.to_string())
         }
         SoftwareCenterError::Validation
-        | SoftwareCenterError::Package
+        | SoftwareCenterError::Package(_)
         | SoftwareCenterError::Repository => ApiError::Internal(error.to_string()),
         SoftwareCenterError::Unsupported => ApiError::Unprocessable(error.to_string()),
     }

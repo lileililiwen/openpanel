@@ -866,8 +866,12 @@ fn software_center_error_message(
         SoftwareCenterError::Validation => {
             "The host rejected the installed package. Inspect the audit log and retry the plan.".to_owned()
         }
-        SoftwareCenterError::Package => {
-            "The package adapter refused the transaction. The host was rolled back to the previous state.".to_owned()
+        SoftwareCenterError::Package(detail) => {
+            if detail.is_empty() {
+                "The package adapter refused the transaction. The host was rolled back to the previous state.".to_owned()
+            } else {
+                format!("The package adapter refused the transaction. The host was rolled back to the previous state. Detail: {detail}")
+            }
         }
         SoftwareCenterError::Unsupported => {
             "This entry's deployment adapter is not configured on this host.".to_owned()

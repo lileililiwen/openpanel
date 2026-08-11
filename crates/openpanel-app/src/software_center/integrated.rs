@@ -150,7 +150,7 @@ impl IntegratedApplicationDeployer {
             }
         }
         if failed {
-            Err(SoftwareCenterError::Package)
+            Err(SoftwareCenterError::Package("operation failed".into()))
         } else {
             Ok(())
         }
@@ -322,7 +322,7 @@ impl ApplicationDeploymentResources for OpenPanelApplicationResources {
                 None,
             )
             .await
-            .map_err(|_| SoftwareCenterError::Package)?;
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         Ok(CreatedApplicationSite {
             id: site.id(),
             document_root: site.document_root().to_owned(),
@@ -340,7 +340,7 @@ impl ApplicationDeploymentResources for OpenPanelApplicationResources {
             .databases
             .create_database(&caller, actor, "software", &suffix, Some("utf8mb4".into()))
             .await
-            .map_err(|_| SoftwareCenterError::Package)?;
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         Ok(CreatedApplicationDatabase {
             id: database.id(),
             name: database.name().to_owned(),
@@ -423,12 +423,12 @@ impl ApplicationDeploymentResources for OpenPanelApplicationResources {
                 .databases
                 .delete_database(&service_actor(Uuid::nil())?, *id)
                 .await
-                .map_err(|_| SoftwareCenterError::Package),
+                .map_err(|_| SoftwareCenterError::Package("operation failed".into())),
             ApplicationResource::Site { id, document_root } => {
                 self.sites
                     .delete_site(&service_actor(Uuid::nil())?, *id)
                     .await
-                    .map_err(|_| SoftwareCenterError::Package)?;
+                    .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
                 remove_empty_site_parent(Path::new(document_root));
                 Ok(())
             }
@@ -467,10 +467,11 @@ fn prepare_document_root(root: &Path) -> Result<(), SoftwareCenterError> {
     validate_managed_document_root(root)?;
     let placeholder = root.join("index.html");
     if placeholder.exists() {
-        fs::remove_file(&placeholder).map_err(|_| SoftwareCenterError::Package)?;
+        fs::remove_file(&placeholder)
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
     }
     if fs::read_dir(root)
-        .map_err(|_| SoftwareCenterError::Package)?
+        .map_err(|error| SoftwareCenterError::Package(format!("read {}: {error}", root.display())))?
         .next()
         .is_some()
     {
@@ -497,7 +498,7 @@ fn validate_managed_document_root(root: &Path) -> Result<(), SoftwareCenterError
 
 fn remove_managed_document_root(root: &Path) -> Result<(), SoftwareCenterError> {
     validate_managed_document_root(root)?;
-    fs::remove_dir_all(root).map_err(|_| SoftwareCenterError::Package)
+    fs::remove_dir_all(root).map_err(|_| SoftwareCenterError::Package("operation failed".into()))
 }
 
 fn remove_empty_site_parent(root: &Path) {
@@ -559,12 +560,13 @@ async fn install_drupal(
     admin_password: &str,
 ) -> Result<(), SoftwareCenterError> {
     let default_dir = root.join("sites/default");
-    fs::create_dir_all(default_dir.join("files")).map_err(|_| SoftwareCenterError::Package)?;
+    fs::create_dir_all(default_dir.join("files"))
+        .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
     fs::copy(
         default_dir.join("default.settings.php"),
         default_dir.join("settings.php"),
     )
-    .map_err(|_| SoftwareCenterError::Package)?;
+    .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
     let language = input.locale.split(['_', '-']).next().unwrap_or("en");
     let driver = "Drupal\\mysql\\Driver\\Database\\mysql";
     let script = format!(
@@ -627,15 +629,16 @@ fn write_secret_file(path: &Path, contents: &str) -> Result<(), SoftwareCenterEr
         .create_new(true)
         .mode(0o600)
         .open(path)
-        .map_err(|_| SoftwareCenterError::Package)?;
+        .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
     file.write_all(contents.as_bytes())
-        .map_err(|_| SoftwareCenterError::Package)?;
-    file.flush().map_err(|_| SoftwareCenterError::Package)
+        .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
+    file.flush()
+        .map_err(|_| SoftwareCenterError::Package("operation failed".into()))
 }
 
 fn secure_existing_file(path: &Path) -> Result<(), SoftwareCenterError> {
     fs::set_permissions(path, fs::Permissions::from_mode(0o600))
-        .map_err(|_| SoftwareCenterError::Package)
+        .map_err(|_| SoftwareCenterError::Package("operation failed".into()))
 }
 
 fn php_string(value: &str) -> Result<String, SoftwareCenterError> {
