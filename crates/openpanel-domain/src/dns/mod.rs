@@ -28,8 +28,24 @@ pub enum DnsError {
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct DnsName(String);
 impl DnsName {
-    /// Parse, lower-case, and validate a DNS name.
+    /// Parse, lower-case, and validate a DNS name. Labels may contain
+    /// only ASCII letters, digits, and hyphens, matching RFC 1035 host
+    /// syntax. Names that need to carry leading underscores (e.g. the
+    /// `_acme-challenge` TXT labels used for ACME HTTP-01 / DNS-01
+    /// challenges) MUST go through [`DnsName::new_with_underscore`].
     pub fn new(value: impl AsRef<str>) -> Result<Self, DnsError> {
+        Self::parse(value, false)
+    }
+
+    /// Parse a DNS name that is allowed to carry leading underscores in
+    /// any of its labels. Reserved for record kinds that the protocol
+    /// deliberately prefixes with `_` (ACME challenges, DKIM, DMARC,
+    /// etc.); do not use for hostnames resolved by A/AAAA/CNAME/MX/NS.
+    pub fn new_with_underscore(value: impl AsRef<str>) -> Result<Self, DnsError> {
+        Self::parse(value, true)
+    }
+
+    fn parse(value: impl AsRef<str>, allow_underscore: bool) -> Result<Self, DnsError> {
         let value = value
             .as_ref()
             .trim()
@@ -44,7 +60,10 @@ impl DnsName {
                 && !label.starts_with('-')
                 && !label.ends_with('-')
                 && label.chars().all(|ch| {
-                    ch.is_ascii_lowercase() || ch.is_ascii_digit() || matches!(ch, '-' | '_')
+                    ch.is_ascii_lowercase()
+                        || ch.is_ascii_digit()
+                        || ch == '-'
+                        || (allow_underscore && ch == '_')
                 })
         });
         if !valid {

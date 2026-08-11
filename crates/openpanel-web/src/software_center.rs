@@ -16,7 +16,7 @@ use maud::{Markup, html};
 use openpanel_app::software_center::{
     CatalogQuery, CatalogSearchPage, CompatibilityHost, StorefrontEntry,
 };
-use openpanel_domain::software_center::CatalogHit;
+use openpanel_domain::software_center::{CatalogHit, EntryKind};
 use serde::Deserialize;
 
 use crate::router::{WebState, WebUser};
@@ -46,7 +46,7 @@ pub async fn page(
     let csrf = state.csrf.token_for(session.id());
     let content = match page_result {
         Ok(page) => storefront_content(&page, &params, diagnostics.as_ref(), &jobs, &csrf),
-        Err(_) => error_content("Failed to load the Software Center catalog."),
+        Err(_) => error_content("Failed to load the Software Center catalog.", ""),
     };
     state
         .render_shell(&user, &csrf, "/software", content)
@@ -232,7 +232,7 @@ fn card(hit: &CatalogHit, csrf: &str) -> Markup {
         "unsupported" => "card__status card__status--warn",
         _ => "card__status",
     };
-    let action = action_for_state(&state, &hit.id, csrf);
+    let action = action_for_state(&state, hit.kind, &hit.id, csrf);
     html! {
         article class="card" {
             div class="card__icon" aria-hidden="true" { (category_glyph(hit.category.slug())) }
@@ -249,7 +249,7 @@ fn card(hit: &CatalogHit, csrf: &str) -> Markup {
     }
 }
 
-fn action_for_state(state: &str, id: &str, csrf: &str) -> Markup {
+fn action_for_state(state: &str, kind: EntryKind, id: &str, csrf: &str) -> Markup {
     match state {
         "panel_managed" => html! {
             form method="post" action={"/software/components/" (id) "/update/preview"} {
@@ -265,6 +265,11 @@ fn action_for_state(state: &str, id: &str, csrf: &str) -> Markup {
             form method="post" action={"/software/components/" (id) "/adopt/preview"} {
                 input type="hidden" name="_csrf" value=(csrf);
                 button class="button" { "Adopt" }
+            }
+        },
+        "available" if kind == EntryKind::Web => html! {
+            form method="get" action={"/software/components/" (id) "/deploy"} {
+                button class="button" { "Deploy" }
             }
         },
         "available" => html! {
@@ -292,11 +297,12 @@ fn category_glyph(slug: &str) -> Markup {
     html! { span class="card__icon-glyph" { (symbol) } }
 }
 
-fn error_content(message: &str) -> Markup {
+fn error_content(message: &str, _csrf: &str) -> Markup {
     html! {
         div class="error-state" {
             h1 { "Software Center unavailable" }
             p { (message) }
+            a class="button" href="/software" { "Return to Software Center" }
         }
     }
 }
@@ -350,8 +356,74 @@ pub async fn entry(
         .into_response()
 }
 
+/// Render the application deployment form for a Web entry. The form
+/// posts to `/software/applications/preview` which assembles the plan and
+/// returns the digest-bound confirmation token used by the existing
+/// deployment executor.
+pub async fn deploy_form(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Path(id): Path<String>,
+) -> Response {
+    let entry = match state.software_center.entry(user.role(), &id).await {
+        Ok(Some(value)) => value,
+        Ok(None) => return StatusCode::NOT_FOUND.into_response(),
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+    let csrf = state.csrf.token_for(session.id());
+    let content = deploy_form_content(&entry, &csrf);
+    let path = format!("/software/components/{id}/deploy");
+    state
+        .render_shell(&user, &csrf, &path, content)
+        .await
+        .into_response()
+}
+
+fn deploy_form_content(entry: &StorefrontEntry, csrf: &str) -> Markup {
+    html! {
+        article class="storefront__detail" {
+            header class="detail__header" {
+                h1 { "Deploy " (entry.name) }
+                span class="badge" { (entry.category.label()) }
+                span class="badge" { (entry.kind.as_str()) }
+                span class="badge" { (entry.license) }
+            }
+            p class="detail__lead" { (entry.description) }
+            p { "Provide the destination domain and runtime options. The next page will summarize the full transaction before any change is made." }
+            form method="post" action="/software/applications/preview" class="deploy-form" {
+                input type="hidden" name="_csrf" value=(csrf);
+                input type="hidden" name="application" value=(entry.id);
+                label class="field" {
+                    span { "Domain" }
+                    input type="text" name="domain" required="required"
+                      pattern="[a-z0-9.-]+" placeholder="example.com";
+                }
+                label class="field" {
+                    span { "PHP version" }
+                    input type="text" name="php_version" required="required"
+                      pattern=r"8\.[34]" placeholder="8.3" value="8.3";
+                }
+                label class="field" {
+                    span { "Locale" }
+                    input type="text" name="locale" required="required"
+                      pattern="[A-Za-z0-9_-]+" placeholder="en_US" value="en_US";
+                }
+                div class="deploy-form__actions" {
+                    a class="button button--ghost" href={"/software/entries/" (entry.id)} { "Cancel" }
+                    button class="button" { "Review deployment" }
+                }
+            }
+        }
+    }
+}
+
 fn detail_content(entry: &StorefrontEntry, csrf: &str) -> Markup {
     let install_action = match entry.install_state.as_str() {
+        "available" if entry.kind == EntryKind::Web => Some(html! {
+            form method="get" action={"/software/components/" (entry.id) "/deploy"} {
+                button class="button" { "Deploy" }
+            }
+        }),
         "available" => Some(html! {
             form method="post" action={"/software/components/" (entry.id) "/preview"} {
                 input type="hidden" name="_csrf" value=(csrf);
@@ -537,7 +609,7 @@ pub async fn preview(
         form method="post" action={"/software/plans/" (preview.plan.digest()) "/execute"} {
             input type="hidden" name="_csrf" value=(csrf);
             input type="hidden" name="confirmation_token" value=(preview.confirmation_token);
-            button { "Confirm installation" }
+            button class="button" { "Confirm installation" }
         }
     };
     state
@@ -573,7 +645,7 @@ pub async fn preview_component_action(
         form method="post" action={"/software/plans/" (preview.plan.digest()) "/execute"} {
             input type="hidden" name="_csrf" value=(csrf);
             input type="hidden" name="confirmation_token" value=(preview.confirmation_token);
-            button { "Confirm transaction" }
+            button class="button" { "Confirm transaction" }
         }
     };
     state
@@ -629,7 +701,7 @@ pub async fn preview_deployment(
         form method="post" action={"/software/applications/plans/" (preview.plan.digest()) "/execute"} {
             input type="hidden" name="_csrf" value=(csrf);
             input type="hidden" name="confirmation_token" value=(preview.confirmation_token);
-            button { "Confirm deployment" }
+            button class="button" { "Confirm deployment" }
         }
     };
     state
@@ -648,23 +720,22 @@ pub async fn execute_deployment(
     if !state.csrf.verify(session.id(), &form._csrf) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    let deployed = match state
+    let csrf = state.csrf.token_for(session.id());
+    let result = state
         .software_center
         .execute_deployment(user.id(), user.role(), &digest, &form.confirmation_token)
-        .await
-    {
-        Ok(value) => value,
-        Err(_) => return StatusCode::UNPROCESSABLE_ENTITY.into_response(),
-    };
-    let csrf = state.csrf.token_for(session.id());
-    let content = html! {
-        h1 { "Application deployed" }
-        p { "Save these administrator credentials now. They will not be shown again." }
-        dl {
-            dt { "Username" } dd { (deployed.admin_username) }
-            dt { "Password" } dd { (deployed.admin_password) }
-        }
-        a href="/software" { "Return to Software Center" }
+        .await;
+    let content = match result {
+        Ok(deployed) => html! {
+            h1 { "Application deployed" }
+            p { "Save these administrator credentials now. They will not be shown again." }
+            dl {
+                dt { "Username" } dd { (deployed.admin_username) }
+                dt { "Password" } dd { (deployed.admin_password) }
+            }
+            a class="button" href="/software" { "Return to Software Center" }
+        },
+        Err(error) => error_content(&software_center_error_message(&error), &csrf),
     };
     state
         .render_shell(&user, &csrf, "/software", content)
@@ -695,13 +766,66 @@ pub async fn execute(
     if !state.csrf.verify(session.id(), &form._csrf) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    match state
+    let csrf = state.csrf.token_for(session.id());
+    let result = state
         .software_center
         .execute(user.id(), user.role(), &digest, &form.confirmation_token)
+        .await;
+    let content = match result {
+        Ok(job) => html! {
+            h1 { "Installation complete" }
+            p { "The transaction finished and the host is back in a healthy state." }
+            dl class="detail__metadata" {
+                dt { "Job" } dd code { (job.id) }
+                dt { "State" } dd { (job.state) }
+                dt { "Plan digest" } dd code { (job.plan_digest) }
+            }
+            div class="detail__action" {
+                a class="button" href="/software" { "Return to Software Center" }
+            }
+        },
+        Err(error) => error_content(&software_center_error_message(&error), &csrf),
+    };
+    state
+        .render_shell(&user, &csrf, "/software", content)
         .await
-    {
-        Ok(_) => StatusCode::OK.into_response(),
-        Err(_) => StatusCode::UNPROCESSABLE_ENTITY.into_response(),
+        .into_response()
+}
+
+/// User-friendly translation of a [`SoftwareCenterError`] so the operator
+/// can read the real failure on the confirmation page instead of staring
+/// at a blank 422. The error is rendered through the authed shell so the
+/// user never has to leave the Software Center to recover.
+fn software_center_error_message(
+    error: &openpanel_app::software_center::SoftwareCenterError,
+) -> String {
+    use openpanel_app::software_center::SoftwareCenterError;
+    match error {
+        SoftwareCenterError::Forbidden => {
+            "Only an Owner may execute this transaction.".to_owned()
+        }
+        SoftwareCenterError::Invalid => {
+            "The confirmation token is no longer valid. Open the entry again and confirm the freshly generated plan.".to_owned()
+        }
+        SoftwareCenterError::Conflict => {
+            "The host changed since the preview was generated. Open the entry to request a fresh plan before retrying.".to_owned()
+        }
+        SoftwareCenterError::Dependencies(count) => format!(
+            "{count} managed component{} still depend on this one. Remove or migrate them first.",
+            if *count == 1 { "" } else { "s" }
+        ),
+        SoftwareCenterError::Validation => {
+            "The host rejected the installed package. Inspect the audit log and retry the plan.".to_owned()
+        }
+        SoftwareCenterError::Package => {
+            "The package adapter refused the transaction. The host was rolled back to the previous state.".to_owned()
+        }
+        SoftwareCenterError::Unsupported => {
+            "This entry's deployment adapter is not configured on this host.".to_owned()
+        }
+        SoftwareCenterError::Repository => {
+            "The Software Center could not persist the job state. Try again; if it persists, the audit log has the trace.".to_owned()
+        }
     }
 }
 
@@ -751,7 +875,7 @@ pub async fn retry(
         form method="post" action={"/software/plans/" (preview.plan_digest) "/execute"} {
             input type="hidden" name="_csrf" value=(csrf);
             input type="hidden" name="confirmation_token" value=(preview.confirmation_token);
-            button { "Confirm retry" }
+            button class="button" { "Confirm retry" }
         }
     };
     state

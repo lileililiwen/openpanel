@@ -367,25 +367,49 @@ impl SoftwareCatalogStore {
     }
 
     /// Materialize the embedded seed into the store when no snapshot is
-    /// active. Returns `None` when a snapshot is already active.
+    /// active, or re-activate it when the active snapshot is a stale
+    /// embedded seed (its stored digest differs from the current embedded
+    /// manifest, e.g. after a schema upgrade added fields). Returns `None`
+    /// when a current snapshot is already active.
     pub async fn materialize_seed_if_empty(
         &self,
         embedded: &super::source::EmbeddedCatalogSource,
     ) -> Result<Option<CatalogActivation>, SoftwareCenterError> {
-        if self.has_active_snapshot().await {
-            return Ok(None);
-        }
-        // The store's tables may not exist yet (migrations run on first
-        // boot or test setup). Detect a missing-table condition and
-        // surface it as a Repository error so the caller can retry.
         let Some(pool) = self.pool.as_ref() else {
             return Ok(None);
         };
+        // The store's tables may not exist yet (migrations run on first
+        // boot or test setup). Detect a missing-table condition and
+        // surface it as a Repository error so the caller can retry.
         let probe: Result<i64, _> = sqlx::query_scalar("SELECT COUNT(*) FROM software_entries")
             .fetch_one(pool)
             .await;
         if probe.is_err() {
             return Err(SoftwareCenterError::Repository);
+        }
+        // A snapshot is active. Only re-activate the embedded seed when
+        // the active snapshot is a stale embedded one; never touch a
+        // remotely-activated catalog.
+        let stored_digest: Option<String> = sqlx::query_scalar(
+            "SELECT manifest_digest FROM software_entries WHERE embedded = 1 LIMIT 1",
+        )
+        .fetch_one(pool)
+        .await
+        .unwrap_or(None);
+        let current_digest = self
+            .embedded_seed()
+            .map(|manifest| manifest.digest())
+            .unwrap_or_default();
+        if let Some(stored) = stored_digest {
+            if stored != current_digest {
+                let fetched = embedded.fetch(now_unix()?).await?;
+                let activation = self.activate("embedded", &fetched).await?;
+                return Ok(Some(activation));
+            }
+            return Ok(None);
+        }
+        if self.has_active_snapshot().await {
+            return Ok(None);
         }
         let fetched = embedded.fetch(now_unix()?).await?;
         let activation = self.activate("embedded", &fetched).await?;

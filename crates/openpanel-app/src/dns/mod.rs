@@ -644,7 +644,12 @@ impl DnsService {
         if !account.account.capabilities.supports(kind) {
             return Err(DnsServiceError::Invalid);
         }
-        let name = DnsName::new(name).map_err(|_| DnsServiceError::Invalid)?;
+        let name = if kind == RecordKind::Txt {
+            DnsName::new_with_underscore(name)
+        } else {
+            DnsName::new(name)
+        }
+        .map_err(|_| DnsServiceError::Invalid)?;
         let data = RecordData::parse(kind, value).map_err(|_| DnsServiceError::Invalid)?;
         let _ = Ttl::new(
             ttl,

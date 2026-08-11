@@ -319,6 +319,10 @@ pub fn router(
             post(crate::software_center::preview),
         )
         .route(
+            "/software/components/{id}/deploy",
+            get(crate::software_center::deploy_form),
+        )
+        .route(
             "/software/components/{id}/{action}/preview",
             post(crate::software_center::preview_component_action),
         )

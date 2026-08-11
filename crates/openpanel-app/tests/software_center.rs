@@ -629,7 +629,7 @@ use openpanel_test_support::TestDb;
 async fn build_store() -> (SoftwareCatalogStore, TestDb) {
     let db = TestDb::new().await;
     // TestDb only runs the core migrations; run the software-center
-    // V001 + V002 migrations so the aggregator store has its tables.
+    // V001 + V002 + V003 migrations so the aggregator store has its tables.
     let pool = db.pool();
     sqlx::query(openpanel_app::migrations::SOFTWARE_CENTER_V001)
         .execute(&pool)
@@ -639,6 +639,10 @@ async fn build_store() -> (SoftwareCatalogStore, TestDb) {
         .execute(&pool)
         .await
         .expect("software_center V002");
+    sqlx::query(openpanel_app::migrations::SOFTWARE_CENTER_V003)
+        .execute(&pool)
+        .await
+        .expect("software_center V003");
     let store = SoftwareCatalogStore::new(Some(pool));
     (store, db)
 }
@@ -675,6 +679,46 @@ async fn materializing_a_second_time_is_a_no_op() {
             .await
             .unwrap()
             .is_none()
+    );
+}
+
+#[tokio::test]
+async fn stale_embedded_seed_is_re_activated_to_backfill_new_fields() {
+    let (store, _db) = build_store().await;
+    let embedded = EmbeddedCatalogSource::new(default_catalog_url());
+    if let Ok(manifest) = embedded_manifest() {
+        eprintln!("SEED-DIGEST: {}", manifest.digest());
+    }
+    assert!(
+        store
+            .materialize_seed_if_empty(&embedded)
+            .await
+            .unwrap()
+            .is_some()
+    );
+    let platforms = store.platforms_for("mysql").await.unwrap();
+    assert!(
+        platforms.is_some_and(|list| !list.is_empty()),
+        "mysql should have platforms after seed materialization"
+    );
+    // Simulate a snapshot that predates the `platforms` seed data by
+    // stamping a bogus manifest digest onto the embedded rows.
+    sqlx::query("UPDATE software_entries SET manifest_digest = 'stale-digest' WHERE embedded = 1")
+        .execute(&_db.pool())
+        .await
+        .expect("stamp stale digest");
+    assert!(
+        store
+            .materialize_seed_if_empty(&embedded)
+            .await
+            .unwrap()
+            .is_some(),
+        "stale embedded seed should re-activate"
+    );
+    let platforms = store.platforms_for("mysql").await.unwrap();
+    assert!(
+        platforms.is_some_and(|list| !list.is_empty()),
+        "platforms should be backfilled after re-activation"
     );
 }
 

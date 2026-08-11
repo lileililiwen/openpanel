@@ -204,6 +204,12 @@ impl SoftwareCenterModule {
                     description: "normalized catalog tables for the aggregator model".into(),
                     sql: crate::migrations::SOFTWARE_CENTER_V002.into(),
                 },
+                Migration {
+                    module: "software-center",
+                    version: "003".into(),
+                    description: "add platforms_json to software_entries".into(),
+                    sql: crate::migrations::SOFTWARE_CENTER_V003.into(),
+                },
             ],
         }
     }

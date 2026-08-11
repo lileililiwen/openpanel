@@ -32,3 +32,6 @@ pub const MAIL_V001: &str = include_str!("mail/V001__init.sql");
 pub const SOFTWARE_CENTER_V001: &str = include_str!("software_center/V001__init.sql");
 /// Normalized Software Center catalog tables for the aggregator model.
 pub const SOFTWARE_CENTER_V002: &str = include_str!("software_center/V002__normalized.sql");
+/// Adds `platforms_json` to `software_entries` for databases seeded
+/// before the column existed (idempotent on newer installs).
+pub const SOFTWARE_CENTER_V003: &str = include_str!("software_center/V003__platforms_backfill.sql");
