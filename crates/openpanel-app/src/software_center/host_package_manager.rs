@@ -249,6 +249,35 @@ struct OsRelease {
     id_like: String,
 }
 
+/// Read `/etc/os-release` once and return a `serde_json::Value`
+/// describing the host platform (`{id, version_id, arch}`). The
+/// `id` falls back to `"unknown"` when the file is unreadable, so
+/// audit metadata stays valid even on minimal images.
+pub fn current_platform() -> serde_json::Value {
+    let release = read_os_release_blocking();
+    let arch = std::env::consts::ARCH;
+    serde_json::json!({
+        "id": release.id,
+        "version_id": release.version_id,
+        "arch": arch,
+    })
+}
+
+fn read_os_release_blocking() -> OsRelease {
+    let Ok(content) = std::fs::read_to_string("/etc/os-release") else {
+        return OsRelease {
+            id: "unknown".to_owned(),
+            version_id: "0".to_owned(),
+            id_like: String::new(),
+        };
+    };
+    OsRelease {
+        id: os_release_value(&content, "ID").unwrap_or_else(|| "unknown".to_owned()),
+        version_id: os_release_value(&content, "VERSION_ID").unwrap_or_else(|| "0".to_owned()),
+        id_like: os_release_value(&content, "ID_LIKE").unwrap_or_default(),
+    }
+}
+
 #[async_trait]
 impl PackageManager for HostPackageManager {
     async fn discover(&self) -> Result<HostSnapshot, SoftwareCenterError> {

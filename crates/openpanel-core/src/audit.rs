@@ -122,6 +122,11 @@ pub enum AuditAction {
     MailChanged,
     /// A Software Center plan or installation job changed host state.
     SoftwareChanged,
+    /// A Web entry's pinned artifact was downloaded and placed on
+    /// disk. The audit metadata records the source URL, the digest
+    /// (or `digest_verified: false` for a documented placeholder),
+    /// the bytes written, and the host platform.
+    SoftwareArtifactInstalled,
 }
 
 impl AuditAction {
@@ -170,6 +175,7 @@ impl AuditAction {
             AuditAction::DnsChanged => "dns_changed",
             AuditAction::MailChanged => "mail_changed",
             AuditAction::SoftwareChanged => "software_changed",
+            AuditAction::SoftwareArtifactInstalled => "software_artifact_installed",
         }
     }
 }

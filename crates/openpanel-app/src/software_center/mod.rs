@@ -28,6 +28,7 @@ pub use artifact::{
 };
 use async_trait::async_trait;
 pub use catalog::{CatalogVerifier, SignedCatalogEnvelope, VerifiedCatalog};
+pub use host_package_manager::{Family, HostPackageManager, current_platform};
 pub use integrated::{
     ApplicationDeploymentResources, CreatedApplicationDatabase, CreatedApplicationSite,
     IntegratedApplicationDeployer, OpenPanelApplicationResources,
@@ -1036,7 +1037,30 @@ impl SoftwareCenterService {
             &self.webapps_root,
             self.require_verified_digests,
         )?;
-        self.record(actor, "artifact_installed", entry_id).await?;
+        let platform = current_platform();
+        self.audit
+            .record(
+                AuditEvent::new(
+                    actor.to_string(),
+                    AuditAction::SoftwareArtifactInstalled,
+                    AuditOutcome::Success,
+                )
+                .target(entry_id)
+                .metadata(serde_json::json!({
+                    "operation": "artifact_installed",
+                    "entry_name": entry.name,
+                    "version": version.version,
+                    "archive_type": pin.archive_type,
+                    "source_url": pin.url.as_str(),
+                    "digest": pin.sha256,
+                    "digest_verified": placed.digest_verified,
+                    "bytes": bytes.len() as u64,
+                    "destination": placed.path.display().to_string(),
+                    "platform": platform,
+                })),
+            )
+            .await
+            .map_err(|_| SoftwareCenterError::Repository)?;
         Ok(ArtifactInstallResult {
             entry_id: entry.id,
             entry_name: entry.name,

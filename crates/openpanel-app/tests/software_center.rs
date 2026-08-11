@@ -1387,3 +1387,105 @@ fn place_artifact_allows_placeholder_when_opted_in() {
         assert_eq!(read_back, bytes);
     });
 }
+
+struct CapturingAudit {
+    events: std::sync::Mutex<Vec<openpanel_core::AuditEvent>>,
+}
+
+#[async_trait]
+impl openpanel_core::AuditService for CapturingAudit {
+    async fn record(
+        &self,
+        event: openpanel_core::AuditEvent,
+    ) -> Result<(), openpanel_core::CoreError> {
+        self.events.lock().expect("events").push(event);
+        Ok(())
+    }
+
+    async fn recent(
+        &self,
+        _limit: i64,
+    ) -> Result<Vec<openpanel_core::AuditEvent>, openpanel_core::CoreError> {
+        Ok(self.events.lock().expect("events").clone())
+    }
+}
+
+#[test]
+fn install_artifact_records_audit_with_source_digest_and_platform() {
+    use openpanel_core::AuditAction;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let sandbox = tempfile::tempdir().expect("tempdir");
+        let webapps_root = sandbox.path().join("webapps");
+        let bytes = b"<?php // adminer".to_vec();
+        let fetcher = Arc::new(MemoryArtifactFetcher {
+            bytes: bytes.clone(),
+            requested: std::sync::Mutex::new(Vec::new()),
+        });
+        let audit = Arc::new(CapturingAudit {
+            events: std::sync::Mutex::new(Vec::new()),
+        });
+        let packages = MockPackages::new();
+        let applications = MockApplications::new();
+        let service = SoftwareCenterService::with_artifact_pipeline(
+            Arc::new(packages),
+            Arc::new(applications),
+            audit.clone(),
+            None,
+            true,
+            fetcher,
+            webapps_root,
+            false,
+        );
+        let actor = Uuid::new_v4();
+        let _ = service
+            .install_artifact(actor, Role::Owner, "adminer")
+            .await
+            .expect("install_artifact");
+        let events = audit.events.lock().expect("events");
+        let event = events
+            .iter()
+            .find(|event| event.action == AuditAction::SoftwareArtifactInstalled)
+            .expect("artifact install event must be recorded");
+        assert_eq!(event.target.as_deref(), Some("adminer"));
+        let metadata = &event.metadata;
+        assert_eq!(
+            metadata.get("source_url").and_then(|value| value.as_str()),
+            Some("https://github.com/vrana/adminer/releases/download/v4.8.1/adminer-4.8.1-en.php"),
+            "metadata must record the source URL, got {metadata}"
+        );
+        assert_eq!(
+            metadata.get("bytes").and_then(|value| value.as_u64()),
+            Some(bytes.len() as u64),
+            "metadata must record the bytes written, got {metadata}"
+        );
+        assert_eq!(
+            metadata
+                .get("digest_verified")
+                .and_then(|value| value.as_bool()),
+            Some(false),
+            "placeholder digest must be reported as unverified, got {metadata}"
+        );
+        let platform = metadata
+            .get("platform")
+            .expect("platform key must be present");
+        assert_eq!(
+            platform.get("id").and_then(|value| value.as_str()),
+            Some("ubuntu"),
+            "platform must record the host OS id, got {platform}"
+        );
+        assert_eq!(
+            platform.get("version_id").and_then(|value| value.as_str()),
+            Some("24.04"),
+            "platform must record the host OS version, got {platform}"
+        );
+        assert_eq!(
+            platform.get("arch").and_then(|value| value.as_str()),
+            Some("x86_64"),
+            "platform must record the host arch, got {platform}"
+        );
+    });
+}
