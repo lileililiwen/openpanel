@@ -16,10 +16,12 @@ use axum::{
 };
 use maud::{Markup, html};
 use openpanel_app::software_center::{
-    CatalogQuery, CatalogSearchPage, CompatibilityHost, InstallBadge, StorefrontEntry,
+    CatalogQuery, CatalogSearchPage, CompatibilityHost, InstallBadge, InstallTaskProgress,
+    InstallTaskState, StorefrontEntry,
 };
 use openpanel_domain::software_center::{CatalogHit, EntryKind};
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::router::{WebState, WebUser};
 
@@ -45,6 +47,7 @@ pub async fn page(
         .jobs(user.role())
         .await
         .unwrap_or_default();
+    let artifact_tasks = state.software_center.artifact_tasks();
     let csrf = state.csrf.token_for(session.id());
     let require_verified_digests = state.software_center.require_verified_digests();
     let badges = match &page_result {
@@ -68,6 +71,7 @@ pub async fn page(
             &params,
             diagnostics.as_ref(),
             &jobs,
+            &artifact_tasks,
             &csrf,
             require_verified_digests,
             &badges,
@@ -126,11 +130,13 @@ pub struct StorefrontQuery {
     pub sort: Option<String>,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn storefront_content(
     page: &CatalogSearchPage,
     params: &StorefrontQuery,
     diagnostics: Option<&openpanel_app::software_center::CatalogDiagnostics>,
     jobs: &[openpanel_app::software_center::SoftwareJobView],
+    artifact_tasks: &[InstallTaskProgress],
     csrf: &str,
     require_verified_digests: bool,
     badges: &HashMap<String, InstallBadge>,
@@ -217,6 +223,15 @@ fn storefront_content(
                 div class="storefront__grid" {
                     @for hit in &page.hits {
                         (card(hit, csrf, require_verified_digests, badges.get(&hit.id)))
+                    }
+                }
+            }
+
+            @if !artifact_tasks.is_empty() {
+                section class="storefront__tasks" aria-label="Install tasks" {
+                    h2 { "Install tasks" }
+                    @for task in artifact_tasks.iter().take(8) {
+                        (progress_fragment(task))
                     }
                 }
             }
@@ -482,11 +497,11 @@ fn deploy_form_content(entry: &StorefrontEntry, csrf: &str) -> Markup {
 }
 
 /// One-click download-and-place for any Web entry that ships an
-/// `ArtifactPin`. The handler does the whole flow in one round trip:
-/// fetch the pinned URL, verify the digest (or skip the check when the
-/// recipe ships a documented placeholder), and drop the file or
-/// extracted archive at the managed webapps root. No preview, no
-/// confirmation token, no wizard.
+/// `ArtifactPin`. The request starts a background task and returns
+/// immediately with a live progress bar (Baota-style), instead of
+/// blocking the browser for the whole download-and-place cycle. The
+/// progress fragment polls `/software/jobs/{id}/progress` until the
+/// task is terminal.
 pub async fn install_artifact(
     State(state): State<WebState>,
     WebUser(user, session): WebUser,
@@ -499,33 +514,96 @@ pub async fn install_artifact(
     let csrf = state.csrf.token_for(session.id());
     let result = state
         .software_center
-        .install_artifact(user.id(), user.role(), &id)
+        .start_artifact_install(user.id(), user.role(), &id)
         .await;
     let content = match result {
-        Ok(installed) => html! {
-            h1 { "Software installed" }
-            p { (installed.entry_name) " " (installed.version) " was downloaded and placed on this host." }
-            dl class="detail__metadata" {
-                dt { "Entry" } dd { (installed.entry_id) }
-                dt { "Version" } dd { (installed.version) }
-                dt { "Archive" } dd { (installed.archive_type) }
-                dt { "Bytes" } dd { (installed.bytes) }
-                dt { "Digest verified" } dd { @if installed.digest_verified { "yes" } @else { "skipped (placeholder)" } }
-                dt { "Path" } dd code { (installed.destination.display()) }
-                @if let Some(name) = &installed.filename {
-                    dt { "Filename" } dd code { (name) }
+        Ok(task_id) => {
+            let task = state
+                .software_center
+                .task_progress(&task_id)
+                .unwrap_or_else(|| placeholder_task(task_id, &id));
+            html! {
+                h1 { "Installing " (task.entry_name) }
+                p { "The download runs in the background. This page refreshes itself until the install finishes." }
+                div class="task-progress__wrap" { (progress_fragment(&task)) }
+                div class="detail__action" {
+                    a class="button" href="/software" { "Return to Software Center" }
                 }
             }
-            div class="detail__action" {
-                a class="button" href="/software" { "Return to Software Center" }
-            }
-        },
+        }
         Err(error) => error_content(&software_center_error_message(&error), &csrf),
     };
     state
         .render_shell(&user, &csrf, "/software", content)
         .await
         .into_response()
+}
+
+/// Minimal task record for the brief window before the background task
+/// publishes its first progress update.
+fn placeholder_task(task_id: Uuid, entry_id: &str) -> InstallTaskProgress {
+    InstallTaskProgress {
+        id: task_id,
+        entry_id: entry_id.to_owned(),
+        entry_name: entry_id.to_owned(),
+        state: InstallTaskState::Queued,
+        step: "Queued".to_owned(),
+        percent: 0,
+        bytes_downloaded: 0,
+        bytes_total: None,
+        detail: None,
+        created_at: chrono::Utc::now(),
+    }
+}
+
+/// htmx fragment for one artifact install task. While the task is not
+/// terminal the fragment carries `hx-get` + `hx-trigger="every 1s"` so
+/// the browser keeps polling; a terminal fragment drops the refresh
+/// attributes and polling stops.
+fn progress_fragment(task: &InstallTaskProgress) -> Markup {
+    let terminal = matches!(
+        task.state,
+        InstallTaskState::Installed | InstallTaskState::Failed
+    );
+    let bar_class = match task.state {
+        InstallTaskState::Failed => "progress__bar progress__bar--error",
+        InstallTaskState::Installed => "progress__bar progress__bar--ok",
+        _ => "progress__bar",
+    };
+    html! {
+        div class="task-progress" {
+            div class="task-progress__row" {
+                span class="badge" { (task.state.as_str()) }
+                span class="task-progress__step" { (task.step) }
+                span class="task-progress__percent" { (task.percent) "%" }
+                @if let Some(total) = task.bytes_total {
+                    span class="task-progress__bytes" { (task.bytes_downloaded) " / " (total) " bytes" }
+                }
+            }
+            div class="progress" role="progressbar" aria-valuenow=(task.percent) aria-valuemin="0" aria-valuemax="100" {
+                div class=(bar_class) style=(format!("width: {}%", task.percent)) {}
+            }
+            @if let Some(detail) = &task.detail {
+                p class="task-progress__error" { (detail) }
+            }
+            @if !terminal {
+                div hx-get=(format!("/software/jobs/{}/progress", task.id)) hx-trigger="every 1s" hx-swap="outerHTML" {}
+            }
+        }
+    }
+}
+
+/// Live fragment endpoint polled by the install page and the storefront
+/// task list.
+pub async fn task_progress_fragment(
+    State(state): State<WebState>,
+    WebUser(_user, _session): WebUser,
+    Path(id): Path<Uuid>,
+) -> Response {
+    let Some(task) = state.software_center.task_progress(&id) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    progress_fragment(&task).into_response()
 }
 
 fn detail_content(

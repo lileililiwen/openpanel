@@ -127,6 +127,22 @@ pub trait ArtifactFetcher: Send + Sync {
     /// refused; only `https://` (or `http://` for the in-process test
     /// server) is accepted.
     async fn fetch(&self, url: &str) -> Result<Vec<u8>, SoftwareCenterError>;
+
+    /// Fetch `url`, invoking `on_progress` as bytes arrive.
+    ///
+    /// The callback receives `(bytes_read_so_far, total_bytes)` where
+    /// `total_bytes` is `None` when the server did not advertise a
+    /// Content-Length. The default implementation reports only the
+    /// final state; streaming fetchers report per-chunk progress.
+    async fn fetch_progressed(
+        &self,
+        url: &str,
+        on_progress: &mut (dyn FnMut(u64, Option<u64>) + Send),
+    ) -> Result<Vec<u8>, SoftwareCenterError> {
+        let bytes = self.fetch(url).await?;
+        on_progress(bytes.len() as u64, Some(bytes.len() as u64));
+        Ok(bytes)
+    }
 }
 
 /// Production fetcher backed by a TLS-only reqwest client with no
@@ -188,6 +204,41 @@ impl ArtifactFetcher for ReqwestArtifactFetcher {
                 ));
             }
             bytes.extend_from_slice(&chunk);
+        }
+        Ok(bytes)
+    }
+
+    async fn fetch_progressed(
+        &self,
+        url: &str,
+        on_progress: &mut (dyn FnMut(u64, Option<u64>) + Send),
+    ) -> Result<Vec<u8>, SoftwareCenterError> {
+        validate_artifact_url(url)?;
+        let response = self
+            .client
+            .get(url)
+            .send()
+            .await
+            .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
+        if !response.status().is_success() {
+            return Err(SoftwareCenterError::Package("operation failed".into()));
+        }
+        let total = response.content_length();
+        if total.is_some_and(|length| length > self.maximum_archive_bytes as u64) {
+            return Err(SoftwareCenterError::Package("operation failed".into()));
+        }
+        let mut bytes = Vec::new();
+        let mut stream = response.bytes_stream();
+        while let Some(chunk) = stream.next().await {
+            let chunk =
+                chunk.map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
+            if bytes.len().saturating_add(chunk.len()) > self.maximum_archive_bytes {
+                return Err(SoftwareCenterError::Invalid(
+                    "invalid software request".into(),
+                ));
+            }
+            bytes.extend_from_slice(&chunk);
+            on_progress(bytes.len() as u64, total);
         }
         Ok(bytes)
     }

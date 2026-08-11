@@ -54,7 +54,7 @@ pub use store::{
     SoftwareCatalogStore, StorefrontEntry, StorefrontVersion, WizardState, default_catalog_url,
 };
 use thiserror::Error;
-use tokio::sync::{Mutex as AsyncMutex, OnceCell};
+use tokio::sync::{Mutex as AsyncMutex, OnceCell, Semaphore};
 use uuid::Uuid;
 
 /// Software Center application error with bounded diagnostics.
@@ -514,6 +514,64 @@ impl InstallBadge {
     }
 }
 
+/// Lifecycle state of a background artifact install task.
+///
+/// Mirrors how Baota models its install queue: the HTTP request that
+/// starts an install returns immediately and the storefront polls the
+/// task until it is terminal, instead of blocking the browser for the
+/// whole download-and-place cycle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+pub enum InstallTaskState {
+    /// Waiting for a free install slot.
+    Queued,
+    /// Downloading the pinned artifact.
+    Downloading,
+    /// Writing the downloaded bytes (or extracted archive) to disk.
+    Placing,
+    /// Finished successfully.
+    Installed,
+    /// Terminated with an error.
+    Failed,
+}
+
+impl InstallTaskState {
+    /// Machine label rendered in the task list badge.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            InstallTaskState::Queued => "queued",
+            InstallTaskState::Downloading => "downloading",
+            InstallTaskState::Placing => "placing",
+            InstallTaskState::Installed => "installed",
+            InstallTaskState::Failed => "failed",
+        }
+    }
+}
+
+/// Live progress of a background artifact install task.
+#[derive(Debug, Clone, Serialize)]
+pub struct InstallTaskProgress {
+    /// Stable task id returned by the install route.
+    pub id: Uuid,
+    /// Catalog entry id being installed.
+    pub entry_id: String,
+    /// Display name of the entry.
+    pub entry_name: String,
+    /// Current lifecycle state.
+    pub state: InstallTaskState,
+    /// Human-readable step label ("Downloading adminer-4.8.1-en.php").
+    pub step: String,
+    /// Download/install progress on a 0..100 scale.
+    pub percent: u8,
+    /// Bytes received so far.
+    pub bytes_downloaded: u64,
+    /// Total bytes when the server advertised Content-Length.
+    pub bytes_total: Option<u64>,
+    /// Terminal error message, when the task failed.
+    pub detail: Option<String>,
+    /// When the task was created.
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
 /// Successful application deployment with credentials returned exactly once.
 #[derive(Debug, Serialize)]
 pub struct ApplicationDeploymentResult {
@@ -550,6 +608,11 @@ pub struct SoftwareCenterService {
     catalog_source: Arc<dyn CatalogSource>,
     artifact_fetcher: Arc<dyn ArtifactFetcher>,
     webapps_root: PathBuf,
+    /// Live progress of background artifact install tasks.
+    artifact_tasks: Mutex<HashMap<Uuid, InstallTaskProgress>>,
+    /// Serializes artifact placement so two installs never race the
+    /// same destination path.
+    artifact_slot: Arc<Semaphore>,
 }
 impl SoftwareCenterService {
     /// Construct from the fixed package adapter and append-only audit port.
@@ -672,6 +735,8 @@ impl SoftwareCenterService {
             catalog_source,
             artifact_fetcher: fetcher,
             webapps_root,
+            artifact_tasks: Mutex::new(HashMap::new()),
+            artifact_slot: Arc::new(Semaphore::new(1)),
         }
     }
 
@@ -1020,6 +1085,142 @@ impl SoftwareCenterService {
         role: Role,
         entry_id: &str,
     ) -> Result<ArtifactInstallResult, SoftwareCenterError> {
+        self.run_artifact_install(actor, role, entry_id, |_, _, _, _, _| {})
+            .await
+    }
+
+    /// Start a Web artifact install as a background task.
+    ///
+    /// The request returns the task id immediately with a queued
+    /// progress record; the download-and-place cycle runs in a spawned
+    /// task that updates `InstallTaskProgress` as bytes arrive (Baota
+    /// style). The audit event is recorded only once the task reaches a
+    /// terminal state.
+    pub async fn start_artifact_install(
+        self: &Arc<Self>,
+        actor: Uuid,
+        role: Role,
+        entry_id: &str,
+    ) -> Result<Uuid, SoftwareCenterError> {
+        owner(role)?;
+        self.ensure_seed_materialized().await;
+        let entry = self
+            .store
+            .get_entry(entry_id)
+            .await?
+            .ok_or(SoftwareCenterError::Invalid(
+            "plan is no longer in the queue; it may have been consumed, expired, or never created"
+                .into(),
+        ))?;
+        if !matches!(
+            entry.kind,
+            openpanel_domain::software_center::EntryKind::Web
+        ) {
+            return Err(SoftwareCenterError::Invalid(
+                "invalid software request".into(),
+            ));
+        }
+        let version = entry
+            .versions
+            .iter()
+            .find(|version| version.is_latest)
+            .or_else(|| entry.versions.first())
+            .ok_or(SoftwareCenterError::Invalid("plan is no longer in the queue; it may have been consumed, expired, or never created".into()))?;
+        let pin = version
+            .artifact
+            .as_ref()
+            .ok_or(SoftwareCenterError::Invalid(
+            "plan is no longer in the queue; it may have been consumed, expired, or never created"
+                .into(),
+        ))?;
+        if self.require_verified_digests && pin.sha256 == PLACEHOLDER_SHA256 {
+            return Err(SoftwareCenterError::Invalid(
+                "digest placeholder is not allowed when OPENPANEL__SOFTWARE__REQUIRE_VERIFIED_DIGESTS is true. Refresh the catalog against a remote signed manifest that pins a real SHA-256, or set the gate to false for air-gapped recovery.".to_owned(),
+            ));
+        }
+        let id = Uuid::new_v4();
+        self.insert_artifact_task(InstallTaskProgress {
+            id,
+            entry_id: entry.id.clone(),
+            entry_name: entry.name.clone(),
+            state: InstallTaskState::Queued,
+            step: "Queued".to_owned(),
+            percent: 0,
+            bytes_downloaded: 0,
+            bytes_total: None,
+            detail: None,
+            created_at: chrono::Utc::now(),
+        });
+        let me = self.clone();
+        let task_entry = entry.clone();
+        tokio::spawn(async move {
+            let _slot = match me.artifact_slot.acquire().await {
+                Ok(permit) => permit,
+                Err(_) => {
+                    me.update_artifact_task(
+                        id,
+                        InstallTaskState::Failed,
+                        "Failed",
+                        100,
+                        0,
+                        None,
+                        Some("artifact install queue was closed".into()),
+                    );
+                    return;
+                }
+            };
+            let result = me
+                .run_artifact_install(
+                    actor,
+                    Role::Owner,
+                    &task_entry.id,
+                    |state, step, percent, done, total| {
+                        me.update_artifact_task(id, state, step, percent, done, total, None);
+                    },
+                )
+                .await;
+            match result {
+                Ok(installed) => {
+                    me.update_artifact_task(
+                        id,
+                        InstallTaskState::Installed,
+                        "Installed",
+                        100,
+                        installed.bytes,
+                        Some(installed.bytes),
+                        None,
+                    );
+                }
+                Err(error) => {
+                    me.update_artifact_task(
+                        id,
+                        InstallTaskState::Failed,
+                        "Failed",
+                        100,
+                        0,
+                        None,
+                        Some(error.to_string()),
+                    );
+                }
+            }
+        });
+        Ok(id)
+    }
+
+    /// Shared download-place-audit pipeline used by both the
+    /// synchronous `install_artifact` and the background task started
+    /// by `start_artifact_install`. `on_progress` is invoked as the
+    /// download streams and when placement begins.
+    async fn run_artifact_install<F>(
+        &self,
+        actor: Uuid,
+        role: Role,
+        entry_id: &str,
+        mut on_progress: F,
+    ) -> Result<ArtifactInstallResult, SoftwareCenterError>
+    where
+        F: FnMut(InstallTaskState, &str, u8, u64, Option<u64>) + Send,
+    {
         owner(role)?;
         self.ensure_seed_materialized().await;
         let entry = self
@@ -1053,13 +1254,38 @@ impl SoftwareCenterService {
                 .into(),
         ))?;
         let url = pin.url.as_str().to_owned();
-        let bytes = self.artifact_fetcher.fetch(&url).await?;
+        on_progress(InstallTaskState::Downloading, "Downloading", 0, 0, None);
+        let bytes = self
+            .artifact_fetcher
+            .fetch_progressed(&url, &mut |done, total| {
+                let percent = total
+                    .and_then(|total| {
+                        done.checked_mul(100)
+                            .and_then(|scaled| scaled.checked_div(total))
+                    })
+                    .map_or(0, |percent| percent.min(98) as u8);
+                on_progress(
+                    InstallTaskState::Downloading,
+                    "Downloading",
+                    percent,
+                    done,
+                    total,
+                );
+            })
+            .await?;
         if let Some(parent) = self.webapps_root.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
         }
         std::fs::create_dir_all(&self.webapps_root)
             .map_err(|_| SoftwareCenterError::Package("operation failed".into()))?;
+        on_progress(
+            InstallTaskState::Placing,
+            "Placing files",
+            98,
+            bytes.len() as u64,
+            Some(bytes.len() as u64),
+        );
         let placed = place_artifact_with_gate(
             &pin,
             &bytes,
@@ -1100,6 +1326,58 @@ impl SoftwareCenterService {
             bytes: bytes.len() as u64,
             digest_verified: placed.digest_verified,
         })
+    }
+
+    /// Insert a new artifact install task into the live registry.
+    fn insert_artifact_task(&self, task: InstallTaskProgress) {
+        if let Ok(mut tasks) = self.artifact_tasks.lock() {
+            tasks.insert(task.id, task);
+        }
+    }
+
+    /// Publish a progress update for one artifact install task.
+    #[allow(clippy::too_many_arguments)]
+    fn update_artifact_task(
+        &self,
+        id: Uuid,
+        state: InstallTaskState,
+        step: &str,
+        percent: u8,
+        bytes_downloaded: u64,
+        bytes_total: Option<u64>,
+        detail: Option<String>,
+    ) {
+        if let Ok(mut tasks) = self.artifact_tasks.lock()
+            && let Some(task) = tasks.get_mut(&id)
+        {
+            task.state = state;
+            task.step = step.to_owned();
+            task.percent = percent;
+            task.bytes_downloaded = bytes_downloaded;
+            task.bytes_total = bytes_total;
+            if let Some(detail) = detail {
+                task.detail = Some(detail);
+            }
+        }
+    }
+
+    /// Snapshot one artifact install task, if it is still live.
+    pub fn task_progress(&self, id: &Uuid) -> Option<InstallTaskProgress> {
+        self.artifact_tasks
+            .lock()
+            .ok()
+            .and_then(|tasks| tasks.get(id).cloned())
+    }
+
+    /// Snapshot every artifact install task, newest first.
+    pub fn artifact_tasks(&self) -> Vec<InstallTaskProgress> {
+        let mut tasks = self
+            .artifact_tasks
+            .lock()
+            .map(|tasks| tasks.values().cloned().collect::<Vec<_>>())
+            .unwrap_or_default();
+        tasks.sort_by_key(|task| std::cmp::Reverse(task.created_at));
+        tasks
     }
 
     /// Most recent successful install for an entry, newest first.

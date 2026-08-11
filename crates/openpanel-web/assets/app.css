@@ -760,3 +760,68 @@ html[data-theme="light"] .button--ghost {
   color: var(--muted);
   font-weight: 600;
 }
+
+.task-progress {
+  margin: 0.5rem 0 1rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.task-progress__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.task-progress__step {
+  color: var(--text);
+}
+
+.task-progress__percent {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.task-progress__bytes {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.task-progress__error {
+  color: #f85149;
+  font-size: 0.8125rem;
+  margin-top: 0.5rem;
+  word-break: break-word;
+}
+
+.progress {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.progress__bar {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: #4493f8;
+  transition: width 0.4s ease;
+}
+
+.progress__bar--ok {
+  background: #3fb950;
+}
+
+.progress__bar--error {
+  background: #f85149;
+}
+
+.storefront__tasks {
+  margin-bottom: 1rem;
+}

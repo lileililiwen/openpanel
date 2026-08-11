@@ -1662,3 +1662,126 @@ fn last_install_badge_renders_system_component_with_platform_and_success() {
         );
     });
 }
+
+#[test]
+fn start_artifact_install_runs_in_background_and_reports_progress() {
+    use openpanel_app::software_center::InstallTaskState;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let sandbox = tempfile::tempdir().expect("tempdir");
+        let webapps_root = sandbox.path().join("webapps");
+        let fetcher = Arc::new(MemoryArtifactFetcher {
+            bytes: b"<?php // adminer 4.8.1 background".to_vec(),
+            requested: std::sync::Mutex::new(Vec::new()),
+        });
+        let audit = Arc::new(CapturingAudit {
+            events: std::sync::Mutex::new(Vec::new()),
+        });
+        let service = Arc::new(SoftwareCenterService::with_artifact_pipeline(
+            Arc::new(MockPackages::new()),
+            Arc::new(MockApplications::new()),
+            audit.clone(),
+            None,
+            true,
+            fetcher,
+            webapps_root,
+            false,
+        ));
+        let actor = Uuid::new_v4();
+        let task_id = service
+            .start_artifact_install(actor, Role::Owner, "adminer")
+            .await
+            .expect("start_artifact_install");
+
+        // The task runs in the background; poll until terminal.
+        let mut observed_queued = false;
+        let mut final_task = None;
+        for _ in 0..10_000 {
+            let task = service.task_progress(&task_id).expect("task must be live");
+            if matches!(task.state, InstallTaskState::Queued) {
+                observed_queued = true;
+            }
+            if matches!(
+                task.state,
+                InstallTaskState::Installed | InstallTaskState::Failed
+            ) {
+                final_task = Some(task);
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+        let task = final_task.expect("task must reach a terminal state");
+        assert!(
+            observed_queued,
+            "task should start queued before the download begins"
+        );
+        assert_eq!(
+            task.state,
+            InstallTaskState::Installed,
+            "task must finish installed, got {} detail={:?}",
+            task.state.as_str(),
+            task.detail
+        );
+        assert_eq!(task.percent, 100);
+        assert_eq!(task.entry_id, "adminer");
+
+        let events = audit.events.lock().expect("events");
+        let installed = events
+            .iter()
+            .find(|event| event.action == openpanel_core::AuditAction::SoftwareArtifactInstalled)
+            .expect("background task must record the audit event");
+        assert_eq!(installed.target.as_deref(), Some("adminer"));
+        assert_eq!(
+            installed
+                .metadata
+                .get("digest_verified")
+                .and_then(|v| v.as_bool()),
+            Some(false),
+            "placeholder digest must be reported as unverified"
+        );
+    });
+}
+
+#[test]
+fn start_artifact_install_refuses_placeholder_when_gate_is_on() {
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    runtime.block_on(async {
+        let sandbox = tempfile::tempdir().expect("tempdir");
+        let service = Arc::new(SoftwareCenterService::with_artifact_pipeline(
+            Arc::new(MockPackages::new()),
+            Arc::new(MockApplications::new()),
+            Arc::new(CapturingAudit {
+                events: std::sync::Mutex::new(Vec::new()),
+            }),
+            None,
+            true,
+            Arc::new(MemoryArtifactFetcher {
+                bytes: b"<?php // adminer".to_vec(),
+                requested: std::sync::Mutex::new(Vec::new()),
+            }),
+            sandbox.path().join("webapps"),
+            true,
+        ));
+        let error = service
+            .start_artifact_install(Uuid::new_v4(), Role::Owner, "adminer")
+            .await
+            .expect_err("adminer must be refused before a task is queued");
+        let SoftwareCenterError::Invalid(detail) = error else {
+            panic!("expected Invalid, got {error:?}");
+        };
+        assert!(
+            detail.contains("OPENPANEL__SOFTWARE__REQUIRE_VERIFIED_DIGESTS"),
+            "error must name the gate: {detail}"
+        );
+        assert!(
+            service.artifact_tasks().is_empty(),
+            "no task must be queued when the gate refuses upfront"
+        );
+    });
+}

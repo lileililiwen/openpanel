@@ -262,7 +262,12 @@ async fn web_install_button_for_a_tar_gz_web_entry_also_lands_on_disk() {
         .unwrap();
     assert_eq!(install.status(), 200, "tar.gz install should not 422");
     let body = install.text().await.unwrap();
-    assert!(body.contains("Software installed"), "body={body}");
+    assert!(
+        body.contains("Installing"),
+        "tar.gz install should return the progress page immediately, body={body}"
+    );
+    let task_id = extract_task_id(&body);
+    await_installed(&server, &task_id, &cookie).await;
     let fetched = server.fetched_artifacts();
     assert_eq!(fetched, vec![phpmyadmin_url.to_owned()]);
     let placed = walk_files(server.webapps_root())
@@ -476,6 +481,47 @@ fn extract_confirmation_token(html: &str) -> String {
     rest[..end].to_owned()
 }
 
+/// Task id embedded in the live progress fragment's poll URL
+/// (`hx-get="/software/jobs/{id}/progress"`).
+fn extract_task_id(html: &str) -> String {
+    let marker = r#"hx-get="/software/jobs/"#;
+    let start = html
+        .find(marker)
+        .expect("install page should embed the task poll URL")
+        + marker.len();
+    let rest = &html[start..];
+    let end = rest.find('/').expect("task id should end before /progress");
+    rest[..end].to_owned()
+}
+
+/// Poll the live progress fragment until the task reaches a terminal
+/// state, then assert it succeeded. Mirrors the browser's htmx loop.
+async fn await_installed(server: &TestServer, task_id: &str, cookie: &str) {
+    let mut body = String::new();
+    for _ in 0..1_000 {
+        let progress = server
+            .client()
+            .get(format!(
+                "{}/software/jobs/{task_id}/progress",
+                server.base_url()
+            ))
+            .header("cookie", cookie)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(progress.status(), 200);
+        body = progress.text().await.unwrap();
+        if body.contains(">installed<") || body.contains(">failed<") {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(
+        body.contains(">installed<"),
+        "install task should finish installed, body={body}"
+    );
+}
+
 #[tokio::test]
 async fn owner_can_deploy_wordpress_and_credentials_are_returned_once() {
     let server = TestServer::new().await;
@@ -650,13 +696,16 @@ async fn web_install_button_for_adminer_downloads_and_places_the_php_file() {
     assert_eq!(install.status(), 200, "install should not 422");
     let install_body = install.text().await.unwrap();
     assert!(
-        install_body.contains("Software installed"),
-        "expected the success page, body={install_body}"
+        install_body.contains("Installing"),
+        "install should return the progress page immediately, body={install_body}"
     );
     assert!(
-        install_body.contains(adminer_url) || install_body.contains("adminer-4.8.1-en.php"),
-        "success page should name the URL or the placed file, body={install_body}"
+        install_body.contains("Downloading") || install_body.contains("progress"),
+        "install page should embed a live progress bar, body={install_body}"
     );
+    let task_id = extract_task_id(&install_body);
+
+    await_installed(&server, &task_id, &cookie).await;
 
     let fetched = server.fetched_artifacts();
     assert_eq!(
