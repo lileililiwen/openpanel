@@ -127,6 +127,16 @@ pub enum AuditAction {
     /// (or `digest_verified: false` for a documented placeholder),
     /// the bytes written, and the host platform.
     SoftwareArtifactInstalled,
+    /// A user enrolled a TOTP or WebAuthn second factor.
+    TwoFactorEnrolled,
+    /// A second-factor verification succeeded during login.
+    TwoFactorVerified,
+    /// A second-factor verification failed during login.
+    TwoFactorFailed,
+    /// A second factor was revoked.
+    TwoFactorRevoked,
+    /// A single-use recovery code was consumed during login.
+    RecoveryCodeConsumed,
 }
 
 impl AuditAction {
@@ -176,6 +186,11 @@ impl AuditAction {
             AuditAction::MailChanged => "mail_changed",
             AuditAction::SoftwareChanged => "software_changed",
             AuditAction::SoftwareArtifactInstalled => "software_artifact_installed",
+            AuditAction::TwoFactorEnrolled => "two_factor_enrolled",
+            AuditAction::TwoFactorVerified => "two_factor_verified",
+            AuditAction::TwoFactorFailed => "two_factor_failed",
+            AuditAction::TwoFactorRevoked => "two_factor_revoked",
+            AuditAction::RecoveryCodeConsumed => "recovery_code_consumed",
         }
     }
 }
@@ -368,6 +383,11 @@ impl AuditService for SqliteAuditService {
                 "service_changed" => AuditAction::ServiceChanged,
                 "software_changed" => AuditAction::SoftwareChanged,
                 "software_artifact_installed" => AuditAction::SoftwareArtifactInstalled,
+                "two_factor_enrolled" => AuditAction::TwoFactorEnrolled,
+                "two_factor_verified" => AuditAction::TwoFactorVerified,
+                "two_factor_failed" => AuditAction::TwoFactorFailed,
+                "two_factor_revoked" => AuditAction::TwoFactorRevoked,
+                "recovery_code_consumed" => AuditAction::RecoveryCodeConsumed,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

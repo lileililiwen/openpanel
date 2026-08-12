@@ -44,6 +44,8 @@ rustls-acme = { workspace = true }
 rustls-pemfile = { workspace = true }
 x509-parser = { workspace = true }
 sysinfo = { workspace = true }
+totp-rs = { workspace = true }
+webauthn-rs = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

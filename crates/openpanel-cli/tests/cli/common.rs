@@ -35,6 +35,10 @@ impl CliRunner {
 
         let env = vec![
             ("OPENPANEL__DATABASE__URL".into(), db.url()),
+            (
+                "OPENPANEL__DATABASE__MASTER_KEY".into(),
+                base64::Engine::encode(&base64::engine::general_purpose::STANDARD, [0u8; 32]),
+            ),
             ("RUST_LOG".into(), "warn".into()),
         ];
 

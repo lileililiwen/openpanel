@@ -34,9 +34,9 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .await
         .ok();
 
-    let identity_module = IdentityModule::new(&ctx).await;
-    let sites_module = SitesModule::new(&ctx).await;
     let master_key = load_master_key(&config)?;
+    let identity_module = IdentityModule::new(&ctx, master_key).await;
+    let sites_module = SitesModule::new(&ctx).await;
     let databases_module = DatabasesModule::new(&ctx, master_key).await;
     let files_module = FilesModule::new(&ctx).await;
     let ssl_module = SslModule::new(&ctx, master_key, ssl_contact_email(&config)).await;
@@ -1707,8 +1707,9 @@ const _: Option<SslPaths> = None;
 pub async fn migrate(config: Arc<Config>) -> anyhow::Result<()> {
     let (pool, audit, db) = bootstrap_persistence(&config).await?;
     let ctx = AppContext::new(config, db, audit);
+    let master_key = load_master_key(&ctx.config)?;
 
-    let identity_module = IdentityModule::new(&ctx).await;
+    let identity_module = IdentityModule::new(&ctx, master_key).await;
     let sites_module = SitesModule::new(&ctx).await;
 
     let runner = MigrationRunner::for_sqlite(pool.clone());
@@ -1916,7 +1917,8 @@ async fn build_identity(
 )> {
     let (pool, audit, db) = bootstrap_persistence(&config).await?;
     let ctx = AppContext::new(config, db, audit.clone());
-    let module = IdentityModule::new(&ctx).await;
+    let master_key = load_master_key(&ctx.config)?;
+    let module = IdentityModule::new(&ctx, master_key).await;
     Ok((module.service(), audit, pool))
 }
 
@@ -1930,7 +1932,8 @@ async fn build_sites(
 )> {
     let (pool, audit, db) = bootstrap_persistence(&config).await?;
     let ctx = AppContext::new(config, db, audit.clone());
-    let identity_module = IdentityModule::new(&ctx).await;
+    let master_key = load_master_key(&ctx.config)?;
+    let identity_module = IdentityModule::new(&ctx, master_key).await;
     let sites_module = SitesModule::new(&ctx).await;
     Ok((
         sites_module.service(),
@@ -1950,8 +1953,8 @@ async fn build_databases(
 )> {
     let (pool, audit, db) = bootstrap_persistence(&config).await?;
     let ctx = AppContext::new(config, db, audit.clone());
-    let identity_module = IdentityModule::new(&ctx).await;
-    let master_key = load_master_key(&build_helper_config(&pool, &audit))?;
+    let master_key = load_master_key(&ctx.config)?;
+    let identity_module = IdentityModule::new(&ctx, master_key).await;
     let databases_module = DatabasesModule::new(&ctx, master_key).await;
     Ok((
         databases_module.service(),
@@ -1961,16 +1964,8 @@ async fn build_databases(
     ))
 }
 
-// Helper that re-derives an Arc<Config> from the persistence layer.
-// Since we already have the live config in callers, this is just a
-// placeholder — the master key actually comes from OPENPANEL__DATABASE__MASTER_KEY
-// env var. The returned `Arc<Config>` is unused.
-fn build_helper_config(
-    _pool: &sqlx::Pool<sqlx::Sqlite>,
-    _audit: &Arc<SqliteAuditService>,
-) -> Arc<Config> {
-    Arc::new(Config::default())
-}
+// Helper removed: callers use `ctx.config` directly to resolve the
+// master key.
 
 /// Creates a new MySQL database and DB user owned by the given user.
 /// Prints the generated password to stdout (it will not be shown again).
@@ -2080,7 +2075,8 @@ async fn build_files(
 )> {
     let (_pool, audit, db) = bootstrap_persistence(&config).await?;
     let ctx = AppContext::new(config, db, audit.clone());
-    let identity_module = IdentityModule::new(&ctx).await;
+    let master_key = load_master_key(&ctx.config)?;
+    let identity_module = IdentityModule::new(&ctx, master_key).await;
     let sites_module = SitesModule::new(&ctx).await;
     let files_module = FilesModule::new(&ctx).await;
     Ok((

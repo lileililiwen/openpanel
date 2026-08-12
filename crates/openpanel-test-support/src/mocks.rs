@@ -84,6 +84,69 @@ mock! {
 }
 
 mock! {
+    pub FactorRepo {}
+
+    #[async_trait::async_trait]
+    #[allow(clippy::type_complexity)]
+    impl openpanel_domain::identity::repository::FactorRepository for FactorRepo {
+        async fn insert_factor(
+            &self,
+            factor: &openpanel_domain::identity::Factor,
+            totp_secret_encrypted: &str,
+        ) -> Result<(), RepoError>;
+        async fn find_factor(&self, id: uuid::Uuid) -> Result<Option<openpanel_domain::identity::Factor>, RepoError>;
+        async fn update_factor(&self, factor: &openpanel_domain::identity::Factor) -> Result<(), RepoError>;
+        async fn list_factors_for_user(&self, user_id: uuid::Uuid) -> Result<Vec<openpanel_domain::identity::Factor>, RepoError>;
+        async fn find_active_totp_factor(
+            &self,
+            user_id: uuid::Uuid,
+        ) -> Result<Option<openpanel_domain::identity::Factor>, RepoError>;
+        async fn find_totp_secret_encrypted(
+            &self,
+            factor_id: uuid::Uuid,
+        ) -> Result<Option<String>, RepoError>;
+        async fn replace_recovery_codes(
+            &self,
+            user_id: uuid::Uuid,
+            entries: &[(String, chrono::DateTime<chrono::Utc>)],
+        ) -> Result<(), RepoError>;
+        async fn list_recovery_codes(
+            &self,
+            user_id: uuid::Uuid,
+        ) -> Result<Vec<(String, Option<chrono::DateTime<chrono::Utc>>)>, RepoError>;
+        async fn consume_recovery_code(
+            &self,
+            user_id: uuid::Uuid,
+            plaintext: &str,
+            now: chrono::DateTime<chrono::Utc>,
+        ) -> Result<bool, RepoError>;
+        async fn insert_challenge(
+            &self,
+            challenge: &openpanel_domain::identity::TwoFactorChallenge,
+        ) -> Result<(), RepoError>;
+        async fn find_challenge(
+            &self,
+            id: uuid::Uuid,
+        ) -> Result<Option<openpanel_domain::identity::TwoFactorChallenge>, RepoError>;
+        async fn delete_challenge(&self, id: uuid::Uuid) -> Result<(), RepoError>;
+        async fn verify_challenge_token(
+            &self,
+            challenge_id: uuid::Uuid,
+            plaintext: &str,
+        ) -> Result<bool, RepoError>;
+        async fn consume_challenge(
+            &self,
+            challenge_id: uuid::Uuid,
+            now: chrono::DateTime<chrono::Utc>,
+        ) -> Result<Option<uuid::Uuid>, RepoError>;
+        async fn purge_expired_challenges(
+            &self,
+            now: chrono::DateTime<chrono::Utc>,
+        ) -> Result<u64, RepoError>;
+    }
+}
+
+mock! {
     pub SiteRepo {}
 
     #[async_trait::async_trait]

@@ -24,10 +24,11 @@ mod tests {
 
     use openpanel_core::{AuditAction, AuditOutcome};
     use openpanel_domain::{IdentityError, Password, Role, User};
-    use openpanel_test_support::{MockAudit, MockSessionRepo, MockUserRepo};
+    use openpanel_test_support::{MockAudit, MockFactorRepo, MockSessionRepo, MockUserRepo};
     use uuid::Uuid;
 
     use super::IdentityService;
+    use crate::identity::two_factor::TwoFactorService;
 
     /// Build a disabled `User` row for the mock to return.
     fn disabled_user(username: &str) -> User {
@@ -54,6 +55,7 @@ mod tests {
             .returning(move |_| Ok(Some(user.clone())));
 
         let sessions = MockSessionRepo::new();
+        let factors = MockFactorRepo::new();
 
         let mut audit = MockAudit::new();
         audit.expect_record().times(1).returning(|event| {
@@ -72,7 +74,17 @@ mod tests {
         // expectation.
         audit.expect_recent().returning(|_| Ok(vec![]));
 
-        let svc = IdentityService::new(Arc::new(users), Arc::new(sessions), Arc::new(audit));
+        let two_factor = Arc::new(TwoFactorService::new(
+            Arc::new(factors),
+            [0u8; 32],
+            Arc::new(MockAudit::stub()),
+        ));
+        let svc = IdentityService::new(
+            Arc::new(users),
+            Arc::new(sessions),
+            Arc::new(audit),
+            two_factor,
+        );
 
         let err = svc
             .login("alice", "correct horse battery staple", None, None)
@@ -91,19 +103,24 @@ pub struct IdentityService {
     users: Arc<dyn UserRepository>,
     sessions: Arc<dyn SessionRepository>,
     audit: Arc<dyn AuditService>,
+    #[allow(dead_code)] // wired in the next phase (login state machine).
+    two_factor: Arc<crate::identity::two_factor::TwoFactorService>,
 }
 
 impl IdentityService {
-    /// Construct the service with the user + session repositories and audit sink.
+    /// Construct the service with the user + session repositories, audit
+    /// sink, and the two-factor service used by the login flow.
     pub fn new(
         users: Arc<dyn UserRepository>,
         sessions: Arc<dyn SessionRepository>,
         audit: Arc<dyn AuditService>,
+        two_factor: Arc<crate::identity::two_factor::TwoFactorService>,
     ) -> Self {
         Self {
             users,
             sessions,
             audit,
+            two_factor,
         }
     }
 

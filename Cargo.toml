@@ -119,6 +119,12 @@ mockall = "0.13"
 # AES-GCM (used by databases module for password encryption at rest)
 aes-gcm = "0.10"
 
+# TOTP (RFC 6238) for two-factor authentication
+totp-rs = { version = "5", default-features = false, features = ["gen_secret", "otpauth"] }
+
+# WebAuthn / FIDO2 for two-factor authentication
+webauthn-rs = "0.5"
+
 # MIME type guessing for the files module
 mime_guess = "2"
 

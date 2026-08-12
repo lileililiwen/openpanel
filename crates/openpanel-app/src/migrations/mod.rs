@@ -6,6 +6,9 @@
 pub const AUDIT_V001: &str = include_str!("000_audit.sql");
 /// SQL for the identity v001 migration (`users` and `sessions` tables).
 pub const IDENTITY_V001: &str = include_str!("identity/V001__init.sql");
+/// SQL for the identity v002 migration (two-factor authentication:
+/// `user_factors`, `recovery_codes`, `login_challenges`).
+pub const IDENTITY_V002: &str = include_str!("identity/V002__2fa.sql");
 /// SQL for the sites v001 migration (`sites` table).
 pub const SITES_V001: &str = include_str!("sites/V001__init.sql");
 /// SQL for the databases v001 migration (`databases` table).

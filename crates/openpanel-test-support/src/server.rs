@@ -179,11 +179,11 @@ impl TestServer {
         let nginx_root = sandbox.path().to_path_buf();
         let paths = NginxPaths::under(nginx_root.clone());
 
-        let identity_module = IdentityModule::new(&ctx).await;
+        // Master key for databases + identity modules — fixed to zeros for tests.
+        let master_key = [0u8; 32];
+        let identity_module = IdentityModule::new(&ctx, master_key).await;
         let sites_module = SitesModule::with_paths(&ctx, paths).await;
 
-        // Master key for databases module — generate a random one for tests.
-        let master_key = [0u8; 32];
         let databases_module = DatabasesModule::new(&ctx, master_key).await;
         let files_module = FilesModule::new(&ctx).await;
 

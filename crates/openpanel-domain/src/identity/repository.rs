@@ -1,9 +1,11 @@
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::{
     RepoError,
     identity::{
+        factor::{Factor, TwoFactorChallenge},
         role::Role,
         session::{Session, SessionToken},
         user::User,
@@ -59,4 +61,82 @@ pub trait SessionRepository: Send + Sync + 'static {
     async fn delete_for_user(&self, user_id: Uuid) -> Result<(), RepoError>;
     /// Remove expired sessions and return the number removed.
     async fn purge_expired(&self) -> Result<u64, RepoError>;
+}
+
+/// Persistence operations for two-factor authentication: factors,
+/// encrypted TOTP secrets, recovery codes, and pending-login
+/// challenges. Phase A covers TOTP + recovery + challenges; WebAuthn
+/// and remember-device are Phase B.
+#[async_trait]
+pub trait FactorRepository: Send + Sync + 'static {
+    // Factors
+    /// Insert a new factor plus its encrypted TOTP secret (if TOTP).
+    /// The `totp_secret_encrypted` argument is the empty string for
+    /// non-TOTP factors.
+    async fn insert_factor(
+        &self,
+        factor: &Factor,
+        totp_secret_encrypted: &str,
+    ) -> Result<(), RepoError>;
+    /// Find a factor by id.
+    async fn find_factor(&self, id: Uuid) -> Result<Option<Factor>, RepoError>;
+    /// Update the factor (e.g. advance `last_used_step`, revoke).
+    async fn update_factor(&self, factor: &Factor) -> Result<(), RepoError>;
+    /// List a user's factors, including revoked ones. The caller
+    /// filters by `revoked_at` if it only wants active factors.
+    async fn list_factors_for_user(&self, user_id: Uuid) -> Result<Vec<Factor>, RepoError>;
+    /// Return the first active TOTP factor for the user, if any.
+    async fn find_active_totp_factor(&self, user_id: Uuid) -> Result<Option<Factor>, RepoError>;
+    /// Return the encrypted TOTP secret for a factor, if any.
+    async fn find_totp_secret_encrypted(
+        &self,
+        factor_id: Uuid,
+    ) -> Result<Option<String>, RepoError>;
+
+    // Recovery codes
+    /// Replace the user's recovery-code set with a fresh batch.
+    #[allow(clippy::type_complexity)]
+    async fn replace_recovery_codes(
+        &self,
+        user_id: Uuid,
+        entries: &[(String, DateTime<Utc>)],
+    ) -> Result<(), RepoError>;
+    /// Return the user's recovery codes as `(hash, consumed_at)` pairs.
+    #[allow(clippy::type_complexity)]
+    async fn list_recovery_codes(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Vec<(String, Option<DateTime<Utc>>)>, RepoError>;
+    /// Mark a single recovery code as consumed (or no-op if already
+    /// consumed). Identified by the plaintext (the repo hashes and
+    /// compares).
+    async fn consume_recovery_code(
+        &self,
+        user_id: Uuid,
+        plaintext: &str,
+        now: DateTime<Utc>,
+    ) -> Result<bool, RepoError>;
+
+    // Pending-login challenges
+    /// Insert a pending-login challenge.
+    async fn insert_challenge(&self, challenge: &TwoFactorChallenge) -> Result<(), RepoError>;
+    /// Find a pending-login challenge by id.
+    async fn find_challenge(&self, id: Uuid) -> Result<Option<TwoFactorChallenge>, RepoError>;
+    /// Delete a pending-login challenge.
+    async fn delete_challenge(&self, id: Uuid) -> Result<(), RepoError>;
+    /// Verify the presented plaintext against the stored hash for the
+    /// challenge. Returns `true` on match.
+    async fn verify_challenge_token(
+        &self,
+        challenge_id: Uuid,
+        plaintext: &str,
+    ) -> Result<bool, RepoError>;
+    /// Mark a challenge as consumed. Returns the user id on success.
+    async fn consume_challenge(
+        &self,
+        challenge_id: Uuid,
+        now: DateTime<Utc>,
+    ) -> Result<Option<Uuid>, RepoError>;
+    /// Remove expired challenges; returns the number removed.
+    async fn purge_expired_challenges(&self, now: DateTime<Utc>) -> Result<u64, RepoError>;
 }
