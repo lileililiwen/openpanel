@@ -1390,7 +1390,11 @@ fn privileged_command_prepends_sudo_for_privileged_binaries() {
         let (program, arguments) = &invocations[0];
         assert_eq!(*program, "/usr/bin/sudo", "must invoke sudo when not root");
         assert_eq!(
-            arguments[0], "/usr/bin/apt-get",
+            arguments[0], "-n",
+            "sudo must run non-interactively so it never prompts on the daemon terminal"
+        );
+        assert_eq!(
+            arguments[2], "/usr/bin/apt-get",
             "sudo args carry the original program"
         );
         assert!(arguments.contains(&"apache2".to_owned()));

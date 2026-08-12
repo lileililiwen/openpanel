@@ -165,7 +165,12 @@ impl PackageCommand for PrivilegedCommand {
         if !needs_privilege(program) || (self.is_root)() {
             return self.inner.run(program, arguments).await;
         }
-        let mut wrapped = vec![program.to_owned()];
+        // Run `sudo` strictly non-interactively (`-n`) with `--` so the
+        // panel can never block on a password prompt on its terminal.
+        // Passwordless sudo is the documented setup (see the snippet
+        // below); anything else fails fast with the sudoers file the
+        // operator must install.
+        let mut wrapped = vec!["-n".to_owned(), "--".to_owned(), program.to_owned()];
         wrapped.extend(arguments.iter().cloned());
         let sudo = sudo_binary();
         let result = self.inner.run(sudo, &wrapped).await.map_err(|error| {
