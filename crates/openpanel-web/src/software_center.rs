@@ -632,24 +632,45 @@ fn progress_fragment(live: &LiveProgress) -> Markup {
     } else {
         "progress__bar"
     };
-    html! {
-        div class="task-progress" {
-            div class="task-progress__row" {
-                span class="badge" { (live.state) }
-                span class="task-progress__step" { (live.step) }
-                span class="task-progress__percent" { (live.percent) "%" }
-                @if let Some((done, total)) = live.bytes {
-                    span class="task-progress__bytes" { (done) " / " (total) " bytes" }
+    // The poll attributes live on the fragment root so each response
+    // replaces the whole bar in place (`hx-swap="outerHTML"`) instead of
+    // nesting another fragment every second.
+    if live.terminal {
+        html! {
+            div class="task-progress" {
+                div class="task-progress__row" {
+                    span class="badge" { (live.state) }
+                    span class="task-progress__step" { (live.step) }
+                    span class="task-progress__percent" { (live.percent) "%" }
+                    @if let Some((done, total)) = live.bytes {
+                        span class="task-progress__bytes" { (done) " / " (total) " bytes" }
+                    }
+                }
+                div class="progress" role="progressbar" aria-valuenow=(live.percent) aria-valuemin="0" aria-valuemax="100" {
+                    div class=(bar_class) style=(format!("width: {}%", live.percent)) {}
+                }
+                @if let Some(detail) = live.detail {
+                    p class="task-progress__error" { (detail) }
                 }
             }
-            div class="progress" role="progressbar" aria-valuenow=(live.percent) aria-valuemin="0" aria-valuemax="100" {
-                div class=(bar_class) style=(format!("width: {}%", live.percent)) {}
-            }
-            @if let Some(detail) = live.detail {
-                p class="task-progress__error" { (detail) }
-            }
-            @if !live.terminal {
-                div hx-get=(format!("/software/jobs/{}/progress", live.id)) hx-trigger="every 1s" hx-swap="outerHTML" {}
+        }
+    } else {
+        html! {
+            div class="task-progress" hx-get=(format!("/software/jobs/{}/progress", live.id)) hx-trigger="every 1s" hx-swap="outerHTML" {
+                div class="task-progress__row" {
+                    span class="badge" { (live.state) }
+                    span class="task-progress__step" { (live.step) }
+                    span class="task-progress__percent" { (live.percent) "%" }
+                    @if let Some((done, total)) = live.bytes {
+                        span class="task-progress__bytes" { (done) " / " (total) " bytes" }
+                    }
+                }
+                div class="progress" role="progressbar" aria-valuenow=(live.percent) aria-valuemin="0" aria-valuemax="100" {
+                    div class=(bar_class) style=(format!("width: {}%", live.percent)) {}
+                }
+                @if let Some(detail) = live.detail {
+                    p class="task-progress__error" { (detail) }
+                }
             }
         }
     }

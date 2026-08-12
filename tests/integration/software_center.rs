@@ -564,6 +564,11 @@ async fn await_job_succeeded(server: &TestServer, job_id: &str, cookie: &str) {
             .unwrap();
         assert_eq!(progress.status(), 200);
         body = progress.text().await.unwrap();
+        assert_eq!(
+            body.matches(r#"class="task-progress""#).count(),
+            1,
+            "each poll must return a single bar that self-replaces (no stacking), body={body}"
+        );
         if body.contains(">succeeded<") || body.contains(">failed<") {
             break;
         }
