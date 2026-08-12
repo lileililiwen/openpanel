@@ -124,6 +124,24 @@ only as a documented "no digest supplied" sentinel; the install
 result SHALL record `digest_verified: false` when the check is
 skipped.
 
+#### Scenario: file artifacts refuse a path separator
+
+- **WHEN** a recipe pins an artifact of type `file` whose
+  `archive_root` contains a path separator or yields an empty
+  filename
+- **THEN** `place_artifact` returns an error and nothing is
+  written under the webapps root.
+
+#### Scenario: tar.gz archives extract under webapps_root/version
+
+- **WHEN** the panel installs a `tar.gz` recipe whose pinned URL
+  points to an archive with a top-level directory matching the
+  recipe's `archive_root`
+- **THEN** the archive is extracted into
+  `webapps_root/<version>/`, the top-level directory is skipped,
+  and the success page reports the destination directory and the
+  bytes written.
+
 ### Requirement: Better error pages for the install flow
 
 `SoftwareCenterError::Package` SHALL carry a bounded, redacted
@@ -140,6 +158,15 @@ Confirm button on those pages (`preview`,
 `preview_component_action`, `preview_deployment`, `retry`) SHALL
 carry the `button` class so it is styled by the shell.
 
+#### Scenario: package-tool failure surfaces the redacted diagnostic
+
+- **WHEN** `apt-get` fails an install with
+  `E: Unable to locate package apache2`
+- **THEN** the `execute` handler renders a typed error page
+  through the authed shell whose message includes the bounded,
+  redacted stderr diagnostic, instead of returning
+  200-with-no-body or a blanket 422.
+
 ### Requirement: DNS labels are strict by default
 
 `DnsName::new` SHALL accept only ASCII letters, digits, and
@@ -155,6 +182,15 @@ The proptest `prop_invalid_dns_label_characters_never_survive`
 SHALL pass for every distribution: any non-alphanumeric,
 non-`-`, non-`.` character in a label produces
 `DnsName::new(...).is_err()`.
+
+#### Scenario: underscore labels require the relaxed constructor
+
+- **WHEN** an Owner creates a TXT record named `_dmarc` and an A
+  record named `web.example.com`
+- **THEN** `create_record` uses `DnsName::new_with_underscore` for
+  the TXT record and the strict `DnsName::new` for the hostname;
+  `DnsName::new("_dmarc")` returns an error while
+  `DnsName::new_with_underscore("_dmarc")` succeeds.
 
 ## REMOVED Requirements
 
