@@ -148,6 +148,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let dns_svc = dns_module.service();
     let mail_svc = mail_module.service();
     let software_center_svc = software_center_module.service();
+    let two_factor_svc = identity_module.two_factor();
     let app = build_router(
         identity_svc.clone(),
         sites_svc.clone(),
@@ -164,6 +165,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         dns_svc.clone(),
         mail_svc.clone(),
         software_center_svc.clone(),
+        two_factor_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -181,6 +183,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         dns_svc,
         mail_svc,
         software_center_svc,
+        two_factor_svc,
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
@@ -1769,6 +1772,102 @@ pub async fn delete_user(config: Arc<Config>, id: String) -> anyhow::Result<()> 
     let uuid = uuid::Uuid::parse_str(&id).context("invalid user id")?;
     svc.delete_user(uuid, "cli").await?;
     println!("deleted {id}");
+    Ok(())
+}
+
+/// Enroll a TOTP factor for the user. Prints the base32 secret,
+/// provisioning URI, and recovery codes to stdout exactly once.
+pub async fn enroll_user_totp(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let (svc, _audit, _pool) = build_identity(config).await?;
+    let user_id = uuid::Uuid::parse_str(&id).context("invalid user id")?;
+    let username = svc
+        .users()
+        .find_by_id(user_id)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.0))?
+        .ok_or_else(|| anyhow::anyhow!("user not found"))?
+        .username()
+        .as_str()
+        .to_string();
+    let now = chrono::Utc::now();
+    let enrollment = svc
+        .two_factor()
+        .enroll_totp(user_id, &username, "OpenPanel", &username, now)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("factor: {}", enrollment.factor.id());
+    println!("secret_base32: {}", enrollment.secret.to_base32());
+    println!("provisioning_uri: {}", enrollment.provisioning_uri);
+    println!("recovery_codes (single-use, shown once):");
+    for code in &enrollment.recovery_codes {
+        println!("  {code}");
+    }
+    Ok(())
+}
+
+/// List a user's enrolled factors and remaining recovery codes.
+pub async fn list_user_factors(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let (svc, _audit, _pool) = build_identity(config).await?;
+    let user_id = uuid::Uuid::parse_str(&id).context("invalid user id")?;
+    let factors = svc
+        .two_factor()
+        .list_factors(user_id)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let remaining = svc
+        .two_factor()
+        .count_recovery_codes(user_id)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    for factor in &factors {
+        let revoked = if factor.revoked_at().is_some() {
+            " (revoked)"
+        } else {
+            ""
+        };
+        println!(
+            "{} {} kind={} enrolled={}{revoked}",
+            factor.id(),
+            factor.user_id(),
+            factor.kind(),
+            factor.created_at().to_rfc3339(),
+        );
+    }
+    println!("recovery_codes_remaining: {remaining}");
+    Ok(())
+}
+
+/// Revoke a factor belonging to the user.
+pub async fn revoke_user_factor(
+    config: Arc<Config>,
+    id: String,
+    factor_id: String,
+) -> anyhow::Result<()> {
+    let (svc, _audit, _pool) = build_identity(config).await?;
+    let user_id = uuid::Uuid::parse_str(&id).context("invalid user id")?;
+    let fid = uuid::Uuid::parse_str(&factor_id).context("invalid factor id")?;
+    svc.two_factor()
+        .revoke_factor("cli", user_id, fid, chrono::Utc::now())
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("revoked factor {factor_id} for user {id}");
+    Ok(())
+}
+
+/// Regenerate a user's recovery codes. Prints the new codes to stdout
+/// exactly once.
+pub async fn regenerate_user_recovery(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let (svc, _audit, _pool) = build_identity(config).await?;
+    let user_id = uuid::Uuid::parse_str(&id).context("invalid user id")?;
+    let codes = svc
+        .two_factor()
+        .regenerate_recovery_codes("cli", user_id, chrono::Utc::now())
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("recovery_codes (single-use, shown once):");
+    for code in &codes {
+        println!("  {code}");
+    }
     Ok(())
 }
 

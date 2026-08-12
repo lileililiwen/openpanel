@@ -29,6 +29,7 @@ pub mod sites;
 pub mod software_center;
 pub mod ssl;
 pub mod system_services;
+pub mod two_factor;
 pub mod users;
 
 pub use router::{WebRuntime, WebState, router};

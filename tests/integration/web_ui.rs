@@ -24,6 +24,24 @@ fn csrf_token_from_html(html: &str) -> String {
     html[start..start + end].to_string()
 }
 
+/// Log in via the web form and return the `openpanel_session` cookie value.
+async fn web_cookie(server: &TestServer, username: &str, password: &str) -> String {
+    let login = server
+        .client()
+        .post(format!("{}/login", server.base_url()))
+        .form(&[("username_or_email", username), ("password", password)])
+        .send()
+        .await
+        .expect("login");
+    login.headers()[reqwest::header::SET_COOKIE]
+        .to_str()
+        .expect("Set-Cookie string")
+        .split(';')
+        .next()
+        .expect("cookie name=value")
+        .to_string()
+}
+
 /// Unauthenticated `GET /` redirects (302) to `/login`.
 #[tokio::test]
 async fn web_unauthenticated_root_redirects_to_login() {
@@ -2141,4 +2159,96 @@ async fn web_settings_rejects_user_invalid_unknown_and_failed_persistence() {
         .await
         .expect("failed persistence response");
     assert_eq!(failed.status(), 500);
+}
+
+#[tokio::test]
+async fn web_settings_security_page_lists_enrolls_and_revokes_factors() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("owner", "correct horse battery staple")
+        .await;
+    let cookie = web_cookie(&server, "owner", "correct horse battery staple").await;
+
+    // Load the page (no factors yet).
+    let page = server
+        .client()
+        .get(format!("{}/settings/security", server.base_url()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .send()
+        .await
+        .expect("security page");
+    assert_eq!(page.status(), 200);
+    let body = page.text().await.unwrap();
+    assert!(body.contains("Two-factor authentication"));
+    assert!(body.contains("No factors enrolled"));
+    let csrf = csrf_token_from_html(&body);
+
+    // Enroll TOTP.
+    let resp = server
+        .client()
+        .post(format!(
+            "{}/settings/security/totp/enroll",
+            server.base_url()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", csrf.as_str())])
+        .send()
+        .await
+        .expect("enroll");
+    assert_eq!(resp.status(), 200);
+    let body = resp.text().await.unwrap();
+    assert!(body.contains("TOTP enrolled"));
+    assert!(body.contains("Recovery codes"));
+
+    // Re-load the page; factor should be listed.
+    let page = server
+        .client()
+        .get(format!("{}/settings/security", server.base_url()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .send()
+        .await
+        .expect("page after enroll");
+    let body = page.text().await.unwrap();
+    assert!(
+        body.contains("totp"),
+        "factor kind should be listed: {body}"
+    );
+    let csrf = csrf_token_from_html(&body);
+
+    // Revoke the factor via the form. We extract the factor id from the
+    // /revoke action URL.
+    let factor_id_start = body
+        .find("/settings/security/factors/")
+        .expect("revoke link")
+        + "/settings/security/factors/".len();
+    let rest = &body[factor_id_start..];
+    let factor_id_end = rest.find('/').expect("factor id terminator");
+    let factor_id = rest[..factor_id_end].to_string();
+
+    let resp = server
+        .client()
+        .post(format!(
+            "{}/settings/security/factors/{factor_id}/revoke",
+            server.base_url()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[("_csrf", csrf.as_str()), ("factor_id", factor_id.as_str())])
+        .send()
+        .await
+        .expect("revoke");
+    assert!(
+        resp.status() == 200 || resp.status() == 303,
+        "revoke should redirect or render (got {})",
+        resp.status()
+    );
+
+    let page = server
+        .client()
+        .get(format!("{}/settings/security", server.base_url()))
+        .header(reqwest::header::COOKIE, &cookie)
+        .send()
+        .await
+        .expect("page after revoke");
+    let body = page.text().await.unwrap();
+    assert!(body.contains("revoked"), "factor should show as revoked");
 }

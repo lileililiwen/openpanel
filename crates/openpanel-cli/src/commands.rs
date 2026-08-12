@@ -697,6 +697,46 @@ pub enum UserCommand {
         #[arg(long)]
         id: String,
     },
+    /// Manage a user's second-factor authentication.
+    TwoFactor {
+        /// Subcommand (enroll/list/revoke/regenerate).
+        #[command(subcommand)]
+        action: TwoFactorCommand,
+    },
+}
+
+/// Subcommands for `openpanel user 2fa`.
+#[derive(Debug, Subcommand)]
+pub enum TwoFactorCommand {
+    /// Enroll a TOTP factor for the user. Prints the secret, provisioning
+    /// URI, and recovery codes to stdout exactly once.
+    EnrollTotp {
+        /// ID of the user to enroll.
+        #[arg(long)]
+        id: String,
+    },
+    /// List the user's enrolled factors.
+    ListFactors {
+        /// ID of the user whose factors to list.
+        #[arg(long)]
+        id: String,
+    },
+    /// Revoke an enrolled factor.
+    RevokeFactor {
+        /// ID of the user owning the factor.
+        #[arg(long)]
+        id: String,
+        /// Factor ID to revoke.
+        #[arg(long)]
+        factor_id: String,
+    },
+    /// Regenerate the recovery code set for a user. Prints the new
+    /// codes to stdout exactly once.
+    RegenerateRecovery {
+        /// ID of the user whose recovery codes to regenerate.
+        #[arg(long)]
+        id: String,
+    },
 }
 
 /// Subcommands for managing hosted sites.

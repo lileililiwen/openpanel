@@ -315,6 +315,7 @@ impl TestServer {
         let software_center_svc = software_center_module.service();
 
         let settings_path = sandbox.path().join("web-preferences.json");
+        let two_factor_svc = identity_module.two_factor();
         let app = build_router(
             identity_svc.clone(),
             sites_svc.clone(),
@@ -331,6 +332,7 @@ impl TestServer {
             dns_svc.clone(),
             mail_svc.clone(),
             software_center_svc.clone(),
+            two_factor_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -348,6 +350,7 @@ impl TestServer {
             dns_svc.clone(),
             mail_svc.clone(),
             software_center_svc.clone(),
+            two_factor_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),

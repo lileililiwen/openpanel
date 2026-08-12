@@ -6,7 +6,7 @@ use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
 use openpanel_app::{
     BackupService, CronService, DatabasesService, DnsService, FilesService, IdentityService,
     LogService, MailService, MonitoringService, SecurityService, SitesService,
-    SoftwareCenterService, SslService, security::LoginThrottleService,
+    SoftwareCenterService, SslService, identity::TwoFactorService, security::LoginThrottleService,
     system_services::ServiceManager,
 };
 
@@ -44,11 +44,15 @@ pub fn build_router(
     dns: Arc<DnsService>,
     mail: Arc<MailService>,
     software_center: Arc<SoftwareCenterService>,
+    two_factor: Arc<TwoFactorService>,
 ) -> Router {
     let identity_for_layer = identity.clone();
 
     let api = Router::new()
-        .nest("/identity", identity_router(identity, login_throttle))
+        .nest(
+            "/identity",
+            identity_router(identity, two_factor, login_throttle),
+        )
         .nest("/sites", sites_router(sites))
         .nest("/databases", databases_router(databases))
         .nest("/files", files_router(files.clone()))

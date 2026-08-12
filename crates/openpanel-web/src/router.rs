@@ -19,7 +19,7 @@ use openpanel_api::{
 use openpanel_app::{
     BackupService, CronService, DatabasesService, DnsService, FilesService, IdentityService,
     LogService, MailService, MonitoringService, SecurityService, SitesService,
-    SoftwareCenterService, SslService, security::LoginThrottleService,
+    SoftwareCenterService, SslService, identity::TwoFactorService, security::LoginThrottleService,
     system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
@@ -104,6 +104,8 @@ pub struct WebState {
     pub mail: Arc<MailService>,
     /// Curated Software Center service.
     pub software_center: Arc<SoftwareCenterService>,
+    /// Two-factor authentication service for the settings/security page.
+    pub two_factor: Arc<TwoFactorService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -216,6 +218,7 @@ pub fn router(
     dns_service: Arc<DnsService>,
     mail_service: Arc<MailService>,
     software_center_service: Arc<SoftwareCenterService>,
+    two_factor: Arc<TwoFactorService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -237,6 +240,7 @@ pub fn router(
         dns: dns_service,
         mail: mail_service,
         software_center: software_center_service,
+        two_factor,
         csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
@@ -257,6 +261,19 @@ pub fn router(
         .route("/login/factor", post(login::login_factor_handler))
         .route("/logout", post(logout))
         .route("/settings", get(settings::page).post(settings::update))
+        .route("/settings/security", get(crate::two_factor::page))
+        .route(
+            "/settings/security/totp/enroll",
+            post(crate::two_factor::enroll_totp),
+        )
+        .route(
+            "/settings/security/recovery/regenerate",
+            post(crate::two_factor::regenerate_recovery),
+        )
+        .route(
+            "/settings/security/factors/{id}/revoke",
+            post(crate::two_factor::revoke_factor),
+        )
         .route("/cron", get(cron::list))
         .route("/cron/new", get(cron::new_form))
         .route("/cron/jobs", post(cron::create))

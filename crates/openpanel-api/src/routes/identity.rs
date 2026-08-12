@@ -12,14 +12,19 @@ use axum::{
     response::IntoResponse,
     routing::{delete, get, post},
 };
-use openpanel_app::{IdentityService, identity::LoginOutcome, security::LoginThrottleService};
+use openpanel_app::{
+    IdentityService,
+    identity::{LoginOutcome, TwoFactorService},
+    security::LoginThrottleService,
+};
 use openpanel_domain::IdentityError;
 use uuid::Uuid;
 
 use crate::{
     dto::{
-        ChangePasswordRequest, ChangeRoleRequest, CreateUserRequest, LoginFactorRequest,
-        LoginFactorRequired, LoginRequest, LoginResponse, UserDto,
+        ChangePasswordRequest, ChangeRoleRequest, CreateUserRequest, EnrollTotpResponse, FactorDto,
+        FactorListResponse, LoginFactorRequest, LoginFactorRequired, LoginRequest, LoginResponse,
+        RegenerateRecoveryResponse, UserDto,
     },
     error::{ApiError, ApiResult},
     extract::{AuthUser, RequireOwner},
@@ -30,11 +35,16 @@ use crate::{
 #[derive(Clone)]
 struct IdentityRouteState {
     identity: Arc<IdentityService>,
+    two_factor: Arc<TwoFactorService>,
     throttle: Arc<LoginThrottleService>,
 }
 
 /// Build identity routes with durable pre-authentication throttling.
-pub fn router(svc: Arc<IdentityService>, throttle: Arc<LoginThrottleService>) -> Router {
+pub fn router(
+    svc: Arc<IdentityService>,
+    two_factor: Arc<TwoFactorService>,
+    throttle: Arc<LoginThrottleService>,
+) -> Router {
     Router::new()
         .route("/login", post(login))
         .route("/login/factor", post(login_factor))
@@ -44,8 +54,13 @@ pub fn router(svc: Arc<IdentityService>, throttle: Arc<LoginThrottleService>) ->
         .route("/users/{id}", delete(delete_user).patch(change_role))
         .route("/users/{id}/disable", post(disable_user))
         .route("/users/{id}/password", post(change_password))
+        .route("/factors", get(list_factors))
+        .route("/factors/totp/enroll", post(enroll_totp))
+        .route("/factors/recovery/regenerate", post(regenerate_recovery))
+        .route("/factors/{id}", delete(revoke_factor))
         .with_state(IdentityRouteState {
             identity: svc,
+            two_factor,
             throttle,
         })
 }
@@ -292,4 +307,93 @@ fn user_agent(headers: &HeaderMap) -> Option<String> {
         .get(axum::http::header::USER_AGENT)
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string())
+}
+
+// --- Two-factor factor management ---
+
+async fn list_factors(
+    State(state): State<IdentityRouteState>,
+    AuthUser(user, _session): AuthUser,
+) -> ApiResult<Json<FactorListResponse>> {
+    let factors = state
+        .two_factor
+        .list_factors(user.id())
+        .await
+        .map_err(map_two_factor_err)?;
+    let remaining = state
+        .two_factor
+        .count_recovery_codes(user.id())
+        .await
+        .map_err(map_two_factor_err)?;
+    Ok(Json(FactorListResponse {
+        factors: factors.iter().map(FactorDto::from_factor).collect(),
+        recovery_codes_remaining: remaining,
+    }))
+}
+
+async fn enroll_totp(
+    State(state): State<IdentityRouteState>,
+    AuthUser(user, session): AuthUser,
+) -> ApiResult<Json<EnrollTotpResponse>> {
+    let now = chrono::Utc::now();
+    let enrollment = state
+        .two_factor
+        .enroll_totp(
+            user.id(),
+            user.username().as_str(),
+            "OpenPanel",
+            user.username().as_str(),
+            now,
+        )
+        .await
+        .map_err(map_two_factor_err)?;
+    let _ = session; // audit attribution could pull from session; left as username.
+    Ok(Json(EnrollTotpResponse {
+        factor: FactorDto::from_factor(&enrollment.factor),
+        secret_base32: enrollment.secret.to_base32(),
+        provisioning_uri: enrollment.provisioning_uri,
+        recovery_codes: enrollment.recovery_codes,
+    }))
+}
+
+async fn regenerate_recovery(
+    State(state): State<IdentityRouteState>,
+    AuthUser(user, _session): AuthUser,
+) -> ApiResult<Json<RegenerateRecoveryResponse>> {
+    let codes = state
+        .two_factor
+        .regenerate_recovery_codes(user.username().as_str(), user.id(), chrono::Utc::now())
+        .await
+        .map_err(map_two_factor_err)?;
+    Ok(Json(RegenerateRecoveryResponse {
+        recovery_codes: codes,
+    }))
+}
+
+async fn revoke_factor(
+    State(state): State<IdentityRouteState>,
+    AuthUser(user, _session): AuthUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    state
+        .two_factor
+        .revoke_factor(user.username().as_str(), user.id(), id, chrono::Utc::now())
+        .await
+        .map_err(map_two_factor_err)?;
+    Ok(Json(serde_json::json!({"ok": true})))
+}
+
+fn map_two_factor_err(e: openpanel_app::identity::two_factor::TwoFactorError) -> ApiError {
+    use openpanel_app::identity::two_factor::TwoFactorError;
+    match e {
+        TwoFactorError::NoFactor | TwoFactorError::FactorNotFound | TwoFactorError::Revoked => {
+            ApiError::Unprocessable(e.to_string())
+        }
+        TwoFactorError::InvalidCode | TwoFactorError::CodeReplayed => {
+            ApiError::Identity(IdentityError::InvalidCredentials)
+        }
+        TwoFactorError::NoRecoveryCodes => ApiError::Unprocessable(e.to_string()),
+        TwoFactorError::Invalid(_) => ApiError::Unprocessable(e.to_string()),
+        TwoFactorError::Storage(_) => ApiError::Internal(e.to_string()),
+    }
 }

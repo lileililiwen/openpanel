@@ -119,3 +119,68 @@ pub struct ChangePasswordRequest {
     /// Replacement plaintext password.
     pub new_password: String,
 }
+
+/// Public-facing projection of an enrolled factor.
+#[derive(Debug, Serialize)]
+pub struct FactorDto {
+    /// Stable factor identifier.
+    pub id: Uuid,
+    /// Owner user id.
+    pub user_id: Uuid,
+    /// Factor kind (`"totp"` today; `"webauthn"` in Phase B).
+    pub kind: String,
+    /// When the factor was enrolled (UTC).
+    pub created_at: DateTime<Utc>,
+    /// When the factor was verified (UTC).
+    pub verified_at: DateTime<Utc>,
+    /// When the factor was last used successfully, if applicable.
+    pub last_used_at: Option<DateTime<Utc>>,
+    /// When the factor was revoked, if applicable.
+    pub revoked_at: Option<DateTime<Utc>>,
+}
+
+impl FactorDto {
+    /// Project a domain [`Factor`](openpanel_domain::identity::Factor) into its wire DTO form.
+    pub fn from_factor(factor: &openpanel_domain::identity::Factor) -> Self {
+        Self {
+            id: factor.id(),
+            user_id: factor.user_id(),
+            kind: factor.kind().to_string(),
+            created_at: factor.created_at(),
+            verified_at: factor.verified_at(),
+            last_used_at: factor.last_used_at(),
+            revoked_at: factor.revoked_at(),
+        }
+    }
+}
+
+/// Response body for `GET /identity/factors`.
+#[derive(Debug, Serialize)]
+pub struct FactorListResponse {
+    /// All of the user's factors (active and revoked).
+    pub factors: Vec<FactorDto>,
+    /// How many recovery codes remain.
+    pub recovery_codes_remaining: u8,
+}
+
+/// Response body for `POST /identity/factors/totp/enroll`. The
+/// `secret_base32`, `provisioning_uri`, and `recovery_codes` are shown
+/// exactly once; the panel never returns them again.
+#[derive(Debug, Serialize)]
+pub struct EnrollTotpResponse {
+    /// The freshly created factor.
+    pub factor: FactorDto,
+    /// Base32-encoded TOTP secret for manual entry into authenticator apps.
+    pub secret_base32: String,
+    /// otpauth:// URI for QR provisioning.
+    pub provisioning_uri: String,
+    /// Freshly generated recovery codes (single-use, shown once).
+    pub recovery_codes: Vec<String>,
+}
+
+/// Response body for `POST /identity/factors/recovery/regenerate`.
+#[derive(Debug, Serialize)]
+pub struct RegenerateRecoveryResponse {
+    /// Freshly generated recovery codes (shown once).
+    pub recovery_codes: Vec<String>,
+}

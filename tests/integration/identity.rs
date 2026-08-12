@@ -2,6 +2,10 @@ use serde_json::json;
 
 use crate::common::*;
 
+fn bearer(token: &str) -> String {
+    format!("Bearer {token}")
+}
+
 /// Boot a server with an owner user and return `(server, token)`.
 async fn owner_server() -> (TestServer, String) {
     let server = TestServer::new().await;
@@ -491,4 +495,92 @@ async fn identity_two_factor_recovery_code_round_trip() {
         .await
         .expect("replay recovery");
     assert_eq!(resp.status(), 401, "a consumed recovery code must not work");
+}
+
+#[tokio::test]
+async fn identity_two_factor_management_enroll_list_revoke() {
+    let server = TestServer::new().await;
+    let token = server
+        .bootstrap_owner("owner", "correct horse battery staple")
+        .await;
+    let auth = bearer(&token);
+
+    // Enroll TOTP via the API.
+    let resp = server
+        .client()
+        .post(format!(
+            "{}/api/v1/identity/factors/totp/enroll",
+            server.base_url()
+        ))
+        .header("authorization", &auth)
+        .send()
+        .await
+        .expect("enroll");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.expect("enroll body");
+    let factor_id = body["factor"]["id"]
+        .as_str()
+        .expect("factor id")
+        .to_string();
+    assert_eq!(body["factor"]["kind"], "totp");
+    assert!(body["secret_base32"].as_str().unwrap().len() > 16);
+    assert!(
+        body["provisioning_uri"]
+            .as_str()
+            .unwrap()
+            .starts_with("otpauth://")
+    );
+    assert_eq!(body["recovery_codes"].as_array().unwrap().len(), 10);
+
+    // List factors.
+    let resp = server
+        .client()
+        .get(format!("{}/api/v1/identity/factors", server.base_url()))
+        .header("authorization", &auth)
+        .send()
+        .await
+        .expect("list factors");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.expect("list body");
+    assert_eq!(body["factors"].as_array().unwrap().len(), 1);
+    assert_eq!(body["recovery_codes_remaining"], 10);
+
+    // Revoke the factor.
+    let resp = server
+        .client()
+        .delete(format!(
+            "{}/api/v1/identity/factors/{factor_id}",
+            server.base_url()
+        ))
+        .header("authorization", &auth)
+        .send()
+        .await
+        .expect("revoke");
+    assert_eq!(resp.status(), 200);
+
+    // Factor still listed but revoked.
+    let resp = server
+        .client()
+        .get(format!("{}/api/v1/identity/factors", server.base_url()))
+        .header("authorization", &auth)
+        .send()
+        .await
+        .expect("list after revoke");
+    let body: serde_json::Value = resp.json().await.expect("list body");
+    assert!(body["factors"][0]["revoked_at"].is_string());
+
+    // Regenerate recovery codes.
+    let resp = server
+        .client()
+        .post(format!(
+            "{}/api/v1/identity/factors/recovery/regenerate",
+            server.base_url()
+        ))
+        .header("authorization", &auth)
+        .send()
+        .await
+        .expect("regen");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.expect("regen body");
+    assert_eq!(body["recovery_codes"].as_array().unwrap().len(), 10);
 }
