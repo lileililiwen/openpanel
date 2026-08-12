@@ -143,6 +143,54 @@ mock! {
             &self,
             now: chrono::DateTime<chrono::Utc>,
         ) -> Result<u64, RepoError>;
+        async fn insert_webauthn_credential(
+            &self,
+            credential_id: &str,
+            user_id: uuid::Uuid,
+            factor_id: uuid::Uuid,
+            public_key_spki: &str,
+            sign_count: i64,
+            transports: Option<&'static str>,
+            uv_policy: &str,
+            created_at: chrono::DateTime<chrono::Utc>,
+        ) -> Result<(), RepoError>;
+        async fn list_webauthn_credentials(
+            &self,
+            user_id: uuid::Uuid,
+        ) -> Result<Vec<openpanel_domain::identity::WebAuthnCredential>, RepoError>;
+        async fn find_webauthn_credential_by_id(
+            &self,
+            credential_id: &str,
+        ) -> Result<Option<openpanel_domain::identity::WebAuthnCredential>, RepoError>;
+        async fn touch_webauthn_credential(
+            &self,
+            credential_id: &str,
+            new_sign_count: i64,
+            last_used_at: chrono::DateTime<chrono::Utc>,
+        ) -> Result<(), RepoError>;
+        async fn revoke_webauthn_credential(
+            &self,
+            credential_id: &str,
+            now: chrono::DateTime<chrono::Utc>,
+        ) -> Result<(), RepoError>;
+        async fn insert_webauthn_challenge(
+            &self,
+            id: uuid::Uuid,
+            user_id: uuid::Uuid,
+            kind: &str,
+            state_json: &str,
+            created_at: chrono::DateTime<chrono::Utc>,
+            expires_at: chrono::DateTime<chrono::Utc>,
+        ) -> Result<(), RepoError>;
+        async fn find_webauthn_challenge(
+            &self,
+            id: uuid::Uuid,
+        ) -> Result<Option<openpanel_domain::identity::WebAuthnChallenge>, RepoError>;
+        async fn consume_webauthn_challenge(
+            &self,
+            id: uuid::Uuid,
+            now: chrono::DateTime<chrono::Utc>,
+        ) -> Result<Option<String>, RepoError>;
     }
 }
 

@@ -5,7 +5,7 @@ use uuid::Uuid;
 use crate::{
     RepoError,
     identity::{
-        factor::{Factor, TwoFactorChallenge},
+        factor::{Factor, TwoFactorChallenge, WebAuthnChallenge, WebAuthnCredential},
         role::Role,
         session::{Session, SessionToken},
         user::User,
@@ -68,6 +68,7 @@ pub trait SessionRepository: Send + Sync + 'static {
 /// challenges. Phase A covers TOTP + recovery + challenges; WebAuthn
 /// and remember-device are Phase B.
 #[async_trait]
+#[allow(clippy::too_many_arguments)]
 pub trait FactorRepository: Send + Sync + 'static {
     // Factors
     /// Insert a new factor plus its encrypted TOTP secret (if TOTP).
@@ -139,4 +140,66 @@ pub trait FactorRepository: Send + Sync + 'static {
     ) -> Result<Option<Uuid>, RepoError>;
     /// Remove expired challenges; returns the number removed.
     async fn purge_expired_challenges(&self, now: DateTime<Utc>) -> Result<u64, RepoError>;
+
+    // WebAuthn credentials
+    /// Insert a WebAuthn credential row.
+    async fn insert_webauthn_credential(
+        &self,
+        credential_id: &str,
+        user_id: Uuid,
+        factor_id: Uuid,
+        public_key_spki: &str,
+        sign_count: i64,
+        transports: Option<&'static str>,
+        uv_policy: &str,
+        created_at: DateTime<Utc>,
+    ) -> Result<(), RepoError>;
+    /// List the (non-revoked) WebAuthn credentials for a user.
+    async fn list_webauthn_credentials(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Vec<WebAuthnCredential>, RepoError>;
+    /// Look up a credential by its authenticator-issued id.
+    async fn find_webauthn_credential_by_id(
+        &self,
+        credential_id: &str,
+    ) -> Result<Option<WebAuthnCredential>, RepoError>;
+    /// Increment `sign_count` and set `last_used_at` for a credential.
+    async fn touch_webauthn_credential(
+        &self,
+        credential_id: &str,
+        new_sign_count: i64,
+        last_used_at: DateTime<Utc>,
+    ) -> Result<(), RepoError>;
+    /// Revoke a credential.
+    async fn revoke_webauthn_credential(
+        &self,
+        credential_id: &str,
+        now: DateTime<Utc>,
+    ) -> Result<(), RepoError>;
+
+    // WebAuthn ceremony challenge state (server-side state persisted
+    // between the begin and finish halves of a registration or
+    // assertion ceremony).
+    /// Persist the opaque ceremony state for a pending challenge.
+    async fn insert_webauthn_challenge(
+        &self,
+        id: Uuid,
+        user_id: Uuid,
+        kind: &str,
+        state_json: &str,
+        created_at: DateTime<Utc>,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), RepoError>;
+    /// Load the ceremony state for a pending challenge.
+    async fn find_webauthn_challenge(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<WebAuthnChallenge>, RepoError>;
+    /// Mark a challenge as consumed.
+    async fn consume_webauthn_challenge(
+        &self,
+        id: Uuid,
+        now: DateTime<Utc>,
+    ) -> Result<Option<String>, RepoError>;
 }

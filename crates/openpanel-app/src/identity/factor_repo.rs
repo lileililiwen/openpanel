@@ -1,12 +1,14 @@
 //! SQLite repository adapter for two-factor authentication: factors,
-//! encrypted TOTP secrets, recovery codes, and pending-login challenges.
+//! encrypted TOTP secrets, recovery codes, pending-login challenges,
+//! WebAuthn credentials, and in-flight WebAuthn ceremony state.
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use openpanel_domain::{
     RepoError,
     identity::{
-        Factor, FactorKind, TwoFactorChallenge,
+        Factor, FactorKind, TwoFactorChallenge, UserVerificationPolicy, WebAuthnChallenge,
+        WebAuthnCredential,
         factor::{FactorError, RecoveryCode},
         repository::FactorRepository,
     },
@@ -291,6 +293,160 @@ impl FactorRepository for SqliteFactorRepository {
             .map_err(|e| RepoError(format!("purge_expired_challenges: {e}")))?;
         Ok(result.rows_affected())
     }
+
+    async fn insert_webauthn_credential(
+        &self,
+        credential_id: &str,
+        user_id: Uuid,
+        factor_id: Uuid,
+        public_key_spki: &str,
+        sign_count: i64,
+        transports: Option<&'static str>,
+        uv_policy: &str,
+        created_at: DateTime<Utc>,
+    ) -> Result<(), RepoError> {
+        sqlx::query(
+            "INSERT INTO webauthn_credentials(
+                id, user_id, factor_id, credential_id, public_key_spki,
+                sign_count, transports, uv_policy, created_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind(user_id.to_string())
+        .bind(factor_id.to_string())
+        .bind(credential_id)
+        .bind(public_key_spki)
+        .bind(sign_count)
+        .bind(transports)
+        .bind(uv_policy)
+        .bind(created_at.to_rfc3339())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RepoError(format!("insert_webauthn_credential: {e}")))?;
+        Ok(())
+    }
+
+    async fn list_webauthn_credentials(
+        &self,
+        user_id: Uuid,
+    ) -> Result<Vec<WebAuthnCredential>, RepoError> {
+        let rows = sqlx::query(
+            "SELECT * FROM webauthn_credentials
+             WHERE user_id = ? AND revoked_at IS NULL
+             ORDER BY created_at DESC",
+        )
+        .bind(user_id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| RepoError(format!("list_webauthn_credentials: {e}")))?;
+        rows.into_iter().map(row_to_webauthn_credential).collect()
+    }
+
+    async fn find_webauthn_credential_by_id(
+        &self,
+        credential_id: &str,
+    ) -> Result<Option<WebAuthnCredential>, RepoError> {
+        let row = sqlx::query("SELECT * FROM webauthn_credentials WHERE credential_id = ?")
+            .bind(credential_id)
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| RepoError(format!("find_webauthn_credential_by_id: {e}")))?;
+        row.map(row_to_webauthn_credential).transpose()
+    }
+
+    async fn touch_webauthn_credential(
+        &self,
+        credential_id: &str,
+        new_sign_count: i64,
+        last_used_at: DateTime<Utc>,
+    ) -> Result<(), RepoError> {
+        sqlx::query(
+            "UPDATE webauthn_credentials
+             SET sign_count = ?, last_used_at = ?
+             WHERE credential_id = ?",
+        )
+        .bind(new_sign_count)
+        .bind(last_used_at.to_rfc3339())
+        .bind(credential_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RepoError(format!("touch_webauthn_credential: {e}")))?;
+        Ok(())
+    }
+
+    async fn revoke_webauthn_credential(
+        &self,
+        credential_id: &str,
+        now: DateTime<Utc>,
+    ) -> Result<(), RepoError> {
+        sqlx::query("UPDATE webauthn_credentials SET revoked_at = ? WHERE credential_id = ?")
+            .bind(now.to_rfc3339())
+            .bind(credential_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| RepoError(format!("revoke_webauthn_credential: {e}")))?;
+        Ok(())
+    }
+
+    async fn insert_webauthn_challenge(
+        &self,
+        id: Uuid,
+        user_id: Uuid,
+        kind: &str,
+        state_json: &str,
+        created_at: DateTime<Utc>,
+        expires_at: DateTime<Utc>,
+    ) -> Result<(), RepoError> {
+        sqlx::query(
+            "INSERT INTO webauthn_challenges(
+                id, user_id, kind, state_json, created_at, expires_at
+             ) VALUES (?, ?, ?, ?, ?, ?)",
+        )
+        .bind(id.to_string())
+        .bind(user_id.to_string())
+        .bind(kind)
+        .bind(state_json)
+        .bind(created_at.to_rfc3339())
+        .bind(expires_at.to_rfc3339())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RepoError(format!("insert_webauthn_challenge: {e}")))?;
+        Ok(())
+    }
+
+    async fn find_webauthn_challenge(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<WebAuthnChallenge>, RepoError> {
+        let row = sqlx::query("SELECT * FROM webauthn_challenges WHERE id = ?")
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| RepoError(format!("find_webauthn_challenge: {e}")))?;
+        row.map(row_to_webauthn_challenge).transpose()
+    }
+
+    async fn consume_webauthn_challenge(
+        &self,
+        id: Uuid,
+        now: DateTime<Utc>,
+    ) -> Result<Option<String>, RepoError> {
+        let challenge = self.find_webauthn_challenge(id).await?;
+        let Some(challenge) = challenge else {
+            return Ok(None);
+        };
+        if !challenge.is_usable(now) {
+            return Ok(None);
+        }
+        let state = challenge.state_json().to_string();
+        sqlx::query("UPDATE webauthn_challenges SET consumed_at = ? WHERE id = ?")
+            .bind(now.to_rfc3339())
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| RepoError(format!("consume_webauthn_challenge: {e}")))?;
+        Ok(Some(state))
+    }
 }
 
 const CHALLENGE_TOKEN_HASH_COL: &str = "token_hash";
@@ -361,4 +517,68 @@ fn parse_dt(s: &str, label: &str) -> Result<DateTime<Utc>, RepoError> {
     DateTime::parse_from_rfc3339(s)
         .map(|d| d.with_timezone(&Utc))
         .map_err(|e| RepoError(format!("{label}: {e}")))
+}
+
+fn row_to_webauthn_credential(
+    row: sqlx::sqlite::SqliteRow,
+) -> Result<WebAuthnCredential, RepoError> {
+    let id: String = row.get("id");
+    let user_id: String = row.get("user_id");
+    let factor_id: String = row.get("factor_id");
+    let credential_id: String = row.get("credential_id");
+    let public_key_spki: String = row.get("public_key_spki");
+    let sign_count: i64 = row.get("sign_count");
+    let transports: Option<String> = row.get("transports");
+    let uv_policy: String = row.get("uv_policy");
+    let created_at: String = row.get("created_at");
+    let last_used_at: Option<String> = row.get("last_used_at");
+    let revoked_at: Option<String> = row.get("revoked_at");
+    let id = Uuid::parse_str(&id).map_err(|e| RepoError(format!("webauthn id: {e}")))?;
+    let user_id =
+        Uuid::parse_str(&user_id).map_err(|e| RepoError(format!("webauthn user_id: {e}")))?;
+    let factor_id =
+        Uuid::parse_str(&factor_id).map_err(|e| RepoError(format!("webauthn factor_id: {e}")))?;
+    let uv = UserVerificationPolicy::parse(&uv_policy)
+        .ok_or_else(|| RepoError(format!("webauthn uv_policy: {uv_policy}")))?;
+    Ok(WebAuthnCredential::restore(
+        id,
+        user_id,
+        factor_id,
+        credential_id,
+        public_key_spki,
+        sign_count,
+        transports.unwrap_or_default(),
+        uv,
+        parse_dt(&created_at, "webauthn created_at")?,
+        last_used_at
+            .map(|s| parse_dt(&s, "webauthn last_used_at"))
+            .transpose()?,
+        revoked_at
+            .map(|s| parse_dt(&s, "webauthn revoked_at"))
+            .transpose()?,
+    ))
+}
+
+fn row_to_webauthn_challenge(row: sqlx::sqlite::SqliteRow) -> Result<WebAuthnChallenge, RepoError> {
+    let id: String = row.get("id");
+    let user_id: String = row.get("user_id");
+    let kind: String = row.get("kind");
+    let state_json: String = row.get("state_json");
+    let created_at: String = row.get("created_at");
+    let expires_at: String = row.get("expires_at");
+    let consumed_at: Option<String> = row.get("consumed_at");
+    let id = Uuid::parse_str(&id).map_err(|e| RepoError(format!("webauthn challenge id: {e}")))?;
+    let user_id = Uuid::parse_str(&user_id)
+        .map_err(|e| RepoError(format!("webauthn challenge user: {e}")))?;
+    Ok(WebAuthnChallenge::restore(
+        id,
+        user_id,
+        kind,
+        state_json,
+        parse_dt(&created_at, "webauthn challenge created_at")?,
+        parse_dt(&expires_at, "webauthn challenge expires_at")?,
+        consumed_at
+            .map(|s| parse_dt(&s, "webauthn challenge consumed_at"))
+            .transpose()?,
+    ))
 }

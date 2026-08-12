@@ -19,7 +19,7 @@ pub mod user;
 pub use error::IdentityError;
 pub use factor::{
     Factor, FactorError, FactorKind, RecoveryCode, RecoveryCodeSet, TotpSecret, TwoFactorChallenge,
-    constant_time_eq,
+    UserVerificationPolicy, WebAuthnChallenge, WebAuthnCredential, constant_time_eq,
 };
 pub use remember::{
     REMEMBER_DEVICE_COOKIE, REMEMBER_DEVICE_DEFAULT_LIFETIME, REMEMBER_DEVICE_VERSION,

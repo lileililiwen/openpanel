@@ -51,6 +51,12 @@ impl IdentityModule {
                     .to_string(),
                 sql: crate::migrations::IDENTITY_V002.to_string(),
             },
+            Migration {
+                module: MODULE_NAME,
+                version: "003".to_string(),
+                description: "WebAuthn credentials and ceremony challenges".to_string(),
+                sql: crate::migrations::IDENTITY_V003.to_string(),
+            },
         ];
         Self {
             service,

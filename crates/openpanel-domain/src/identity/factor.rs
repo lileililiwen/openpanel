@@ -768,3 +768,288 @@ mod tests {
         assert!(!constant_time_eq(b"abc", b"abcd"));
     }
 }
+
+// --- WebAuthn ---
+
+/// User-verification policy advertised by the relying party.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum UserVerificationPolicy {
+    /// User verification is required.
+    Required,
+    /// User verification is preferred (the panel's default).
+    #[default]
+    Preferred,
+    /// User verification is discouraged (typically a roaming
+    /// security key without biometric).
+    Discouraged,
+}
+
+impl UserVerificationPolicy {
+    /// Stable, lowercase string used for storage and audit.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Required => "required",
+            Self::Preferred => "preferred",
+            Self::Discouraged => "discouraged",
+        }
+    }
+
+    /// Parse from the stable string form.
+    pub fn parse(value: &str) -> Option<Self> {
+        match value {
+            "required" => Some(Self::Required),
+            "preferred" => Some(Self::Preferred),
+            "discouraged" => Some(Self::Discouraged),
+            _ => None,
+        }
+    }
+}
+
+/// A WebAuthn / FIDO2 credential enrolled against a factor.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WebAuthnCredential {
+    /// Stable panel id (NOT the authenticator-issued credential id).
+    id: Uuid,
+    user_id: Uuid,
+    factor_id: Uuid,
+    /// Credential id emitted by the authenticator (opaque to the panel).
+    credential_id: String,
+    /// COSE-encoded public key, hex-encoded.
+    public_key_spki: String,
+    /// Monotonically increasing sign count for clone detection.
+    sign_count: i64,
+    /// Comma-separated transport hints (`"usb,nfc,internal"`); empty when unknown.
+    transports: String,
+    /// The user-verification policy advertised at registration.
+    uv_policy: UserVerificationPolicy,
+    created_at: DateTime<Utc>,
+    last_used_at: Option<DateTime<Utc>>,
+    revoked_at: Option<DateTime<Utc>>,
+}
+
+impl WebAuthnCredential {
+    /// Build a freshly-enrolled credential (created_at = `now`,
+    /// last_used_at = None, revoked_at = None).
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        id: Uuid,
+        user_id: Uuid,
+        factor_id: Uuid,
+        credential_id: String,
+        public_key_spki: String,
+        sign_count: i64,
+        transports: String,
+        uv_policy: UserVerificationPolicy,
+        now: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            id,
+            user_id,
+            factor_id,
+            credential_id,
+            public_key_spki,
+            sign_count,
+            transports,
+            uv_policy,
+            created_at: now,
+            last_used_at: None,
+            revoked_at: None,
+        }
+    }
+
+    /// Rebuild from persisted fields (used by the repository).
+    #[allow(clippy::too_many_arguments)]
+    pub fn restore(
+        id: Uuid,
+        user_id: Uuid,
+        factor_id: Uuid,
+        credential_id: String,
+        public_key_spki: String,
+        sign_count: i64,
+        transports: String,
+        uv_policy: UserVerificationPolicy,
+        created_at: DateTime<Utc>,
+        last_used_at: Option<DateTime<Utc>>,
+        revoked_at: Option<DateTime<Utc>>,
+    ) -> Self {
+        Self {
+            id,
+            user_id,
+            factor_id,
+            credential_id,
+            public_key_spki,
+            sign_count,
+            transports,
+            uv_policy,
+            created_at,
+            last_used_at,
+            revoked_at,
+        }
+    }
+
+    /// Whether this credential can be used (i.e. not revoked).
+    pub fn is_usable(&self) -> bool {
+        self.revoked_at.is_none()
+    }
+
+    /// Stable panel-side id.
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+
+    /// Owner user id.
+    pub fn user_id(&self) -> Uuid {
+        self.user_id
+    }
+
+    /// Owning factor id.
+    pub fn factor_id(&self) -> Uuid {
+        self.factor_id
+    }
+
+    /// Credential id emitted by the authenticator (opaque).
+    pub fn credential_id(&self) -> &str {
+        &self.credential_id
+    }
+
+    /// COSE-encoded public key, hex-encoded for storage.
+    pub fn public_key_spki(&self) -> &str {
+        &self.public_key_spki
+    }
+
+    /// Monotonically increasing counter for clone detection.
+    pub fn sign_count(&self) -> i64 {
+        self.sign_count
+    }
+
+    /// Comma-separated transport hints.
+    pub fn transports(&self) -> &str {
+        &self.transports
+    }
+
+    /// User-verification policy advertised at registration.
+    pub fn uv_policy(&self) -> UserVerificationPolicy {
+        self.uv_policy
+    }
+
+    /// Enrollment timestamp.
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+
+    /// Most recent successful assertion timestamp.
+    pub fn last_used_at(&self) -> Option<DateTime<Utc>> {
+        self.last_used_at
+    }
+
+    /// Revocation timestamp.
+    pub fn revoked_at(&self) -> Option<DateTime<Utc>> {
+        self.revoked_at
+    }
+}
+
+/// A pending WebAuthn ceremony challenge persisted server-side
+/// between the `begin` and `finish` halves. The `state_json` is the
+/// serialized `PasskeyRegistration` or `PasskeyAuthentication`
+/// payload from `webauthn-rs`; the panel treats it as opaque JSON.
+#[derive(Debug, Clone)]
+pub struct WebAuthnChallenge {
+    id: Uuid,
+    user_id: Uuid,
+    /// `"register"` or `"assert"`.
+    kind: String,
+    state_json: String,
+    created_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+    consumed_at: Option<DateTime<Utc>>,
+}
+
+impl WebAuthnChallenge {
+    /// Ceremony kind for assertion flows.
+    pub const KIND_ASSERT: &'static str = "assert";
+    /// Ceremony kind for registration flows.
+    pub const KIND_REGISTER: &'static str = "register";
+
+    /// Build a fresh challenge with `consumed_at = None`.
+    pub fn new(
+        id: Uuid,
+        user_id: Uuid,
+        kind: &str,
+        state_json: String,
+        created_at: DateTime<Utc>,
+        expires_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            id,
+            user_id,
+            kind: kind.to_string(),
+            state_json,
+            created_at,
+            expires_at,
+            consumed_at: None,
+        }
+    }
+
+    /// Rebuild from persisted fields (used by the repository).
+    pub fn restore(
+        id: Uuid,
+        user_id: Uuid,
+        kind: String,
+        state_json: String,
+        created_at: DateTime<Utc>,
+        expires_at: DateTime<Utc>,
+        consumed_at: Option<DateTime<Utc>>,
+    ) -> Self {
+        Self {
+            id,
+            user_id,
+            kind,
+            state_json,
+            created_at,
+            expires_at,
+            consumed_at,
+        }
+    }
+
+    /// Whether the challenge is still valid: not consumed and not past
+    /// its expiry timestamp.
+    pub fn is_usable(&self, now: DateTime<Utc>) -> bool {
+        self.consumed_at.is_none() && now < self.expires_at
+    }
+
+    /// Stable challenge identifier.
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+
+    /// Owner user id.
+    pub fn user_id(&self) -> Uuid {
+        self.user_id
+    }
+
+    /// Ceremony kind (`"register"` or `"assert"`).
+    pub fn kind(&self) -> &str {
+        &self.kind
+    }
+
+    /// Serialized ceremony state (opaque JSON).
+    pub fn state_json(&self) -> &str {
+        &self.state_json
+    }
+
+    /// When the challenge was issued.
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+
+    /// When the challenge expires.
+    pub fn expires_at(&self) -> DateTime<Utc> {
+        self.expires_at
+    }
+
+    /// When the challenge was consumed (single-use).
+    pub fn consumed_at(&self) -> Option<DateTime<Utc>> {
+        self.consumed_at
+    }
+}
