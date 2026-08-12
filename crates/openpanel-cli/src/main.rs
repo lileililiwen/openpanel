@@ -4,8 +4,9 @@ use clap::Parser;
 use openpanel_cli::{
     BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, Command, CronCommand,
     DatabaseCommand, DnsCommand, FileCommand, LogsCommand, MailCommand, MonitoringCommand,
-    SecurityAllowlistCommand, SecurityCommand, SecurityRuleCommand, ServicesCommand, SiteCommand,
-    SoftwareCommand, SslCommand, TwoFactorCommand, UserCommand, handlers,
+    RecoveryCodeCommand, SecurityAllowlistCommand, SecurityCommand, SecurityRuleCommand,
+    ServicesCommand, SiteCommand, SoftwareCommand, SslCommand, TwoFactorCommand, UserCommand,
+    handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -30,16 +31,16 @@ async fn main() -> anyhow::Result<()> {
             UserCommand::Disable { id } => handlers::disable_user(config, id).await,
             UserCommand::Delete { id } => handlers::delete_user(config, id).await,
             UserCommand::TwoFactor { action } => match action {
-                TwoFactorCommand::EnrollTotp { id } => handlers::enroll_user_totp(config, id).await,
-                TwoFactorCommand::ListFactors { id } => {
-                    handlers::list_user_factors(config, id).await
+                TwoFactorCommand::Enroll { kind: _, id } => {
+                    handlers::enroll_user_totp(config, id).await
                 }
-                TwoFactorCommand::RevokeFactor { id, factor_id } => {
+                TwoFactorCommand::List { id } => handlers::list_user_factors(config, id).await,
+                TwoFactorCommand::Revoke { id, factor_id } => {
                     handlers::revoke_user_factor(config, id, factor_id).await
                 }
-                TwoFactorCommand::RegenerateRecovery { id } => {
-                    handlers::regenerate_user_recovery(config, id).await
-                }
+                TwoFactorCommand::Recovery {
+                    action: RecoveryCodeCommand::Regenerate { id },
+                } => handlers::regenerate_user_recovery(config, id).await,
             },
         },
         Command::Site { action } => match action {

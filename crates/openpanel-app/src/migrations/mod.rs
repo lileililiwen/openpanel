@@ -12,6 +12,10 @@ pub const IDENTITY_V002: &str = include_str!("identity/V002__2fa.sql");
 /// SQL for the identity v003 migration (WebAuthn credentials and
 /// in-flight ceremony challenges).
 pub const IDENTITY_V003: &str = include_str!("identity/V003__webauthn.sql");
+/// SQL for the identity v004 migration (adds `passkey_json` to
+/// `webauthn_credentials` so the assertion ceremony can reconstruct
+/// the webauthn-rs `Passkey` without decoding raw COSE bytes).
+pub const IDENTITY_V004: &str = include_str!("identity/V004__webauthn_passkey_json.sql");
 /// SQL for the sites v001 migration (`sites` table).
 pub const SITES_V001: &str = include_str!("sites/V001__init.sql");
 /// SQL for the databases v001 migration (`databases` table).

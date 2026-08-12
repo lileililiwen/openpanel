@@ -73,6 +73,27 @@ pub fn issue_remember_device(
     ip: &str,
     now: DateTime<Utc>,
 ) -> String {
+    issue_remember_device_with_lifetime(
+        master_key,
+        user_id,
+        factor_id,
+        user_agent,
+        ip,
+        now,
+        chrono::Duration::days(DEFAULT_LIFETIME_DAYS),
+    )
+}
+
+/// Build a remember-device cookie using a configured lifetime.
+pub fn issue_remember_device_with_lifetime(
+    master_key: &[u8; 32],
+    user_id: Uuid,
+    factor_id: Uuid,
+    user_agent: &str,
+    ip: &str,
+    now: DateTime<Utc>,
+    lifetime: chrono::Duration,
+) -> String {
     let cookie_key = derive_signing_key(master_key);
     let payload = RememberedDevicePayload {
         v: REMEMBER_DEVICE_VERSION,
@@ -80,7 +101,7 @@ pub fn issue_remember_device(
         user_id,
         ua_hash: hash_user_agent(user_agent),
         ip_prefix: ip_prefix(ip),
-        exp: now + chrono::Duration::days(DEFAULT_LIFETIME_DAYS),
+        exp: now + lifetime,
         nonce: Uuid::new_v4(),
     };
     let payload_bytes = match serde_json::to_vec(&payload) {

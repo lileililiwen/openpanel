@@ -68,6 +68,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Auth + crypto
 argon2 = "0.5"
+bcrypt = "0.17"
 rand = "0.8"
 base64 = "0.22"
 sha2 = "0.10"
@@ -123,7 +124,7 @@ aes-gcm = "0.10"
 totp-rs = { version = "5", default-features = false, features = ["gen_secret", "otpauth"] }
 
 # WebAuthn / FIDO2 for two-factor authentication
-webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation"] }
+webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation", "danger-credential-internals"] }
 
 # HMAC-based signing for remember-device cookies
 hmac = "0.12"
@@ -158,6 +159,7 @@ sqlx = { workspace = true }
 tempfile = "3"
 cargo-audit = "0.22"
 chrono = { workspace = true }
+totp-rs = { workspace = true }
 flate2 = "1"
 tar = "0.4"
 base64 = { workspace = true }

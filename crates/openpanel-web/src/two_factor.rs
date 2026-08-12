@@ -1,9 +1,9 @@
 //! Two-factor authentication settings page.
 
 use axum::{
-    Form,
+    Form, Json,
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
 };
 use maud::{DOCTYPE, Markup, html};
@@ -41,6 +41,93 @@ pub struct EmptyCsrf {
     pub _csrf: String,
 }
 
+/// TOTP enrollment verification form.
+#[derive(Deserialize)]
+pub struct VerifyTotpForm {
+    /// CSRF token.
+    pub _csrf: String,
+    /// Pending enrollment id.
+    pub enrollment_id: Uuid,
+    /// Six-digit code from the authenticator.
+    pub code: String,
+}
+
+fn valid_csrf_header(headers: &HeaderMap, state: &WebState, session_id: Uuid) -> bool {
+    headers
+        .get("x-csrf-token")
+        .and_then(|value| value.to_str().ok())
+        .is_some_and(|token| state.csrf.verify(session_id, token))
+}
+
+/// `POST /settings/security/webauthn/register/begin` — begin a
+/// browser-bound passkey ceremony with CSRF protection.
+pub async fn begin_webauthn(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    headers: HeaderMap,
+) -> Response {
+    if !valid_csrf_header(&headers, &state, session.id()) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let now = chrono::Utc::now();
+    let result = state
+        .two_factor
+        .begin_webauthn_register(user.id(), user.username().as_str());
+    let (challenge_id, public_key, state_json) = match result {
+        Ok(value) => value,
+        Err(error) => {
+            return (StatusCode::UNPROCESSABLE_ENTITY, error.to_string()).into_response();
+        }
+    };
+    if let Err(error) = state
+        .two_factor
+        .persist_webauthn_register(challenge_id, user.id(), &state_json, now)
+        .await
+    {
+        return (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()).into_response();
+    }
+    Json(serde_json::json!({
+        "challenge_id": challenge_id,
+        "public_key": public_key,
+    }))
+    .into_response()
+}
+
+/// Browser payload completing a passkey registration ceremony.
+#[derive(Debug, Deserialize)]
+pub struct FinishWebAuthnForm {
+    /// Panel-side ceremony id.
+    challenge_id: Uuid,
+    /// Serialized `PublicKeyCredential` returned by the browser.
+    credential: serde_json::Value,
+}
+
+/// `POST /settings/security/webauthn/register/finish`.
+pub async fn finish_webauthn(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    headers: HeaderMap,
+    Json(form): Json<FinishWebAuthnForm>,
+) -> Response {
+    if !valid_csrf_header(&headers, &state, session.id()) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    match state
+        .two_factor
+        .finish_webauthn_register(
+            user.username().as_str(),
+            form.challenge_id,
+            user.id(),
+            &form.credential,
+            chrono::Utc::now(),
+        )
+        .await
+    {
+        Ok(_) => Json(serde_json::json!({"ok": true})).into_response(),
+        Err(error) => (StatusCode::UNPROCESSABLE_ENTITY, error.to_string()).into_response(),
+    }
+}
+
 /// `POST /settings/security/totp/enroll` — enroll TOTP for the current user.
 pub async fn enroll_totp(
     State(state): State<WebState>,
@@ -56,7 +143,6 @@ pub async fn enroll_totp(
         .enroll_totp(
             user.id(),
             user.username().as_str(),
-            "OpenPanel",
             user.username().as_str(),
             now,
         )
@@ -65,11 +151,46 @@ pub async fn enroll_totp(
         Ok(enrollment) => {
             let csrf = state.csrf.token_for(session.id());
             let content = enrollment_content(
+                enrollment.enrollment_id,
                 &enrollment.secret.to_base32(),
                 &enrollment.provisioning_uri,
-                &enrollment.recovery_codes,
                 &csrf,
             );
+            state
+                .render_shell(&user, &csrf, "/settings/security", content)
+                .await
+                .into_response()
+        }
+        Err(error) => {
+            let csrf = state.csrf.token_for(session.id());
+            error_page_response(&error.to_string(), &state, &user, &csrf).await
+        }
+    }
+}
+
+/// `POST /settings/security/totp/verify` — activate a pending TOTP enrollment.
+pub async fn verify_totp(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Form(form): Form<VerifyTotpForm>,
+) -> Response {
+    if !state.csrf.verify(session.id(), &form._csrf) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    match state
+        .two_factor
+        .verify_totp_enrollment(
+            user.username().as_str(),
+            user.id(),
+            form.enrollment_id,
+            &form.code,
+            chrono::Utc::now(),
+        )
+        .await
+    {
+        Ok(verified) => {
+            let csrf = state.csrf.token_for(session.id());
+            let content = recovery_content(&verified.recovery_codes, &csrf);
             state
                 .render_shell(&user, &csrf, "/settings/security", content)
                 .await
@@ -190,6 +311,8 @@ fn security_content(factors: &[Factor], recovery_remaining: u8, csrf: &str) -> M
                             input type="hidden" name="_csrf" value=(csrf);
                             button type="submit" class="button" { "Enroll TOTP" }
                         }
+                        button type="button" class="button" id="enroll-webauthn" { "Enroll passkey" }
+                        p id="webauthn-status" role="status" {}
                     }
                     section class="card" {
                         h2 { "Recovery codes" }
@@ -199,6 +322,42 @@ fn security_content(factors: &[Factor], recovery_remaining: u8, csrf: &str) -> M
                             button type="submit" class="button" { "Regenerate recovery codes" }
                         }
                     }
+                    script {
+                        (maud::PreEscaped(format!(r#"
+const csrf = {csrf:?};
+const status = document.getElementById('webauthn-status');
+const fromB64 = value => Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - value.length % 4) % 4)), c => c.charCodeAt(0));
+const toB64 = value => btoa(String.fromCharCode(...new Uint8Array(value))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+document.getElementById('enroll-webauthn').addEventListener('click', async () => {{
+  try {{
+    const begin = await fetch('/settings/security/webauthn/register/begin', {{method: 'POST', headers: {{'x-csrf-token': csrf}}}});
+    if (!begin.ok) throw new Error(await begin.text());
+    const ceremony = await begin.json();
+    const options = ceremony.public_key.publicKey || ceremony.public_key;
+    options.challenge = fromB64(options.challenge);
+    options.user.id = fromB64(options.user.id);
+    if (options.excludeCredentials) options.excludeCredentials.forEach(c => c.id = fromB64(c.id));
+    const credential = await navigator.credentials.create({{publicKey: options}});
+    const body = {{
+      challenge_id: ceremony.challenge_id,
+      credential: {{
+        id: credential.id,
+        rawId: toB64(credential.rawId),
+        type: credential.type,
+        response: {{
+          clientDataJSON: toB64(credential.response.clientDataJSON),
+          attestationObject: toB64(credential.response.attestationObject),
+          transports: credential.response.getTransports ? credential.response.getTransports() : []
+        }}
+      }}
+    }};
+    const finish = await fetch('/settings/security/webauthn/register/finish', {{method: 'POST', headers: {{'content-type': 'application/json', 'x-csrf-token': csrf}}, body: JSON.stringify(body)}});
+    if (!finish.ok) throw new Error(await finish.text());
+    window.location.reload();
+  }} catch (error) {{ status.textContent = `Passkey enrollment failed: ${{error.message}}`; }}
+}});
+"#)))
+                    }
                 }
             }
         }
@@ -206,9 +365,9 @@ fn security_content(factors: &[Factor], recovery_remaining: u8, csrf: &str) -> M
 }
 
 fn enrollment_content(
+    enrollment_id: Uuid,
     secret_base32: &str,
     provisioning_uri: &str,
-    recovery_codes: &[String],
     csrf: &str,
 ) -> Markup {
     html! {
@@ -221,25 +380,22 @@ fn enrollment_content(
             }
             body {
                 main class="settings" {
-                    h1 { "TOTP enrolled — save these now" }
+                    h1 { "Verify TOTP enrollment" }
                     div class="banner banner--ok" {
-                        "The secret and recovery codes below are shown only once. Save them in a password manager or write them down."
+                        "The secret below is shown only once. Add it to your authenticator, then enter the current six-digit code to activate it."
                     }
                     section class="card" {
                         h2 { "TOTP secret" }
                         p class="config__path" { code { (secret_base32) } }
                         p { "Provisioning URI: " code { (provisioning_uri) } }
                     }
-                    section class="card" {
-                        h2 { "Recovery codes" }
-                        ul {
-                            @for code in recovery_codes {
-                                li { code { (code) } }
-                            }
+                    form method="post" action="/settings/security/totp/verify" {
+                        input type="hidden" name="_csrf" value=(csrf);
+                        input type="hidden" name="enrollment_id" value=(enrollment_id);
+                        label for="totp-code" { "Authenticator code" }
+                        input id="totp-code" name="code" inputmode="numeric" autocomplete="one-time-code" required;
+                        button type="submit" class="button" { "Verify and activate" }
                         }
-                    }
-                    a class="button" href="/settings/security" { "Done" }
-                    input type="hidden" name="_csrf" value=(csrf);
                 }
             }
         }

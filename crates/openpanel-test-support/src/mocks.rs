@@ -105,6 +105,19 @@ mock! {
             &self,
             factor_id: uuid::Uuid,
         ) -> Result<Option<String>, RepoError>;
+        async fn insert_totp_enrollment(
+            &self,
+            enrollment: &openpanel_domain::identity::TotpEnrollmentChallenge,
+        ) -> Result<(), RepoError>;
+        async fn find_totp_enrollment(
+            &self,
+            id: uuid::Uuid,
+        ) -> Result<Option<openpanel_domain::identity::TotpEnrollmentChallenge>, RepoError>;
+        async fn consume_totp_enrollment(
+            &self,
+            id: uuid::Uuid,
+            now: chrono::DateTime<chrono::Utc>,
+        ) -> Result<bool, RepoError>;
         async fn replace_recovery_codes(
             &self,
             user_id: uuid::Uuid,
@@ -143,15 +156,16 @@ mock! {
             &self,
             now: chrono::DateTime<chrono::Utc>,
         ) -> Result<u64, RepoError>;
-        async fn insert_webauthn_credential(
+        async fn insert_webauthn_credential<'a>(
             &self,
             credential_id: &str,
             user_id: uuid::Uuid,
             factor_id: uuid::Uuid,
             public_key_spki: &str,
             sign_count: i64,
-            transports: Option<&'static str>,
+            transports: Option<&'a str>,
             uv_policy: &str,
+            passkey_json: &str,
             created_at: chrono::DateTime<chrono::Utc>,
         ) -> Result<(), RepoError>;
         async fn list_webauthn_credentials(
@@ -190,7 +204,7 @@ mock! {
             &self,
             id: uuid::Uuid,
             now: chrono::DateTime<chrono::Utc>,
-        ) -> Result<Option<String>, RepoError>;
+        ) -> Result<Option<openpanel_domain::identity::WebAuthnChallenge>, RepoError>;
     }
 }
 

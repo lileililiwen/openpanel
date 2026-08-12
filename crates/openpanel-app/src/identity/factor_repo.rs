@@ -7,8 +7,8 @@ use chrono::{DateTime, Utc};
 use openpanel_domain::{
     RepoError,
     identity::{
-        Factor, FactorKind, TwoFactorChallenge, UserVerificationPolicy, WebAuthnChallenge,
-        WebAuthnCredential,
+        Factor, FactorKind, TotpEnrollmentChallenge, TwoFactorChallenge, UserVerificationPolicy,
+        WebAuthnChallenge, WebAuthnCredential,
         factor::{FactorError, RecoveryCode},
         repository::FactorRepository,
     },
@@ -121,6 +121,60 @@ impl FactorRepository for SqliteFactorRepository {
             .await
             .map_err(|e| RepoError(format!("find_totp_secret_encrypted: {e}")))?;
         Ok(row.and_then(|r| r.get::<Option<String>, _>("totp_secret_encrypted")))
+    }
+
+    async fn insert_totp_enrollment(
+        &self,
+        enrollment: &TotpEnrollmentChallenge,
+    ) -> Result<(), RepoError> {
+        sqlx::query(
+            "INSERT INTO totp_enrollment_challenges(
+                id, user_id, encrypted_secret, created_at, expires_at
+             ) VALUES (?, ?, ?, ?, ?)",
+        )
+        .bind(enrollment.id().to_string())
+        .bind(enrollment.user_id().to_string())
+        .bind(enrollment.encrypted_secret())
+        .bind(enrollment.created_at().to_rfc3339())
+        .bind(enrollment.expires_at().to_rfc3339())
+        .execute(&self.pool)
+        .await
+        .map_err(|error| RepoError(format!("insert_totp_enrollment: {error}")))?;
+        Ok(())
+    }
+
+    async fn find_totp_enrollment(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<TotpEnrollmentChallenge>, RepoError> {
+        let row = sqlx::query(
+            "SELECT id, user_id, encrypted_secret, created_at, expires_at
+             FROM totp_enrollment_challenges
+             WHERE id = ? AND consumed_at IS NULL",
+        )
+        .bind(id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|error| RepoError(format!("find_totp_enrollment: {error}")))?;
+        row.map(row_to_totp_enrollment).transpose()
+    }
+
+    async fn consume_totp_enrollment(
+        &self,
+        id: Uuid,
+        now: DateTime<Utc>,
+    ) -> Result<bool, RepoError> {
+        let result = sqlx::query(
+            "UPDATE totp_enrollment_challenges SET consumed_at = ?
+             WHERE id = ? AND consumed_at IS NULL AND expires_at > ?",
+        )
+        .bind(now.to_rfc3339())
+        .bind(id.to_string())
+        .bind(now.to_rfc3339())
+        .execute(&self.pool)
+        .await
+        .map_err(|error| RepoError(format!("consume_totp_enrollment: {error}")))?;
+        Ok(result.rows_affected() == 1)
     }
 
     async fn replace_recovery_codes(
@@ -294,22 +348,23 @@ impl FactorRepository for SqliteFactorRepository {
         Ok(result.rows_affected())
     }
 
-    async fn insert_webauthn_credential(
+    async fn insert_webauthn_credential<'a>(
         &self,
         credential_id: &str,
         user_id: Uuid,
         factor_id: Uuid,
         public_key_spki: &str,
         sign_count: i64,
-        transports: Option<&'static str>,
+        transports: Option<&'a str>,
         uv_policy: &str,
+        passkey_json: &str,
         created_at: DateTime<Utc>,
     ) -> Result<(), RepoError> {
         sqlx::query(
             "INSERT INTO webauthn_credentials(
                 id, user_id, factor_id, credential_id, public_key_spki,
-                sign_count, transports, uv_policy, created_at
-             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                sign_count, transports, uv_policy, passkey_json, created_at
+             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(Uuid::new_v4().to_string())
         .bind(user_id.to_string())
@@ -319,6 +374,7 @@ impl FactorRepository for SqliteFactorRepository {
         .bind(sign_count)
         .bind(transports)
         .bind(uv_policy)
+        .bind(passkey_json)
         .bind(created_at.to_rfc3339())
         .execute(&self.pool)
         .await
@@ -430,7 +486,7 @@ impl FactorRepository for SqliteFactorRepository {
         &self,
         id: Uuid,
         now: DateTime<Utc>,
-    ) -> Result<Option<String>, RepoError> {
+    ) -> Result<Option<WebAuthnChallenge>, RepoError> {
         let challenge = self.find_webauthn_challenge(id).await?;
         let Some(challenge) = challenge else {
             return Ok(None);
@@ -438,14 +494,21 @@ impl FactorRepository for SqliteFactorRepository {
         if !challenge.is_usable(now) {
             return Ok(None);
         }
-        let state = challenge.state_json().to_string();
-        sqlx::query("UPDATE webauthn_challenges SET consumed_at = ? WHERE id = ?")
-            .bind(now.to_rfc3339())
-            .bind(id.to_string())
-            .execute(&self.pool)
-            .await
-            .map_err(|e| RepoError(format!("consume_webauthn_challenge: {e}")))?;
-        Ok(Some(state))
+        let result = sqlx::query(
+            "UPDATE webauthn_challenges SET consumed_at = ?
+             WHERE id = ? AND consumed_at IS NULL AND expires_at > ?",
+        )
+        .bind(now.to_rfc3339())
+        .bind(id.to_string())
+        .bind(now.to_rfc3339())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| RepoError(format!("consume_webauthn_challenge: {e}")))?;
+        if result.rows_affected() == 1 {
+            Ok(Some(challenge))
+        } else {
+            Ok(None)
+        }
     }
 }
 
@@ -481,6 +544,24 @@ fn row_to_factor(row: sqlx::sqlite::SqliteRow) -> Result<Factor, RepoError> {
         last_used_at,
         revoked_at,
         last_used_step,
+    ))
+}
+
+fn row_to_totp_enrollment(
+    row: sqlx::sqlite::SqliteRow,
+) -> Result<TotpEnrollmentChallenge, RepoError> {
+    let id: String = row.get("id");
+    let user_id: String = row.get("user_id");
+    let encrypted_secret: String = row.get("encrypted_secret");
+    let created_at: String = row.get("created_at");
+    let expires_at: String = row.get("expires_at");
+    Ok(TotpEnrollmentChallenge::restore(
+        Uuid::parse_str(&id).map_err(|error| RepoError(format!("TOTP enrollment id: {error}")))?,
+        Uuid::parse_str(&user_id)
+            .map_err(|error| RepoError(format!("TOTP enrollment user: {error}")))?,
+        encrypted_secret,
+        parse_dt(&created_at, "TOTP enrollment created_at")?,
+        parse_dt(&expires_at, "TOTP enrollment expires_at")?,
     ))
 }
 
@@ -530,6 +611,7 @@ fn row_to_webauthn_credential(
     let sign_count: i64 = row.get("sign_count");
     let transports: Option<String> = row.get("transports");
     let uv_policy: String = row.get("uv_policy");
+    let passkey_json: String = row.get("passkey_json");
     let created_at: String = row.get("created_at");
     let last_used_at: Option<String> = row.get("last_used_at");
     let revoked_at: Option<String> = row.get("revoked_at");
@@ -549,6 +631,7 @@ fn row_to_webauthn_credential(
         sign_count,
         transports.unwrap_or_default(),
         uv,
+        passkey_json,
         parse_dt(&created_at, "webauthn created_at")?,
         last_used_at
             .map(|s| parse_dt(&s, "webauthn last_used_at"))

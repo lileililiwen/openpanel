@@ -698,6 +698,7 @@ pub enum UserCommand {
         id: String,
     },
     /// Manage a user's second-factor authentication.
+    #[command(name = "2fa")]
     TwoFactor {
         /// Subcommand (enroll/list/revoke/regenerate).
         #[command(subcommand)]
@@ -710,19 +711,23 @@ pub enum UserCommand {
 pub enum TwoFactorCommand {
     /// Enroll a TOTP factor for the user. Prints the secret, provisioning
     /// URI, and recovery codes to stdout exactly once.
-    EnrollTotp {
+    Enroll {
+        /// Factor kind. TOTP enrollment is supported from the terminal;
+        /// WebAuthn registration requires the browser security page.
+        #[arg(value_parser = ["totp"])]
+        kind: String,
         /// ID of the user to enroll.
         #[arg(long)]
         id: String,
     },
     /// List the user's enrolled factors.
-    ListFactors {
+    List {
         /// ID of the user whose factors to list.
         #[arg(long)]
         id: String,
     },
     /// Revoke an enrolled factor.
-    RevokeFactor {
+    Revoke {
         /// ID of the user owning the factor.
         #[arg(long)]
         id: String,
@@ -732,7 +737,18 @@ pub enum TwoFactorCommand {
     },
     /// Regenerate the recovery code set for a user. Prints the new
     /// codes to stdout exactly once.
-    RegenerateRecovery {
+    Recovery {
+        /// Recovery-code operation.
+        #[command(subcommand)]
+        action: RecoveryCodeCommand,
+    },
+}
+
+/// Recovery-code operations under `openpanel user 2fa recovery`.
+#[derive(Debug, Subcommand)]
+pub enum RecoveryCodeCommand {
+    /// Replace all existing recovery codes and print the new set once.
+    Regenerate {
         /// ID of the user whose recovery codes to regenerate.
         #[arg(long)]
         id: String,

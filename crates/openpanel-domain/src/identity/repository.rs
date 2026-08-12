@@ -5,7 +5,10 @@ use uuid::Uuid;
 use crate::{
     RepoError,
     identity::{
-        factor::{Factor, TwoFactorChallenge, WebAuthnChallenge, WebAuthnCredential},
+        factor::{
+            Factor, TotpEnrollmentChallenge, TwoFactorChallenge, WebAuthnChallenge,
+            WebAuthnCredential,
+        },
         role::Role,
         session::{Session, SessionToken},
         user::User,
@@ -93,6 +96,22 @@ pub trait FactorRepository: Send + Sync + 'static {
         &self,
         factor_id: Uuid,
     ) -> Result<Option<String>, RepoError>;
+    /// Persist a pending TOTP enrollment ceremony.
+    async fn insert_totp_enrollment(
+        &self,
+        enrollment: &TotpEnrollmentChallenge,
+    ) -> Result<(), RepoError>;
+    /// Load a pending TOTP enrollment ceremony.
+    async fn find_totp_enrollment(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<TotpEnrollmentChallenge>, RepoError>;
+    /// Atomically consume a still-valid pending TOTP enrollment.
+    async fn consume_totp_enrollment(
+        &self,
+        id: Uuid,
+        now: DateTime<Utc>,
+    ) -> Result<bool, RepoError>;
 
     // Recovery codes
     /// Replace the user's recovery-code set with a fresh batch.
@@ -142,16 +161,19 @@ pub trait FactorRepository: Send + Sync + 'static {
     async fn purge_expired_challenges(&self, now: DateTime<Utc>) -> Result<u64, RepoError>;
 
     // WebAuthn credentials
-    /// Insert a WebAuthn credential row.
-    async fn insert_webauthn_credential(
+    /// Insert a WebAuthn credential row. `passkey_json` holds the
+    /// webauthn-rs `Passkey` serialized via serde so the assertion
+    /// ceremony can reconstruct it without decoding raw COSE bytes.
+    async fn insert_webauthn_credential<'a>(
         &self,
         credential_id: &str,
         user_id: Uuid,
         factor_id: Uuid,
         public_key_spki: &str,
         sign_count: i64,
-        transports: Option<&'static str>,
+        transports: Option<&'a str>,
         uv_policy: &str,
+        passkey_json: &str,
         created_at: DateTime<Utc>,
     ) -> Result<(), RepoError>;
     /// List the (non-revoked) WebAuthn credentials for a user.
@@ -201,5 +223,5 @@ pub trait FactorRepository: Send + Sync + 'static {
         &self,
         id: Uuid,
         now: DateTime<Utc>,
-    ) -> Result<Option<String>, RepoError>;
+    ) -> Result<Option<WebAuthnChallenge>, RepoError>;
 }

@@ -36,6 +36,10 @@ pub enum FactorError {
     /// Recovery code was already consumed.
     #[error("recovery code has already been consumed")]
     RecoveryConsumed,
+    /// A WebAuthn authenticator counter did not advance, indicating a
+    /// replayed assertion or cloned credential.
+    #[error("WebAuthn signature counter did not advance")]
+    WebAuthnCounterRegression,
     /// TOTP secret bytes could not be decoded.
     #[error("TOTP secret is malformed")]
     InvalidSecret,
@@ -212,6 +216,80 @@ pub struct TotpSecret {
     algorithm: Algorithm,
 }
 
+/// Durable, time-bounded TOTP enrollment awaiting proof that the user
+/// successfully configured the presented secret.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TotpEnrollmentChallenge {
+    id: Uuid,
+    user_id: Uuid,
+    encrypted_secret: String,
+    created_at: DateTime<Utc>,
+    expires_at: DateTime<Utc>,
+}
+
+impl TotpEnrollmentChallenge {
+    /// Pending enrollment lifetime.
+    pub const DEFAULT_LIFETIME: chrono::Duration = chrono::Duration::minutes(10);
+
+    /// Create a pending enrollment containing only encrypted secret material.
+    pub fn new(id: Uuid, user_id: Uuid, encrypted_secret: String, now: DateTime<Utc>) -> Self {
+        Self {
+            id,
+            user_id,
+            encrypted_secret,
+            created_at: now,
+            expires_at: now + Self::DEFAULT_LIFETIME,
+        }
+    }
+
+    /// Restore persisted enrollment state.
+    pub fn restore(
+        id: Uuid,
+        user_id: Uuid,
+        encrypted_secret: String,
+        created_at: DateTime<Utc>,
+        expires_at: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            id,
+            user_id,
+            encrypted_secret,
+            created_at,
+            expires_at,
+        }
+    }
+
+    /// Whether verification may still complete.
+    pub fn is_usable(&self, now: DateTime<Utc>) -> bool {
+        now < self.expires_at
+    }
+
+    /// Stable enrollment id.
+    pub fn id(&self) -> Uuid {
+        self.id
+    }
+
+    /// User owning the enrollment.
+    pub fn user_id(&self) -> Uuid {
+        self.user_id
+    }
+
+    /// Encrypted secret envelope.
+    pub fn encrypted_secret(&self) -> &str {
+        &self.encrypted_secret
+    }
+
+    /// Creation time.
+    pub fn created_at(&self) -> DateTime<Utc> {
+        self.created_at
+    }
+
+    /// Expiry time.
+    pub fn expires_at(&self) -> DateTime<Utc> {
+        self.expires_at
+    }
+}
+
 impl TotpSecret {
     /// Generate a fresh 160-bit (20-byte) secret and the RFC 6238
     /// defaults (6 digits, 30-second period, SHA-1).
@@ -340,31 +418,27 @@ pub fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-/// A single-use recovery code plus its argon2 hash.
+/// A single-use recovery code plus its bcrypt hash.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RecoveryCode {
     /// Plaintext code (base32-Crockford, see [`generate_recovery_code`]).
     pub plaintext: String,
-    /// Independent argon2id PHC hash of the plaintext.
+    /// Independent bcrypt hash of the plaintext.
     pub hash: String,
 }
 
 impl RecoveryCode {
-    /// Compute the argon2id PHC hash of a plaintext code.
+    /// Compute the bcrypt hash of a plaintext code.
     pub fn hash(plaintext: &str) -> Result<String, FactorError> {
-        let salt = SaltString::generate(&mut OsRng);
-        Argon2::default()
-            .hash_password(plaintext.as_bytes(), &salt)
-            .map_err(|_| FactorError::InvalidSecret)
-            .map(|h| h.to_string())
+        bcrypt::hash(plaintext, bcrypt::DEFAULT_COST).map_err(|_| FactorError::InvalidSecret)
     }
 
     /// Verify a presented plaintext against the stored hash.
     pub fn verify(plaintext: &str, hash: &str) -> Result<(), FactorError> {
-        let parsed = PasswordHash::new(hash).map_err(|_| FactorError::RecoveryMismatch)?;
-        Argon2::default()
-            .verify_password(plaintext.as_bytes(), &parsed)
-            .map_err(|_| FactorError::RecoveryMismatch)
+        match bcrypt::verify(plaintext, hash) {
+            Ok(true) => Ok(()),
+            Ok(false) | Err(_) => Err(FactorError::RecoveryMismatch),
+        }
     }
 }
 
@@ -381,7 +455,7 @@ pub struct RecoveryCodeSet {
 
 #[derive(Debug, Clone)]
 struct RecoveryCodeEntry {
-    /// argon2id PHC hash of the plaintext.
+    /// bcrypt hash of the plaintext.
     hash: String,
     /// Unix-second timestamp the code was consumed (single-use).
     consumed_at: Option<DateTime<Utc>>,
@@ -396,7 +470,7 @@ impl RecoveryCodeSet {
         let mut entries = Vec::with_capacity(count as usize);
         for _ in 0..count {
             let code = generate_recovery_code();
-            // argon2id with a random salt never fails; the unwrap_or_default is unreachable.
+            // bcrypt with a supported cost does not fail for these bounded plaintexts.
             let hash = hash_recovery_code(&code).unwrap_or_default();
             plaintexts.push(code);
             entries.push(RecoveryCodeEntry {
@@ -476,12 +550,7 @@ pub fn generate_recovery_code() -> String {
 }
 
 fn hash_recovery_code(code: &str) -> Result<String, FactorError> {
-    let salt = SaltString::generate(&mut OsRng);
-    let hash = Argon2::default()
-        .hash_password(code.as_bytes(), &salt)
-        .map_err(|_| FactorError::InvalidSecret)?
-        .to_string();
-    Ok(hash)
+    RecoveryCode::hash(code)
 }
 
 fn base32_crockford(bytes: &[u8]) -> String {
@@ -533,6 +602,17 @@ impl TwoFactorChallenge {
         user_agent: Option<String>,
         now: DateTime<Utc>,
     ) -> (Self, String) {
+        Self::create_with_lifetime(user_id, source_ip, user_agent, now, Self::DEFAULT_LIFETIME)
+    }
+
+    /// Create a challenge using a configured lifetime.
+    pub fn create_with_lifetime(
+        user_id: Uuid,
+        source_ip: Option<String>,
+        user_agent: Option<String>,
+        now: DateTime<Utc>,
+        lifetime: chrono::Duration,
+    ) -> (Self, String) {
         let id = Uuid::new_v4();
         let token = random_token();
         let token_hash = hash_token(&token);
@@ -541,7 +621,7 @@ impl TwoFactorChallenge {
             user_id,
             token_hash,
             created_at: now,
-            expires_at: now + Self::DEFAULT_LIFETIME,
+            expires_at: now + lifetime,
             consumed_at: None,
             source_ip,
             user_agent,
@@ -658,7 +738,23 @@ fn hash_token(token: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use proptest::prelude::*;
+
     use super::*;
+
+    #[test]
+    fn factor_constructors_preserve_totp_and_webauthn_kinds() {
+        let now = Utc::now();
+        let user_id = Uuid::new_v4();
+        for kind in [FactorKind::Totp, FactorKind::WebAuthn] {
+            let id = Uuid::new_v4();
+            let factor = Factor::new_verified(id, user_id, kind, now);
+            assert_eq!(factor.id(), id);
+            assert_eq!(factor.user_id(), user_id);
+            assert_eq!(factor.kind(), kind);
+            assert!(factor.is_usable());
+        }
+    }
 
     #[test]
     fn totp_verify_accepts_current_code_and_rejects_random() {
@@ -767,6 +863,94 @@ mod tests {
         assert!(!constant_time_eq(b"abc", b"abd"));
         assert!(!constant_time_eq(b"abc", b"abcd"));
     }
+
+    #[test]
+    fn webauthn_credential_constructor_preserves_public_fields() {
+        let now = Utc::now();
+        let id = Uuid::new_v4();
+        let user_id = Uuid::new_v4();
+        let factor_id = Uuid::new_v4();
+        let credential = WebAuthnCredential::new(
+            id,
+            user_id,
+            factor_id,
+            "credential".into(),
+            "public-key".into(),
+            7,
+            "usb,nfc".into(),
+            UserVerificationPolicy::Required,
+            "{\"cred\":{}}".into(),
+            now,
+        );
+        assert_eq!(credential.id(), id);
+        assert_eq!(credential.user_id(), user_id);
+        assert_eq!(credential.factor_id(), factor_id);
+        assert_eq!(credential.credential_id(), "credential");
+        assert_eq!(credential.public_key_spki(), "public-key");
+        assert_eq!(credential.sign_count(), 7);
+        assert_eq!(credential.transports(), "usb,nfc");
+        assert_eq!(credential.uv_policy(), UserVerificationPolicy::Required);
+        assert_eq!(credential.created_at(), now);
+        assert!(credential.last_used_at().is_none());
+        assert!(credential.revoked_at().is_none());
+    }
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn prop_totp_rejects_codes_outside_adjacent_window(offset in 2_i64..10_000) {
+            let secret = TotpSecret::from_bytes(vec![0x42; 20]).unwrap();
+            let now = DateTime::from_timestamp(1_800_000_000, 0).unwrap();
+            let current_step = secret.current_step(now);
+            let totp = secret.totp("OpenPanel", "property@example.com");
+            let outside_step = current_step + offset;
+            let code = totp
+                .generate(u64::try_from(outside_step).unwrap());
+            // Six-digit TOTP values can collide across counters. A code from an
+            // outside counter is still valid when its value equals one produced
+            // by the accepted current/adjacent counters.
+            let accepted_codes = (-1_i64..=1)
+                .map(|delta| totp.generate(u64::try_from(current_step + delta).unwrap()))
+                .collect::<Vec<_>>();
+            prop_assume!(!accepted_codes.contains(&code));
+            prop_assert_eq!(secret.verify(&code, now), Err(FactorError::CodeMismatch));
+        }
+
+        #[test]
+        fn prop_webauthn_counter_regression_is_rejected(
+            stored in 0_i64..i64::MAX,
+            delta in 0_i64..1_000,
+        ) {
+            let now = Utc::now();
+            let mut credential = WebAuthnCredential::new(
+                Uuid::new_v4(),
+                Uuid::new_v4(),
+                Uuid::new_v4(),
+                "credential".into(),
+                "public-key".into(),
+                stored,
+                String::new(),
+                UserVerificationPolicy::Preferred,
+                "{}".into(),
+                now,
+            );
+            let presented = stored.saturating_sub(delta);
+            prop_assert_eq!(
+                credential.record_assertion(presented, now),
+                Err(FactorError::WebAuthnCounterRegression)
+            );
+        }
+
+        #[test]
+        fn prop_recovery_codes_are_single_use(count in 1_u8..4) {
+            let now = Utc::now();
+            let (mut set, plaintexts) = RecoveryCodeSet::generate(Uuid::new_v4(), count, now);
+            let code = &plaintexts[0];
+            prop_assert!(set.consume(code, now).is_ok());
+            prop_assert_eq!(set.consume(code, now), Err(FactorError::RecoveryMismatch));
+        }
+    }
 }
 
 // --- WebAuthn ---
@@ -823,6 +1007,9 @@ pub struct WebAuthnCredential {
     transports: String,
     /// The user-verification policy advertised at registration.
     uv_policy: UserVerificationPolicy,
+    /// Serialized webauthn-rs `Passkey` (the full credential the panel
+    /// hands back to `start_passkey_authentication`).
+    passkey_json: String,
     created_at: DateTime<Utc>,
     last_used_at: Option<DateTime<Utc>>,
     revoked_at: Option<DateTime<Utc>>,
@@ -841,6 +1028,7 @@ impl WebAuthnCredential {
         sign_count: i64,
         transports: String,
         uv_policy: UserVerificationPolicy,
+        passkey_json: String,
         now: DateTime<Utc>,
     ) -> Self {
         Self {
@@ -852,6 +1040,7 @@ impl WebAuthnCredential {
             sign_count,
             transports,
             uv_policy,
+            passkey_json,
             created_at: now,
             last_used_at: None,
             revoked_at: None,
@@ -869,6 +1058,7 @@ impl WebAuthnCredential {
         sign_count: i64,
         transports: String,
         uv_policy: UserVerificationPolicy,
+        passkey_json: String,
         created_at: DateTime<Utc>,
         last_used_at: Option<DateTime<Utc>>,
         revoked_at: Option<DateTime<Utc>>,
@@ -882,6 +1072,7 @@ impl WebAuthnCredential {
             sign_count,
             transports,
             uv_policy,
+            passkey_json,
             created_at,
             last_used_at,
             revoked_at,
@@ -891,6 +1082,24 @@ impl WebAuthnCredential {
     /// Whether this credential can be used (i.e. not revoked).
     pub fn is_usable(&self) -> bool {
         self.revoked_at.is_none()
+    }
+
+    /// Record a successful assertion while enforcing strict monotonic
+    /// signature-counter advancement for clone detection.
+    pub fn record_assertion(
+        &mut self,
+        presented_counter: i64,
+        now: DateTime<Utc>,
+    ) -> Result<(), FactorError> {
+        if !self.is_usable() {
+            return Err(FactorError::Revoked);
+        }
+        if presented_counter <= self.sign_count {
+            return Err(FactorError::WebAuthnCounterRegression);
+        }
+        self.sign_count = presented_counter;
+        self.last_used_at = Some(now);
+        Ok(())
     }
 
     /// Stable panel-side id.
@@ -946,6 +1155,13 @@ impl WebAuthnCredential {
     /// Revocation timestamp.
     pub fn revoked_at(&self) -> Option<DateTime<Utc>> {
         self.revoked_at
+    }
+
+    /// Serialized webauthn-rs `Passkey` (used by the assertion
+    /// ceremony to reconstruct the credential without decoding raw
+    /// COSE bytes).
+    pub fn passkey_json(&self) -> &str {
+        &self.passkey_json
     }
 }
 

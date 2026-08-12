@@ -21,8 +21,8 @@ use openpanel_app::{
     DnsModule, DnsService, FilesModule, FilesService, IdentityModule, IdentityService, LogService,
     LogsModule, MailModule, MailService, MonitoringModule, MonitoringService, SecurityModule,
     SecurityService, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
-    SslModule, SslPaths, SslService, SystemServicesModule, security::MemoryFirewall,
-    sites::nginx::NginxPaths, software_center::ArtifactFetcher,
+    SslModule, SslPaths, SslService, SystemServicesModule, identity::two_factor::TwoFactorCrypto,
+    security::MemoryFirewall, sites::nginx::NginxPaths, software_center::ArtifactFetcher,
 };
 
 /// In-process artifact fetcher used by the test server. Bytes are
@@ -150,6 +150,25 @@ impl TestServer {
     /// gate. The strict gate is the production default; the lenient
     /// gate is what the existing install tests use.
     pub async fn new_with_gate(require_verified_digests: bool) -> Self {
+        Self::new_with_gate_config_and_crypto(require_verified_digests, Config::default(), None)
+            .await
+    }
+
+    /// Boot a real server with an explicit validated configuration.
+    pub async fn new_with_config(config: Config) -> Self {
+        Self::new_with_gate_config_and_crypto(false, config, None).await
+    }
+
+    /// Boot with deterministic two-factor cryptography.
+    pub async fn new_with_two_factor_crypto(crypto: Arc<dyn TwoFactorCrypto>) -> Self {
+        Self::new_with_gate_config_and_crypto(false, Config::default(), Some(crypto)).await
+    }
+
+    async fn new_with_gate_config_and_crypto(
+        require_verified_digests: bool,
+        config: Config,
+        two_factor_crypto: Option<Arc<dyn TwoFactorCrypto>>,
+    ) -> Self {
         let db = TestDb::new().await;
         let pool = db.pool();
 
@@ -159,7 +178,7 @@ impl TestServer {
         let driver: Arc<dyn openpanel_core::DatabaseDriver> = Arc::new(driver);
 
         let audit: Arc<dyn AuditService> = Arc::new(SqliteAuditService::new(pool.clone()));
-        let config = Arc::new(Config::default());
+        let config = Arc::new(config);
 
         let ctx = AppContext::new(config.clone(), driver, audit.clone());
 
@@ -181,7 +200,11 @@ impl TestServer {
 
         // Master key for databases + identity modules — fixed to zeros for tests.
         let master_key = [0u8; 32];
-        let identity_module = IdentityModule::new(&ctx, master_key).await;
+        let identity_module = if let Some(crypto) = two_factor_crypto {
+            IdentityModule::new_with_two_factor_crypto(&ctx, master_key, crypto).await
+        } else {
+            IdentityModule::new(&ctx, master_key).await
+        };
         let sites_module = SitesModule::with_paths(&ctx, paths).await;
 
         let databases_module = DatabasesModule::new(&ctx, master_key).await;

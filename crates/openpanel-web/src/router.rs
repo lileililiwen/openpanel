@@ -267,6 +267,18 @@ pub fn router(
             post(crate::two_factor::enroll_totp),
         )
         .route(
+            "/settings/security/totp/verify",
+            post(crate::two_factor::verify_totp),
+        )
+        .route(
+            "/settings/security/webauthn/register/begin",
+            post(crate::two_factor::begin_webauthn),
+        )
+        .route(
+            "/settings/security/webauthn/register/finish",
+            post(crate::two_factor::finish_webauthn),
+        )
+        .route(
             "/settings/security/recovery/regenerate",
             post(crate::two_factor::regenerate_recovery),
         )

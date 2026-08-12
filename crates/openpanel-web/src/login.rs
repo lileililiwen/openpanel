@@ -265,7 +265,7 @@ pub async fn login_factor_handler(
                     ip_str,
                     chrono::Utc::now(),
                 );
-                let max_age = openpanel_app::identity::remember_device_max_age_seconds();
+                let max_age = state.two_factor.remember_device_lifetime_seconds();
                 let remember_cookie = format!(
                     "{}={}; HttpOnly; Path=/; SameSite=Lax; Max-Age={}",
                     openpanel_domain::REMEMBER_DEVICE_COOKIE,

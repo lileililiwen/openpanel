@@ -45,16 +45,59 @@ pub struct LoginFactorRequest {
     /// Stable challenge identifier from the prior `factor_required` response.
     pub challenge_id: Uuid,
     /// Plaintext challenge token held by the browser.
+    #[serde(default)]
     pub challenge_token: String,
     /// `"totp"` or `"recovery"`.
     pub kind: String,
     /// The TOTP code or recovery code.
+    #[serde(default)]
     pub code: String,
+    /// WebAuthn ceremony id returned by `/login/webauthn/begin`.
+    pub webauthn_challenge_id: Option<Uuid>,
+    /// Browser assertion response when `kind` is `"webauthn"`.
+    pub credential: Option<serde_json::Value>,
     /// When `true`, the API issues an `openpanel_2fa_remember` cookie
     /// so the same browser can skip the factor step on the next
     /// login. Defaults to `false`.
     #[serde(default)]
     pub remember_device: bool,
+}
+
+/// Request to bind a WebAuthn assertion ceremony to a password-login challenge.
+#[derive(Debug, Deserialize)]
+pub struct BeginWebAuthnLoginRequest {
+    /// Password-login challenge id.
+    pub challenge_id: Uuid,
+    /// Plaintext challenge token; may be omitted when the challenge cookie is present.
+    #[serde(default)]
+    pub challenge_token: String,
+}
+
+/// Response from beginning a WebAuthn assertion ceremony.
+#[derive(Debug, Serialize)]
+pub struct BeginWebAuthnLoginResponse {
+    /// Panel-side WebAuthn ceremony id.
+    pub challenge_id: Uuid,
+    /// Options passed to `navigator.credentials.get()`.
+    pub public_key: serde_json::Value,
+}
+
+/// Response from beginning WebAuthn registration.
+#[derive(Debug, Serialize)]
+pub struct BeginWebAuthnRegisterResponse {
+    /// Panel-side registration ceremony id.
+    pub challenge_id: Uuid,
+    /// Options passed to `navigator.credentials.create()`.
+    pub public_key: serde_json::Value,
+}
+
+/// Browser response completing WebAuthn registration.
+#[derive(Debug, Deserialize)]
+pub struct FinishWebAuthnRegisterRequest {
+    /// Panel-side registration ceremony id.
+    pub challenge_id: Uuid,
+    /// Result returned by `navigator.credentials.create()`.
+    pub credential: serde_json::Value,
 }
 
 /// Public-facing projection of a [`User`], safe to serialize over the wire.
@@ -173,13 +216,29 @@ pub struct FactorListResponse {
 /// exactly once; the panel never returns them again.
 #[derive(Debug, Serialize)]
 pub struct EnrollTotpResponse {
-    /// The freshly created factor.
-    pub factor: FactorDto,
+    /// Pending enrollment id used by the verification request.
+    pub enrollment_id: Uuid,
     /// Base32-encoded TOTP secret for manual entry into authenticator apps.
     pub secret_base32: String,
     /// otpauth:// URI for QR provisioning.
     pub provisioning_uri: String,
-    /// Freshly generated recovery codes (single-use, shown once).
+}
+
+/// Proof-of-possession request for a pending TOTP enrollment.
+#[derive(Debug, Deserialize)]
+pub struct VerifyTotpEnrollmentRequest {
+    /// Pending enrollment id.
+    pub enrollment_id: Uuid,
+    /// Six-digit TOTP code from the configured authenticator.
+    pub code: String,
+}
+
+/// Activated factor and once-only recovery codes.
+#[derive(Debug, Serialize)]
+pub struct VerifyTotpEnrollmentResponse {
+    /// Newly activated TOTP factor.
+    pub factor: FactorDto,
+    /// Fresh recovery codes shown once.
     pub recovery_codes: Vec<String>,
 }
 

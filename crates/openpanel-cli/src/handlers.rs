@@ -1792,14 +1792,25 @@ pub async fn enroll_user_totp(config: Arc<Config>, id: String) -> anyhow::Result
     let now = chrono::Utc::now();
     let enrollment = svc
         .two_factor()
-        .enroll_totp(user_id, &username, "OpenPanel", &username, now)
+        .enroll_totp(user_id, &username, &username, now)
         .await
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
-    println!("factor: {}", enrollment.factor.id());
+    let step = enrollment.secret.current_step(now);
+    let step = u64::try_from(step).context("invalid TOTP step")?;
+    let code = enrollment
+        .secret
+        .totp("OpenPanel", &username)
+        .generate(step);
+    let verified = svc
+        .two_factor()
+        .verify_totp_enrollment("cli", user_id, enrollment.enrollment_id, &code, now)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("factor: {}", verified.factor.id());
     println!("secret_base32: {}", enrollment.secret.to_base32());
     println!("provisioning_uri: {}", enrollment.provisioning_uri);
     println!("recovery_codes (single-use, shown once):");
-    for code in &enrollment.recovery_codes {
+    for code in &verified.recovery_codes {
         println!("  {code}");
     }
     Ok(())
@@ -2018,6 +2029,10 @@ async fn build_identity(
     let ctx = AppContext::new(config, db, audit.clone());
     let master_key = load_master_key(&ctx.config)?;
     let module = IdentityModule::new(&ctx, master_key).await;
+    MigrationRunner::for_sqlite(pool.clone())
+        .apply_module(module.name(), &module.migrations())
+        .await
+        .context("apply identity migrations")?;
     Ok((module.service(), audit, pool))
 }
 

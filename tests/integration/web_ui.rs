@@ -2181,7 +2181,21 @@ async fn web_settings_security_page_lists_enrolls_and_revokes_factors() {
     let body = page.text().await.unwrap();
     assert!(body.contains("Two-factor authentication"));
     assert!(body.contains("No factors enrolled"));
+    assert!(body.contains("Enroll passkey"));
     let csrf = csrf_token_from_html(&body);
+
+    let bad_webauthn_csrf = server
+        .client()
+        .post(format!(
+            "{}/settings/security/webauthn/register/begin",
+            server.base_url()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .header("x-csrf-token", "wrong-token")
+        .send()
+        .await
+        .expect("WebAuthn begin with bad CSRF");
+    assert_eq!(bad_webauthn_csrf.status(), 403);
 
     // Enroll TOTP.
     let resp = server
@@ -2197,8 +2211,46 @@ async fn web_settings_security_page_lists_enrolls_and_revokes_factors() {
         .expect("enroll");
     assert_eq!(resp.status(), 200);
     let body = resp.text().await.unwrap();
-    assert!(body.contains("TOTP enrolled"));
-    assert!(body.contains("Recovery codes"));
+    assert!(body.contains("Verify TOTP enrollment"));
+    let enrollment_marker = "name=\"enrollment_id\" value=\"";
+    let enrollment_start =
+        body.find(enrollment_marker).expect("enrollment id field") + enrollment_marker.len();
+    let enrollment_id = body[enrollment_start..]
+        .split('"')
+        .next()
+        .expect("enrollment id");
+    let secret_marker = "class=\"config__path\"><code>";
+    let secret_start = body.find(secret_marker).expect("TOTP secret") + secret_marker.len();
+    let secret_base32 = body[secret_start..]
+        .split('<')
+        .next()
+        .expect("TOTP secret value");
+    let secret = openpanel_domain::identity::TotpSecret::from_bytes(
+        totp_rs::Secret::Encoded(secret_base32.to_string())
+            .to_bytes()
+            .expect("decode TOTP secret"),
+    )
+    .expect("TOTP secret");
+    let now = chrono::Utc::now();
+    let step = u64::try_from(secret.current_step(now)).expect("positive TOTP step");
+    let code = secret.totp("OpenPanel", "owner").generate(step);
+    let verify = server
+        .client()
+        .post(format!(
+            "{}/settings/security/totp/verify",
+            server.base_url()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[
+            ("_csrf", csrf.as_str()),
+            ("enrollment_id", enrollment_id),
+            ("code", code.as_str()),
+        ])
+        .send()
+        .await
+        .expect("verify enrollment");
+    assert_eq!(verify.status(), 200);
+    assert!(verify.text().await.unwrap().contains("Recovery codes"));
 
     // Re-load the page; factor should be listed.
     let page = server
