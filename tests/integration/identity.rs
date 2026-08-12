@@ -584,3 +584,216 @@ async fn identity_two_factor_management_enroll_list_revoke() {
     let body: serde_json::Value = resp.json().await.expect("regen body");
     assert_eq!(body["recovery_codes"].as_array().unwrap().len(), 10);
 }
+
+#[tokio::test]
+async fn identity_remember_device_skips_factor_on_next_login() {
+    use openpanel_app::identity::two_factor::FactorResponse;
+
+    let server = TestServer::new().await;
+    server
+        .identity()
+        .create_user(
+            "carol",
+            "carol@example.com",
+            "correct horse battery staple",
+            openpanel_domain::Role::Owner,
+            "test",
+        )
+        .await
+        .expect("create carol");
+    let identity_svc = server.identity();
+    let user_id = identity_svc
+        .users()
+        .find_by_username("carol")
+        .await
+        .expect("find")
+        .expect("carol exists")
+        .id();
+    identity_svc
+        .two_factor()
+        .enroll_totp(
+            user_id,
+            "test",
+            "OpenPanel",
+            "carol@example.com",
+            chrono::Utc::now(),
+        )
+        .await
+        .expect("enroll");
+
+    // First login → factor_required → correct TOTP + remember_device.
+    let resp = server
+        .client()
+        .post(format!("{}/api/v1/identity/login", server.base_url()))
+        .json(&json!({
+            "username_or_email": "carol",
+            "password": "correct horse battery staple",
+        }))
+        .send()
+        .await
+        .expect("first password login");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.expect("first body");
+    let challenge_id = body["challenge_id"]
+        .as_str()
+        .expect("challenge")
+        .to_string();
+
+    let challenge = identity_svc
+        .two_factor()
+        .issue_login_challenge(
+            user_id,
+            Some("203.0.113.42".into()),
+            Some("TestUA/1.0".into()),
+            chrono::Utc::now(),
+        )
+        .await
+        .expect("issue challenge");
+    let enrollment = identity_svc
+        .two_factor()
+        .list_factors(user_id)
+        .await
+        .expect("list factors")
+        .into_iter()
+        .find(|f| f.revoked_at().is_none())
+        .expect("active factor");
+    let secret_bytes = identity_svc
+        .two_factor()
+        .active_totp_factor(user_id)
+        .await
+        .expect("active factor")
+        .expect("factor exists")
+        .1;
+    let step = secret_bytes.current_step(chrono::Utc::now());
+    let step_u = u64::try_from(step).expect("step");
+    let code = secret_bytes
+        .totp("OpenPanel", "carol@example.com")
+        .generate(step_u);
+
+    let resp = server
+        .client()
+        .post(format!(
+            "{}/api/v1/identity/login/factor",
+            server.base_url()
+        ))
+        .header("x-forwarded-for", "203.0.113.42")
+        .header("user-agent", "TestUA/1.0")
+        .json(&json!({
+            "challenge_id": challenge.challenge_id,
+            "challenge_token": challenge.challenge_token,
+            "kind": "totp",
+            "code": code,
+            "remember_device": true,
+        }))
+        .send()
+        .await
+        .expect("factor login");
+    assert_eq!(resp.status(), 200);
+    let cookies: Vec<String> = resp
+        .headers()
+        .get_all(reqwest::header::SET_COOKIE)
+        .iter()
+        .map(|v| v.to_str().unwrap_or("").to_string())
+        .collect();
+    let cookie_header = cookies
+        .iter()
+        .find(|v| v.starts_with("openpanel_2fa_remember="))
+        .cloned()
+        .expect("remember-device cookie must be set");
+    let cookie_value = cookie_header
+        .split_once('=')
+        .map(|(_, v)| v)
+        .expect("cookie value")
+        .to_string();
+
+    // Second login: present the remember-device cookie. Password step
+    // should authenticate directly (Authenticated, not FactorRequired).
+    let resp = server
+        .client()
+        .post(format!("{}/api/v1/identity/login", server.base_url()))
+        .header(
+            reqwest::header::COOKIE,
+            format!(
+                "{}={}",
+                openpanel_domain::REMEMBER_DEVICE_COOKIE,
+                cookie_value
+            ),
+        )
+        .header("x-forwarded-for", "203.0.113.42")
+        .header("user-agent", "TestUA/1.0")
+        .json(&json!({
+            "username_or_email": "carol",
+            "password": "correct horse battery staple",
+        }))
+        .send()
+        .await
+        .expect("second login");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.expect("body");
+    assert!(
+        body["token"].as_str().is_some(),
+        "second login must authenticate directly, got {body}"
+    );
+
+    // Third login: same UA but a different IP prefix (mismatched
+    // device) must NOT skip the factor step.
+    let resp = server
+        .client()
+        .post(format!("{}/api/v1/identity/login", server.base_url()))
+        .header(
+            reqwest::header::COOKIE,
+            format!(
+                "{}={}",
+                openpanel_domain::REMEMBER_DEVICE_COOKIE,
+                cookie_value
+            ),
+        )
+        .header("x-forwarded-for", "10.20.30.40")
+        .header("user-agent", "TestUA/1.0")
+        .json(&json!({
+            "username_or_email": "carol",
+            "password": "correct horse battery staple",
+        }))
+        .send()
+        .await
+        .expect("third login");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.expect("body");
+    assert_eq!(
+        body["status"], "factor_required",
+        "IP mismatch must NOT skip the factor step: {body}"
+    );
+
+    // Fourth login: tampered cookie must NOT skip the factor step.
+    // Flip one char in the middle of the payload base64 portion.
+    let dot = cookie_value.find('.').expect("dot");
+    let mut tampered_chars: Vec<char> = cookie_value.chars().collect();
+    let mid = dot / 2;
+    tampered_chars[mid] = if tampered_chars[mid] == 'A' { 'B' } else { 'A' };
+    let tampered: String = tampered_chars.iter().collect();
+    let resp = server
+        .client()
+        .post(format!("{}/api/v1/identity/login", server.base_url()))
+        .header(
+            reqwest::header::COOKIE,
+            format!("{}={}", openpanel_domain::REMEMBER_DEVICE_COOKIE, tampered),
+        )
+        .header("x-forwarded-for", "203.0.113.42")
+        .header("user-agent", "TestUA/1.0")
+        .json(&json!({
+            "username_or_email": "carol",
+            "password": "correct horse battery staple",
+        }))
+        .send()
+        .await
+        .expect("tampered login");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.expect("body");
+    assert_eq!(
+        body["status"], "factor_required",
+        "tampered cookie must NOT skip the factor step"
+    );
+    let _ = FactorResponse::Totp(String::new()); // silence
+    let _ = challenge_id; // silence
+    let _ = enrollment; // silence
+}

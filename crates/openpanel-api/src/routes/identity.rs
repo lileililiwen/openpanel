@@ -81,11 +81,20 @@ async fn login(
     {
         return Err(rate_limited(decision.retry_after_seconds));
     }
-    let ip = Some(peer.to_string());
+    let ip = forwarded
+        .map(|v| v.to_string())
+        .or_else(|| Some(peer.to_string()));
     let ua = user_agent(&headers_in);
+    let remember = remember_device_cookie(&headers_in);
     let outcome = state
         .identity
-        .login(&req.username_or_email, &req.password, ip, ua)
+        .login(
+            &req.username_or_email,
+            &req.password,
+            ip,
+            ua.clone(),
+            remember.as_deref(),
+        )
         .await;
     match outcome {
         Ok(LoginOutcome::Authenticated { user, token }) => {
@@ -146,16 +155,25 @@ async fn login_factor(
     headers_in: HeaderMap,
     Json(req): Json<LoginFactorRequest>,
 ) -> ApiResult<impl IntoResponse> {
-    let ip = Some(peer.ip().to_string());
+    let forwarded = forwarded_ip(&headers_in);
+    let ip = forwarded
+        .map(|v| v.to_string())
+        .or_else(|| Some(peer.ip().to_string()));
     let ua = user_agent(&headers_in);
     let response = match req.kind.as_str() {
         "totp" => openpanel_app::identity::two_factor::FactorResponse::Totp(req.code),
         "recovery" => openpanel_app::identity::two_factor::FactorResponse::Recovery(req.code),
         _ => return Err(ApiError::Unprocessable("unknown factor kind".into())),
     };
-    let (user, token) = state
+    let (user, factor_id, token) = state
         .identity
-        .verify_login_factor(req.challenge_id, &req.challenge_token, response, ip, ua)
+        .verify_login_factor_with_factor(
+            req.challenge_id,
+            &req.challenge_token,
+            response,
+            ip.clone(),
+            ua.clone(),
+        )
         .await?;
     let expires_at = chrono::Utc::now() + chrono::Duration::hours(24);
     let cookie = format!(
@@ -173,6 +191,33 @@ async fn login_factor(
         SET_COOKIE,
         HeaderValue::from_str(&cookie).map_err(|_| ApiError::Internal("bad cookie".into()))?,
     );
+    if req.remember_device {
+        // Remember-device binds to a specific factor; recovery codes
+        // are account-scoped, so we only issue when the factor is known.
+        if let Some(factor_id) = factor_id {
+            let ip_str = ip.as_deref().unwrap_or("");
+            let ua_str = ua.as_deref().unwrap_or("");
+            let remember = state.two_factor.issue_remember_device_cookie(
+                user.id(),
+                factor_id,
+                ua_str,
+                ip_str,
+                chrono::Utc::now(),
+            );
+            let max_age = openpanel_app::identity::remember_device_max_age_seconds();
+            let remember_cookie = format!(
+                "{}={}; HttpOnly; Path=/; SameSite=Lax; Max-Age={}",
+                openpanel_domain::REMEMBER_DEVICE_COOKIE,
+                remember,
+                max_age
+            );
+            headers.append(
+                SET_COOKIE,
+                HeaderValue::from_str(&remember_cookie)
+                    .map_err(|_| ApiError::Internal("bad remember cookie".into()))?,
+            );
+        }
+    }
     Ok((headers, Json(resp)))
 }
 
@@ -309,6 +354,24 @@ fn user_agent(headers: &HeaderMap) -> Option<String> {
         .map(|s| s.to_string())
 }
 
+/// Extract the remember-device cookie value (if any) from the request.
+fn remember_device_cookie(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(axum::http::header::COOKIE)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|raw| {
+            for part in raw.split(';') {
+                let trimmed = part.trim();
+                if let Some(rest) =
+                    trimmed.strip_prefix(&format!("{}=", openpanel_domain::REMEMBER_DEVICE_COOKIE))
+                {
+                    return Some(rest.to_string());
+                }
+            }
+            None
+        })
+}
+
 // --- Two-factor factor management ---
 
 async fn list_factors(
@@ -395,5 +458,8 @@ fn map_two_factor_err(e: openpanel_app::identity::two_factor::TwoFactorError) ->
         TwoFactorError::NoRecoveryCodes => ApiError::Unprocessable(e.to_string()),
         TwoFactorError::Invalid(_) => ApiError::Unprocessable(e.to_string()),
         TwoFactorError::Storage(_) => ApiError::Internal(e.to_string()),
+        TwoFactorError::RememberDeviceInvalid
+        | TwoFactorError::RememberDeviceExpired
+        | TwoFactorError::RememberDeviceMismatch => ApiError::Unprocessable(e.to_string()),
     }
 }

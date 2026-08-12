@@ -50,6 +50,11 @@ pub struct LoginFactorRequest {
     pub kind: String,
     /// The TOTP code or recovery code.
     pub code: String,
+    /// When `true`, the API issues an `openpanel_2fa_remember` cookie
+    /// so the same browser can skip the factor step on the next
+    /// login. Defaults to `false`.
+    #[serde(default)]
+    pub remember_device: bool,
 }
 
 /// Public-facing projection of a [`User`], safe to serialize over the wire.

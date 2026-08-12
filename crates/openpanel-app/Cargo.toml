@@ -46,6 +46,7 @@ x509-parser = { workspace = true }
 sysinfo = { workspace = true }
 totp-rs = { workspace = true }
 webauthn-rs = { workspace = true }
+hmac = { workspace = true }
 
 [dev-dependencies]
 tempfile = "3"

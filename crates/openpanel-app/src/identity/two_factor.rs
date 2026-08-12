@@ -43,6 +43,17 @@ pub enum TwoFactorError {
     /// Storage failure.
     #[error("storage failure: {0}")]
     Storage(String),
+    /// The remember-device cookie was missing, malformed, or its HMAC
+    /// did not verify.
+    #[error("remember-device cookie invalid")]
+    RememberDeviceInvalid,
+    /// The remember-device cookie's lifetime has elapsed.
+    #[error("remember-device cookie expired")]
+    RememberDeviceExpired,
+    /// The remember-device cookie's UA hash or IP prefix does not
+    /// match the current request.
+    #[error("remember-device cookie does not match this device")]
+    RememberDeviceMismatch,
 }
 
 impl From<RepoError> for TwoFactorError {
@@ -279,6 +290,23 @@ impl TwoFactorService {
         response: FactorResponse,
         now: DateTime<Utc>,
     ) -> Result<Uuid, TwoFactorError> {
+        let (user_id, _) = self
+            .verify_login_challenge_with_factor(actor, challenge_id, challenge_token, response, now)
+            .await?;
+        Ok(user_id)
+    }
+
+    /// Like [`Self::verify_login_challenge`] but also returns the factor id
+    /// that satisfied the response. `None` means a recovery code was
+    /// used (recovery codes are account-scoped, not factor-scoped).
+    pub async fn verify_login_challenge_with_factor(
+        &self,
+        actor: &str,
+        challenge_id: Uuid,
+        challenge_token: &str,
+        response: FactorResponse,
+        now: DateTime<Utc>,
+    ) -> Result<(Uuid, Option<Uuid>), TwoFactorError> {
         // Verify the challenge token matches.
         if !self
             .factors
@@ -300,7 +328,7 @@ impl TwoFactorService {
             FactorResponse::Recovery(code) => self.verify_recovery_code(user_id, &code, now).await,
         };
         match verify_result {
-            Ok(kind) => {
+            Ok((factor_id, kind)) => {
                 self.factors.consume_challenge(challenge_id, now).await?;
                 self.audit
                     .record(
@@ -313,7 +341,7 @@ impl TwoFactorService {
                     )
                     .await
                     .map_err(|e| TwoFactorError::Storage(format!("audit: {e}")))?;
-                Ok(user_id)
+                Ok((user_id, factor_id))
             }
             Err(error) => {
                 self.audit
@@ -339,14 +367,15 @@ impl TwoFactorService {
         user_id: Uuid,
         code: &str,
         now: DateTime<Utc>,
-    ) -> Result<&'static str, TwoFactorError> {
+    ) -> Result<(Option<Uuid>, &'static str), TwoFactorError> {
         let Some((mut factor, secret)) = self.active_totp_factor(user_id).await? else {
             return Err(TwoFactorError::NoFactor);
         };
         let step = secret.verify(code, now).map_err(map_factor_error)?;
         factor.record_used_step(step).map_err(map_factor_error)?;
+        let factor_id = factor.id();
         self.factors.update_factor(&factor).await?;
-        Ok("totp")
+        Ok((Some(factor_id), "totp"))
     }
 
     async fn verify_recovery_code(
@@ -354,13 +383,14 @@ impl TwoFactorService {
         user_id: Uuid,
         code: &str,
         now: DateTime<Utc>,
-    ) -> Result<&'static str, TwoFactorError> {
+    ) -> Result<(Option<Uuid>, &'static str), TwoFactorError> {
         let consumed = self
             .factors
             .consume_recovery_code(user_id, code, now)
             .await?;
         if consumed {
-            Ok("recovery")
+            // Recovery codes are account-scoped, not factor-scoped.
+            Ok((None, "recovery"))
         } else {
             Err(TwoFactorError::InvalidCode)
         }
@@ -389,5 +419,55 @@ fn map_factor_error(e: FactorError) -> TwoFactorError {
         }
         FactorError::InvalidSecret => TwoFactorError::Storage("invalid secret".into()),
         FactorError::NotVerified => TwoFactorError::InvalidCode,
+    }
+}
+
+// --- Remember-device cookie ---
+
+impl TwoFactorService {
+    /// Validate a remember-device cookie and confirm the bound factor
+    /// is still active for the cookie's user. Returns `(user_id,
+    /// factor_id)` on success.
+    pub async fn accept_remember_device(
+        &self,
+        cookie: &str,
+        user_agent: &str,
+        ip: &str,
+        now: DateTime<Utc>,
+    ) -> Result<(Uuid, Uuid), TwoFactorError> {
+        let payload = crate::identity::remember_device::validate_remember_device(
+            &self.master_key,
+            cookie,
+            user_agent,
+            ip,
+            now,
+        )?;
+        // Confirm the user still owns an active factor with this id.
+        let factors = self.factors.list_factors_for_user(payload.user_id).await?;
+        let factor = factors
+            .into_iter()
+            .find(|f| f.id() == payload.factor_id && f.revoked_at().is_none())
+            .ok_or(TwoFactorError::RememberDeviceMismatch)?;
+        Ok((payload.user_id, factor.id()))
+    }
+
+    /// Issue a remember-device cookie for `factor_id` bound to the
+    /// current request's UA and IP. Returns the cookie value.
+    pub fn issue_remember_device_cookie(
+        &self,
+        user_id: Uuid,
+        factor_id: Uuid,
+        user_agent: &str,
+        ip: &str,
+        now: DateTime<Utc>,
+    ) -> String {
+        crate::identity::remember_device::issue_remember_device(
+            &self.master_key,
+            user_id,
+            factor_id,
+            user_agent,
+            ip,
+            now,
+        )
     }
 }

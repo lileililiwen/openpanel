@@ -39,6 +39,10 @@ pub struct FactorForm {
     pub kind: String,
     /// The TOTP code or recovery code.
     pub code: String,
+    /// When `true`, the panel issues a remember-device cookie so this
+    /// browser can skip the factor step on the next login.
+    #[serde(default)]
+    pub remember: bool,
 }
 
 /// Render the standalone login page. `error` is shown when present.
@@ -97,9 +101,16 @@ pub async fn login_handler(
     }
     let ip = Some(peer.to_string());
     let ua = user_agent(&headers);
+    let remember = remember_cookie_from_headers(&headers);
     match state
         .identity
-        .login(&form.username_or_email, &form.password, ip, ua)
+        .login(
+            &form.username_or_email,
+            &form.password,
+            ip,
+            ua,
+            remember.as_deref(),
+        )
         .await
     {
         Ok(LoginOutcome::Authenticated { user: _user, token }) => {
@@ -182,6 +193,10 @@ pub fn login_factor_page(
                         input type="hidden" name="challenge_token" value=(challenge_token);
                         label { "TOTP code or recovery code" }
                         input type="text" name="code" required autofocus;
+                        label class="field-inline" {
+                            input type="checkbox" name="remember" value="true";
+                            "Remember this device for 30 days"
+                        }
                         button type="submit" { "Verify" }
                     }
                     p class="muted" { "Expires at " (expires_at.to_rfc3339()) }
@@ -199,7 +214,9 @@ pub async fn login_factor_handler(
     Form(form): Form<FactorForm>,
 ) -> Response {
     let ip = Some(peer.ip().to_string());
+    let ip_for_remember = ip.clone();
     let ua = user_agent(&headers);
+    let ua_for_remember = ua.clone();
     let kind = form.kind.trim();
     let response = match kind {
         "" | "totp" => FactorResponse::Totp(form.code.clone()),
@@ -220,10 +237,10 @@ pub async fn login_factor_handler(
     };
     match state
         .identity
-        .verify_login_factor(challenge_id, &form.challenge_token, response, ip, ua)
+        .verify_login_factor_with_factor(challenge_id, &form.challenge_token, response, ip, ua)
         .await
     {
-        Ok((_user, token)) => {
+        Ok((_user, factor_id, token)) => {
             let mut resp = Redirect::to("/").into_response();
             let cookie = format!(
                 "{SESSION_COOKIE}={}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400",
@@ -232,6 +249,33 @@ pub async fn login_factor_handler(
             if let Ok(value) = HeaderValue::from_str(&cookie) {
                 resp.headers_mut()
                     .insert(axum::http::header::SET_COOKIE, value);
+            }
+            // Issue a remember-device cookie when requested and the
+            // factor is known (recovery codes are account-scoped, so
+            // they don't bind a per-factor cookie).
+            if form.remember
+                && let Some(factor_id) = factor_id
+                && let Some(ip_str) = ip_for_remember.as_deref()
+                && let Some(ua_str) = ua_for_remember.as_deref()
+            {
+                let remember = state.two_factor.issue_remember_device_cookie(
+                    _user.id(),
+                    factor_id,
+                    ua_str,
+                    ip_str,
+                    chrono::Utc::now(),
+                );
+                let max_age = openpanel_app::identity::remember_device_max_age_seconds();
+                let remember_cookie = format!(
+                    "{}={}; HttpOnly; Path=/; SameSite=Lax; Max-Age={}",
+                    openpanel_domain::REMEMBER_DEVICE_COOKIE,
+                    remember,
+                    max_age
+                );
+                if let Ok(value) = HeaderValue::from_str(&remember_cookie) {
+                    resp.headers_mut()
+                        .append(axum::http::header::SET_COOKIE, value);
+                }
             }
             resp
         }
@@ -276,6 +320,24 @@ fn user_agent(headers: &HeaderMap) -> Option<String> {
         .get(axum::http::header::USER_AGENT)
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string())
+}
+
+/// Extract the remember-device cookie value (if any) from the request.
+fn remember_cookie_from_headers(headers: &HeaderMap) -> Option<String> {
+    headers
+        .get(axum::http::header::COOKIE)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|raw| {
+            for part in raw.split(';') {
+                let trimmed = part.trim();
+                if let Some(rest) =
+                    trimmed.strip_prefix(&format!("{}=", openpanel_domain::REMEMBER_DEVICE_COOKIE))
+                {
+                    return Some(rest.to_string());
+                }
+            }
+            None
+        })
 }
 
 #[cfg(test)]

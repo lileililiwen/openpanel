@@ -3594,6 +3594,7 @@ dependencies = [
  "flate2",
  "futures-util",
  "hex",
+ "hmac",
  "libc",
  "mime_guess",
  "mockall",

@@ -46,6 +46,10 @@ pub use files::{
 };
 pub use identity::{
     error::IdentityError,
+    remember::{
+        REMEMBER_DEVICE_COOKIE, REMEMBER_DEVICE_DEFAULT_LIFETIME, REMEMBER_DEVICE_VERSION,
+        RememberedDevicePayload, hash_user_agent, ip_prefix,
+    },
     repository::{SessionRepository, UserRepository},
     role::Role,
     session::{Session, SessionBuilder, SessionToken, SessionTokenError},

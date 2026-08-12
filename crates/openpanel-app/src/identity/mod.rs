@@ -2,11 +2,15 @@
 
 pub mod factor_repo;
 pub mod module;
+pub mod remember_device;
 pub mod repo;
 pub mod service;
 pub mod two_factor;
 
 pub use factor_repo::SqliteFactorRepository;
 pub use module::IdentityModule;
+pub use remember_device::{
+    issue_remember_device, remember_device_max_age_seconds, validate_remember_device,
+};
 pub use service::{IdentityService, LoginOutcome};
 pub use two_factor::{ChallengeView, FactorResponse, TotpEnrollment, TwoFactorService};

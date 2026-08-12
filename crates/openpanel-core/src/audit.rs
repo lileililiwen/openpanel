@@ -137,6 +137,9 @@ pub enum AuditAction {
     TwoFactorRevoked,
     /// A single-use recovery code was consumed during login.
     RecoveryCodeConsumed,
+    /// A valid remember-device cookie skipped the second-factor
+    /// challenge for a subsequent login.
+    DeviceRemembered,
 }
 
 impl AuditAction {
@@ -191,6 +194,7 @@ impl AuditAction {
             AuditAction::TwoFactorFailed => "two_factor_failed",
             AuditAction::TwoFactorRevoked => "two_factor_revoked",
             AuditAction::RecoveryCodeConsumed => "recovery_code_consumed",
+            AuditAction::DeviceRemembered => "device_remembered",
         }
     }
 }
@@ -388,6 +392,7 @@ impl AuditService for SqliteAuditService {
                 "two_factor_failed" => AuditAction::TwoFactorFailed,
                 "two_factor_revoked" => AuditAction::TwoFactorRevoked,
                 "recovery_code_consumed" => AuditAction::RecoveryCodeConsumed,
+                "device_remembered" => AuditAction::DeviceRemembered,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

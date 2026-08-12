@@ -91,7 +91,7 @@ mod tests {
         );
 
         let err = svc
-            .login("alice", "correct horse battery staple", None, None)
+            .login("alice", "correct horse battery staple", None, None, None)
             .await
             .expect_err("login should fail");
         assert!(
@@ -229,13 +229,16 @@ impl IdentityService {
     /// Authenticate by username or email. The outcome is `Authenticated`
     /// when no second factor is enrolled (and a session is issued) or
     /// `FactorRequired` when the user has at least one enrolled factor
-    /// (and a pending-login challenge is returned).
+    /// (and a pending-login challenge is returned). A valid
+    /// `remember_device` cookie skips the factor step when the bound
+    /// factor is still active for this device.
     pub async fn login(
         &self,
         username_or_email: &str,
         plaintext_password: &str,
         ip: Option<String>,
         user_agent: Option<String>,
+        remember_device: Option<&str>,
     ) -> Result<LoginOutcome, IdentityError> {
         let user = self
             .users
@@ -296,6 +299,89 @@ impl IdentityService {
             .await
             .map_err(|e| IdentityError::Persistence(e.to_string()))?;
         if has_factor {
+            // If the caller presented a valid remember-device cookie
+            // for an active factor on this device, skip the factor
+            // step entirely. A tampered / expired / mismatched cookie
+            // falls through to the factor-required path (the spec
+            // mandates a tamper audit; we log the attempt and continue).
+            if let Some(cookie) = remember_device {
+                let ua = user_agent.as_deref().unwrap_or("");
+                let ip_str = ip.as_deref().unwrap_or("");
+                match self
+                    .two_factor
+                    .accept_remember_device(cookie, ua, ip_str, now)
+                    .await
+                {
+                    Ok((cookie_user_id, _factor_id)) if cookie_user_id != user.id() => {
+                        self.audit
+                            .record(
+                                AuditEvent::new(
+                                    user.username().as_str(),
+                                    AuditAction::TwoFactorFailed,
+                                    AuditOutcome::Denied,
+                                )
+                                .source_ip(ip.clone().unwrap_or_default())
+                                .metadata(serde_json::json!({
+                                    "reason": "remember_device_user_mismatch",
+                                })),
+                            )
+                            .await
+                            .ok();
+                    }
+                    Ok((_cookie_user_id, _factor_id)) => {
+                        self.audit
+                            .record(
+                                AuditEvent::new(
+                                    user.username().as_str(),
+                                    AuditAction::DeviceRemembered,
+                                    AuditOutcome::Success,
+                                )
+                                .source_ip(ip.clone().unwrap_or_default()),
+                            )
+                            .await
+                            .ok();
+                        let token = SessionToken::generate();
+                        let (mut session, token) =
+                            Session::new(user.id(), user.role(), &token, ip, user_agent);
+                        if let Err(e) = self.sessions.insert(&session).await {
+                            return Err(IdentityError::Persistence(e.0));
+                        }
+                        let _ = self.sessions.touch(session.id()).await;
+                        let mut user = user;
+                        user.record_login();
+                        let _ = self.users.update_last_login(user.id()).await;
+                        session.touch();
+                        self.audit
+                            .record(
+                                AuditEvent::new(
+                                    user.username().as_str(),
+                                    AuditAction::Login,
+                                    AuditOutcome::Success,
+                                )
+                                .source_ip(session.source_ip().unwrap_or("").to_string()),
+                            )
+                            .await
+                            .ok();
+                        return Ok(LoginOutcome::Authenticated { user, token });
+                    }
+                    Err(error) => {
+                        self.audit
+                            .record(
+                                AuditEvent::new(
+                                    user.username().as_str(),
+                                    AuditAction::TwoFactorFailed,
+                                    AuditOutcome::Denied,
+                                )
+                                .source_ip(ip.clone().unwrap_or_default())
+                                .metadata(serde_json::json!({
+                                    "reason": format!("remember_device: {error}"),
+                                })),
+                            )
+                            .await
+                            .ok();
+                    }
+                }
+            }
             let challenge = self
                 .two_factor
                 .issue_login_challenge(user.id(), ip, user_agent.clone(), now)
@@ -344,11 +430,34 @@ impl IdentityService {
         ip: Option<String>,
         user_agent: Option<String>,
     ) -> Result<(User, SessionToken), IdentityError> {
+        let (user, _factor_id, token) = self
+            .verify_login_factor_with_factor(
+                challenge_id,
+                challenge_token,
+                response,
+                ip,
+                user_agent,
+            )
+            .await?;
+        Ok((user, token))
+    }
+
+    /// Same as [`Self::verify_login_factor`] but also returns the factor id
+    /// that satisfied the challenge (`None` for recovery codes) so
+    /// callers can bind a remember-device cookie.
+    pub async fn verify_login_factor_with_factor(
+        &self,
+        challenge_id: Uuid,
+        challenge_token: &str,
+        response: FactorResponse,
+        ip: Option<String>,
+        user_agent: Option<String>,
+    ) -> Result<(User, Option<Uuid>, SessionToken), IdentityError> {
         let now = Utc::now();
         let actor = "two_factor";
-        let user_id = self
+        let (user_id, factor_id) = self
             .two_factor
-            .verify_login_challenge(actor, challenge_id, challenge_token, response, now)
+            .verify_login_challenge_with_factor(actor, challenge_id, challenge_token, response, now)
             .await
             .map_err(|e| match e {
                 TwoFactorError::InvalidCode
@@ -389,7 +498,7 @@ impl IdentityService {
             )
             .await
             .ok();
-        Ok((user, token))
+        Ok((user, factor_id, token))
     }
 
     /// Invalidate the session matching `token` and record a logout audit event.
