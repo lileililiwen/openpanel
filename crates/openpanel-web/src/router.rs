@@ -327,6 +327,14 @@ pub fn router(
             post(crate::software_center::install_artifact),
         )
         .route(
+            "/software/components/{id}/config",
+            get(crate::software_center::config_page),
+        )
+        .route(
+            "/software/components/{id}/config",
+            post(crate::software_center::config_save),
+        )
+        .route(
             "/software/jobs/{id}/progress",
             get(crate::software_center::task_progress_fragment),
         )

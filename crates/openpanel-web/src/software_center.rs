@@ -16,8 +16,8 @@ use axum::{
 };
 use maud::{Markup, html};
 use openpanel_app::software_center::{
-    CatalogQuery, CatalogSearchPage, CompatibilityHost, InstallBadge, InstallTaskProgress,
-    InstallTaskState, StorefrontEntry,
+    CatalogQuery, CatalogSearchPage, CompatibilityHost, ComponentConfigDocument, InstallBadge,
+    InstallTaskProgress, InstallTaskState, StorefrontEntry, component_config,
 };
 use openpanel_domain::software_center::{CatalogHit, EntryKind};
 use serde::Deserialize;
@@ -425,7 +425,14 @@ pub async fn entry(
         .await
         .ok()
         .flatten();
-    let content = detail_content(&entry, &csrf, require_verified_digests, badge.as_ref());
+    let has_config = component_config(&id).is_some();
+    let content = detail_content(
+        &entry,
+        &csrf,
+        require_verified_digests,
+        badge.as_ref(),
+        has_config,
+    );
     state
         .render_shell(&user, &csrf, &format!("/software/entries/{id}"), content)
         .await
@@ -489,6 +496,167 @@ fn deploy_form_content(entry: &StorefrontEntry, csrf: &str) -> Markup {
                     button class="button" { "Review deployment" }
                 }
             }
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Managed-component configuration editor.
+// ---------------------------------------------------------------------------
+
+/// Read the curated config file for a managed component and render the
+/// configuration editor page. Owner-only; unknown or externally-managed
+/// components render the typed error page.
+pub async fn config_page(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Path(id): Path<String>,
+) -> Response {
+    let csrf = state.csrf.token_for(session.id());
+    let document = match state.software_center.read_config(user.role(), &id).await {
+        Ok(document) => document,
+        Err(error) => {
+            let content = error_content(&config_error_message(&error), &csrf);
+            return state
+                .render_shell(&user, &csrf, "/software", content)
+                .await
+                .into_response();
+        }
+    };
+    let content = config_content(&document, &csrf, None);
+    state
+        .render_shell(
+            &user,
+            &csrf,
+            &format!("/software/components/{id}/config"),
+            content,
+        )
+        .await
+        .into_response()
+}
+
+/// Save the curated config file for a managed component. On validation
+/// failure the service restores the previous content; this handler
+/// re-reads the authoritative on-disk content and explains the failure.
+pub async fn config_save(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Path(id): Path<String>,
+    Form(form): Form<ConfigForm>,
+) -> Response {
+    if !state.csrf.verify(session.id(), &form._csrf) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let csrf = state.csrf.token_for(session.id());
+    let notice = match state
+        .software_center
+        .save_config(user.role(), &id, form.content)
+        .await
+    {
+        Ok(path) => Some(ConfigNotice::Saved(path)),
+        Err(error) => Some(ConfigNotice::Error(config_error_message(&error))),
+    };
+    let document = match state.software_center.read_config(user.role(), &id).await {
+        Ok(document) => document,
+        Err(error) => {
+            let content = error_content(&config_error_message(&error), &csrf);
+            return state
+                .render_shell(&user, &csrf, "/software", content)
+                .await
+                .into_response();
+        }
+    };
+    let content = config_content(&document, &csrf, notice.as_ref());
+    state
+        .render_shell(
+            &user,
+            &csrf,
+            &format!("/software/components/{id}/config"),
+            content,
+        )
+        .await
+        .into_response()
+}
+
+#[derive(Deserialize)]
+pub struct ConfigForm {
+    pub _csrf: String,
+    #[serde(default)]
+    pub content: String,
+}
+
+enum ConfigNotice {
+    Saved(String),
+    Error(String),
+}
+
+/// Render the configuration editor: path line, current content in a
+/// textarea, and a success or failure banner carried over the save.
+fn config_content(
+    document: &ComponentConfigDocument,
+    csrf: &str,
+    notice: Option<&ConfigNotice>,
+) -> Markup {
+    let (saved, error) = match notice {
+        Some(ConfigNotice::Saved(path)) => (Some(path.as_str()), None),
+        Some(ConfigNotice::Error(message)) => (None, Some(message.as_str())),
+        None => (None, None),
+    };
+    html! {
+        article class="storefront__detail" {
+            header class="detail__header" {
+                h1 { "Configure " (document.component) }
+                span class="badge" { (document.label) }
+            }
+            @if let Some(message) = saved {
+                div class="banner banner--ok" { "Saved: " (message) }
+            }
+            @if let Some(message) = error {
+                div class="banner banner--error" { (message) }
+            }
+            p class="detail__lead" {
+                "Edit the key config file for this managed component. The panel writes it atomically and validates the result; an invalid configuration is rolled back automatically."
+            }
+            p class="config__path" {
+                @if document.exists { "Editing: " } @else { "Creating: " }
+                code { (document.path) }
+            }
+            form method="post" action={"/software/components/" (document.component) "/config"} {
+                input type="hidden" name="_csrf" value=(csrf);
+                textarea name="content" rows="24" spellcheck="false" aria-label="Configuration" {
+                    (document.content.as_deref().unwrap_or(""))
+                }
+                div class="deploy-form__actions" {
+                    a class="button button--ghost" href={"/software/entries/" (document.component)} { "Cancel" }
+                    button class="button" { "Save configuration" }
+                }
+            }
+        }
+    }
+}
+
+/// Owner-readable translation of a config-editor error.
+fn config_error_message(error: &openpanel_app::software_center::SoftwareCenterError) -> String {
+    use openpanel_app::software_center::SoftwareCenterError;
+    match error {
+        SoftwareCenterError::Forbidden => "Only an Owner may edit this configuration.".to_owned(),
+        SoftwareCenterError::Unsupported => {
+            "This component has no editable configuration in this panel.".to_owned()
+        }
+        SoftwareCenterError::Validation => {
+            "The component rejected the new configuration. The previous content was restored."
+                .to_owned()
+        }
+        SoftwareCenterError::Invalid(detail) => detail.clone(),
+        SoftwareCenterError::Package(detail) => {
+            format!("The config file could not be written. {detail}")
+        }
+        SoftwareCenterError::Repository => {
+            "The Software Center could not persist the config file state. Try again.".to_owned()
+        }
+        SoftwareCenterError::Conflict | SoftwareCenterError::Dependencies(_) => {
+            "This component's configuration is not in a state that can be edited right now."
+                .to_owned()
         }
     }
 }
@@ -701,6 +869,7 @@ fn detail_content(
     csrf: &str,
     require_verified_digests: bool,
     badge: Option<&InstallBadge>,
+    has_config: bool,
 ) -> Markup {
     let install_blocked = require_verified_digests
         && entry.versions.iter().any(|version| {
@@ -738,6 +907,9 @@ fn detail_content(
         }),
         "panel_managed" => Some(html! {
             div class="detail__actions" {
+                @if has_config {
+                    a class="button" href={"/software/components/" (entry.id) "/config"} { "Configuration" }
+                }
                 form method="post" action={"/software/components/" (entry.id) "/update/preview"} {
                     input type="hidden" name="_csrf" value=(csrf);
                     button class="button" { "Update" }

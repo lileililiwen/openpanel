@@ -3,6 +3,7 @@
 mod apt;
 mod artifact;
 mod catalog;
+mod config;
 pub mod host_package_manager;
 mod integrated;
 mod module;
@@ -28,6 +29,10 @@ pub use artifact::{
 };
 use async_trait::async_trait;
 pub use catalog::{CatalogVerifier, SignedCatalogEnvelope, VerifiedCatalog};
+pub use config::{
+    ComponentConfig, ComponentConfigDocument, ComponentConfigInfo, MAX_CONFIG_BYTES,
+    component_config,
+};
 pub use host_package_manager::{Family, HostPackageManager, current_platform};
 pub use integrated::{
     ApplicationDeploymentResources, CreatedApplicationDatabase, CreatedApplicationSite,
@@ -633,6 +638,10 @@ pub struct SoftwareCenterService {
     catalog_source: Arc<dyn CatalogSource>,
     artifact_fetcher: Arc<dyn ArtifactFetcher>,
     webapps_root: PathBuf,
+    /// Filesystem root the curated config manifest resolves against.
+    /// Defaults to `/`; tests override it with a sandbox directory so the
+    /// config editor never touches the real host config.
+    config_root: PathBuf,
     /// Live progress of background artifact install tasks.
     artifact_tasks: Mutex<HashMap<Uuid, InstallTaskProgress>>,
     /// Serializes artifact placement so two installs never race the
@@ -677,6 +686,14 @@ impl SoftwareCenterService {
     /// shell to disable the Install button for those entries.
     pub fn require_verified_digests(&self) -> bool {
         self.require_verified_digests
+    }
+
+    /// Override the config root the curated config manifest resolves
+    /// against. Tests use this to sandbox config-file edits; production
+    /// keeps the `/` default.
+    pub fn with_config_root(mut self, config_root: PathBuf) -> Self {
+        self.config_root = config_root;
+        self
     }
 
     /// Compose the service with an explicit artifact fetcher, a custom
@@ -762,6 +779,7 @@ impl SoftwareCenterService {
             catalog_source,
             artifact_fetcher: fetcher,
             webapps_root,
+            config_root: default_config_root(),
             artifact_tasks: Mutex::new(HashMap::new()),
             artifact_slot: Arc::new(Semaphore::new(1)),
             system_job_progress: Mutex::new(HashMap::new()),
@@ -2786,6 +2804,11 @@ fn supported_platforms() -> Result<Vec<SupportedPlatform>, SoftwareCenterError> 
 /// `{webapps_root}/{entry_id}/{version}/`.
 fn default_webapps_root() -> PathBuf {
     PathBuf::from("/var/lib/openpanel/webapps")
+}
+
+/// Default config root the curated config manifest resolves against.
+fn default_config_root() -> PathBuf {
+    PathBuf::from("/")
 }
 
 fn owner(role: Role) -> Result<(), SoftwareCenterError> {

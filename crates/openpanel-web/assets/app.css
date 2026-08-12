@@ -698,6 +698,39 @@ html[data-theme="light"] .button--ghost {
   gap: 0.5rem;
 }
 
+.config__path {
+  margin: 0 0 1rem;
+  font-size: 0.875rem;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.config__path code {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  padding: 0.125rem 0.375rem;
+}
+
+.banner {
+  margin: 0 0 1rem;
+  padding: 0.625rem 0.875rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+}
+
+.banner--ok {
+  background: rgba(63, 185, 80, 0.12);
+  border: 1px solid #3fb950;
+  color: #3fb950;
+}
+
+.banner--error {
+  background: rgba(248, 81, 73, 0.12);
+  border: 1px solid #f85149;
+  color: #f85149;
+}
+
 .detail__tabs {
   display: flex;
   flex-direction: column;

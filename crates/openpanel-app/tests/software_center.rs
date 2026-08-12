@@ -1952,3 +1952,193 @@ fn start_artifact_install_refuses_placeholder_when_gate_is_on() {
         );
     });
 }
+
+/// Package manager that succeeds until `fail_on`-th validate call, then
+/// fails validation. Used to keep a component panel-managed (install
+/// validates once) while the subsequent config save fails validation.
+struct EventuallyFailingValidate {
+    validate_calls: std::sync::atomic::AtomicUsize,
+    fail_on: usize,
+}
+#[async_trait]
+impl PackageManager for EventuallyFailingValidate {
+    async fn discover(&self) -> Result<HostSnapshot, SoftwareCenterError> {
+        Ok(HostSnapshot::test("same-state"))
+    }
+
+    async fn apply(&self, _actions: &[PlanAction]) -> Result<(), SoftwareCenterError> {
+        Ok(())
+    }
+
+    async fn validate(&self, _component: &str) -> Result<(), SoftwareCenterError> {
+        let call = self.validate_calls.fetch_add(1, Ordering::SeqCst) + 1;
+        if call >= self.fail_on {
+            Err(SoftwareCenterError::Validation)
+        } else {
+            Ok(())
+        }
+    }
+
+    async fn rollback(&self, _actions: &[PlanAction]) -> Result<(), SoftwareCenterError> {
+        Ok(())
+    }
+}
+
+/// Install a component through the sync path so the service marks it
+/// panel-managed, and return the service plus the sandboxed config root.
+async fn managed_redis_service(
+    packages: Arc<dyn PackageManager>,
+) -> (SoftwareCenterService, tempfile::TempDir) {
+    let sandbox = tempfile::tempdir().expect("tempdir");
+    let service = SoftwareCenterService::with_artifact_pipeline(
+        packages,
+        Arc::new(MockApplications::new()),
+        Arc::new(MockAudit::stub()),
+        None,
+        true,
+        Arc::new(MemoryArtifactFetcher {
+            bytes: Vec::new(),
+            requested: std::sync::Mutex::new(Vec::new()),
+        }),
+        sandbox.path().join("webapps"),
+        false,
+    )
+    .with_config_root(sandbox.path().to_path_buf());
+    let actor = Uuid::new_v4();
+    let preview = service
+        .preview_install(actor, Role::Owner, "redis")
+        .await
+        .expect("preview redis");
+    let job = service
+        .execute(
+            actor,
+            Role::Owner,
+            preview.plan.digest(),
+            &preview.confirmation_token,
+        )
+        .await
+        .expect("execute redis");
+    assert_eq!(job.state, "succeeded", "redis must be panel-managed");
+    (service, sandbox)
+}
+
+#[tokio::test]
+async fn read_config_returns_manifest_path_and_existing_content() {
+    let (service, sandbox) = managed_redis_service(Arc::new(RecordingPackages::default())).await;
+    let target = sandbox.path().join("etc/redis/redis.conf");
+    std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+    std::fs::write(&target, "port 6379\n").unwrap();
+    let document = service.read_config(Role::Owner, "redis").await.unwrap();
+    assert!(document.exists);
+    assert_eq!(document.content.as_deref(), Some("port 6379\n"));
+    assert!(document.path.ends_with("redis.conf"));
+    assert_eq!(document.label, "redis.conf");
+}
+
+#[tokio::test]
+async fn read_config_reports_missing_file_without_error() {
+    let (service, _sandbox) = managed_redis_service(Arc::new(RecordingPackages::default())).await;
+    let document = service.read_config(Role::Owner, "redis").await.unwrap();
+    assert!(!document.exists);
+    assert_eq!(document.content, None);
+}
+
+#[tokio::test]
+async fn save_config_writes_bytes_readable_back() {
+    let (service, _sandbox) = managed_redis_service(Arc::new(RecordingPackages::default())).await;
+    let saved = service
+        .save_config(
+            Role::Owner,
+            "redis",
+            "port 6380\nmaxmemory 256mb\n".to_owned(),
+        )
+        .await
+        .expect("valid save");
+    assert!(saved.ends_with("redis.conf"));
+    let document = service.read_config(Role::Owner, "redis").await.unwrap();
+    assert_eq!(
+        document.content.as_deref(),
+        Some("port 6380\nmaxmemory 256mb\n")
+    );
+}
+
+#[tokio::test]
+async fn save_config_validation_failure_restores_previous_content() {
+    let (service, sandbox) = managed_redis_service(Arc::new(EventuallyFailingValidate {
+        validate_calls: std::sync::atomic::AtomicUsize::new(0),
+        fail_on: 2,
+    }))
+    .await;
+    let target = sandbox.path().join("etc/redis/redis.conf");
+    std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+    std::fs::write(&target, "port 6379\n").unwrap();
+    let error = service
+        .save_config(Role::Owner, "redis", "port 9999\n".to_owned())
+        .await
+        .expect_err("validation must fail on the second validate");
+    assert_eq!(error, SoftwareCenterError::Validation);
+    let document = service.read_config(Role::Owner, "redis").await.unwrap();
+    assert_eq!(
+        document.content.as_deref(),
+        Some("port 6379\n"),
+        "previous content must be restored after a failed validation"
+    );
+}
+
+#[tokio::test]
+async fn config_surface_is_owner_only() {
+    let (service, _sandbox) = managed_redis_service(Arc::new(RecordingPackages::default())).await;
+    assert!(matches!(
+        service.read_config(Role::Admin, "redis").await,
+        Err(SoftwareCenterError::Forbidden)
+    ));
+    assert!(matches!(
+        service.component_config_info(Role::User, "redis").await,
+        Err(SoftwareCenterError::Forbidden)
+    ));
+    assert!(matches!(
+        service
+            .save_config(Role::Admin, "redis", "x".to_owned())
+            .await,
+        Err(SoftwareCenterError::Forbidden)
+    ));
+}
+
+#[tokio::test]
+async fn config_surface_requires_a_manifest_entry_and_a_managed_component() {
+    let sandbox = tempfile::tempdir().expect("tempdir");
+    let service = SoftwareCenterService::with_artifact_pipeline(
+        Arc::new(RecordingPackages::default()),
+        Arc::new(MockApplications::new()),
+        Arc::new(MockAudit::stub()),
+        None,
+        true,
+        Arc::new(MemoryArtifactFetcher {
+            bytes: Vec::new(),
+            requested: std::sync::Mutex::new(Vec::new()),
+        }),
+        sandbox.path().join("webapps"),
+        false,
+    )
+    .with_config_root(sandbox.path().to_path_buf());
+    assert!(matches!(
+        service.read_config(Role::Owner, "apache2").await,
+        Err(SoftwareCenterError::Unsupported)
+    ));
+    assert!(matches!(
+        service.read_config(Role::Owner, "redis").await,
+        Err(SoftwareCenterError::Forbidden)
+    ));
+}
+
+#[tokio::test]
+async fn config_read_rejects_files_over_the_bound() {
+    let (service, sandbox) = managed_redis_service(Arc::new(RecordingPackages::default())).await;
+    let target = sandbox.path().join("etc/redis/redis.conf");
+    std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+    std::fs::write(&target, vec![b'x'; 128 * 1024 + 1]).unwrap();
+    assert!(matches!(
+        service.read_config(Role::Owner, "redis").await,
+        Err(SoftwareCenterError::Invalid(_))
+    ));
+}

@@ -177,14 +177,15 @@ impl SoftwareCenterModule {
     }
 
     /// Compose the deterministic in-memory adapter with an injected
-    /// artifact fetcher, a custom webapps root, and a gate flag. The
-    /// integration tests use this with `require_verified_digests =
-    /// false`; the app-crate tests override the flag for the gate-on
-    /// case.
+    /// artifact fetcher, a custom webapps root, a custom config root,
+    /// and a gate flag. The integration tests use this with
+    /// `require_verified_digests = false`; the app-crate tests override
+    /// the flag for the gate-on case.
     pub async fn memory_with_artifact_and_gate(
         ctx: &AppContext,
         fetcher: Arc<dyn ArtifactFetcher>,
         webapps_root: std::path::PathBuf,
+        config_root: std::path::PathBuf,
         require_verified_digests: bool,
     ) -> Result<Self, SoftwareCenterError> {
         Ok(Self::compose_with_artifact(
@@ -194,6 +195,7 @@ impl SoftwareCenterModule {
             true,
             fetcher,
             webapps_root,
+            config_root,
             require_verified_digests,
         )
         .await)
@@ -206,7 +208,14 @@ impl SoftwareCenterModule {
         fetcher: Arc<dyn ArtifactFetcher>,
         webapps_root: std::path::PathBuf,
     ) -> Result<Self, SoftwareCenterError> {
-        Self::memory_with_artifact_and_gate(ctx, fetcher, webapps_root, false).await
+        Self::memory_with_artifact_and_gate(
+            ctx,
+            fetcher,
+            webapps_root,
+            super::default_config_root(),
+            false,
+        )
+        .await
     }
 
     async fn compose(
@@ -222,6 +231,7 @@ impl SoftwareCenterModule {
             applications_enabled,
             Arc::new(ReqwestArtifactFetcher::default()),
             default_webapps_root(),
+            super::default_config_root(),
             !matches!(
                 std::env::var("OPENPANEL__SOFTWARE__REQUIRE_VERIFIED_DIGESTS").as_deref(),
                 Ok("false") | Ok("0") | Ok("no"),
@@ -230,6 +240,7 @@ impl SoftwareCenterModule {
         .await
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn compose_with_artifact(
         ctx: &AppContext,
         packages: Arc<dyn PackageManager>,
@@ -237,6 +248,7 @@ impl SoftwareCenterModule {
         applications_enabled: bool,
         fetcher: Arc<dyn ArtifactFetcher>,
         webapps_root: std::path::PathBuf,
+        config_root: std::path::PathBuf,
         require_verified_digests: bool,
     ) -> Self {
         let pool = ctx.db.pool().await;
@@ -249,7 +261,8 @@ impl SoftwareCenterModule {
             fetcher,
             webapps_root,
             require_verified_digests,
-        );
+        )
+        .with_config_root(config_root);
         // Materialize the embedded seed on first boot so the storefront is
         // never empty before the first remote refresh succeeds.
         let embedded = crate::software_center::EmbeddedCatalogSource::new(

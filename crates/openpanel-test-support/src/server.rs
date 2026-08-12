@@ -98,6 +98,8 @@ pub struct TestServer {
     sandbox: Arc<TempDir>,
     /// Sandbox directory downloaded artifacts are placed at.
     webapps_root: PathBuf,
+    /// Sandbox directory the curated config manifest resolves against.
+    config_root: PathBuf,
     /// Pre-canned bytes keyed by URL for the in-process artifact fetcher.
     staged_artifacts: Arc<Mutex<HashMap<String, Vec<u8>>>>,
     /// URLs the in-process fetcher served during the test.
@@ -125,6 +127,13 @@ impl TestServer {
     /// into. The default is `<sandbox>/webapps`.
     pub fn webapps_root(&self) -> &std::path::Path {
         &self.webapps_root
+    }
+
+    /// Sandbox directory the curated config manifest resolves against.
+    /// Config files land under `<sandbox>/config/etc/...` so the config
+    /// editor never touches the real host configuration.
+    pub fn config_root(&self) -> &std::path::Path {
+        &self.config_root
     }
 }
 
@@ -229,6 +238,7 @@ impl TestServer {
         let dns_module = DnsModule::memory(&ctx).await.expect("dns module");
         let mail_module = MailModule::memory(&ctx).await.expect("mail module");
         let webapps_root = sandbox.path().join("webapps");
+        let config_root = sandbox.path().join("config");
         let staged_artifacts: Arc<Mutex<HashMap<String, Vec<u8>>>> =
             Arc::new(Mutex::new(HashMap::new()));
         let fetched_urls: Arc<Mutex<Vec<String>>> = Arc::new(Mutex::new(Vec::new()));
@@ -240,6 +250,7 @@ impl TestServer {
             &ctx,
             fetcher,
             webapps_root.clone(),
+            config_root.clone(),
             require_verified_digests,
         )
         .await
@@ -404,6 +415,7 @@ impl TestServer {
             sandbox,
             require_verified_digests,
             webapps_root,
+            config_root,
             staged_artifacts,
             fetched_urls,
         }

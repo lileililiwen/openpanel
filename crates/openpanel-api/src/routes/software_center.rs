@@ -9,9 +9,9 @@ use axum::{
 };
 use openpanel_app::software_center::{
     ApplicationDeploymentInput, ApplicationDeploymentResult, CatalogDiagnostics, CatalogEntry,
-    CatalogQuery, CatalogSearchPage, ComponentAction, ComponentInventory, InstallPreview,
-    RefreshOutcome, RetryPreview, SoftwareCenterError, SoftwareCenterService, SoftwareJobView,
-    StorefrontEntry,
+    CatalogQuery, CatalogSearchPage, ComponentAction, ComponentConfigDocument, ComponentInventory,
+    InstallPreview, RefreshOutcome, RetryPreview, SoftwareCenterError, SoftwareCenterService,
+    SoftwareJobView, StorefrontEntry,
 };
 use serde::Deserialize;
 
@@ -183,6 +183,38 @@ async fn rollback(
     ))
 }
 
+/// Read the curated config file for a panel-managed component.
+async fn get_config(
+    State(service): State<Arc<SoftwareCenterService>>,
+    AuthUser(user, _): AuthUser,
+    Path(id): Path<String>,
+) -> ApiResult<Json<ComponentConfigDocument>> {
+    Ok(Json(
+        service.read_config(user.role(), &id).await.map_err(map)?,
+    ))
+}
+
+#[derive(Deserialize)]
+struct SetConfigInput {
+    content: String,
+}
+
+/// Save the curated config file for a panel-managed component. Returns
+/// the absolute path written; a failed validation restores the previous
+/// content and surfaces the error.
+async fn set_config(
+    State(service): State<Arc<SoftwareCenterService>>,
+    AuthUser(user, _): AuthUser,
+    Path(id): Path<String>,
+    Json(input): Json<SetConfigInput>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let path = service
+        .save_config(user.role(), &id, input.content)
+        .await
+        .map_err(map)?;
+    Ok(Json(serde_json::json!({ "path": path })))
+}
+
 fn map(error: SoftwareCenterError) -> ApiError {
     match error {
         SoftwareCenterError::Forbidden => ApiError::Forbidden,
@@ -209,6 +241,8 @@ pub fn router(service: Arc<SoftwareCenterService>) -> Router {
         .route("/search", get(search))
         .route("/entries/{id}", get(entry))
         .route("/components/{id}/preview", post(preview))
+        .route("/components/{id}/config", get(get_config))
+        .route("/components/{id}/config", post(set_config))
         .route("/components/{id}/{action}/preview", post(preview_component))
         .route("/plans/{digest}/execute", post(execute))
         .route("/applications/preview", post(preview_deployment))

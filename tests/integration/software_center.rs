@@ -875,3 +875,278 @@ async fn placeholder_digest_entry_renders_disabled_install_with_explanation() {
         "the blocked Install button must explain the placeholder digest: {body}"
     );
 }
+
+/// Install a System component through the JSON API so the panel marks it
+/// `panel_managed`. The API `execute` runs the transaction synchronously,
+/// so a `succeeded` job means `set_managed(true)` has already run.
+async fn install_managed_component(server: &TestServer, owner_token: &str, component: &str) {
+    let auth = bearer(owner_token);
+    let preview = server
+        .client()
+        .post(format!(
+            "{}/api/v1/software/components/{component}/preview",
+            server.base_url()
+        ))
+        .header("authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(preview.status(), 200);
+    let preview: serde_json::Value = preview.json().await.unwrap();
+    let digest = preview["plan"]["digest"].as_str().unwrap().to_owned();
+    let confirmation = preview["confirmation_token"].as_str().unwrap().to_owned();
+    let execute = server
+        .client()
+        .post(format!(
+            "{}/api/v1/software/plans/{digest}/execute",
+            server.base_url()
+        ))
+        .header("authorization", &auth)
+        .json(&serde_json::json!({"confirmation_token": confirmation}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(execute.status(), 200);
+    let job: serde_json::Value = execute.json().await.unwrap();
+    assert_eq!(job["state"], "succeeded", "{job}");
+}
+
+/// Log in through the web form and return the session cookie.
+async fn web_cookie(server: &TestServer, username: &str, password: &str) -> String {
+    let login = server
+        .client()
+        .post(format!("{}/login", server.base_url()))
+        .form(&[("username_or_email", username), ("password", password)])
+        .send()
+        .await
+        .unwrap();
+    login.headers()[reqwest::header::SET_COOKIE]
+        .to_str()
+        .unwrap()
+        .split(';')
+        .next()
+        .unwrap()
+        .to_owned()
+}
+
+#[tokio::test]
+async fn config_page_renders_and_saves_a_managed_component() {
+    let server = TestServer::new().await;
+    let token = server
+        .bootstrap_owner("owner", "correct horse battery staple")
+        .await;
+    install_managed_component(&server, &token, "redis").await;
+
+    let target = server.config_root().join("etc/redis/redis.conf");
+    std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+    std::fs::write(&target, "port 6379\n").unwrap();
+
+    let cookie = web_cookie(&server, "owner", "correct horse battery staple").await;
+
+    let detail = server
+        .client()
+        .get(format!("{}/software/entries/redis", server.base_url()))
+        .header("cookie", &cookie)
+        .send()
+        .await
+        .unwrap();
+    let detail_body = detail.text().await.unwrap();
+    assert!(
+        detail_body.contains(r#"href="/software/components/redis/config""#),
+        "panel-managed entry detail must offer the Configuration action: {detail_body}"
+    );
+
+    let page = server
+        .client()
+        .get(format!(
+            "{}/software/components/redis/config",
+            server.base_url()
+        ))
+        .header("cookie", &cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(page.status(), 200);
+    let body = page.text().await.unwrap();
+    assert!(
+        body.contains("port 6379"),
+        "config page must render current content: {body}"
+    );
+    assert!(
+        body.contains("redis.conf"),
+        "config page must show the file label: {body}"
+    );
+    assert!(
+        body.contains("Editing:"),
+        "config page must show the path line: {body}"
+    );
+    assert!(body.contains("Save configuration"));
+
+    let csrf = extract_csrf(&body);
+    let saved = server
+        .client()
+        .post(format!(
+            "{}/software/components/redis/config",
+            server.base_url()
+        ))
+        .header("cookie", &cookie)
+        .form(&[("_csrf", csrf.as_str()), ("content", "port 6380\n")])
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(saved.status(), 200);
+    let saved_body = saved.text().await.unwrap();
+    assert!(
+        saved_body.contains("Saved:"),
+        "success banner required: {saved_body}"
+    );
+    assert!(
+        saved_body.contains("port 6380"),
+        "editor must show the saved content"
+    );
+    assert_eq!(
+        std::fs::read_to_string(&target).unwrap(),
+        "port 6380\n",
+        "the config file on disk must hold the saved bytes"
+    );
+}
+
+#[tokio::test]
+async fn config_page_for_an_unknown_component_renders_typed_error() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("owner", "correct horse battery staple")
+        .await;
+    let cookie = web_cookie(&server, "owner", "correct horse battery staple").await;
+    let page = server
+        .client()
+        .get(format!(
+            "{}/software/components/apache2/config",
+            server.base_url()
+        ))
+        .header("cookie", &cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(page.status(), 200);
+    let body = page.text().await.unwrap();
+    assert!(
+        body.contains("no editable configuration"),
+        "unknown component must render the typed error: {body}"
+    );
+}
+
+#[tokio::test]
+async fn config_surface_is_owner_only_on_web_and_api() {
+    let server = TestServer::new().await;
+    let token = server
+        .bootstrap_owner("owner", "correct horse battery staple")
+        .await;
+    install_managed_component(&server, &token, "redis").await;
+    server
+        .identity()
+        .create_user(
+            "admin",
+            "admin@example.com",
+            "correct horse battery staple",
+            openpanel_domain::Role::Admin,
+            "test",
+        )
+        .await
+        .expect("create admin");
+    let admin_token = server.login("admin", "correct horse battery staple").await;
+    assert_eq!(
+        server
+            .client()
+            .get(format!(
+                "{}/api/v1/software/components/redis/config",
+                server.base_url()
+            ))
+            .header("authorization", bearer(&admin_token))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    assert_eq!(
+        server
+            .client()
+            .post(format!(
+                "{}/api/v1/software/components/redis/config",
+                server.base_url()
+            ))
+            .header("authorization", bearer(&admin_token))
+            .json(&serde_json::json!({"content": "port 1\n"}))
+            .send()
+            .await
+            .unwrap()
+            .status(),
+        403
+    );
+    assert!(
+        !server.config_root().join("etc/redis/redis.conf").exists(),
+        "a forbidden save must never touch the config file"
+    );
+    let admin_cookie = web_cookie(&server, "admin", "correct horse battery staple").await;
+    let page = server
+        .client()
+        .get(format!(
+            "{}/software/components/redis/config",
+            server.base_url()
+        ))
+        .header("cookie", &admin_cookie)
+        .send()
+        .await
+        .unwrap();
+    let body = page.text().await.unwrap();
+    assert!(
+        body.contains("Only an Owner may edit this configuration."),
+        "non-owner web page must explain the owner-only rule: {body}"
+    );
+}
+
+#[tokio::test]
+async fn config_api_reads_and_writes_a_managed_component() {
+    let server = TestServer::new().await;
+    let token = server
+        .bootstrap_owner("owner", "correct horse battery staple")
+        .await;
+    install_managed_component(&server, &token, "nginx").await;
+    let auth = bearer(&token);
+    let target = server.config_root().join("etc/nginx/nginx.conf");
+    std::fs::create_dir_all(target.parent().unwrap()).unwrap();
+    std::fs::write(&target, "user www-data;\n").unwrap();
+
+    let read = server
+        .client()
+        .get(format!(
+            "{}/api/v1/software/components/nginx/config",
+            server.base_url()
+        ))
+        .header("authorization", &auth)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(read.status(), 200);
+    let doc: serde_json::Value = read.json().await.unwrap();
+    assert_eq!(doc["exists"], true);
+    assert_eq!(doc["content"], "user www-data;\n");
+    assert!(doc["path"].as_str().unwrap().ends_with("nginx.conf"));
+
+    let write = server
+        .client()
+        .post(format!(
+            "{}/api/v1/software/components/nginx/config",
+            server.base_url()
+        ))
+        .header("authorization", &auth)
+        .json(&serde_json::json!({"content": "user nginx;\n"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(write.status(), 200);
+    let out: serde_json::Value = write.json().await.unwrap();
+    assert!(out["path"].as_str().unwrap().ends_with("nginx.conf"));
+    assert_eq!(std::fs::read_to_string(&target).unwrap(), "user nginx;\n");
+}
