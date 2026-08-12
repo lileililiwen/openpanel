@@ -616,6 +616,169 @@ async fn cancellation_waits_for_package_checkpoint_then_rolls_back() {
     assert!(packages.rolled_back.load(Ordering::SeqCst));
 }
 
+/// Package manager that records every applied action and always succeeds.
+#[derive(Default)]
+struct RecordingPackages {
+    applied: std::sync::Mutex<Vec<PackageId>>,
+}
+#[async_trait]
+impl PackageManager for RecordingPackages {
+    async fn discover(&self) -> Result<HostSnapshot, SoftwareCenterError> {
+        Ok(HostSnapshot::test("same-state"))
+    }
+
+    async fn apply(&self, actions: &[PlanAction]) -> Result<(), SoftwareCenterError> {
+        for action in actions {
+            match action {
+                PlanAction::Install(package)
+                | PlanAction::Update(package)
+                | PlanAction::Remove(package) => self
+                    .applied
+                    .lock()
+                    .expect("applied lock")
+                    .push(package.clone()),
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+        }
+        Ok(())
+    }
+
+    async fn validate(&self, _component: &str) -> Result<(), SoftwareCenterError> {
+        tokio::time::sleep(std::time::Duration::from_millis(25)).await;
+        Ok(())
+    }
+
+    async fn rollback(&self, _actions: &[PlanAction]) -> Result<(), SoftwareCenterError> {
+        Ok(())
+    }
+}
+
+/// Audit double that counts recorded events for deterministic polling.
+#[derive(Default)]
+struct CountingAudit {
+    recorded: AtomicBool,
+}
+#[async_trait]
+impl openpanel_core::AuditService for CountingAudit {
+    async fn record(&self, _event: openpanel_core::AuditEvent) -> openpanel_core::CoreResult<()> {
+        self.recorded.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+
+    async fn recent(
+        &self,
+        _limit: i64,
+    ) -> openpanel_core::CoreResult<Vec<openpanel_core::AuditEvent>> {
+        Ok(Vec::new())
+    }
+}
+
+#[tokio::test]
+async fn start_execute_runs_in_background_and_reports_progress() {
+    let packages = Arc::new(RecordingPackages::default());
+    let audit = Arc::new(CountingAudit::default());
+    let service = Arc::new(SoftwareCenterService::new(packages.clone(), audit.clone()));
+    let actor = Uuid::new_v4();
+    let preview = service
+        .preview_install(actor, Role::Owner, "php-8.3")
+        .await
+        .unwrap();
+    assert_eq!(preview.packages.len(), 9, "php-8.3 should plan 9 packages");
+    let digest = preview.plan.digest().to_owned();
+    let token = preview.confirmation_token;
+    let job_id = service
+        .start_execute(actor, Role::Owner, &digest, &token)
+        .await
+        .unwrap();
+
+    let mut seen = Vec::new();
+    let mut terminal = None;
+    for _ in 0..2000 {
+        if let Some(live) = service.system_job_progress(&job_id) {
+            seen.push((live.percent, live.step.clone()));
+        }
+        let jobs = service.jobs(Role::Owner).await.unwrap();
+        if let Some(job) = jobs.into_iter().find(|job| job.id == job_id)
+            && job.state == "succeeded"
+            && audit.recorded.load(Ordering::SeqCst)
+        {
+            terminal = Some(job);
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    let job = terminal.expect("job should reach the succeeded state");
+    assert_eq!(job.percent, 100);
+    assert_eq!(job.step, "Completed");
+    assert!(
+        seen.iter()
+            .any(|(percent, step)| *percent == 99 && step == "Validating"),
+        "expected a 99% Validating step, saw {seen:?}"
+    );
+    assert!(
+        seen.iter()
+            .any(|(_, step)| step == "Installing 2 of 9 · php8.3-cli"),
+        "expected per-package step labels, saw {seen:?}"
+    );
+    let applied = packages.applied.lock().expect("applied lock").clone();
+    assert_eq!(applied.len(), 9, "every planned package must be applied");
+    assert!(audit.recorded.load(Ordering::SeqCst));
+}
+
+#[tokio::test]
+async fn start_execute_cancellation_lands_at_a_package_boundary() {
+    let packages = Arc::new(BlockingPackages {
+        entered: tokio::sync::Notify::new(),
+        proceed: tokio::sync::Notify::new(),
+        rolled_back: AtomicBool::new(false),
+    });
+    let service = Arc::new(SoftwareCenterService::new(
+        packages.clone(),
+        Arc::new(MockAudit::stub()),
+    ));
+    let actor = Uuid::new_v4();
+    let preview = service
+        .preview_install(actor, Role::Owner, "php-8.3")
+        .await
+        .unwrap();
+    let digest = preview.plan.digest().to_owned();
+    let token = preview.confirmation_token;
+    let job_id = service
+        .start_execute(actor, Role::Owner, &digest, &token)
+        .await
+        .unwrap();
+
+    packages.entered.notified().await;
+    let live = service
+        .system_job_progress(&job_id)
+        .expect("job should be live");
+    assert_eq!(live.percent, 0, "first package reports 0%");
+    let pending = service
+        .cancel(actor, Role::Owner, job_id)
+        .await
+        .expect("cancel accepted while running");
+    assert_eq!(pending.state, "cancellation_pending");
+    packages.proceed.notify_one();
+
+    let mut terminal = None;
+    for _ in 0..2000 {
+        let jobs = service.jobs(Role::Owner).await.unwrap();
+        if let Some(job) = jobs.into_iter().find(|job| job.id == job_id)
+            && job.state == "cancelled"
+        {
+            terminal = Some(job);
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    let job = terminal.expect("job should reach the cancelled state");
+    assert_eq!(
+        job.percent, 0,
+        "a job cancelled mid-first-package reports the checkpoint percent, not 100"
+    );
+    assert!(packages.rolled_back.load(Ordering::SeqCst));
+}
+
 // ---------------------------------------------------------------------------
 // Aggregator tests — exercise the new `source`, `seed`, and `store` modules.
 // ---------------------------------------------------------------------------

@@ -390,6 +390,14 @@ struct DurableTransactionLock {
     pool: Option<SqlitePool>,
     job_id: Uuid,
 }
+
+/// Upfront state captured by `prepare_execution`, shared by the
+/// synchronous `execute` and the background `start_execute` paths.
+struct PreparedExecution {
+    preview: StoredPreview,
+    host_state_digest: String,
+    durable_lock: DurableTransactionLock,
+}
 impl DurableTransactionLock {
     async fn release(mut self) -> Result<(), SoftwareCenterError> {
         if let Some(pool) = self.pool.take() {
@@ -442,6 +450,12 @@ pub struct SoftwareJobView {
     pub plan_digest: String,
     /// Redacted lifecycle state.
     pub state: String,
+    /// 0..100 progress reported by a live background transaction.
+    pub percent: u8,
+    /// Bounded step label ("Installing 2 of 5 · nginx").
+    pub step: String,
+    /// Terminal error detail, when the job failed.
+    pub detail: Option<String>,
 }
 
 /// Secret-free aggregate health and ownership counts.
@@ -572,6 +586,17 @@ pub struct InstallTaskProgress {
     pub created_at: chrono::DateTime<chrono::Utc>,
 }
 
+/// Live progress of a background system package transaction.
+#[derive(Debug, Clone, Serialize)]
+pub struct SystemJobProgress {
+    /// 0..100 progress on the current transaction.
+    pub percent: u8,
+    /// Bounded step label ("Installing 2 of 5 · nginx").
+    pub step: String,
+    /// Terminal error detail, when the transaction failed.
+    pub detail: Option<String>,
+}
+
 /// Successful application deployment with credentials returned exactly once.
 #[derive(Debug, Serialize)]
 pub struct ApplicationDeploymentResult {
@@ -613,6 +638,8 @@ pub struct SoftwareCenterService {
     /// Serializes artifact placement so two installs never race the
     /// same destination path.
     artifact_slot: Arc<Semaphore>,
+    /// Live progress of background system package transactions.
+    system_job_progress: Mutex<HashMap<Uuid, SystemJobProgress>>,
 }
 impl SoftwareCenterService {
     /// Construct from the fixed package adapter and append-only audit port.
@@ -737,6 +764,7 @@ impl SoftwareCenterService {
             webapps_root,
             artifact_tasks: Mutex::new(HashMap::new()),
             artifact_slot: Arc::new(Semaphore::new(1)),
+            system_job_progress: Mutex::new(HashMap::new()),
         }
     }
 
@@ -1018,7 +1046,7 @@ impl SoftwareCenterService {
             ComponentAction::Adopt => Vec::new(),
         };
         let plan = SoftwarePlan::new(
-            format!("embedded-v1-{component}-{action:?}"),
+            format!("embedded-v1-{}-{action:?}", component.replace('.', "-")),
             snapshot.platform,
             actions.clone(),
         )
@@ -1380,6 +1408,42 @@ impl SoftwareCenterService {
         tasks
     }
 
+    /// Publish a bounded progress step for a live system job.
+    fn update_system_job_progress(&self, id: Uuid, percent: u8, step: String) {
+        if let Ok(mut progress) = self.system_job_progress.lock() {
+            progress.insert(
+                id,
+                SystemJobProgress {
+                    percent,
+                    step,
+                    detail: None,
+                },
+            );
+        }
+    }
+
+    /// Mark a live system job failed with a bounded error detail.
+    fn fail_system_job_progress(&self, id: Uuid, detail: String) {
+        if let Ok(mut progress) = self.system_job_progress.lock() {
+            progress.insert(
+                id,
+                SystemJobProgress {
+                    percent: 100,
+                    step: "Failed".to_owned(),
+                    detail: Some(detail),
+                },
+            );
+        }
+    }
+
+    /// Snapshot the live progress of one system job, if any is running.
+    pub fn system_job_progress(&self, id: &Uuid) -> Option<SystemJobProgress> {
+        self.system_job_progress
+            .lock()
+            .ok()
+            .and_then(|progress| progress.get(id).cloned())
+    }
+
     /// Most recent successful install for an entry, newest first.
     ///
     /// Surfaces the actor, the host platform captured at install
@@ -1456,6 +1520,12 @@ impl SoftwareCenterService {
     }
 
     /// Execute one fresh preview under the exclusive package transaction lock.
+    /// Execute one confirmed System transaction synchronously and
+    /// return the terminal job view.
+    ///
+    /// Kept for the CLI and for callers that need the final state in
+    /// the response. The web surface uses [`Self::start_execute`] so
+    /// the browser is never blocked for the package transaction.
     pub async fn execute(
         &self,
         actor: Uuid,
@@ -1463,9 +1533,73 @@ impl SoftwareCenterService {
         plan_digest: &str,
         confirmation_token: &str,
     ) -> Result<SoftwareJobView, SoftwareCenterError> {
+        let _transaction = self.transaction.lock().await;
+        let (job_id, prepared) = self
+            .prepare_execution(role, plan_digest, confirmation_token)
+            .await?;
+        self.run_execute_job(actor, job_id, plan_digest, prepared, |_, _| {})
+            .await
+    }
+
+    /// Start a System transaction in the background and return its job
+    /// id immediately.
+    ///
+    /// Validates the Owner, consumes the one-shot preview, checks the
+    /// host state digest, and acquires the durable lock upfront (so an
+    /// invalid or busy request fails fast), then spawns the shared
+    /// [`Self::run_execute_job`] pipeline. The confirm page and the
+    /// storefront poll live progress through
+    /// [`Self::system_job_progress`].
+    pub async fn start_execute(
+        self: &Arc<Self>,
+        actor: Uuid,
+        role: Role,
+        plan_digest: &str,
+        confirmation_token: &str,
+    ) -> Result<Uuid, SoftwareCenterError> {
+        let (job_id, prepared) = self
+            .prepare_execution(role, plan_digest, confirmation_token)
+            .await?;
+        // Publish the queued state before spawning so the confirm page
+        // and the storefront never poll a not-yet-registered job id.
+        self.update_system_job_progress(job_id, 0, "Preparing".to_owned());
+        self.push_job(job_id, plan_digest, JobState::Queued).await?;
+        let plan_digest = plan_digest.to_owned();
+        let me = self.clone();
+        let progress_me = me.clone();
+        let fail_me = me.clone();
+        tokio::spawn(async move {
+            // Serialize package operations across the process; the
+            // one-shot preview token already prevents double-confirm.
+            let _slot = me.transaction.lock().await;
+            let result = me
+                .run_execute_job(
+                    actor,
+                    job_id,
+                    &plan_digest,
+                    prepared,
+                    &mut move |percent, step| {
+                        progress_me.update_system_job_progress(job_id, percent, step);
+                    },
+                )
+                .await;
+            if let Err(error) = result {
+                fail_me.fail_system_job_progress(job_id, error.to_string());
+            }
+        });
+        Ok(job_id)
+    }
+
+    /// Upfront validation shared by the synchronous [`Self::execute`]
+    /// and the background [`Self::start_execute`] entry points.
+    async fn prepare_execution(
+        &self,
+        role: Role,
+        plan_digest: &str,
+        confirmation_token: &str,
+    ) -> Result<(Uuid, PreparedExecution), SoftwareCenterError> {
         owner(role)?;
         self.ensure_reconciled().await?;
-        let _transaction = self.transaction.lock().await;
         let preview = self.take_preview(plan_digest, confirmation_token).await?;
         let current = self.packages.discover().await?;
         if current.state_digest != preview.host_state_digest {
@@ -1473,24 +1607,77 @@ impl SoftwareCenterService {
         }
         let id = Uuid::new_v4();
         let durable_lock = self.acquire_durable_lock(id).await?;
-        let mut aggregate = SoftwareJob::new(id, plan_digest)
+        Ok((
+            id,
+            PreparedExecution {
+                preview,
+                host_state_digest: current.state_digest,
+                durable_lock,
+            },
+        ))
+    }
+
+    /// The shared transaction pipeline used by both entry points.
+    ///
+    /// Executes the action list one package at a time and invokes
+    /// `on_progress` (percent, bounded step label) as the job advances.
+    /// Each package boundary is a safe cancellation checkpoint.
+    async fn run_execute_job<F>(
+        &self,
+        actor: Uuid,
+        job_id: Uuid,
+        plan_digest: &str,
+        prepared: PreparedExecution,
+        mut on_progress: F,
+    ) -> Result<SoftwareJobView, SoftwareCenterError>
+    where
+        F: FnMut(u8, String) + Send,
+    {
+        let PreparedExecution {
+            preview,
+            host_state_digest,
+            durable_lock,
+        } = prepared;
+        let mut aggregate = SoftwareJob::new(job_id, plan_digest)
             .map_err(|_| SoftwareCenterError::Invalid("invalid software request".into()))?;
         aggregate
             .start()
             .map_err(|_| SoftwareCenterError::Repository)?;
-        self.push_job(id, plan_digest, aggregate.state()).await?;
-        if !preview.actions.is_empty()
-            && let Err(error) = self.packages.apply(&preview.actions).await
-        {
-            let _ = aggregate.fail();
-            self.push_job(id, plan_digest, aggregate.state()).await?;
-            self.record_failure(actor, "package_failed", plan_digest)
-                .await?;
-            return Err(error);
+        on_progress(1, "Preparing".to_owned());
+        self.push_job(job_id, plan_digest, aggregate.state())
+            .await?;
+
+        let total = preview.actions.len();
+        for (index, action) in preview.actions.iter().enumerate() {
+            let percent = index
+                .checked_mul(99)
+                .and_then(|value| value.checked_div(total))
+                .map_or(0, |value| value.min(99) as u8);
+            on_progress(percent, action_step_label(action, index, total));
+            if let Err(error) = self.packages.apply(std::slice::from_ref(action)).await {
+                let _ = aggregate.fail();
+                self.push_job(job_id, plan_digest, aggregate.state())
+                    .await?;
+                self.record_failure(actor, "package_failed", plan_digest)
+                    .await?;
+                return Err(error);
+            }
+            let applied = index + 1;
+            if self.take_cancellation(job_id)? {
+                let _ = self.packages.rollback(&preview.actions[..applied]).await;
+                let view = self
+                    .push_job(job_id, plan_digest, JobState::Cancelled)
+                    .await?;
+                durable_lock.release().await?;
+                self.record(actor, "cancelled", plan_digest).await?;
+                return Ok(view);
+            }
         }
-        if self.take_cancellation(id)? {
+        if self.take_cancellation(job_id)? {
             let _ = self.packages.rollback(&preview.actions).await;
-            let view = self.push_job(id, plan_digest, JobState::Cancelled).await?;
+            let view = self
+                .push_job(job_id, plan_digest, JobState::Cancelled)
+                .await?;
             durable_lock.release().await?;
             self.record(actor, "cancelled", plan_digest).await?;
             return Ok(view);
@@ -1498,7 +1685,9 @@ impl SoftwareCenterService {
         aggregate
             .validate()
             .map_err(|_| SoftwareCenterError::Repository)?;
-        self.push_job(id, plan_digest, aggregate.state()).await?;
+        on_progress(99, "Validating".to_owned());
+        self.push_job(job_id, plan_digest, aggregate.state())
+            .await?;
         let (component, action) = match preview.kind {
             PreviewKind::Component { id, action } => (id, action),
             PreviewKind::Application(_) => {
@@ -1512,14 +1701,17 @@ impl SoftwareCenterService {
         {
             let _ = self.packages.rollback(&preview.actions).await;
             let _ = aggregate.fail();
-            self.push_job(id, plan_digest, aggregate.state()).await?;
+            self.push_job(job_id, plan_digest, aggregate.state())
+                .await?;
             self.record_failure(actor, "validation_failed", plan_digest)
                 .await?;
             return Err(error);
         }
-        if self.take_cancellation(id)? {
+        if self.take_cancellation(job_id)? {
             let _ = self.packages.rollback(&preview.actions).await;
-            let view = self.push_job(id, plan_digest, JobState::Cancelled).await?;
+            let view = self
+                .push_job(job_id, plan_digest, JobState::Cancelled)
+                .await?;
             durable_lock.release().await?;
             self.record(actor, "cancelled", plan_digest).await?;
             return Ok(view);
@@ -1527,13 +1719,16 @@ impl SoftwareCenterService {
         self.set_managed(
             &component,
             action != ComponentAction::Remove,
-            &current.state_digest,
+            &host_state_digest,
         )
         .await?;
         aggregate
             .succeed()
             .map_err(|_| SoftwareCenterError::Repository)?;
-        let view = self.push_job(id, plan_digest, aggregate.state()).await?;
+        on_progress(100, "Completed".to_owned());
+        let view = self
+            .push_job(job_id, plan_digest, aggregate.state())
+            .await?;
         durable_lock.release().await?;
         self.audit
             .record(
@@ -1882,13 +2077,33 @@ impl SoftwareCenterService {
             .fetch_all(pool)
             .await
             .map_err(|_| SoftwareCenterError::Repository)?;
+            let progress = self
+                .system_job_progress
+                .lock()
+                .ok()
+                .map(|progress| progress.clone())
+                .unwrap_or_default();
             return rows
                 .into_iter()
                 .map(|(id, plan_digest, state)| {
+                    let id = Uuid::parse_str(&id).map_err(|_| SoftwareCenterError::Repository)?;
+                    let live = progress.get(&id).cloned();
+                    let (percent, step, detail) = live
+                        .map(|live| (live.percent, live.step, live.detail))
+                        .unwrap_or_else(|| {
+                            (
+                                if is_terminal_label(&state) { 100 } else { 0 },
+                                String::new(),
+                                None,
+                            )
+                        });
                     Ok(SoftwareJobView {
-                        id: Uuid::parse_str(&id).map_err(|_| SoftwareCenterError::Repository)?,
+                        id,
                         plan_digest,
                         state,
+                        percent,
+                        step,
+                        detail,
                     })
                 })
                 .collect();
@@ -2080,10 +2295,26 @@ impl SoftwareCenterService {
         plan_digest: &str,
         state: JobState,
     ) -> Result<SoftwareJobView, SoftwareCenterError> {
+        let label = state_label(state);
+        let live = self
+            .system_job_progress
+            .lock()
+            .map_err(|_| SoftwareCenterError::Repository)?
+            .get(&id)
+            .cloned();
         let view = SoftwareJobView {
             id,
             plan_digest: plan_digest.to_owned(),
-            state: state_label(state).to_owned(),
+            state: label.to_owned(),
+            percent: live
+                .as_ref()
+                .map(|live| live.percent)
+                .unwrap_or_else(|| if is_terminal_label(label) { 100 } else { 0 }),
+            step: live
+                .as_ref()
+                .map(|live| live.step.clone())
+                .unwrap_or_default(),
+            detail: live.and_then(|live| live.detail),
         };
         if let Some(pool) = &self.pool {
             let now = chrono::Utc::now().to_rfc3339();
@@ -2624,6 +2855,25 @@ fn state_label(state: JobState) -> &'static str {
         JobState::RolledBack => "rolled_back",
         JobState::Interrupted => "interrupted",
     }
+}
+
+/// Whether a job-state label is terminal.
+fn is_terminal_label(label: &str) -> bool {
+    matches!(
+        label,
+        "succeeded" | "failed" | "cancelled" | "rolled_back" | "interrupted"
+    )
+}
+
+/// Bounded step label for one package action, as already executed
+/// (`completed` actions done out of `total`).
+fn action_step_label(action: &PlanAction, completed: usize, total: usize) -> String {
+    let (verb, package) = match action {
+        PlanAction::Install(package) => ("Installing", package.as_str()),
+        PlanAction::Update(package) => ("Updating", package.as_str()),
+        PlanAction::Remove(package) => ("Removing", package.as_str()),
+    };
+    format!("{verb} {} of {} · {package}", completed + 1, total)
 }
 
 // ============================================================================

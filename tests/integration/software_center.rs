@@ -382,9 +382,34 @@ async fn web_preview_renders_styled_confirm_button_and_executes_end_to_end() {
         "execute should render a confirmation page, not 422. body={executed_body}"
     );
     assert!(
-        executed_body.contains("Installation complete")
-            || executed_body.contains("Software Center unavailable"),
-        "execute should render the success or error page, got body={executed_body}"
+        executed_body.contains("Running job"),
+        "execute should render the running-job page immediately, got body={executed_body}"
+    );
+    assert!(
+        executed_body.contains(r#"hx-get="/software/jobs/"#)
+            && executed_body.contains(r#"hx-trigger="every 1s""#),
+        "the running-job page must embed the live progress fragment, got body={executed_body}"
+    );
+    let job_id = extract_task_id(&executed_body);
+    await_job_succeeded(&server, &job_id, &cookie).await;
+
+    let storefront = server
+        .client()
+        .get(format!("{}/software", server.base_url()))
+        .header("cookie", &cookie)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(storefront.status(), 200);
+    let storefront_body = storefront.text().await.unwrap();
+    assert!(
+        storefront_body.contains(r#"aria-label="Recent jobs""#)
+            && storefront_body.contains(">succeeded<"),
+        "the Recent jobs panel should render the finished job's bar, body={storefront_body}"
+    );
+    assert!(
+        storefront_body.contains("progress__bar--ok"),
+        "a succeeded job should render the terminal success bar, body={storefront_body}"
     );
 }
 
@@ -519,6 +544,34 @@ async fn await_installed(server: &TestServer, task_id: &str, cookie: &str) {
     assert!(
         body.contains(">installed<"),
         "install task should finish installed, body={body}"
+    );
+}
+
+/// Poll the live progress fragment until the job reaches a terminal
+/// state, then assert it succeeded. Mirrors the browser's htmx loop.
+async fn await_job_succeeded(server: &TestServer, job_id: &str, cookie: &str) {
+    let mut body = String::new();
+    for _ in 0..1_000 {
+        let progress = server
+            .client()
+            .get(format!(
+                "{}/software/jobs/{job_id}/progress",
+                server.base_url()
+            ))
+            .header("cookie", cookie)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(progress.status(), 200);
+        body = progress.text().await.unwrap();
+        if body.contains(">succeeded<") || body.contains(">failed<") {
+            break;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    assert!(
+        body.contains(">succeeded<"),
+        "system job should finish succeeded, body={body}"
     );
 }
 

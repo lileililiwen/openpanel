@@ -231,7 +231,7 @@ fn storefront_content(
                 section class="storefront__tasks" aria-label="Install tasks" {
                     h2 { "Install tasks" }
                     @for task in artifact_tasks.iter().take(8) {
-                        (progress_fragment(task))
+                        (progress_fragment(&LiveProgress::from_artifact(task)))
                     }
                 }
             }
@@ -239,16 +239,13 @@ fn storefront_content(
             @if !jobs.is_empty() {
                 section class="storefront__jobs" aria-label="Recent jobs" {
                     h2 { "Recent jobs" }
-                    ul {
-                        @for job in jobs.iter().take(8) {
-                            li {
-                                span class="badge" { (job.state) }
-                                span { (job.id) }
-                                @if matches!(job.state.as_str(), "queued" | "running" | "validating") {
-                                    form method="post" action={"/software/jobs/" (job.id) "/cancel"} {
-                                        input type="hidden" name="_csrf" value=(csrf);
-                                        button class="button button--ghost" { "Cancel" }
-                                    }
+                    @for job in jobs.iter().take(8) {
+                        div class="task-progress" {
+                            (progress_fragment(&LiveProgress::from_system(job)))
+                            @if job_is_live(&job.state) {
+                                form method="post" action={"/software/jobs/" (job.id) "/cancel"} {
+                                    input type="hidden" name="_csrf" value=(csrf);
+                                    button class="button button--ghost" { "Cancel" }
                                 }
                             }
                         }
@@ -525,7 +522,7 @@ pub async fn install_artifact(
             html! {
                 h1 { "Installing " (task.entry_name) }
                 p { "The download runs in the background. This page refreshes itself until the install finishes." }
-                div class="task-progress__wrap" { (progress_fragment(&task)) }
+                div class="task-progress__wrap" { (progress_fragment(&LiveProgress::from_artifact(&task))) }
                 div class="detail__action" {
                     a class="button" href="/software" { "Return to Software Center" }
                 }
@@ -556,54 +553,126 @@ fn placeholder_task(task_id: Uuid, entry_id: &str) -> InstallTaskProgress {
     }
 }
 
-/// htmx fragment for one artifact install task. While the task is not
+/// Rendered fields shared by artifact install tasks and system package
+/// jobs, so one fragment markup serves both.
+struct LiveProgress<'a> {
+    /// Badge label ("downloading", "running", "succeeded", …).
+    state: &'a str,
+    /// Bounded step label ("Installing 2 of 5 · nginx").
+    step: &'a str,
+    /// 0..100 progress.
+    percent: u8,
+    /// Byte readout, when the source advertises totals (artifacts).
+    bytes: Option<(u64, u64)>,
+    /// Terminal error detail, when the task/job failed.
+    detail: Option<&'a str>,
+    /// Polling target id.
+    id: Uuid,
+    /// Whether polling should stop.
+    terminal: bool,
+}
+
+impl<'a> LiveProgress<'a> {
+    /// Placeholder for the brief window before the background task
+    /// publishes its first progress update.
+    fn queued(id: Uuid) -> LiveProgress<'static> {
+        LiveProgress {
+            state: "queued",
+            step: "Preparing",
+            percent: 0,
+            bytes: None,
+            detail: None,
+            id,
+            terminal: false,
+        }
+    }
+
+    fn from_artifact(task: &'a InstallTaskProgress) -> Self {
+        Self {
+            state: task.state.as_str(),
+            step: &task.step,
+            percent: task.percent,
+            bytes: task.bytes_total.map(|total| (task.bytes_downloaded, total)),
+            detail: task.detail.as_deref(),
+            id: task.id,
+            terminal: matches!(
+                task.state,
+                InstallTaskState::Installed | InstallTaskState::Failed
+            ),
+        }
+    }
+
+    fn from_system(job: &'a openpanel_app::software_center::SoftwareJobView) -> Self {
+        Self {
+            state: &job.state,
+            step: &job.step,
+            percent: job.percent,
+            bytes: None,
+            detail: job.detail.as_deref(),
+            id: job.id,
+            terminal: !job_is_live(&job.state),
+        }
+    }
+}
+
+/// Whether a system job state label is still live (non-terminal).
+fn job_is_live(state: &str) -> bool {
+    matches!(state, "queued" | "running" | "validating" | "rolling_back")
+}
+
+/// htmx fragment for a live install task or system job. While it is not
 /// terminal the fragment carries `hx-get` + `hx-trigger="every 1s"` so
 /// the browser keeps polling; a terminal fragment drops the refresh
 /// attributes and polling stops.
-fn progress_fragment(task: &InstallTaskProgress) -> Markup {
-    let terminal = matches!(
-        task.state,
-        InstallTaskState::Installed | InstallTaskState::Failed
-    );
-    let bar_class = match task.state {
-        InstallTaskState::Failed => "progress__bar progress__bar--error",
-        InstallTaskState::Installed => "progress__bar progress__bar--ok",
-        _ => "progress__bar",
+fn progress_fragment(live: &LiveProgress) -> Markup {
+    let bar_class = if live.state == "failed" {
+        "progress__bar progress__bar--error"
+    } else if live.terminal {
+        "progress__bar progress__bar--ok"
+    } else {
+        "progress__bar"
     };
     html! {
         div class="task-progress" {
             div class="task-progress__row" {
-                span class="badge" { (task.state.as_str()) }
-                span class="task-progress__step" { (task.step) }
-                span class="task-progress__percent" { (task.percent) "%" }
-                @if let Some(total) = task.bytes_total {
-                    span class="task-progress__bytes" { (task.bytes_downloaded) " / " (total) " bytes" }
+                span class="badge" { (live.state) }
+                span class="task-progress__step" { (live.step) }
+                span class="task-progress__percent" { (live.percent) "%" }
+                @if let Some((done, total)) = live.bytes {
+                    span class="task-progress__bytes" { (done) " / " (total) " bytes" }
                 }
             }
-            div class="progress" role="progressbar" aria-valuenow=(task.percent) aria-valuemin="0" aria-valuemax="100" {
-                div class=(bar_class) style=(format!("width: {}%", task.percent)) {}
+            div class="progress" role="progressbar" aria-valuenow=(live.percent) aria-valuemin="0" aria-valuemax="100" {
+                div class=(bar_class) style=(format!("width: {}%", live.percent)) {}
             }
-            @if let Some(detail) = &task.detail {
+            @if let Some(detail) = live.detail {
                 p class="task-progress__error" { (detail) }
             }
-            @if !terminal {
-                div hx-get=(format!("/software/jobs/{}/progress", task.id)) hx-trigger="every 1s" hx-swap="outerHTML" {}
+            @if !live.terminal {
+                div hx-get=(format!("/software/jobs/{}/progress", live.id)) hx-trigger="every 1s" hx-swap="outerHTML" {}
             }
         }
     }
 }
 
-/// Live fragment endpoint polled by the install page and the storefront
-/// task list.
+/// Live fragment endpoint polled by the install page, the confirm page,
+/// and the storefront task/job list. Serves artifact install tasks and
+/// system package jobs from a union lookup.
 pub async fn task_progress_fragment(
     State(state): State<WebState>,
-    WebUser(_user, _session): WebUser,
+    WebUser(user, _session): WebUser,
     Path(id): Path<Uuid>,
 ) -> Response {
-    let Some(task) = state.software_center.task_progress(&id) else {
+    if let Some(task) = state.software_center.task_progress(&id) {
+        return progress_fragment(&LiveProgress::from_artifact(&task)).into_response();
+    }
+    let Ok(jobs) = state.software_center.jobs(user.role()).await else {
         return StatusCode::NOT_FOUND.into_response();
     };
-    progress_fragment(&task).into_response()
+    let Some(job) = jobs.into_iter().find(|job| job.id == id) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    progress_fragment(&LiveProgress::from_system(&job)).into_response()
 }
 
 fn detail_content(
@@ -984,21 +1053,20 @@ pub async fn execute(
     let csrf = state.csrf.token_for(session.id());
     let result = state
         .software_center
-        .execute(user.id(), user.role(), &digest, &form.confirmation_token)
+        .start_execute(user.id(), user.role(), &digest, &form.confirmation_token)
         .await;
     let content = match result {
-        Ok(job) => html! {
-            h1 { "Installation complete" }
-            p { "The transaction finished and the host is back in a healthy state." }
-            dl class="detail__metadata" {
-                dt { "Job" } dd code { (job.id) }
-                dt { "State" } dd { (job.state) }
-                dt { "Plan digest" } dd code { (job.plan_digest) }
+        Ok(job_id) => {
+            let job = LiveProgress::queued(job_id);
+            html! {
+                h1 { "Running job" }
+                p { "The transaction runs in the background. This page refreshes itself until it finishes." }
+                div class="task-progress__wrap" { (progress_fragment(&job)) }
+                div class="detail__action" {
+                    a class="button" href="/software" { "Return to Software Center" }
+                }
             }
-            div class="detail__action" {
-                a class="button" href="/software" { "Return to Software Center" }
-            }
-        },
+        }
         Err(error) => error_content(&software_center_error_message(&error), &csrf),
     };
     state
