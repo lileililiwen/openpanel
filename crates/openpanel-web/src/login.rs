@@ -13,6 +13,7 @@ use axum::{
 };
 use maud::{DOCTYPE, Markup, html};
 use openpanel_api::middleware::session::SESSION_COOKIE;
+use openpanel_app::identity::{FactorResponse, LoginOutcome};
 use serde::Deserialize;
 
 use crate::router::WebState;
@@ -24,6 +25,20 @@ pub struct LoginForm {
     pub username_or_email: String,
     /// Plaintext password.
     pub password: String,
+}
+
+/// Body of the second-factor form presented after the password step.
+#[derive(Debug, Deserialize)]
+pub struct FactorForm {
+    /// Challenge id from the prior `factor_required` response.
+    pub challenge_id: String,
+    /// Plaintext challenge token held by the browser.
+    pub challenge_token: String,
+    /// Either `totp` (default) or `recovery`.
+    #[serde(default)]
+    pub kind: String,
+    /// The TOTP code or recovery code.
+    pub code: String,
 }
 
 /// Render the standalone login page. `error` is shown when present.
@@ -61,7 +76,8 @@ pub async fn login_page_handler() -> Markup {
     login_page(None)
 }
 
-/// POST /login — authenticate and set the session cookie.
+/// POST /login — authenticate and set the session cookie, or hand off to
+/// the factor page when the user has a second factor enrolled.
 pub async fn login_handler(
     State(state): State<WebState>,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,
@@ -86,7 +102,7 @@ pub async fn login_handler(
         .login(&form.username_or_email, &form.password, ip, ua)
         .await
     {
-        Ok((_user, token)) => {
+        Ok(LoginOutcome::Authenticated { user: _user, token }) => {
             if state
                 .login_throttle
                 .record_success(&form.username_or_email)
@@ -106,6 +122,26 @@ pub async fn login_handler(
             }
             resp
         }
+        Ok(LoginOutcome::FactorRequired {
+            user: _user,
+            challenge,
+        }) => {
+            if state
+                .login_throttle
+                .record_success(&form.username_or_email)
+                .await
+                .is_err()
+            {
+                return StatusCode::INTERNAL_SERVER_ERROR.into_response();
+            }
+            login_factor_page(
+                challenge.challenge_id.to_string(),
+                &challenge.challenge_token,
+                challenge.expires_at,
+                None,
+            )
+            .into_response()
+        }
         Err(_) => match state
             .login_throttle
             .record_failure(&form.username_or_email, peer, forwarded)
@@ -114,6 +150,98 @@ pub async fn login_handler(
             Ok(decision) => denied(decision.retry_after_seconds),
             Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
         },
+    }
+}
+
+/// Render the second-factor form, optionally carrying a `code`-flavored
+/// error message.
+pub fn login_factor_page(
+    challenge_id: String,
+    challenge_token: &str,
+    expires_at: chrono::DateTime<chrono::Utc>,
+    error: Option<&str>,
+) -> Markup {
+    html! {
+        (DOCTYPE)
+        html lang="en" {
+            head {
+                meta charset="utf-8";
+                meta name="viewport" content="width=device-width, initial-scale=1";
+                title { "OpenPanel — Second factor" }
+                link rel="stylesheet" href="/assets/app.css";
+            }
+            body {
+                main class="login" {
+                    h1 { "Second factor required" }
+                    @if let Some(msg) = error {
+                        p class="error" { (msg) }
+                    }
+                    p { "Enter the 6-digit code from your authenticator app, or a recovery code if you no longer have the device." }
+                    form method="post" action="/login/factor" {
+                        input type="hidden" name="challenge_id" value=(challenge_id);
+                        input type="hidden" name="challenge_token" value=(challenge_token);
+                        label { "TOTP code or recovery code" }
+                        input type="text" name="code" required autofocus;
+                        button type="submit" { "Verify" }
+                    }
+                    p class="muted" { "Expires at " (expires_at.to_rfc3339()) }
+                }
+            }
+        }
+    }
+}
+
+/// POST /login/factor — verify the factor response and set the session cookie.
+pub async fn login_factor_handler(
+    State(state): State<WebState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers: HeaderMap,
+    Form(form): Form<FactorForm>,
+) -> Response {
+    let ip = Some(peer.ip().to_string());
+    let ua = user_agent(&headers);
+    let kind = form.kind.trim();
+    let response = match kind {
+        "" | "totp" => FactorResponse::Totp(form.code.clone()),
+        "recovery" => FactorResponse::Recovery(form.code.clone()),
+        _ => {
+            return login_factor_page(
+                form.challenge_id.clone(),
+                &form.challenge_token,
+                chrono::Utc::now() + chrono::Duration::minutes(5),
+                Some("Unknown factor kind. Use 'totp' or 'recovery'."),
+            )
+            .into_response();
+        }
+    };
+    let challenge_id = match uuid::Uuid::parse_str(&form.challenge_id) {
+        Ok(value) => value,
+        Err(_) => return StatusCode::BAD_REQUEST.into_response(),
+    };
+    match state
+        .identity
+        .verify_login_factor(challenge_id, &form.challenge_token, response, ip, ua)
+        .await
+    {
+        Ok((_user, token)) => {
+            let mut resp = Redirect::to("/").into_response();
+            let cookie = format!(
+                "{SESSION_COOKIE}={}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400",
+                token.expose()
+            );
+            if let Ok(value) = HeaderValue::from_str(&cookie) {
+                resp.headers_mut()
+                    .insert(axum::http::header::SET_COOKIE, value);
+            }
+            resp
+        }
+        Err(_) => login_factor_page(
+            form.challenge_id.clone(),
+            &form.challenge_token,
+            chrono::Utc::now() + chrono::Duration::minutes(5),
+            Some("The code did not match. Try again."),
+        )
+        .into_response(),
     }
 }
 

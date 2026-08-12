@@ -2,6 +2,7 @@
 
 use std::sync::Arc;
 
+use chrono::Utc;
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::{
     Email, IdentityError, Password, Session, SessionRepository, SessionToken, User, UserRepository,
@@ -9,7 +10,10 @@ use openpanel_domain::{
 };
 use uuid::Uuid;
 
-use crate::identity::repo::{SqliteSessionRepository, SqliteUserRepository};
+use crate::identity::{
+    repo::{SqliteSessionRepository, SqliteUserRepository},
+    two_factor::{ChallengeView, FactorResponse, TwoFactorError},
+};
 
 #[cfg(test)]
 mod tests {
@@ -97,13 +101,35 @@ mod tests {
     }
 }
 
+/// Result of a password authentication. If the user has a second factor
+/// enrolled, the outcome is `FactorRequired` and no session is created
+/// until the factor challenge is satisfied.
+#[derive(Debug, Clone)]
+pub enum LoginOutcome {
+    /// Password authenticated and no factor enrolled — a session has
+    /// been issued.
+    Authenticated {
+        /// The authenticated user.
+        user: User,
+        /// Plaintext session token (the browser stores this).
+        token: SessionToken,
+    },
+    /// Password authenticated but the user has a second factor enrolled;
+    /// a challenge must be completed before a session is issued.
+    FactorRequired {
+        /// The authenticated user (the password step succeeded).
+        user: User,
+        /// The pending-login challenge for the second-factor step.
+        challenge: ChallengeView,
+    },
+}
+
 /// Application service orchestrating identity use cases (users, sessions).
 #[derive(Clone)]
 pub struct IdentityService {
     users: Arc<dyn UserRepository>,
     sessions: Arc<dyn SessionRepository>,
     audit: Arc<dyn AuditService>,
-    #[allow(dead_code)] // wired in the next phase (login state machine).
     two_factor: Arc<crate::identity::two_factor::TwoFactorService>,
 }
 
@@ -132,6 +158,11 @@ impl IdentityService {
     /// Return a clone of the underlying session repository handle.
     pub fn sessions(&self) -> Arc<dyn SessionRepository> {
         self.sessions.clone()
+    }
+
+    /// Return a clone of the two-factor service handle.
+    pub fn two_factor(&self) -> Arc<crate::identity::two_factor::TwoFactorService> {
+        self.two_factor.clone()
     }
 
     /// Create a new user, hashing the plaintext password and auditing the action.
@@ -195,14 +226,17 @@ impl IdentityService {
         Ok(user)
     }
 
-    /// Authenticate by username or email, create a session, return (user, token).
+    /// Authenticate by username or email. The outcome is `Authenticated`
+    /// when no second factor is enrolled (and a session is issued) or
+    /// `FactorRequired` when the user has at least one enrolled factor
+    /// (and a pending-login challenge is returned).
     pub async fn login(
         &self,
         username_or_email: &str,
         plaintext_password: &str,
         ip: Option<String>,
         user_agent: Option<String>,
-    ) -> Result<(User, SessionToken), IdentityError> {
+    ) -> Result<LoginOutcome, IdentityError> {
         let user = self
             .users
             .find_by_username(username_or_email)
@@ -254,6 +288,23 @@ impl IdentityService {
             return Err(IdentityError::InvalidCredentials);
         }
 
+        // Check whether the user has at least one enrolled second factor.
+        let now = Utc::now();
+        let has_factor = self
+            .two_factor
+            .has_active_factor(user.id())
+            .await
+            .map_err(|e| IdentityError::Persistence(e.to_string()))?;
+        if has_factor {
+            let challenge = self
+                .two_factor
+                .issue_login_challenge(user.id(), ip, user_agent.clone(), now)
+                .await
+                .map_err(|e| IdentityError::Persistence(e.to_string()))?;
+            return Ok(LoginOutcome::FactorRequired { user, challenge });
+        }
+
+        // No factor enrolled — finish the session as before.
         let token = SessionToken::generate();
         let (mut session, token) = Session::new(user.id(), user.role(), &token, ip, user_agent);
 
@@ -261,7 +312,6 @@ impl IdentityService {
             return Err(IdentityError::Persistence(e.0));
         }
 
-        // Refresh last_seen to now (already set by Session::new).
         let _ = self.sessions.touch(session.id()).await;
 
         let mut user = user;
@@ -281,6 +331,64 @@ impl IdentityService {
             .await
             .ok();
 
+        Ok(LoginOutcome::Authenticated { user, token })
+    }
+
+    /// Complete a pending-login challenge by presenting a second-factor
+    /// response. On success, a session is issued and returned.
+    pub async fn verify_login_factor(
+        &self,
+        challenge_id: Uuid,
+        challenge_token: &str,
+        response: FactorResponse,
+        ip: Option<String>,
+        user_agent: Option<String>,
+    ) -> Result<(User, SessionToken), IdentityError> {
+        let now = Utc::now();
+        let actor = "two_factor";
+        let user_id = self
+            .two_factor
+            .verify_login_challenge(actor, challenge_id, challenge_token, response, now)
+            .await
+            .map_err(|e| match e {
+                TwoFactorError::InvalidCode
+                | TwoFactorError::CodeReplayed
+                | TwoFactorError::NoFactor
+                | TwoFactorError::Revoked => IdentityError::InvalidCredentials,
+                other => IdentityError::Persistence(other.to_string()),
+            })?;
+        let Some(user) = self
+            .users
+            .find_by_id(user_id)
+            .await
+            .map_err(|e| IdentityError::Persistence(e.0))?
+        else {
+            return Err(IdentityError::UserNotFound);
+        };
+        if user.is_disabled() {
+            return Err(IdentityError::AccountDisabled);
+        }
+        let token = SessionToken::generate();
+        let (mut session, token) = Session::new(user.id(), user.role(), &token, ip, user_agent);
+        if let Err(e) = self.sessions.insert(&session).await {
+            return Err(IdentityError::Persistence(e.0));
+        }
+        let _ = self.sessions.touch(session.id()).await;
+        let mut user = user;
+        user.record_login();
+        let _ = self.users.update_last_login(user.id()).await;
+        session.touch();
+        self.audit
+            .record(
+                AuditEvent::new(
+                    user.username().as_str(),
+                    AuditAction::Login,
+                    AuditOutcome::Success,
+                )
+                .source_ip(session.source_ip().unwrap_or("").to_string()),
+            )
+            .await
+            .ok();
         Ok((user, token))
     }
 

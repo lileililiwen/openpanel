@@ -254,6 +254,7 @@ pub fn router(
             "/login",
             get(login::login_page_handler).post(login::login_handler),
         )
+        .route("/login/factor", post(login::login_factor_handler))
         .route("/logout", post(logout))
         .route("/settings", get(settings::page).post(settings::update))
         .route("/cron", get(cron::list))

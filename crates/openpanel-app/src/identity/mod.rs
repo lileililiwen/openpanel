@@ -8,5 +8,5 @@ pub mod two_factor;
 
 pub use factor_repo::SqliteFactorRepository;
 pub use module::IdentityModule;
-pub use service::IdentityService;
-pub use two_factor::TwoFactorService;
+pub use service::{IdentityService, LoginOutcome};
+pub use two_factor::{ChallengeView, FactorResponse, TotpEnrollment, TwoFactorService};

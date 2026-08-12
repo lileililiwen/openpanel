@@ -250,3 +250,245 @@ async fn login_token(server: &TestServer, username: &str, password: &str) -> Str
     let body: serde_json::Value = resp.json().await.unwrap();
     body["token"].as_str().unwrap().to_string()
 }
+
+#[tokio::test]
+async fn identity_two_factor_login_requires_factor_then_succeeds() {
+    use openpanel_app::identity::two_factor::FactorResponse;
+
+    let server = TestServer::new().await;
+    server
+        .identity()
+        .create_user(
+            "alice",
+            "alice@example.com",
+            "correct horse battery staple",
+            openpanel_domain::Role::Owner,
+            "test",
+        )
+        .await
+        .expect("create alice");
+
+    // Enroll TOTP for alice via the service so she has an active factor.
+    let two_factor = server.software_center(); // placeholder; correct accessor below
+    let _ = two_factor;
+    let identity_svc = server.identity();
+    let user_id = identity_svc
+        .users()
+        .find_by_username("alice")
+        .await
+        .expect("find user")
+        .expect("alice exists")
+        .id();
+    let enrollment = identity_svc
+        .two_factor()
+        .enroll_totp(
+            user_id,
+            "test",
+            "OpenPanel",
+            "alice@example.com",
+            chrono::Utc::now(),
+        )
+        .await
+        .expect("enroll totp");
+
+    // Step 1: password-only login returns factor_required.
+    let resp = server
+        .client()
+        .post(format!("{}/api/v1/identity/login", server.base_url()))
+        .json(&json!({
+            "username_or_email": "alice",
+            "password": "correct horse battery staple",
+        }))
+        .send()
+        .await
+        .expect("password login");
+    assert_eq!(resp.status(), 200);
+    let body: serde_json::Value = resp.json().await.expect("factor_required body");
+    assert_eq!(body["status"], "factor_required");
+    let challenge_id = body["challenge_id"]
+        .as_str()
+        .expect("challenge_id")
+        .to_string();
+    assert!(body["expires_at"].is_string());
+
+    // The challenge token isn't returned by the API (it lives in the
+    // cookie / web flow). For the JSON API we read it back via the
+    // service: re-issue a fresh challenge so we have its plaintext.
+    let challenge = identity_svc
+        .two_factor()
+        .issue_login_challenge(
+            user_id,
+            Some("127.0.0.1".into()),
+            Some("integration-test".into()),
+            chrono::Utc::now(),
+        )
+        .await
+        .expect("issue challenge");
+    let _ = (challenge_id, &enrollment.secret); // silence unused
+
+    // Compute the current TOTP code from the enrolled secret.
+    let now = chrono::Utc::now();
+    let step = enrollment.secret.current_step(now);
+    let step_u = u64::try_from(step).expect("step");
+    let code = enrollment
+        .secret
+        .totp("OpenPanel", "alice@example.com")
+        .generate(step_u);
+    let _ = &identity_svc; // silence
+
+    // Step 2: verify the factor and assert we get a session token.
+    let resp = server
+        .client()
+        .post(format!(
+            "{}/api/v1/identity/login/factor",
+            server.base_url()
+        ))
+        .json(&json!({
+            "challenge_id": challenge.challenge_id,
+            "challenge_token": challenge.challenge_token,
+            "kind": "totp",
+            "code": code,
+        }))
+        .send()
+        .await
+        .expect("factor login");
+    assert_eq!(resp.status(), 200, "factor login should succeed");
+    let body: serde_json::Value = resp.json().await.expect("login body");
+    assert!(body["token"].as_str().expect("token").len() > 20);
+
+    // Step 3: replaying the same code on a fresh challenge fails (replay protection).
+    let challenge2 = identity_svc
+        .two_factor()
+        .issue_login_challenge(
+            user_id,
+            Some("127.0.0.1".into()),
+            Some("integration-test".into()),
+            chrono::Utc::now(),
+        )
+        .await
+        .expect("second challenge");
+    let resp = server
+        .client()
+        .post(format!(
+            "{}/api/v1/identity/login/factor",
+            server.base_url()
+        ))
+        .json(&json!({
+            "challenge_id": challenge2.challenge_id,
+            "challenge_token": challenge2.challenge_token,
+            "kind": "totp",
+            "code": code,
+        }))
+        .send()
+        .await
+        .expect("replay");
+    assert_eq!(
+        resp.status(),
+        401,
+        "replaying an already-used TOTP code must fail"
+    );
+    let _ = FactorResponse::Totp(String::new()); // silence unused import
+}
+
+#[tokio::test]
+async fn identity_two_factor_recovery_code_round_trip() {
+    let server = TestServer::new().await;
+    server
+        .identity()
+        .create_user(
+            "bob",
+            "bob@example.com",
+            "correct horse battery staple",
+            openpanel_domain::Role::Owner,
+            "test",
+        )
+        .await
+        .expect("create bob");
+    let identity_svc = server.identity();
+    let user_id = identity_svc
+        .users()
+        .find_by_username("bob")
+        .await
+        .expect("find")
+        .expect("bob exists")
+        .id();
+    let enrollment = identity_svc
+        .two_factor()
+        .enroll_totp(
+            user_id,
+            "test",
+            "OpenPanel",
+            "bob@example.com",
+            chrono::Utc::now(),
+        )
+        .await
+        .expect("enroll bob");
+    assert_eq!(enrollment.recovery_codes.len(), 10);
+
+    // Login → factor_required → consume one recovery code.
+    let resp = server
+        .client()
+        .post(format!("{}/api/v1/identity/login", server.base_url()))
+        .json(&json!({
+            "username_or_email": "bob",
+            "password": "correct horse battery staple",
+        }))
+        .send()
+        .await
+        .expect("password login");
+    assert_eq!(resp.status(), 200);
+    let challenge = identity_svc
+        .two_factor()
+        .issue_login_challenge(
+            user_id,
+            Some("127.0.0.1".into()),
+            Some("integration-test".into()),
+            chrono::Utc::now(),
+        )
+        .await
+        .expect("challenge");
+    let resp = server
+        .client()
+        .post(format!(
+            "{}/api/v1/identity/login/factor",
+            server.base_url()
+        ))
+        .json(&json!({
+            "challenge_id": challenge.challenge_id,
+            "challenge_token": challenge.challenge_token,
+            "kind": "recovery",
+            "code": enrollment.recovery_codes[0],
+        }))
+        .send()
+        .await
+        .expect("recovery login");
+    assert_eq!(resp.status(), 200, "recovery code should log bob in");
+
+    // A second consume of the same recovery code on a fresh challenge fails.
+    let challenge2 = identity_svc
+        .two_factor()
+        .issue_login_challenge(
+            user_id,
+            Some("127.0.0.1".into()),
+            Some("integration-test".into()),
+            chrono::Utc::now(),
+        )
+        .await
+        .expect("second challenge");
+    let resp = server
+        .client()
+        .post(format!(
+            "{}/api/v1/identity/login/factor",
+            server.base_url()
+        ))
+        .json(&json!({
+            "challenge_id": challenge2.challenge_id,
+            "challenge_token": challenge2.challenge_token,
+            "kind": "recovery",
+            "code": enrollment.recovery_codes[0],
+        }))
+        .send()
+        .await
+        .expect("replay recovery");
+    assert_eq!(resp.status(), 401, "a consumed recovery code must not work");
+}

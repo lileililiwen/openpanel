@@ -256,7 +256,7 @@ impl TotpSecret {
     }
 
     /// Build the underlying TOTP calculator (no issuer/account).
-    pub(crate) fn totp(&self, issuer: &str, account_name: &str) -> TOTP {
+    pub fn totp(&self, issuer: &str, account_name: &str) -> TOTP {
         match TOTP::new(
             self.algorithm,
             self.digits,

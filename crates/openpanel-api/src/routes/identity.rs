@@ -12,14 +12,14 @@ use axum::{
     response::IntoResponse,
     routing::{delete, get, post},
 };
-use openpanel_app::{IdentityService, security::LoginThrottleService};
+use openpanel_app::{IdentityService, identity::LoginOutcome, security::LoginThrottleService};
 use openpanel_domain::IdentityError;
 use uuid::Uuid;
 
 use crate::{
     dto::{
-        ChangePasswordRequest, ChangeRoleRequest, CreateUserRequest, LoginRequest, LoginResponse,
-        UserDto,
+        ChangePasswordRequest, ChangeRoleRequest, CreateUserRequest, LoginFactorRequest,
+        LoginFactorRequired, LoginRequest, LoginResponse, UserDto,
     },
     error::{ApiError, ApiResult},
     extract::{AuthUser, RequireOwner},
@@ -37,6 +37,7 @@ struct IdentityRouteState {
 pub fn router(svc: Arc<IdentityService>, throttle: Arc<LoginThrottleService>) -> Router {
     Router::new()
         .route("/login", post(login))
+        .route("/login/factor", post(login_factor))
         .route("/logout", post(logout))
         .route("/me", get(me))
         .route("/users", get(list_users).post(create_user))
@@ -67,18 +68,48 @@ async fn login(
     }
     let ip = Some(peer.to_string());
     let ua = user_agent(&headers_in);
-    let login = state
+    let outcome = state
         .identity
         .login(&req.username_or_email, &req.password, ip, ua)
         .await;
-    let (user, token) = match login {
-        Ok(value) => {
+    match outcome {
+        Ok(LoginOutcome::Authenticated { user, token }) => {
             state
                 .throttle
                 .record_success(&req.username_or_email)
                 .await
                 .map_err(|error| ApiError::Internal(error.to_string()))?;
-            value
+            let expires_at = chrono::Utc::now() + chrono::Duration::hours(24);
+            let cookie = format!(
+                "{}={}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400",
+                SESSION_COOKIE,
+                token.expose()
+            );
+            let resp = LoginResponse {
+                token: token.expose().to_string(),
+                user: UserDto::from_user(&user),
+                expires_at,
+            };
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                SET_COOKIE,
+                HeaderValue::from_str(&cookie)
+                    .map_err(|_| ApiError::Internal("bad cookie".into()))?,
+            );
+            Ok((headers, Json(resp)).into_response())
+        }
+        Ok(LoginOutcome::FactorRequired { user: _, challenge }) => {
+            state
+                .throttle
+                .record_success(&req.username_or_email)
+                .await
+                .map_err(|error| ApiError::Internal(error.to_string()))?;
+            let body = LoginFactorRequired {
+                status: "factor_required",
+                challenge_id: challenge.challenge_id,
+                expires_at: challenge.expires_at,
+            };
+            Ok(Json(body).into_response())
         }
         Err(error) => {
             let decision = state
@@ -89,23 +120,39 @@ async fn login(
             if decision.retry_after_seconds.is_some() {
                 return Err(rate_limited(decision.retry_after_seconds));
             }
-            return Err(ApiError::Identity(error));
+            Err(ApiError::Identity(error))
         }
-    };
-    let expires_at = chrono::Utc::now() + chrono::Duration::hours(24);
+    }
+}
 
+async fn login_factor(
+    State(state): State<IdentityRouteState>,
+    ConnectInfo(peer): ConnectInfo<SocketAddr>,
+    headers_in: HeaderMap,
+    Json(req): Json<LoginFactorRequest>,
+) -> ApiResult<impl IntoResponse> {
+    let ip = Some(peer.ip().to_string());
+    let ua = user_agent(&headers_in);
+    let response = match req.kind.as_str() {
+        "totp" => openpanel_app::identity::two_factor::FactorResponse::Totp(req.code),
+        "recovery" => openpanel_app::identity::two_factor::FactorResponse::Recovery(req.code),
+        _ => return Err(ApiError::Unprocessable("unknown factor kind".into())),
+    };
+    let (user, token) = state
+        .identity
+        .verify_login_factor(req.challenge_id, &req.challenge_token, response, ip, ua)
+        .await?;
+    let expires_at = chrono::Utc::now() + chrono::Duration::hours(24);
     let cookie = format!(
         "{}={}; HttpOnly; Path=/; SameSite=Lax; Max-Age=86400",
         SESSION_COOKIE,
         token.expose()
     );
-
     let resp = LoginResponse {
         token: token.expose().to_string(),
         user: UserDto::from_user(&user),
         expires_at,
     };
-
     let mut headers = HeaderMap::new();
     headers.insert(
         SET_COOKIE,

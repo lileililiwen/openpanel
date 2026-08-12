@@ -23,6 +23,35 @@ pub struct LoginResponse {
     pub expires_at: DateTime<Utc>,
 }
 
+/// Response body when the password step succeeded but the user has a
+/// second factor enrolled. The browser follows up with
+/// `POST /identity/login/factor` carrying the challenge id, token, and
+/// factor response.
+#[derive(Debug, Serialize)]
+pub struct LoginFactorRequired {
+    /// Stable string the client echoes when comparing responses.
+    pub status: &'static str,
+    /// Stable challenge identifier.
+    pub challenge_id: Uuid,
+    /// When the challenge expires.
+    pub expires_at: DateTime<Utc>,
+}
+
+/// Request body for `POST /identity/login/factor`. `kind` is
+/// `"totp"` for a time-based OTP or `"recovery"` for a single-use
+/// recovery code.
+#[derive(Debug, Deserialize)]
+pub struct LoginFactorRequest {
+    /// Stable challenge identifier from the prior `factor_required` response.
+    pub challenge_id: Uuid,
+    /// Plaintext challenge token held by the browser.
+    pub challenge_token: String,
+    /// `"totp"` or `"recovery"`.
+    pub kind: String,
+    /// The TOTP code or recovery code.
+    pub code: String,
+}
+
 /// Public-facing projection of a [`User`], safe to serialize over the wire.
 #[derive(Debug, Serialize)]
 pub struct UserDto {
