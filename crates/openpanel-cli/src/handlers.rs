@@ -7,10 +7,10 @@ use anyhow::Context;
 use base64::Engine;
 use openpanel_api::build_router;
 use openpanel_app::{
-    AcmeEndpoint, BackupsModule, CronModule, DatabasesModule, DnsModule, DockerModule, FilesModule,
-    FtpModule, IdentityModule, LogService, LogsModule, MailModule, MonitoringModule,
-    SecurityModule, SecurityService, SitesModule, SoftwareCenterModule, SslModule, SslPaths,
-    SystemServicesModule, WafModule, databases::crypto as db_crypto,
+    AcmeEndpoint, ApiTokenModule, BackupsModule, CronModule, DatabasesModule, DnsModule,
+    DockerModule, FilesModule, FtpModule, IdentityModule, LogService, LogsModule, MailModule,
+    MonitoringModule, SecurityModule, SecurityService, SitesModule, SoftwareCenterModule,
+    SslModule, SslPaths, SystemServicesModule, WafModule, databases::crypto as db_crypto,
 };
 use openpanel_core::{
     AppContext, Config, JobSupervisor, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
@@ -36,6 +36,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
 
     let master_key = load_master_key(&config)?;
     let identity_module = IdentityModule::new(&ctx, master_key).await;
+    let api_token_module = ApiTokenModule::new(&ctx, master_key).await;
     let sites_module = SitesModule::new(&ctx).await;
     let waf_module = WafModule::new(&ctx, sites_module.generator().clone()).await;
     let docker_module = DockerModule::new(&ctx, master_key)
@@ -85,6 +86,10 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .apply_module(identity_module.name(), &identity_module.migrations())
         .await
         .context("apply identity migrations")?;
+    runner
+        .apply_module(api_token_module.name(), &api_token_module.migrations())
+        .await
+        .context("apply API-token migrations")?;
     runner
         .apply_module(sites_module.name(), &sites_module.migrations())
         .await
@@ -157,6 +162,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let docker_supervisor = JobSupervisor::new().spawn(background_tasks);
 
     let identity_svc = identity_module.service();
+    let api_token_svc = api_token_module.service();
     let sites_svc = sites_module.service();
     let databases_svc = databases_module.service();
     let files_svc = files_module.service();
@@ -195,6 +201,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         waf_svc.clone(),
         docker_svc.clone(),
         ftp_svc.clone(),
+        api_token_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -216,6 +223,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         waf_svc,
         docker_svc,
         ftp_svc,
+        api_token_svc,
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
@@ -2184,6 +2192,96 @@ async fn build_ftp(
         .await
         .context("apply FTP migrations")?;
     Ok((ftp.service(), identity.service()))
+}
+
+async fn build_api_tokens(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::ApiTokenService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config, db, audit);
+    let master_key = load_master_key(&ctx.config)?;
+    let identity = IdentityModule::new(&ctx, master_key).await;
+    let tokens = ApiTokenModule::new(&ctx, master_key).await;
+    let runner = MigrationRunner::for_sqlite(pool);
+    runner
+        .apply_module(identity.name(), &identity.migrations())
+        .await
+        .context("apply identity migrations")?;
+    runner
+        .apply_module(tokens.name(), &tokens.migrations())
+        .await
+        .context("apply API-token migrations")?;
+    Ok((tokens.service(), identity.service()))
+}
+
+/// Create a scoped token for the installation owner and show plaintext once.
+pub async fn token_create(
+    config: Arc<Config>,
+    label: String,
+    scopes: Vec<String>,
+    cidr_allowlist: Vec<String>,
+    expires_in_days: i64,
+) -> anyhow::Result<()> {
+    let (service, identity) = build_api_tokens(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let created = service
+        .create(
+            &owner,
+            openpanel_app::api_tokens::CreateApiToken {
+                user_id: owner.id(),
+                label,
+                scopes,
+                expires_at: chrono::Utc::now() + chrono::Duration::days(expires_in_days),
+                cidr_allowlist,
+            },
+        )
+        .await?;
+    println!("{}", serde_json::to_string_pretty(&created)?);
+    Ok(())
+}
+
+/// List safe token metadata for the installation owner.
+pub async fn token_list(config: Arc<Config>) -> anyhow::Result<()> {
+    let (service, identity) = build_api_tokens(config).await?;
+    let owner = waf_owner(&identity).await?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&service.list(&owner, owner.id()).await?)?
+    );
+    Ok(())
+}
+
+/// Revoke an owner token.
+pub async fn token_revoke(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let (service, identity) = build_api_tokens(config).await?;
+    let owner = waf_owner(&identity).await?;
+    service
+        .revoke(
+            &owner,
+            owner.id(),
+            uuid::Uuid::parse_str(&id).context("invalid token id")?,
+        )
+        .await?;
+    println!("revoked");
+    Ok(())
+}
+
+/// Atomically rotate an owner token and show the replacement once.
+pub async fn token_rotate(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let (service, identity) = build_api_tokens(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let created = service
+        .rotate(
+            &owner,
+            owner.id(),
+            uuid::Uuid::parse_str(&id).context("invalid token id")?,
+        )
+        .await?;
+    println!("{}", serde_json::to_string_pretty(&created)?);
+    Ok(())
 }
 
 /// Create a per-site FTP account.

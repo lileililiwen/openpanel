@@ -6,6 +6,7 @@
 // allow them here for this test binary.
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
+mod api_tokens;
 mod backup;
 mod common;
 mod cron;

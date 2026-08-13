@@ -17,14 +17,14 @@ use std::{
 
 use openpanel_api::build_router;
 use openpanel_app::{
-    ApplyReport, BackupService, BackupsModule, CronModule, CronService, DatabasesModule,
-    DatabasesService, DnsModule, DnsService, DockerAdapter, DockerModule, DockerService,
-    ExecResult, FilesModule, FilesService, FtpModule, FtpService, IdentityModule, IdentityService,
-    LogService, LogsModule, MailModule, MailService, MonitoringModule, MonitoringService,
-    SecurityModule, SecurityService, SitesModule, SitesService, SoftwareCenterModule,
-    SoftwareCenterService, SslModule, SslPaths, SslService, SystemServicesModule, WafModule,
-    WafService, identity::two_factor::TwoFactorCrypto, security::MemoryFirewall,
-    sites::nginx::NginxPaths, software_center::ArtifactFetcher,
+    ApiTokenModule, ApiTokenService, ApplyReport, BackupService, BackupsModule, CronModule,
+    CronService, DatabasesModule, DatabasesService, DnsModule, DnsService, DockerAdapter,
+    DockerModule, DockerService, ExecResult, FilesModule, FilesService, FtpModule, FtpService,
+    IdentityModule, IdentityService, LogService, LogsModule, MailModule, MailService,
+    MonitoringModule, MonitoringService, SecurityModule, SecurityService, SitesModule,
+    SitesService, SoftwareCenterModule, SoftwareCenterService, SslModule, SslPaths, SslService,
+    SystemServicesModule, WafModule, WafService, identity::two_factor::TwoFactorCrypto,
+    security::MemoryFirewall, sites::nginx::NginxPaths, software_center::ArtifactFetcher,
 };
 
 #[derive(Default)]
@@ -216,6 +216,7 @@ pub struct TestServer {
     waf: Arc<WafService>,
     docker: Arc<DockerService>,
     ftp: Arc<FtpService>,
+    api_tokens: Arc<ApiTokenService>,
     audit: Arc<dyn AuditService>,
     settings_path: PathBuf,
     _handle: JoinHandle<()>,
@@ -295,6 +296,16 @@ impl TestServer {
         Self::new_with_gate_config_and_crypto(false, Config::default(), Some(crypto)).await
     }
 
+    /// Boot with a deterministic per-token bucket configuration.
+    pub async fn new_with_api_token_rate(burst: u32, per_minute: u32) -> Self {
+        let mut config = Config::default();
+        config.modules.insert(
+            "api-tokens".into(),
+            serde_json::json!({"burst": burst, "per_minute": per_minute}),
+        );
+        Self::new_with_gate_config_and_crypto(false, config, None).await
+    }
+
     async fn new_with_gate_config_and_crypto(
         require_verified_digests: bool,
         config: Config,
@@ -336,6 +347,7 @@ impl TestServer {
         } else {
             IdentityModule::new(&ctx, master_key).await
         };
+        let api_token_module = ApiTokenModule::new(&ctx, master_key).await;
         let sites_module = SitesModule::with_paths(&ctx, paths).await;
         let waf_module = WafModule::new(&ctx, sites_module.generator().clone()).await;
         let docker_runtime = Arc::new(MemoryDocker::default());
@@ -365,6 +377,10 @@ impl TestServer {
             .apply_module(identity_module.name(), &identity_module.migrations())
             .await
             .expect("identity migrations");
+        runner
+            .apply_module(api_token_module.name(), &api_token_module.migrations())
+            .await
+            .expect("API-token migrations");
         runner
             .apply_module(sites_module.name(), &sites_module.migrations())
             .await
@@ -471,6 +487,7 @@ impl TestServer {
             .expect("software center migrations");
 
         let identity_svc = identity_module.service();
+        let api_token_svc = api_token_module.service();
         let sites_svc = sites_module.service();
         let waf_svc = waf_module.service();
         let docker_svc = docker_module.service();
@@ -511,6 +528,7 @@ impl TestServer {
             waf_svc.clone(),
             docker_svc.clone(),
             ftp_svc.clone(),
+            api_token_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -532,6 +550,7 @@ impl TestServer {
             waf_svc.clone(),
             docker_svc.clone(),
             ftp_svc.clone(),
+            api_token_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -597,6 +616,7 @@ impl TestServer {
             waf: waf_svc,
             docker: docker_svc,
             ftp: ftp_svc,
+            api_tokens: api_token_svc,
             audit,
             settings_path,
             _handle: handle,
@@ -623,6 +643,11 @@ impl TestServer {
     /// The identity service handle (for bootstrapping users).
     pub fn identity(&self) -> Arc<IdentityService> {
         self.identity.clone()
+    }
+
+    /// API-token lifecycle service handle.
+    pub fn api_tokens(&self) -> Arc<ApiTokenService> {
+        self.api_tokens.clone()
     }
 
     /// The sites service handle.

@@ -4,23 +4,24 @@ use std::sync::Arc;
 
 use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
 use openpanel_app::{
-    BackupService, CronService, DatabasesService, DnsService, DockerService, FilesService,
-    FtpService, IdentityService, LogService, MailService, MonitoringService, SecurityService,
-    SitesService, SoftwareCenterService, SslService, WafService, identity::TwoFactorService,
-    security::LoginThrottleService, system_services::ServiceManager,
+    ApiTokenService, BackupService, CronService, DatabasesService, DnsService, DockerService,
+    FilesService, FtpService, IdentityService, LogService, MailService, MonitoringService,
+    SecurityService, SitesService, SoftwareCenterService, SslService, WafService,
+    identity::TwoFactorService, security::LoginThrottleService, system_services::ServiceManager,
 };
 
 use crate::{
-    middleware::session::session_middleware,
+    middleware::session::{ApiAuthState, api_auth_middleware},
     routes::{
-        backups::router as backups_router, cron::router as cron_router,
-        databases::router as databases_router, dns::router as dns_router,
-        docker::router as docker_router, files::router as files_router, ftp::router as ftp_router,
-        identity::router as identity_router, logs::router as logs_router,
-        mail::router as mail_router, monitoring::router as monitoring_router,
-        security::router as security_router, sites::router as sites_router,
-        software_center::router as software_center_router, ssl::router as ssl_router,
-        system_services::router as system_services_router, waf::router as waf_router,
+        api_tokens::router as api_tokens_router, backups::router as backups_router,
+        cron::router as cron_router, databases::router as databases_router,
+        dns::router as dns_router, docker::router as docker_router, files::router as files_router,
+        ftp::router as ftp_router, identity::router as identity_router,
+        logs::router as logs_router, mail::router as mail_router,
+        monitoring::router as monitoring_router, security::router as security_router,
+        sites::router as sites_router, software_center::router as software_center_router,
+        ssl::router as ssl_router, system_services::router as system_services_router,
+        waf::router as waf_router,
     },
 };
 
@@ -49,13 +50,18 @@ pub fn build_router(
     waf: Arc<WafService>,
     docker: Arc<DockerService>,
     ftp: Arc<FtpService>,
+    api_tokens: Arc<ApiTokenService>,
 ) -> Router {
-    let identity_for_layer = identity.clone();
+    let auth_state = ApiAuthState {
+        identity: identity.clone(),
+        tokens: api_tokens.clone(),
+    };
 
     let api = Router::new()
         .nest(
             "/identity",
-            identity_router(identity, two_factor, login_throttle),
+            identity_router(identity, two_factor, login_throttle)
+                .merge(api_tokens_router(api_tokens)),
         )
         .nest("/sites", sites_router(sites))
         .nest("/sites", waf_router(waf))
@@ -73,7 +79,7 @@ pub fn build_router(
         .nest("/mail", mail_router(mail))
         .nest("/software", software_center_router(software_center))
         .nest("/docker", docker_router(docker))
-        .layer(from_fn_with_state(identity_for_layer, session_middleware));
+        .layer(from_fn_with_state(auth_state, api_auth_middleware));
 
     Router::new()
         .nest("/api/v1", api)

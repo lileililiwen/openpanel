@@ -9,6 +9,7 @@
 // Tests MAY use unwrap/expect/panic freely (same convention as other crates).
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+pub mod api_tokens;
 pub mod assets;
 pub mod backups;
 pub mod cron;

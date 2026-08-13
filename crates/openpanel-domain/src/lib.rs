@@ -9,6 +9,8 @@
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
 /// Backup plans, manifests, runs, and safe restore values.
+/// Scoped personal API token credentials and lifecycle invariants.
+pub mod api_tokens;
 pub mod backups;
 pub mod common;
 /// Scheduled command and HTTP job domain model.
@@ -35,6 +37,10 @@ pub mod system_services;
 /// Per-site typed web application firewall rules.
 pub mod waf;
 
+pub use api_tokens::{
+    ApiToken, ApiTokenError, ApiTokenMetadata, ApiTokenRepository, Cidr, TokenCredential,
+    TokenHash, TokenScope,
+};
 pub use common::{
     Email, Password, PasswordError, Username, UsernameError,
     error::{DomainError, RepoError},

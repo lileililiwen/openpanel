@@ -4044,6 +4044,7 @@ dependencies = [
  "chrono-tz",
  "cron",
  "hex",
+ "hmac",
  "openpanel-test-support",
  "proptest",
  "rand 0.8.7",

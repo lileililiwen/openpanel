@@ -5,7 +5,7 @@ use openpanel_cli::{
     BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, Command, CronCommand,
     DatabaseCommand, DnsCommand, DockerCommand, FileCommand, FtpCommand, LogsCommand, MailCommand,
     MonitoringCommand, RecoveryCodeCommand, SecurityAllowlistCommand, SecurityCommand,
-    SecurityRuleCommand, ServicesCommand, SiteCommand, SoftwareCommand, SslCommand,
+    SecurityRuleCommand, ServicesCommand, SiteCommand, SoftwareCommand, SslCommand, TokenCommand,
     TwoFactorCommand, UserCommand, WafCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
@@ -116,6 +116,19 @@ async fn main() -> anyhow::Result<()> {
             }
             FtpCommand::Enable { site, id } => handlers::ftp_enabled(config, site, id, true).await,
             FtpCommand::Delete { site, id } => handlers::ftp_delete(config, site, id).await,
+        },
+        Command::Token { action } => match action {
+            TokenCommand::Create {
+                label,
+                scopes,
+                cidr_allowlist,
+                expires_in_days,
+            } => {
+                handlers::token_create(config, label, scopes, cidr_allowlist, expires_in_days).await
+            }
+            TokenCommand::List => handlers::token_list(config).await,
+            TokenCommand::Revoke { id } => handlers::token_revoke(config, id).await,
+            TokenCommand::Rotate { id } => handlers::token_rotate(config, id).await,
         },
         Command::Database { action } => match action {
             DatabaseCommand::Create {

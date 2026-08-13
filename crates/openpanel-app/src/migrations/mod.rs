@@ -51,3 +51,5 @@ pub const WAF_V001: &str = include_str!("waf/V001__init.sql");
 pub const DOCKER_V001: &str = include_str!("docker/V001__init.sql");
 /// Per-site FTP accounts.
 pub const FTP_V001: &str = include_str!("ftp/V001__init.sql");
+/// Scoped personal access tokens.
+pub const API_TOKENS_V001: &str = include_str!("api_tokens/V001__init.sql");

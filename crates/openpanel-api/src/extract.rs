@@ -17,6 +17,8 @@ pub struct AuthSession {
     pub user: User,
     /// The resolved session backing the bearer token / cookie.
     pub session: Session,
+    /// Personal access token id when bearer authentication was used.
+    pub token_id: Option<uuid::Uuid>,
 }
 
 /// Internal extension trait used by the session middleware.

@@ -17,10 +17,10 @@ use openpanel_api::{
     middleware::session::{SESSION_COOKIE, session_middleware},
 };
 use openpanel_app::{
-    BackupService, CronService, DatabasesService, DnsService, DockerService, FilesService,
-    FtpService, IdentityService, LogService, MailService, MonitoringService, SecurityService,
-    SitesService, SoftwareCenterService, SslService, WafService, identity::TwoFactorService,
-    security::LoginThrottleService, system_services::ServiceManager,
+    ApiTokenService, BackupService, CronService, DatabasesService, DnsService, DockerService,
+    FilesService, FtpService, IdentityService, LogService, MailService, MonitoringService,
+    SecurityService, SitesService, SoftwareCenterService, SslService, WafService,
+    identity::TwoFactorService, security::LoginThrottleService, system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
 use openpanel_domain::{Session, SessionToken, User};
@@ -112,6 +112,8 @@ pub struct WebState {
     pub docker: Arc<DockerService>,
     /// Per-site FTP account service.
     pub ftp: Arc<FtpService>,
+    /// Scoped personal API-token lifecycle.
+    pub api_tokens: Arc<ApiTokenService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -228,6 +230,7 @@ pub fn router(
     waf: Arc<WafService>,
     docker: Arc<DockerService>,
     ftp: Arc<FtpService>,
+    api_tokens: Arc<ApiTokenService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -253,6 +256,7 @@ pub fn router(
         waf,
         docker,
         ftp,
+        api_tokens,
         csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
@@ -287,6 +291,14 @@ pub fn router(
         .route("/login/factor", post(login::login_factor_handler))
         .route("/logout", post(logout))
         .route("/settings", get(settings::page).post(settings::update))
+        .route(
+            "/settings/tokens",
+            get(crate::api_tokens::page).post(crate::api_tokens::create),
+        )
+        .route(
+            "/settings/tokens/{id}/{action}",
+            post(crate::api_tokens::action),
+        )
         .route("/settings/security", get(crate::two_factor::page))
         .route(
             "/settings/security/totp/enroll",

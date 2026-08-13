@@ -4,9 +4,14 @@
 
 use std::sync::Arc;
 
-use axum::{extract::Request, http::header::COOKIE, middleware::Next, response::Response};
-use openpanel_app::IdentityService;
-use openpanel_domain::SessionToken;
+use axum::{
+    extract::{ConnectInfo, Request},
+    http::{StatusCode, header::COOKIE},
+    middleware::Next,
+    response::{IntoResponse, Response},
+};
+use openpanel_app::{ApiTokenService, IdentityService, api_tokens::TokenAuthError};
+use openpanel_domain::{SessionBuilder, SessionToken, TokenScope};
 
 use crate::extract::{AuthSession, AuthSessionExt};
 
@@ -25,9 +30,134 @@ pub async fn session_middleware(
         && let Ok(parsed) = SessionToken::from_string(tok)
         && let Ok((user, session)) = svc.resolve_session(&parsed).await
     {
-        req.extensions_mut().insert(AuthSession { user, session });
+        req.extensions_mut().insert(AuthSession {
+            user,
+            session,
+            token_id: None,
+        });
     }
     next.run(req).await
+}
+
+/// API authentication state combining interactive sessions and scoped bearers.
+#[derive(Clone)]
+pub struct ApiAuthState {
+    /// Interactive identity sessions.
+    pub identity: Arc<IdentityService>,
+    /// Personal access token resolver.
+    pub tokens: Arc<ApiTokenService>,
+}
+
+/// Resolve a scoped personal bearer before falling back to normal session auth.
+pub async fn api_auth_middleware(
+    axum::extract::State(state): axum::extract::State<ApiAuthState>,
+    mut req: Request,
+    next: Next,
+) -> Response {
+    if let Some(plaintext) = personal_bearer(&req) {
+        let Some(scope) = required_scope(req.method(), req.uri().path()) else {
+            return StatusCode::FORBIDDEN.into_response();
+        };
+        let peer = req
+            .extensions()
+            .get::<ConnectInfo<std::net::SocketAddr>>()
+            .map_or_else(
+                || std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST),
+                |info| info.0.ip(),
+            );
+        match state.tokens.authenticate(&plaintext, peer, &scope).await {
+            Ok(principal) => {
+                let now = chrono::Utc::now();
+                let session = openpanel_domain::Session::restore(SessionBuilder {
+                    id: principal.token_id,
+                    user_id: principal.user.id(),
+                    token_hash: "[api-token]".into(),
+                    role: principal.user.role(),
+                    created_at: now,
+                    last_seen_at: now,
+                    absolute_expires_at: now + chrono::Duration::days(365),
+                    source_ip: Some(peer.to_string()),
+                    user_agent: None,
+                });
+                req.extensions_mut().insert(AuthSession {
+                    user: principal.user,
+                    session,
+                    token_id: Some(principal.token_id),
+                });
+                return next.run(req).await;
+            }
+            Err(error) => return token_error_response(error),
+        }
+    }
+    let token = extract_token(&req);
+    if let Some(tok) = token
+        && let Ok(parsed) = SessionToken::from_string(tok)
+        && let Ok((user, session)) = state.identity.resolve_session(&parsed).await
+    {
+        req.extensions_mut().insert(AuthSession {
+            user,
+            session,
+            token_id: None,
+        });
+    }
+    next.run(req).await
+}
+
+fn personal_bearer(req: &Request) -> Option<String> {
+    req.headers()
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|header| header.to_str().ok())
+        .and_then(|header| header.strip_prefix("Bearer "))
+        .map(str::trim)
+        .filter(|value| value.starts_with("openpanel_pat_"))
+        .map(str::to_owned)
+}
+
+fn required_scope(method: &axum::http::Method, path: &str) -> Option<TokenScope> {
+    let relative = path
+        .strip_prefix("/api/v1/")
+        .unwrap_or_else(|| path.trim_start_matches('/'));
+    let context = relative.split('/').next()?;
+    let verb = if context == "cron" && relative.ends_with("/run") {
+        "run"
+    } else if matches!(
+        *method,
+        axum::http::Method::GET | axum::http::Method::HEAD | axum::http::Method::OPTIONS
+    ) {
+        "read"
+    } else {
+        "write"
+    };
+    TokenScope::parse(&format!("{context}:{verb}")).ok()
+}
+
+fn token_error_response(error: TokenAuthError) -> Response {
+    let (status, code, retry) = match error {
+        TokenAuthError::Unauthorized | TokenAuthError::Expired => {
+            (StatusCode::UNAUTHORIZED, "invalid_token", None)
+        }
+        TokenAuthError::ScopeRejected
+        | TokenAuthError::CidrRejected
+        | TokenAuthError::Forbidden => (StatusCode::FORBIDDEN, "forbidden", None),
+        TokenAuthError::RateLimited {
+            retry_after_seconds,
+        } => (
+            StatusCode::TOO_MANY_REQUESTS,
+            "rate_limited",
+            Some(retry_after_seconds),
+        ),
+        TokenAuthError::Invalid(_) => (StatusCode::BAD_REQUEST, "bad_request", None),
+        TokenAuthError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal", None),
+    };
+    let mut response = (status, axum::Json(serde_json::json!({"error": code}))).into_response();
+    if let Some(seconds) = retry
+        && let Ok(value) = axum::http::HeaderValue::from_str(&seconds.to_string())
+    {
+        response
+            .headers_mut()
+            .insert(axum::http::header::RETRY_AFTER, value);
+    }
+    response
 }
 
 fn extract_token(req: &Request) -> Option<String> {

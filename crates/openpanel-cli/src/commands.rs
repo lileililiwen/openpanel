@@ -122,6 +122,37 @@ pub enum Command {
         #[command(subcommand)]
         action: FtpCommand,
     },
+    /// Manage scoped personal API tokens.
+    Token {
+        /// Token lifecycle operation.
+        #[command(subcommand)]
+        action: TokenCommand,
+    },
+}
+
+/// Personal API-token lifecycle operations.
+#[derive(Debug, Subcommand)]
+#[allow(missing_docs)]
+pub enum TokenCommand {
+    Create {
+        #[arg(long)]
+        label: String,
+        #[arg(long = "scope", required = true)]
+        scopes: Vec<String>,
+        #[arg(long = "cidr")]
+        cidr_allowlist: Vec<String>,
+        #[arg(long, default_value_t = 90)]
+        expires_in_days: i64,
+    },
+    List,
+    Revoke {
+        #[arg(long)]
+        id: String,
+    },
+    Rotate {
+        #[arg(long)]
+        id: String,
+    },
 }
 
 /// Per-site FTP account operations.

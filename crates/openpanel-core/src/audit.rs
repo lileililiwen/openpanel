@@ -172,6 +172,22 @@ pub enum AuditAction {
     FtpBindFailed,
     /// The supervised FTP listener restarted after a panic.
     FtpListenerRestart,
+    /// A personal API token was created.
+    TokenCreated,
+    /// A personal API token was rotated.
+    TokenRotated,
+    /// A personal API token was revoked.
+    TokenRevoked,
+    /// A bearer-authenticated request succeeded.
+    TokenRequest,
+    /// An expired bearer was rejected.
+    TokenExpired,
+    /// A bearer lacked the declared route scope.
+    TokenScopeRejected,
+    /// A bearer source address was outside its allowlist.
+    TokenCidrRejected,
+    /// A bearer exhausted its per-token bucket.
+    TokenRateLimited,
 }
 
 impl AuditAction {
@@ -243,6 +259,14 @@ impl AuditAction {
             AuditAction::FtpTransferLimit => "ftp_transfer_limit",
             AuditAction::FtpBindFailed => "ftp_bind_failed",
             AuditAction::FtpListenerRestart => "ftp_listener_restart",
+            AuditAction::TokenCreated => "token_created",
+            AuditAction::TokenRotated => "token_rotated",
+            AuditAction::TokenRevoked => "token_revoked",
+            AuditAction::TokenRequest => "token_request",
+            AuditAction::TokenExpired => "token_expired",
+            AuditAction::TokenScopeRejected => "token_scope_rejected",
+            AuditAction::TokenCidrRejected => "token_cidr_rejected",
+            AuditAction::TokenRateLimited => "token_rate_limited",
         }
     }
 }

@@ -1,5 +1,6 @@
 //! Per-resource HTTP route modules. Each submodule exposes a `router(...)` builder.
 
+pub mod api_tokens;
 /// Backup and restore routes (`/backups`).
 pub mod backups;
 /// Cron scheduling routes (`/cron`).

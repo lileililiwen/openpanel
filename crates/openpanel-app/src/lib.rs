@@ -6,6 +6,7 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+pub mod api_tokens;
 pub mod backups;
 pub mod cron;
 pub mod databases;
@@ -26,6 +27,7 @@ pub mod ssl;
 pub mod system_services;
 pub mod waf;
 
+pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
 pub use cron::{CronModule, CronService};
 pub use databases::{DatabasesModule, service::DatabasesService};
