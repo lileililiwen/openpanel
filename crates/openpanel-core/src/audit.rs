@@ -142,6 +142,18 @@ pub enum AuditAction {
     DeviceRemembered,
     /// A per-site web application firewall policy changed.
     WafChanged,
+    /// A trusted container image was pulled.
+    DockerImagePulled,
+    /// An unsafe container specification was rejected.
+    DockerSpecRejected,
+    /// A forbidden container capability was denied.
+    DockerCapabilityDenied,
+    /// A container was OOM-killed.
+    DockerOomKilled,
+    /// A container lifecycle operation completed.
+    DockerChanged,
+    /// A site network denied access to the control plane.
+    DockerEgressDenied,
 }
 
 impl AuditAction {
@@ -198,6 +210,12 @@ impl AuditAction {
             AuditAction::RecoveryCodeConsumed => "recovery_code_consumed",
             AuditAction::DeviceRemembered => "device_remembered",
             AuditAction::WafChanged => "waf_changed",
+            AuditAction::DockerImagePulled => "docker_image_pulled",
+            AuditAction::DockerSpecRejected => "docker_spec_rejected",
+            AuditAction::DockerCapabilityDenied => "docker_capability_denied",
+            AuditAction::DockerOomKilled => "docker_oom_killed",
+            AuditAction::DockerChanged => "docker_changed",
+            AuditAction::DockerEgressDenied => "docker_egress_denied",
         }
     }
 }

@@ -47,3 +47,5 @@ pub const SOFTWARE_CENTER_V002: &str = include_str!("software_center/V002__norma
 pub const SOFTWARE_CENTER_V003: &str = include_str!("software_center/V003__platforms_backfill.sql");
 /// Per-site WAF rule sets and aggregated hit rows.
 pub const WAF_V001: &str = include_str!("waf/V001__init.sql");
+/// Docker desired state, stacks, and trusted image patterns.
+pub const DOCKER_V001: &str = include_str!("docker/V001__init.sql");

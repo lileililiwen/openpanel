@@ -79,6 +79,7 @@ flate2 = "1"
 tar = "0.4"
 futures-util = "0.3"
 url = "2"
+bollard = { version = "0.21", default-features = false, features = ["pipe", "chrono"] }
 
 # CLI
 clap = { version = "4.5", features = ["derive", "env"] }
@@ -151,6 +152,7 @@ openpanel-domain = { workspace = true }
 openpanel-cli = { workspace = true }
 tokio = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 uuid = { workspace = true }
 reqwest = { workspace = true, features = ["multipart"] }
 tracing = { workspace = true }

@@ -10,6 +10,7 @@ mod backups;
 mod cron;
 mod databases;
 mod dns;
+mod docker;
 mod files;
 mod identity;
 mod logs;

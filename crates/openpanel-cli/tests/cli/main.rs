@@ -11,6 +11,7 @@ mod common;
 mod cron;
 mod database;
 mod dns;
+mod docker;
 mod file;
 mod logs;
 mod mail;

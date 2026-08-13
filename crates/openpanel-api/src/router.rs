@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
 use openpanel_app::{
-    BackupService, CronService, DatabasesService, DnsService, FilesService, IdentityService,
-    LogService, MailService, MonitoringService, SecurityService, SitesService,
+    BackupService, CronService, DatabasesService, DnsService, DockerService, FilesService,
+    IdentityService, LogService, MailService, MonitoringService, SecurityService, SitesService,
     SoftwareCenterService, SslService, WafService, identity::TwoFactorService,
     security::LoginThrottleService, system_services::ServiceManager,
 };
@@ -15,12 +15,12 @@ use crate::{
     routes::{
         backups::router as backups_router, cron::router as cron_router,
         databases::router as databases_router, dns::router as dns_router,
-        files::router as files_router, identity::router as identity_router,
-        logs::router as logs_router, mail::router as mail_router,
-        monitoring::router as monitoring_router, security::router as security_router,
-        sites::router as sites_router, software_center::router as software_center_router,
-        ssl::router as ssl_router, system_services::router as system_services_router,
-        waf::router as waf_router,
+        docker::router as docker_router, files::router as files_router,
+        identity::router as identity_router, logs::router as logs_router,
+        mail::router as mail_router, monitoring::router as monitoring_router,
+        security::router as security_router, sites::router as sites_router,
+        software_center::router as software_center_router, ssl::router as ssl_router,
+        system_services::router as system_services_router, waf::router as waf_router,
     },
 };
 
@@ -47,6 +47,7 @@ pub fn build_router(
     software_center: Arc<SoftwareCenterService>,
     two_factor: Arc<TwoFactorService>,
     waf: Arc<WafService>,
+    docker: Arc<DockerService>,
 ) -> Router {
     let identity_for_layer = identity.clone();
 
@@ -69,6 +70,7 @@ pub fn build_router(
         .nest("/dns", dns_router(dns))
         .nest("/mail", mail_router(mail))
         .nest("/software", software_center_router(software_center))
+        .nest("/docker", docker_router(docker))
         .layer(from_fn_with_state(identity_for_layer, session_middleware));
 
     Router::new()

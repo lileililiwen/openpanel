@@ -110,6 +110,67 @@ pub enum Command {
         #[command(subcommand)]
         action: WafCommand,
     },
+    /// Manage allowlisted least-privilege containers.
+    Docker {
+        /// Container operation.
+        #[command(subcommand)]
+        action: DockerCommand,
+    },
+}
+
+/// Container runtime operations.
+#[derive(Debug, Subcommand)]
+#[allow(missing_docs)]
+pub enum DockerCommand {
+    Pull {
+        #[arg(long)]
+        image: String,
+    },
+    List,
+    Inspect {
+        #[arg(long)]
+        id: String,
+    },
+    Create {
+        #[arg(long)]
+        spec_json: String,
+    },
+    Start {
+        #[arg(long)]
+        id: String,
+    },
+    Stop {
+        #[arg(long)]
+        id: String,
+    },
+    Restart {
+        #[arg(long)]
+        id: String,
+    },
+    Logs {
+        #[arg(long)]
+        id: String,
+        #[arg(long, default_value_t = 100)]
+        tail: u64,
+    },
+    Exec {
+        #[arg(long)]
+        id: String,
+        #[arg(long, required = true)]
+        command: Vec<String>,
+    },
+    Rm {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        force: bool,
+    },
+    Allow {
+        #[arg(long)]
+        pattern: String,
+        #[arg(long)]
+        pin_digest_required: bool,
+    },
 }
 
 /// Per-site WAF operations.

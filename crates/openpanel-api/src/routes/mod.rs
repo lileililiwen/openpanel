@@ -8,6 +8,7 @@ pub mod cron;
 pub mod databases;
 /// Provider-backed DNS routes (`/dns`).
 pub mod dns;
+pub mod docker;
 /// Files resource routes (`/files/{site_id}/...`).
 pub mod files;
 /// Identity resource routes (`/identity`).

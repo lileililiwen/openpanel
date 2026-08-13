@@ -8,6 +8,7 @@ description = "Domain layer: entities, value objects, aggregates, repository tra
 [dependencies]
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 thiserror = { workspace = true }
 argon2 = { workspace = true }
 bcrypt = { workspace = true }

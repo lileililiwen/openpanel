@@ -17,8 +17,8 @@ use openpanel_api::{
     middleware::session::{SESSION_COOKIE, session_middleware},
 };
 use openpanel_app::{
-    BackupService, CronService, DatabasesService, DnsService, FilesService, IdentityService,
-    LogService, MailService, MonitoringService, SecurityService, SitesService,
+    BackupService, CronService, DatabasesService, DnsService, DockerService, FilesService,
+    IdentityService, LogService, MailService, MonitoringService, SecurityService, SitesService,
     SoftwareCenterService, SslService, WafService, identity::TwoFactorService,
     security::LoginThrottleService, system_services::ServiceManager,
 };
@@ -108,6 +108,8 @@ pub struct WebState {
     pub two_factor: Arc<TwoFactorService>,
     /// Per-site web application firewall service.
     pub waf: Arc<WafService>,
+    /// Least-privilege container lifecycle service.
+    pub docker: Arc<DockerService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -222,6 +224,7 @@ pub fn router(
     software_center_service: Arc<SoftwareCenterService>,
     two_factor: Arc<TwoFactorService>,
     waf: Arc<WafService>,
+    docker: Arc<DockerService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -245,6 +248,7 @@ pub fn router(
         software_center: software_center_service,
         two_factor,
         waf,
+        docker,
         csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
@@ -258,6 +262,12 @@ pub fn router(
         .route("/", get(dashboard::home))
         .route("/dashboard", get(dashboard::home))
         .route("/dashboard/gauges", get(dashboard::gauges_partial))
+        .route(
+            "/docker",
+            get(crate::docker::page).post(crate::docker::create),
+        )
+        .route("/docker/{id}/{action}", post(crate::docker::action))
+        .route("/docker/{id}/logs", get(crate::docker::logs))
         .route(
             "/login",
             get(login::login_page_handler).post(login::login_handler),

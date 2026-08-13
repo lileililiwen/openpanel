@@ -16,6 +16,7 @@ pub mod cron;
 pub mod databases;
 /// Provider-backed DNS zones and typed records.
 pub mod dns;
+pub mod docker;
 pub mod files;
 pub mod identity;
 pub mod logs;

@@ -121,6 +121,12 @@ const SECURITY_NETWORK: &[NavItem] = &[
 ];
 const ADMINISTRATION: &[NavItem] = &[
     NavItem {
+        href: "/docker",
+        label: "Containers",
+        capability: "docker",
+        role: RequiredRole::Owner,
+    },
+    NavItem {
         href: "/software",
         label: "Software Center",
         capability: "software-center",

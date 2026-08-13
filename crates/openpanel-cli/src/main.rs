@@ -3,10 +3,10 @@
 use clap::Parser;
 use openpanel_cli::{
     BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, Command, CronCommand,
-    DatabaseCommand, DnsCommand, FileCommand, LogsCommand, MailCommand, MonitoringCommand,
-    RecoveryCodeCommand, SecurityAllowlistCommand, SecurityCommand, SecurityRuleCommand,
-    ServicesCommand, SiteCommand, SoftwareCommand, SslCommand, TwoFactorCommand, UserCommand,
-    WafCommand, handlers,
+    DatabaseCommand, DnsCommand, DockerCommand, FileCommand, LogsCommand, MailCommand,
+    MonitoringCommand, RecoveryCodeCommand, SecurityAllowlistCommand, SecurityCommand,
+    SecurityRuleCommand, ServicesCommand, SiteCommand, SoftwareCommand, SslCommand,
+    TwoFactorCommand, UserCommand, WafCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -86,6 +86,22 @@ async fn main() -> anyhow::Result<()> {
                 rule_json,
                 request_json,
             } => handlers::waf_test(config, site, rule_json, request_json).await,
+        },
+        Command::Docker { action } => match action {
+            DockerCommand::Pull { image } => handlers::docker_pull(config, image).await,
+            DockerCommand::List => handlers::docker_list(config).await,
+            DockerCommand::Inspect { id } => handlers::docker_inspect(config, id).await,
+            DockerCommand::Create { spec_json } => handlers::docker_create(config, spec_json).await,
+            DockerCommand::Start { id } => handlers::docker_action(config, id, "start").await,
+            DockerCommand::Stop { id } => handlers::docker_action(config, id, "stop").await,
+            DockerCommand::Restart { id } => handlers::docker_action(config, id, "restart").await,
+            DockerCommand::Logs { id, tail } => handlers::docker_logs(config, id, tail).await,
+            DockerCommand::Exec { id, command } => handlers::docker_exec(config, id, command).await,
+            DockerCommand::Rm { id, force } => handlers::docker_remove(config, id, force).await,
+            DockerCommand::Allow {
+                pattern,
+                pin_digest_required,
+            } => handlers::docker_allow(config, pattern, pin_digest_required).await,
         },
         Command::Database { action } => match action {
             DatabaseCommand::Create {

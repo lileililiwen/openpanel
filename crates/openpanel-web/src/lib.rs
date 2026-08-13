@@ -16,6 +16,7 @@ pub mod csrf;
 pub mod dashboard;
 pub mod databases;
 pub mod dns;
+pub mod docker;
 pub mod files;
 pub mod layout;
 pub mod login;

@@ -7,13 +7,13 @@ use anyhow::Context;
 use base64::Engine;
 use openpanel_api::build_router;
 use openpanel_app::{
-    AcmeEndpoint, BackupsModule, CronModule, DatabasesModule, DnsModule, FilesModule,
+    AcmeEndpoint, BackupsModule, CronModule, DatabasesModule, DnsModule, DockerModule, FilesModule,
     IdentityModule, LogService, LogsModule, MailModule, MonitoringModule, SecurityModule,
     SecurityService, SitesModule, SoftwareCenterModule, SslModule, SslPaths, SystemServicesModule,
     WafModule, databases::crypto as db_crypto,
 };
 use openpanel_core::{
-    AppContext, Config, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
+    AppContext, Config, JobSupervisor, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
 };
 use openpanel_domain::{
     Role,
@@ -38,6 +38,9 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let identity_module = IdentityModule::new(&ctx, master_key).await;
     let sites_module = SitesModule::new(&ctx).await;
     let waf_module = WafModule::new(&ctx, sites_module.generator().clone()).await;
+    let docker_module = DockerModule::new(&ctx, master_key)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let databases_module = DatabasesModule::new(&ctx, master_key).await;
     let files_module = FilesModule::new(&ctx).await;
     let ssl_module = SslModule::new(&ctx, master_key, ssl_contact_email(&config)).await;
@@ -87,6 +90,10 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .apply_module(waf_module.name(), &waf_module.migrations())
         .await
         .context("apply WAF migrations")?;
+    runner
+        .apply_module(docker_module.name(), &docker_module.migrations())
+        .await
+        .context("apply Docker migrations")?;
     runner
         .apply_module(databases_module.name(), &databases_module.migrations())
         .await
@@ -138,6 +145,9 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .await
         .context("apply software center migrations")?;
 
+    let docker_tasks = docker_module.background_tasks(&ctx);
+    let docker_supervisor = JobSupervisor::new().spawn(docker_tasks);
+
     let identity_svc = identity_module.service();
     let sites_svc = sites_module.service();
     let databases_svc = databases_module.service();
@@ -155,6 +165,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let software_center_svc = software_center_module.service();
     let two_factor_svc = identity_module.two_factor();
     let waf_svc = waf_module.service();
+    let docker_svc = docker_module.service();
     let app = build_router(
         identity_svc.clone(),
         sites_svc.clone(),
@@ -173,6 +184,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         software_center_svc.clone(),
         two_factor_svc.clone(),
         waf_svc.clone(),
+        docker_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -192,6 +204,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         software_center_svc,
         two_factor_svc,
         waf_svc,
+        docker_svc,
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
@@ -201,7 +214,8 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
                 .with("system-services")
                 .with("dns")
                 .with("mail")
-                .with("software-center"),
+                .with("software-center")
+                .with("docker"),
         ),
     ));
 
@@ -210,11 +224,13 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .await
         .with_context(|| format!("bind {addr}"))?;
     tracing::info!(%addr, "openpanel listening on http://{addr}");
-    axum::serve(
+    let server_result = axum::serve(
         listener,
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
-    .await?;
+    .await;
+    docker_supervisor.join().await;
+    server_result?;
     Ok(())
 }
 
@@ -2101,6 +2117,134 @@ async fn waf_owner(
         .into_iter()
         .find(|user| user.role() == Role::Owner)
         .ok_or_else(|| anyhow::anyhow!("owner caller not found"))
+}
+
+async fn build_docker(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::DockerService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config, db, audit);
+    let master_key = load_master_key(&ctx.config)?;
+    let identity = IdentityModule::new(&ctx, master_key).await;
+    let docker = DockerModule::new(&ctx, master_key)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let runner = MigrationRunner::for_sqlite(pool);
+    runner
+        .apply_module(identity.name(), &identity.migrations())
+        .await
+        .context("apply identity migrations")?;
+    runner
+        .apply_module(docker.name(), &docker.migrations())
+        .await
+        .context("apply Docker migrations")?;
+    Ok((docker.service(), identity.service()))
+}
+
+/// Add a trusted image pattern.
+pub async fn docker_allow(config: Arc<Config>, pattern: String, pin: bool) -> anyhow::Result<()> {
+    let (service, identity) = build_docker(config).await?;
+    let owner = waf_owner(&identity).await?;
+    service
+        .put_allowlist(
+            &owner,
+            openpanel_domain::docker::ImageAllowlistEntry {
+                pattern: pattern.clone(),
+                allow_pull: true,
+                pin_digest_required: pin,
+            },
+        )
+        .await?;
+    println!("allowed {pattern}");
+    Ok(())
+}
+
+/// Pull an allowlisted image.
+pub async fn docker_pull(config: Arc<Config>, image: String) -> anyhow::Result<()> {
+    let (service, identity) = build_docker(config).await?;
+    let owner = waf_owner(&identity).await?;
+    println!("{}", service.pull(&owner, &image).await?);
+    Ok(())
+}
+/// List managed containers.
+pub async fn docker_list(config: Arc<Config>) -> anyhow::Result<()> {
+    let (service, identity) = build_docker(config).await?;
+    let owner = waf_owner(&identity).await?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&service.list(&owner).await?)?
+    );
+    Ok(())
+}
+/// Inspect one managed container and refresh its OOM state.
+pub async fn docker_inspect(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let (service, identity) = build_docker(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let id = uuid::Uuid::parse_str(&id).context("invalid container id")?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&service.inspect(&owner, id).await?)?
+    );
+    Ok(())
+}
+/// Create from one strict JSON specification.
+pub async fn docker_create(config: Arc<Config>, json: String) -> anyhow::Result<()> {
+    let (service, identity) = build_docker(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let spec = serde_json::from_str(&json).context("invalid container spec JSON")?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&service.create(&owner, spec).await?)?
+    );
+    Ok(())
+}
+/// Start, stop, or restart a managed container.
+pub async fn docker_action(config: Arc<Config>, id: String, action: &str) -> anyhow::Result<()> {
+    let (service, identity) = build_docker(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let id = uuid::Uuid::parse_str(&id).context("invalid container id")?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&service.action(&owner, id, action).await?)?
+    );
+    Ok(())
+}
+/// Print bounded redacted tail logs.
+pub async fn docker_logs(config: Arc<Config>, id: String, tail: u64) -> anyhow::Result<()> {
+    let (service, identity) = build_docker(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let id = uuid::Uuid::parse_str(&id).context("invalid container id")?;
+    for line in service.logs(&owner, id, tail).await? {
+        print!("{line}");
+    }
+    Ok(())
+}
+/// Execute an argv as the configured non-root user.
+pub async fn docker_exec(
+    config: Arc<Config>,
+    id: String,
+    command: Vec<String>,
+) -> anyhow::Result<()> {
+    let (service, identity) = build_docker(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let id = uuid::Uuid::parse_str(&id).context("invalid container id")?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&service.exec(&owner, id, command).await?)?
+    );
+    Ok(())
+}
+/// Remove a managed runtime and row.
+pub async fn docker_remove(config: Arc<Config>, id: String, force: bool) -> anyhow::Result<()> {
+    let (service, identity) = build_docker(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let id = uuid::Uuid::parse_str(&id).context("invalid container id")?;
+    service.remove(&owner, id, force).await?;
+    println!("removed {id}");
+    Ok(())
 }
 
 /// Print a site's complete WAF policy as JSON.

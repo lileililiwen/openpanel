@@ -17,14 +17,139 @@ use std::{
 
 use openpanel_api::build_router;
 use openpanel_app::{
-    BackupService, BackupsModule, CronModule, CronService, DatabasesModule, DatabasesService,
-    DnsModule, DnsService, FilesModule, FilesService, IdentityModule, IdentityService, LogService,
-    LogsModule, MailModule, MailService, MonitoringModule, MonitoringService, SecurityModule,
-    SecurityService, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
-    SslModule, SslPaths, SslService, SystemServicesModule, WafModule, WafService,
-    identity::two_factor::TwoFactorCrypto, security::MemoryFirewall, sites::nginx::NginxPaths,
-    software_center::ArtifactFetcher,
+    ApplyReport, BackupService, BackupsModule, CronModule, CronService, DatabasesModule,
+    DatabasesService, DnsModule, DnsService, DockerAdapter, DockerModule, DockerService,
+    ExecResult, FilesModule, FilesService, IdentityModule, IdentityService, LogService, LogsModule,
+    MailModule, MailService, MonitoringModule, MonitoringService, SecurityModule, SecurityService,
+    SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService, SslModule, SslPaths,
+    SslService, SystemServicesModule, WafModule, WafService, identity::two_factor::TwoFactorCrypto,
+    security::MemoryFirewall, sites::nginx::NginxPaths, software_center::ArtifactFetcher,
 };
+
+#[derive(Default)]
+struct MemoryDocker {
+    states: Mutex<HashMap<String, openpanel_app::RuntimeContainerState>>,
+}
+
+#[async_trait::async_trait]
+impl DockerAdapter for MemoryDocker {
+    async fn ping(&self) -> Result<(), openpanel_domain::docker::DockerError> {
+        Ok(())
+    }
+
+    async fn pull(&self, image: &str) -> Result<String, openpanel_domain::docker::DockerError> {
+        Ok(format!("{image}@sha256:test"))
+    }
+
+    async fn create(
+        &self,
+        _spec: &openpanel_domain::docker::ContainerSpec,
+    ) -> Result<String, openpanel_domain::docker::DockerError> {
+        let id = Uuid::new_v4().to_string();
+        self.states.lock().expect("docker states").insert(
+            id.clone(),
+            openpanel_app::RuntimeContainerState {
+                status: "created".into(),
+                oom_killed: false,
+            },
+        );
+        Ok(id)
+    }
+
+    async fn start(&self, id: &str) -> Result<(), openpanel_domain::docker::DockerError> {
+        if let Some(state) = self.states.lock().expect("docker states").get_mut(id) {
+            state.status = "running".into();
+        }
+        Ok(())
+    }
+
+    async fn stop(&self, id: &str) -> Result<(), openpanel_domain::docker::DockerError> {
+        if let Some(state) = self.states.lock().expect("docker states").get_mut(id) {
+            state.status = "exited".into();
+        }
+        Ok(())
+    }
+
+    async fn restart(&self, id: &str) -> Result<(), openpanel_domain::docker::DockerError> {
+        self.start(id).await
+    }
+
+    async fn remove(
+        &self,
+        id: &str,
+        _force: bool,
+    ) -> Result<(), openpanel_domain::docker::DockerError> {
+        self.states.lock().expect("docker states").remove(id);
+        Ok(())
+    }
+
+    async fn inspect(
+        &self,
+        id: &str,
+    ) -> Result<openpanel_app::RuntimeContainerState, openpanel_domain::docker::DockerError> {
+        self.states
+            .lock()
+            .expect("docker states")
+            .get(id)
+            .cloned()
+            .ok_or_else(|| openpanel_domain::docker::DockerError::NotFound(id.into()))
+    }
+
+    async fn logs(
+        &self,
+        _: &str,
+        _: u64,
+    ) -> Result<Vec<String>, openpanel_domain::docker::DockerError> {
+        Ok(vec!["container ready".into()])
+    }
+
+    async fn exec(
+        &self,
+        _: &str,
+        command: &[String],
+        _user: &str,
+    ) -> Result<ExecResult, openpanel_domain::docker::DockerError> {
+        Ok(ExecResult {
+            exit_code: 0,
+            output: command.join(" "),
+            truncated: false,
+        })
+    }
+
+    async fn apply_stack(
+        &self,
+        _stack: &openpanel_domain::docker::ComposeStack,
+    ) -> Result<ApplyReport, openpanel_domain::docker::DockerError> {
+        Ok(ApplyReport {
+            created: vec!["memory-stack".into()],
+            removed: Vec::new(),
+        })
+    }
+
+    async fn remove_stack(
+        &self,
+        _stack: &openpanel_domain::docker::ComposeStack,
+    ) -> Result<Vec<String>, openpanel_domain::docker::DockerError> {
+        Ok(Vec::new())
+    }
+}
+
+#[async_trait::async_trait]
+impl openpanel_app::NetworkAdapter for MemoryDocker {
+    async fn ensure(
+        &self,
+        _site_id: Option<Uuid>,
+    ) -> Result<(), openpanel_domain::docker::DockerError> {
+        Ok(())
+    }
+
+    async fn remove_if_unused(
+        &self,
+        _site_id: Option<Uuid>,
+    ) -> Result<(), openpanel_domain::docker::DockerError> {
+        Ok(())
+    }
+}
 
 /// In-process artifact fetcher used by the test server. Bytes are
 /// staged per URL via [`TestServer::stage_artifact`]. Anything not
@@ -64,6 +189,7 @@ use openpanel_core::{
 };
 use tempfile::TempDir;
 use tokio::{net::TcpListener, task::JoinHandle};
+use uuid::Uuid;
 
 use super::db::TestDb;
 
@@ -87,6 +213,7 @@ pub struct TestServer {
     mail: Arc<MailService>,
     software_center: Arc<SoftwareCenterService>,
     waf: Arc<WafService>,
+    docker: Arc<DockerService>,
     audit: Arc<dyn AuditService>,
     settings_path: PathBuf,
     _handle: JoinHandle<()>,
@@ -209,6 +336,10 @@ impl TestServer {
         };
         let sites_module = SitesModule::with_paths(&ctx, paths).await;
         let waf_module = WafModule::new(&ctx, sites_module.generator().clone()).await;
+        let docker_runtime = Arc::new(MemoryDocker::default());
+        let docker_module =
+            DockerModule::with_adapters(&ctx, docker_runtime.clone(), docker_runtime, master_key)
+                .await;
 
         let databases_module = DatabasesModule::new(&ctx, master_key).await;
         let files_module = FilesModule::new(&ctx).await;
@@ -239,6 +370,10 @@ impl TestServer {
             .apply_module(waf_module.name(), &waf_module.migrations())
             .await
             .expect("waf migrations");
+        runner
+            .apply_module(docker_module.name(), &docker_module.migrations())
+            .await
+            .expect("docker migrations");
         runner
             .apply_module(databases_module.name(), &databases_module.migrations())
             .await
@@ -331,6 +466,7 @@ impl TestServer {
         let identity_svc = identity_module.service();
         let sites_svc = sites_module.service();
         let waf_svc = waf_module.service();
+        let docker_svc = docker_module.service();
         let databases_svc = databases_module.service();
         let files_svc = files_module.service();
         let ssl_svc = ssl_module.service();
@@ -365,6 +501,7 @@ impl TestServer {
             software_center_svc.clone(),
             two_factor_svc.clone(),
             waf_svc.clone(),
+            docker_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -384,6 +521,7 @@ impl TestServer {
             software_center_svc.clone(),
             two_factor_svc.clone(),
             waf_svc.clone(),
+            docker_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -404,7 +542,8 @@ impl TestServer {
                     .with("system-services")
                     .with("dns")
                     .with("mail")
-                    .with("software-center"),
+                    .with("software-center")
+                    .with("docker"),
             ),
         ));
 
@@ -445,6 +584,7 @@ impl TestServer {
             mail: mail_svc,
             software_center: software_center_svc,
             waf: waf_svc,
+            docker: docker_svc,
             audit,
             settings_path,
             _handle: handle,
@@ -501,6 +641,11 @@ impl TestServer {
     /// Per-site WAF service.
     pub fn waf(&self) -> Arc<WafService> {
         self.waf.clone()
+    }
+
+    /// Docker service handle for staging allowlist and runtime observations.
+    pub fn docker(&self) -> Arc<DockerService> {
+        self.docker.clone()
     }
 
     /// Underlying isolated SQLite pool for persistence assertions.

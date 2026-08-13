@@ -10,6 +10,7 @@ pub mod backups;
 pub mod cron;
 pub mod databases;
 pub mod dns;
+pub mod docker;
 pub mod files;
 pub mod identity;
 pub mod logs;
@@ -28,6 +29,10 @@ pub use backups::{BackupService, BackupsModule};
 pub use cron::{CronModule, CronService};
 pub use databases::{DatabasesModule, service::DatabasesService};
 pub use dns::{DnsModule, DnsService};
+pub use docker::{
+    ApplyReport, BollardDockerAdapter, DockerAdapter, DockerModule, DockerService, ExecResult,
+    NetworkAdapter, RuntimeContainerState, SqliteDockerRepository,
+};
 pub use files::{FilesModule, service::FilesService};
 pub use identity::{IdentityModule, service::IdentityService};
 pub use logs::{LogService, LogsModule};
