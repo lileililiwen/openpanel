@@ -18,6 +18,8 @@ pub mod databases;
 pub mod dns;
 pub mod docker;
 pub mod files;
+/// Per-site FTP accounts, limits, and chroot path policy.
+pub mod ftp;
 pub mod identity;
 pub mod logs;
 /// Hosted mail domains, addresses, quotas, aliases, and relay policy.

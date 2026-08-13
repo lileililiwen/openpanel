@@ -116,6 +116,50 @@ pub enum Command {
         #[command(subcommand)]
         action: DockerCommand,
     },
+    /// Manage per-site FTP accounts.
+    Ftp {
+        /// FTP account operation.
+        #[command(subcommand)]
+        action: FtpCommand,
+    },
+}
+
+/// Per-site FTP account operations.
+#[derive(Debug, Subcommand)]
+#[allow(missing_docs)]
+pub enum FtpCommand {
+    Create {
+        #[arg(long)]
+        site: String,
+        #[arg(long)]
+        username: String,
+        #[arg(long)]
+        password: String,
+        #[arg(long)]
+        read_only: bool,
+    },
+    List {
+        #[arg(long)]
+        site: String,
+    },
+    Disable {
+        #[arg(long)]
+        site: String,
+        #[arg(long)]
+        id: String,
+    },
+    Enable {
+        #[arg(long)]
+        site: String,
+        #[arg(long)]
+        id: String,
+    },
+    Delete {
+        #[arg(long)]
+        site: String,
+        #[arg(long)]
+        id: String,
+    },
 }
 
 /// Container runtime operations.

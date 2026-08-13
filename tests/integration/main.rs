@@ -12,6 +12,7 @@ mod databases;
 mod dns;
 mod docker;
 mod files;
+mod ftp;
 mod identity;
 mod logs;
 mod mail;

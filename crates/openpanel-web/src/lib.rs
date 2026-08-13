@@ -18,6 +18,7 @@ pub mod databases;
 pub mod dns;
 pub mod docker;
 pub mod files;
+pub mod ftp;
 pub mod layout;
 pub mod login;
 pub mod logs;

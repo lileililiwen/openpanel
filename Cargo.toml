@@ -80,6 +80,11 @@ tar = "0.4"
 futures-util = "0.3"
 url = "2"
 bollard = { version = "0.21", default-features = false, features = ["pipe", "chrono"] }
+libunftp = { version = "0.23", default-features = false, features = ["ring"] }
+unftp-core = "0.1"
+unftp-sbe-fs = "0.4"
+unftp-sbe-rooter = "0.3"
+unftp-sbe-restrict = "0.1.5"
 
 # CLI
 clap = { version = "4.5", features = ["derive", "env"] }

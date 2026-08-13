@@ -5,8 +5,8 @@ use std::sync::Arc;
 use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
 use openpanel_app::{
     BackupService, CronService, DatabasesService, DnsService, DockerService, FilesService,
-    IdentityService, LogService, MailService, MonitoringService, SecurityService, SitesService,
-    SoftwareCenterService, SslService, WafService, identity::TwoFactorService,
+    FtpService, IdentityService, LogService, MailService, MonitoringService, SecurityService,
+    SitesService, SoftwareCenterService, SslService, WafService, identity::TwoFactorService,
     security::LoginThrottleService, system_services::ServiceManager,
 };
 
@@ -15,7 +15,7 @@ use crate::{
     routes::{
         backups::router as backups_router, cron::router as cron_router,
         databases::router as databases_router, dns::router as dns_router,
-        docker::router as docker_router, files::router as files_router,
+        docker::router as docker_router, files::router as files_router, ftp::router as ftp_router,
         identity::router as identity_router, logs::router as logs_router,
         mail::router as mail_router, monitoring::router as monitoring_router,
         security::router as security_router, sites::router as sites_router,
@@ -48,6 +48,7 @@ pub fn build_router(
     two_factor: Arc<TwoFactorService>,
     waf: Arc<WafService>,
     docker: Arc<DockerService>,
+    ftp: Arc<FtpService>,
 ) -> Router {
     let identity_for_layer = identity.clone();
 
@@ -58,6 +59,7 @@ pub fn build_router(
         )
         .nest("/sites", sites_router(sites))
         .nest("/sites", waf_router(waf))
+        .nest("/sites", ftp_router(ftp))
         .nest("/databases", databases_router(databases))
         .nest("/files", files_router(files.clone()))
         .nest("/ssl", ssl_router(ssl))

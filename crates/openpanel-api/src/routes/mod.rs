@@ -11,6 +11,8 @@ pub mod dns;
 pub mod docker;
 /// Files resource routes (`/files/{site_id}/...`).
 pub mod files;
+/// Per-site FTP account routes (`/sites/{id}/ftp/accounts`).
+pub mod ftp;
 /// Identity resource routes (`/identity`).
 pub mod identity;
 /// Authorized log and traffic routes (`/logs`).

@@ -8,9 +8,9 @@ use base64::Engine;
 use openpanel_api::build_router;
 use openpanel_app::{
     AcmeEndpoint, BackupsModule, CronModule, DatabasesModule, DnsModule, DockerModule, FilesModule,
-    IdentityModule, LogService, LogsModule, MailModule, MonitoringModule, SecurityModule,
-    SecurityService, SitesModule, SoftwareCenterModule, SslModule, SslPaths, SystemServicesModule,
-    WafModule, databases::crypto as db_crypto,
+    FtpModule, IdentityModule, LogService, LogsModule, MailModule, MonitoringModule,
+    SecurityModule, SecurityService, SitesModule, SoftwareCenterModule, SslModule, SslPaths,
+    SystemServicesModule, WafModule, databases::crypto as db_crypto,
 };
 use openpanel_core::{
     AppContext, Config, JobSupervisor, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
@@ -39,6 +39,9 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let sites_module = SitesModule::new(&ctx).await;
     let waf_module = WafModule::new(&ctx, sites_module.generator().clone()).await;
     let docker_module = DockerModule::new(&ctx, master_key)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let ftp_module = FtpModule::new(&ctx)
         .await
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let databases_module = DatabasesModule::new(&ctx, master_key).await;
@@ -95,6 +98,10 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .await
         .context("apply Docker migrations")?;
     runner
+        .apply_module(ftp_module.name(), &ftp_module.migrations())
+        .await
+        .context("apply FTP migrations")?;
+    runner
         .apply_module(databases_module.name(), &databases_module.migrations())
         .await
         .context("apply databases migrations")?;
@@ -145,8 +152,9 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .await
         .context("apply software center migrations")?;
 
-    let docker_tasks = docker_module.background_tasks(&ctx);
-    let docker_supervisor = JobSupervisor::new().spawn(docker_tasks);
+    let mut background_tasks = docker_module.background_tasks(&ctx);
+    background_tasks.extend(ftp_module.background_tasks(&ctx));
+    let docker_supervisor = JobSupervisor::new().spawn(background_tasks);
 
     let identity_svc = identity_module.service();
     let sites_svc = sites_module.service();
@@ -166,6 +174,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let two_factor_svc = identity_module.two_factor();
     let waf_svc = waf_module.service();
     let docker_svc = docker_module.service();
+    let ftp_svc = ftp_module.service();
     let app = build_router(
         identity_svc.clone(),
         sites_svc.clone(),
@@ -185,6 +194,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         two_factor_svc.clone(),
         waf_svc.clone(),
         docker_svc.clone(),
+        ftp_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -205,6 +215,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         two_factor_svc,
         waf_svc,
         docker_svc,
+        ftp_svc,
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
@@ -215,7 +226,8 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
                 .with("dns")
                 .with("mail")
                 .with("software-center")
-                .with("docker"),
+                .with("docker")
+                .with("ftp"),
         ),
     ));
 
@@ -2142,6 +2154,107 @@ async fn build_docker(
         .await
         .context("apply Docker migrations")?;
     Ok((docker.service(), identity.service()))
+}
+
+async fn build_ftp(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::FtpService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config, db, audit);
+    let master_key = load_master_key(&ctx.config)?;
+    let identity = IdentityModule::new(&ctx, master_key).await;
+    let sites = SitesModule::new(&ctx).await;
+    let ftp = FtpModule::new(&ctx)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let runner = MigrationRunner::for_sqlite(pool);
+    runner
+        .apply_module(identity.name(), &identity.migrations())
+        .await
+        .context("apply identity migrations")?;
+    runner
+        .apply_module(sites.name(), &sites.migrations())
+        .await
+        .context("apply site migrations")?;
+    runner
+        .apply_module(ftp.name(), &ftp.migrations())
+        .await
+        .context("apply FTP migrations")?;
+    Ok((ftp.service(), identity.service()))
+}
+
+/// Create a per-site FTP account.
+pub async fn ftp_create(
+    config: Arc<Config>,
+    site: String,
+    username: String,
+    password: String,
+    read_only: bool,
+) -> anyhow::Result<()> {
+    let (service, identity) = build_ftp(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let created = service
+        .create(
+            &owner,
+            site_id,
+            openpanel_app::CreateFtpAccount {
+                username,
+                password,
+                read_only,
+                bandwidth_kb_per_session: None,
+                max_concurrent_connections: None,
+            },
+        )
+        .await?;
+    println!("{}", serde_json::to_string_pretty(&created)?);
+    Ok(())
+}
+
+/// List a site's FTP accounts without credential hashes.
+pub async fn ftp_list(config: Arc<Config>, site: String) -> anyhow::Result<()> {
+    let (service, identity) = build_ftp(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&service.list(&owner, site_id).await?)?
+    );
+    Ok(())
+}
+
+/// Enable or disable a site FTP account.
+pub async fn ftp_enabled(
+    config: Arc<Config>,
+    site: String,
+    id: String,
+    enabled: bool,
+) -> anyhow::Result<()> {
+    let (service, identity) = build_ftp(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let id = uuid::Uuid::parse_str(&id).context("invalid FTP account id")?;
+    let value = if enabled {
+        service.enable(&owner, site_id, id).await?
+    } else {
+        service.disable(&owner, site_id, id).await?
+    };
+    println!("{}", serde_json::to_string_pretty(&value)?);
+    Ok(())
+}
+
+/// Delete a site FTP account.
+pub async fn ftp_delete(config: Arc<Config>, site: String, id: String) -> anyhow::Result<()> {
+    let (service, identity) = build_ftp(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let id = uuid::Uuid::parse_str(&id).context("invalid FTP account id")?;
+    service.delete(&owner, site_id, id).await?;
+    println!("deleted {id}");
+    Ok(())
 }
 
 /// Add a trusted image pattern.

@@ -3,7 +3,7 @@
 use clap::Parser;
 use openpanel_cli::{
     BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, Command, CronCommand,
-    DatabaseCommand, DnsCommand, DockerCommand, FileCommand, LogsCommand, MailCommand,
+    DatabaseCommand, DnsCommand, DockerCommand, FileCommand, FtpCommand, LogsCommand, MailCommand,
     MonitoringCommand, RecoveryCodeCommand, SecurityAllowlistCommand, SecurityCommand,
     SecurityRuleCommand, ServicesCommand, SiteCommand, SoftwareCommand, SslCommand,
     TwoFactorCommand, UserCommand, WafCommand, handlers,
@@ -102,6 +102,20 @@ async fn main() -> anyhow::Result<()> {
                 pattern,
                 pin_digest_required,
             } => handlers::docker_allow(config, pattern, pin_digest_required).await,
+        },
+        Command::Ftp { action } => match action {
+            FtpCommand::Create {
+                site,
+                username,
+                password,
+                read_only,
+            } => handlers::ftp_create(config, site, username, password, read_only).await,
+            FtpCommand::List { site } => handlers::ftp_list(config, site).await,
+            FtpCommand::Disable { site, id } => {
+                handlers::ftp_enabled(config, site, id, false).await
+            }
+            FtpCommand::Enable { site, id } => handlers::ftp_enabled(config, site, id, true).await,
+            FtpCommand::Delete { site, id } => handlers::ftp_delete(config, site, id).await,
         },
         Command::Database { action } => match action {
             DatabaseCommand::Create {

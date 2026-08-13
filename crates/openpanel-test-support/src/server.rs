@@ -19,11 +19,12 @@ use openpanel_api::build_router;
 use openpanel_app::{
     ApplyReport, BackupService, BackupsModule, CronModule, CronService, DatabasesModule,
     DatabasesService, DnsModule, DnsService, DockerAdapter, DockerModule, DockerService,
-    ExecResult, FilesModule, FilesService, IdentityModule, IdentityService, LogService, LogsModule,
-    MailModule, MailService, MonitoringModule, MonitoringService, SecurityModule, SecurityService,
-    SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService, SslModule, SslPaths,
-    SslService, SystemServicesModule, WafModule, WafService, identity::two_factor::TwoFactorCrypto,
-    security::MemoryFirewall, sites::nginx::NginxPaths, software_center::ArtifactFetcher,
+    ExecResult, FilesModule, FilesService, FtpModule, FtpService, IdentityModule, IdentityService,
+    LogService, LogsModule, MailModule, MailService, MonitoringModule, MonitoringService,
+    SecurityModule, SecurityService, SitesModule, SitesService, SoftwareCenterModule,
+    SoftwareCenterService, SslModule, SslPaths, SslService, SystemServicesModule, WafModule,
+    WafService, identity::two_factor::TwoFactorCrypto, security::MemoryFirewall,
+    sites::nginx::NginxPaths, software_center::ArtifactFetcher,
 };
 
 #[derive(Default)]
@@ -214,6 +215,7 @@ pub struct TestServer {
     software_center: Arc<SoftwareCenterService>,
     waf: Arc<WafService>,
     docker: Arc<DockerService>,
+    ftp: Arc<FtpService>,
     audit: Arc<dyn AuditService>,
     settings_path: PathBuf,
     _handle: JoinHandle<()>,
@@ -340,6 +342,7 @@ impl TestServer {
         let docker_module =
             DockerModule::with_adapters(&ctx, docker_runtime.clone(), docker_runtime, master_key)
                 .await;
+        let ftp_module = FtpModule::new(&ctx).await.expect("ftp module");
 
         let databases_module = DatabasesModule::new(&ctx, master_key).await;
         let files_module = FilesModule::new(&ctx).await;
@@ -374,6 +377,10 @@ impl TestServer {
             .apply_module(docker_module.name(), &docker_module.migrations())
             .await
             .expect("docker migrations");
+        runner
+            .apply_module(ftp_module.name(), &ftp_module.migrations())
+            .await
+            .expect("ftp migrations");
         runner
             .apply_module(databases_module.name(), &databases_module.migrations())
             .await
@@ -467,6 +474,7 @@ impl TestServer {
         let sites_svc = sites_module.service();
         let waf_svc = waf_module.service();
         let docker_svc = docker_module.service();
+        let ftp_svc = ftp_module.service();
         let databases_svc = databases_module.service();
         let files_svc = files_module.service();
         let ssl_svc = ssl_module.service();
@@ -502,6 +510,7 @@ impl TestServer {
             two_factor_svc.clone(),
             waf_svc.clone(),
             docker_svc.clone(),
+            ftp_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -522,6 +531,7 @@ impl TestServer {
             two_factor_svc.clone(),
             waf_svc.clone(),
             docker_svc.clone(),
+            ftp_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -543,7 +553,8 @@ impl TestServer {
                     .with("dns")
                     .with("mail")
                     .with("software-center")
-                    .with("docker"),
+                    .with("docker")
+                    .with("ftp"),
             ),
         ));
 
@@ -585,6 +596,7 @@ impl TestServer {
             software_center: software_center_svc,
             waf: waf_svc,
             docker: docker_svc,
+            ftp: ftp_svc,
             audit,
             settings_path,
             _handle: handle,
@@ -646,6 +658,11 @@ impl TestServer {
     /// Docker service handle for staging allowlist and runtime observations.
     pub fn docker(&self) -> Arc<DockerService> {
         self.docker.clone()
+    }
+
+    /// FTP account service handle.
+    pub fn ftp(&self) -> Arc<FtpService> {
+        self.ftp.clone()
     }
 
     /// Underlying isolated SQLite pool for persistence assertions.

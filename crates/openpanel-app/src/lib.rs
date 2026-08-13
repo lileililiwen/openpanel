@@ -12,6 +12,7 @@ pub mod databases;
 pub mod dns;
 pub mod docker;
 pub mod files;
+pub mod ftp;
 pub mod identity;
 pub mod logs;
 pub mod mail;
@@ -34,6 +35,11 @@ pub use docker::{
     NetworkAdapter, RuntimeContainerState, SqliteDockerRepository,
 };
 pub use files::{FilesModule, service::FilesService};
+pub use ftp::{
+    ChrootStorage, CreateFtpAccount, CreatedFtpAccount, FtpAccountView, FtpAuthenticator,
+    FtpModule, FtpServerConfig, FtpServerTask, FtpService, FtpSessionRegistry, SqliteFtpRepository,
+    UpdateFtpAccount,
+};
 pub use identity::{IdentityModule, service::IdentityService};
 pub use logs::{LogService, LogsModule};
 pub use mail::{MailModule, MailService};

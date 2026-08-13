@@ -154,6 +154,24 @@ pub enum AuditAction {
     DockerChanged,
     /// A site network denied access to the control plane.
     DockerEgressDenied,
+    /// An FTP account or its enabled state changed.
+    FtpChanged,
+    /// An FTP login succeeded.
+    FtpLogin,
+    /// An FTP login was denied without exposing credentials.
+    FtpLoginDenied,
+    /// An FTP path attempted to escape its site root.
+    FtpChrootEscape,
+    /// An FTP client attempted plaintext authentication when TLS is required.
+    FtpTlsRequired,
+    /// An FTP connection ceiling rejected a session.
+    FtpConcurrentLimit,
+    /// An FTP session exhausted its transfer-byte allowance.
+    FtpTransferLimit,
+    /// The supervised FTP listener could not bind.
+    FtpBindFailed,
+    /// The supervised FTP listener restarted after a panic.
+    FtpListenerRestart,
 }
 
 impl AuditAction {
@@ -216,6 +234,15 @@ impl AuditAction {
             AuditAction::DockerOomKilled => "docker_oom_killed",
             AuditAction::DockerChanged => "docker_changed",
             AuditAction::DockerEgressDenied => "docker_egress_denied",
+            AuditAction::FtpChanged => "ftp_changed",
+            AuditAction::FtpLogin => "ftp_login",
+            AuditAction::FtpLoginDenied => "ftp_login_denied",
+            AuditAction::FtpChrootEscape => "ftp_chroot_escape",
+            AuditAction::FtpTlsRequired => "ftp_tls_required",
+            AuditAction::FtpConcurrentLimit => "ftp_concurrent_limit",
+            AuditAction::FtpTransferLimit => "ftp_transfer_limit",
+            AuditAction::FtpBindFailed => "ftp_bind_failed",
+            AuditAction::FtpListenerRestart => "ftp_listener_restart",
         }
     }
 }

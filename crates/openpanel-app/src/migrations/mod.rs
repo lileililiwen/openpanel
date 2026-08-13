@@ -49,3 +49,5 @@ pub const SOFTWARE_CENTER_V003: &str = include_str!("software_center/V003__platf
 pub const WAF_V001: &str = include_str!("waf/V001__init.sql");
 /// Docker desired state, stacks, and trusted image patterns.
 pub const DOCKER_V001: &str = include_str!("docker/V001__init.sql");
+/// Per-site FTP accounts.
+pub const FTP_V001: &str = include_str!("ftp/V001__init.sql");

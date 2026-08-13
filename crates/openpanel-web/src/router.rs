@@ -18,8 +18,8 @@ use openpanel_api::{
 };
 use openpanel_app::{
     BackupService, CronService, DatabasesService, DnsService, DockerService, FilesService,
-    IdentityService, LogService, MailService, MonitoringService, SecurityService, SitesService,
-    SoftwareCenterService, SslService, WafService, identity::TwoFactorService,
+    FtpService, IdentityService, LogService, MailService, MonitoringService, SecurityService,
+    SitesService, SoftwareCenterService, SslService, WafService, identity::TwoFactorService,
     security::LoginThrottleService, system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
@@ -110,6 +110,8 @@ pub struct WebState {
     pub waf: Arc<WafService>,
     /// Least-privilege container lifecycle service.
     pub docker: Arc<DockerService>,
+    /// Per-site FTP account service.
+    pub ftp: Arc<FtpService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -225,6 +227,7 @@ pub fn router(
     two_factor: Arc<TwoFactorService>,
     waf: Arc<WafService>,
     docker: Arc<DockerService>,
+    ftp: Arc<FtpService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -249,6 +252,7 @@ pub fn router(
         two_factor,
         waf,
         docker,
+        ftp,
         csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
@@ -268,6 +272,14 @@ pub fn router(
         )
         .route("/docker/{id}/{action}", post(crate::docker::action))
         .route("/docker/{id}/logs", get(crate::docker::logs))
+        .route(
+            "/sites/{id}/ftp",
+            get(crate::ftp::page).post(crate::ftp::create),
+        )
+        .route(
+            "/sites/{site_id}/ftp/{account_id}/{action}",
+            post(crate::ftp::action),
+        )
         .route(
             "/login",
             get(login::login_page_handler).post(login::login_handler),
