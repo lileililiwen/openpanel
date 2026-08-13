@@ -22,6 +22,7 @@ pub mod sites;
 pub mod software_center;
 pub mod ssl;
 pub mod system_services;
+pub mod waf;
 
 pub use backups::{BackupService, BackupsModule};
 pub use cron::{CronModule, CronService};
@@ -44,3 +45,4 @@ pub use ssl::{
     module::CHALLENGE_SERVER_PORT,
 };
 pub use system_services::{ServiceManager, SystemServicesModule};
+pub use waf::{WafModule, WafService};

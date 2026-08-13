@@ -22,4 +22,5 @@ mod smoke;
 mod software_center;
 mod ssl;
 mod system_services;
+mod waf;
 mod web_ui;

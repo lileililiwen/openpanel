@@ -22,3 +22,4 @@ mod software_center;
 mod ssl;
 mod system_services;
 mod user;
+mod waf;

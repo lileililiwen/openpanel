@@ -19,8 +19,8 @@ use openpanel_api::{
 use openpanel_app::{
     BackupService, CronService, DatabasesService, DnsService, FilesService, IdentityService,
     LogService, MailService, MonitoringService, SecurityService, SitesService,
-    SoftwareCenterService, SslService, identity::TwoFactorService, security::LoginThrottleService,
-    system_services::ServiceManager,
+    SoftwareCenterService, SslService, WafService, identity::TwoFactorService,
+    security::LoginThrottleService, system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
 use openpanel_domain::{Session, SessionToken, User};
@@ -106,6 +106,8 @@ pub struct WebState {
     pub software_center: Arc<SoftwareCenterService>,
     /// Two-factor authentication service for the settings/security page.
     pub two_factor: Arc<TwoFactorService>,
+    /// Per-site web application firewall service.
+    pub waf: Arc<WafService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -219,6 +221,7 @@ pub fn router(
     mail_service: Arc<MailService>,
     software_center_service: Arc<SoftwareCenterService>,
     two_factor: Arc<TwoFactorService>,
+    waf: Arc<WafService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -241,6 +244,7 @@ pub fn router(
         mail: mail_service,
         software_center: software_center_service,
         two_factor,
+        waf,
         csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
@@ -401,6 +405,11 @@ pub fn router(
         .route("/sites/{id}", get(sites::detail).delete(sites::delete))
         .route("/sites/{id}/enable", post(sites::enable))
         .route("/sites/{id}/disable", post(sites::disable))
+        .route(
+            "/sites/{id}/waf",
+            get(crate::waf::page).post(crate::waf::save),
+        )
+        .route("/sites/{id}/waf/test", post(crate::waf::test_rule))
         .route("/users", get(users::list).post(users::create))
         .route("/users/new", get(users::new_form))
         .route("/users/{id}/role", post(users::change_role))

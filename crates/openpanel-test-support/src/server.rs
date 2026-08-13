@@ -21,8 +21,9 @@ use openpanel_app::{
     DnsModule, DnsService, FilesModule, FilesService, IdentityModule, IdentityService, LogService,
     LogsModule, MailModule, MailService, MonitoringModule, MonitoringService, SecurityModule,
     SecurityService, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
-    SslModule, SslPaths, SslService, SystemServicesModule, identity::two_factor::TwoFactorCrypto,
-    security::MemoryFirewall, sites::nginx::NginxPaths, software_center::ArtifactFetcher,
+    SslModule, SslPaths, SslService, SystemServicesModule, WafModule, WafService,
+    identity::two_factor::TwoFactorCrypto, security::MemoryFirewall, sites::nginx::NginxPaths,
+    software_center::ArtifactFetcher,
 };
 
 /// In-process artifact fetcher used by the test server. Bytes are
@@ -85,6 +86,7 @@ pub struct TestServer {
     dns: Arc<DnsService>,
     mail: Arc<MailService>,
     software_center: Arc<SoftwareCenterService>,
+    waf: Arc<WafService>,
     audit: Arc<dyn AuditService>,
     settings_path: PathBuf,
     _handle: JoinHandle<()>,
@@ -206,6 +208,7 @@ impl TestServer {
             IdentityModule::new(&ctx, master_key).await
         };
         let sites_module = SitesModule::with_paths(&ctx, paths).await;
+        let waf_module = WafModule::new(&ctx, sites_module.generator().clone()).await;
 
         let databases_module = DatabasesModule::new(&ctx, master_key).await;
         let files_module = FilesModule::new(&ctx).await;
@@ -232,6 +235,10 @@ impl TestServer {
             .apply_module(sites_module.name(), &sites_module.migrations())
             .await
             .expect("sites migrations");
+        runner
+            .apply_module(waf_module.name(), &waf_module.migrations())
+            .await
+            .expect("waf migrations");
         runner
             .apply_module(databases_module.name(), &databases_module.migrations())
             .await
@@ -323,6 +330,7 @@ impl TestServer {
 
         let identity_svc = identity_module.service();
         let sites_svc = sites_module.service();
+        let waf_svc = waf_module.service();
         let databases_svc = databases_module.service();
         let files_svc = files_module.service();
         let ssl_svc = ssl_module.service();
@@ -356,6 +364,7 @@ impl TestServer {
             mail_svc.clone(),
             software_center_svc.clone(),
             two_factor_svc.clone(),
+            waf_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -374,6 +383,7 @@ impl TestServer {
             mail_svc.clone(),
             software_center_svc.clone(),
             two_factor_svc.clone(),
+            waf_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -434,6 +444,7 @@ impl TestServer {
             dns: dns_svc,
             mail: mail_svc,
             software_center: software_center_svc,
+            waf: waf_svc,
             audit,
             settings_path,
             _handle: handle,
@@ -485,6 +496,11 @@ impl TestServer {
     /// The curated Software Center service.
     pub fn software_center(&self) -> Arc<SoftwareCenterService> {
         self.software_center.clone()
+    }
+
+    /// Per-site WAF service.
+    pub fn waf(&self) -> Arc<WafService> {
+        self.waf.clone()
     }
 
     /// Underlying isolated SQLite pool for persistence assertions.

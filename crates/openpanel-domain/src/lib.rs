@@ -29,6 +29,8 @@ pub mod software_center;
 pub mod ssl;
 /// Allowlisted host service lifecycle and health domain.
 pub mod system_services;
+/// Per-site typed web application firewall rules.
+pub mod waf;
 
 pub use common::{
     Email, Password, PasswordError, Username, UsernameError,
@@ -66,3 +68,4 @@ pub use ssl::{
     repository::CertificateRepository,
     source::{CertificateSource, CertificateStatus},
 };
+pub use waf::{Rule, RuleSet, WafError, WafRepository};

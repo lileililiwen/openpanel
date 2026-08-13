@@ -31,5 +31,7 @@ pub mod ssl;
 pub mod system_services;
 pub mod two_factor;
 pub mod users;
+/// Per-site WAF editor page.
+pub mod waf;
 
 pub use router::{WebRuntime, WebState, router};

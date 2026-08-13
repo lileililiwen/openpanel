@@ -6,7 +6,7 @@ use openpanel_cli::{
     DatabaseCommand, DnsCommand, FileCommand, LogsCommand, MailCommand, MonitoringCommand,
     RecoveryCodeCommand, SecurityAllowlistCommand, SecurityCommand, SecurityRuleCommand,
     ServicesCommand, SiteCommand, SoftwareCommand, SslCommand, TwoFactorCommand, UserCommand,
-    handlers,
+    WafCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -67,6 +67,25 @@ async fn main() -> anyhow::Result<()> {
             SiteCommand::Delete { id } => handlers::delete_site(config, id).await,
             SiteCommand::Enable { id } => handlers::enable_site(config, id).await,
             SiteCommand::Disable { id } => handlers::disable_site(config, id).await,
+        },
+        Command::Waf { action } => match action {
+            WafCommand::Rules { site } => handlers::waf_rules(config, site).await,
+            WafCommand::Hits { site } => handlers::waf_hits(config, site).await,
+            WafCommand::Add { site, rule_json } => handlers::waf_add(config, site, rule_json).await,
+            WafCommand::Remove { site, rule_id } => {
+                handlers::waf_remove(config, site, rule_id).await
+            }
+            WafCommand::Enable { site, rule_id } => {
+                handlers::waf_enabled(config, site, rule_id, true).await
+            }
+            WafCommand::Disable { site, rule_id } => {
+                handlers::waf_enabled(config, site, rule_id, false).await
+            }
+            WafCommand::Test {
+                site,
+                rule_json,
+                request_json,
+            } => handlers::waf_test(config, site, rule_json, request_json).await,
         },
         Command::Database { action } => match action {
             DatabaseCommand::Create {

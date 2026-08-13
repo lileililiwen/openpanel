@@ -10,7 +10,7 @@ use openpanel_app::{
     AcmeEndpoint, BackupsModule, CronModule, DatabasesModule, DnsModule, FilesModule,
     IdentityModule, LogService, LogsModule, MailModule, MonitoringModule, SecurityModule,
     SecurityService, SitesModule, SoftwareCenterModule, SslModule, SslPaths, SystemServicesModule,
-    databases::crypto as db_crypto,
+    WafModule, databases::crypto as db_crypto,
 };
 use openpanel_core::{
     AppContext, Config, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
@@ -37,6 +37,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let master_key = load_master_key(&config)?;
     let identity_module = IdentityModule::new(&ctx, master_key).await;
     let sites_module = SitesModule::new(&ctx).await;
+    let waf_module = WafModule::new(&ctx, sites_module.generator().clone()).await;
     let databases_module = DatabasesModule::new(&ctx, master_key).await;
     let files_module = FilesModule::new(&ctx).await;
     let ssl_module = SslModule::new(&ctx, master_key, ssl_contact_email(&config)).await;
@@ -82,6 +83,10 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .apply_module(sites_module.name(), &sites_module.migrations())
         .await
         .context("apply sites migrations")?;
+    runner
+        .apply_module(waf_module.name(), &waf_module.migrations())
+        .await
+        .context("apply WAF migrations")?;
     runner
         .apply_module(databases_module.name(), &databases_module.migrations())
         .await
@@ -149,6 +154,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let mail_svc = mail_module.service();
     let software_center_svc = software_center_module.service();
     let two_factor_svc = identity_module.two_factor();
+    let waf_svc = waf_module.service();
     let app = build_router(
         identity_svc.clone(),
         sites_svc.clone(),
@@ -166,6 +172,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         mail_svc.clone(),
         software_center_svc.clone(),
         two_factor_svc.clone(),
+        waf_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -184,6 +191,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         mail_svc,
         software_center_svc,
         two_factor_svc,
+        waf_svc,
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
@@ -2055,6 +2063,169 @@ async fn build_sites(
         audit,
         pool,
     ))
+}
+
+async fn build_waf(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::WafService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config, db, audit);
+    let master_key = load_master_key(&ctx.config)?;
+    let identity_module = IdentityModule::new(&ctx, master_key).await;
+    let sites_module = if let Ok(root) = std::env::var("OPENPANEL_WAF_NGINX_ROOT") {
+        let mut paths = openpanel_app::NginxPaths::under(root.into());
+        if let Ok(binary) = std::env::var("OPENPANEL_WAF_NGINX_BINARY") {
+            paths.nginx_binary = binary.into();
+        }
+        SitesModule::with_paths(&ctx, paths).await
+    } else {
+        SitesModule::new(&ctx).await
+    };
+    let waf_module = WafModule::new(&ctx, sites_module.generator().clone()).await;
+    MigrationRunner::for_sqlite(pool)
+        .apply_module(waf_module.name(), &waf_module.migrations())
+        .await
+        .context("apply WAF migrations")?;
+    Ok((waf_module.service(), identity_module.service()))
+}
+
+async fn waf_owner(
+    identity: &openpanel_app::IdentityService,
+) -> anyhow::Result<openpanel_domain::User> {
+    identity
+        .list_users()
+        .await?
+        .into_iter()
+        .find(|user| user.role() == Role::Owner)
+        .ok_or_else(|| anyhow::anyhow!("owner caller not found"))
+}
+
+/// Print a site's complete WAF policy as JSON.
+pub async fn waf_rules(config: Arc<Config>, site: String) -> anyhow::Result<()> {
+    let (service, identity) = build_waf(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&service.get(&owner, site_id).await?)?
+    );
+    Ok(())
+}
+
+/// Print a site's per-rule WAF hit totals as JSON.
+pub async fn waf_hits(config: Arc<Config>, site: String) -> anyhow::Result<()> {
+    let (service, identity) = build_waf(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&service.hits(&owner, site_id).await?)?
+    );
+    Ok(())
+}
+
+/// Add one strict JSON rule to a site's policy.
+pub async fn waf_add(config: Arc<Config>, site: String, rule_json: String) -> anyhow::Result<()> {
+    let (service, identity) = build_waf(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let rule: openpanel_domain::waf::Rule =
+        serde_json::from_str(&rule_json).context("invalid rule JSON")?;
+    let current = service.get(&owner, site_id).await?;
+    let mut rules = current.rules().to_vec();
+    let rule_id = rule.id();
+    rules.push(rule);
+    let desired = openpanel_domain::waf::RuleSet::new(
+        site_id,
+        current.version().saturating_add(1),
+        current.default_action(),
+        rules,
+    )?;
+    service.put(&owner, desired).await?;
+    println!("added WAF rule {rule_id}");
+    Ok(())
+}
+
+/// Remove one rule from a site's policy.
+pub async fn waf_remove(config: Arc<Config>, site: String, rule_id: String) -> anyhow::Result<()> {
+    let (service, identity) = build_waf(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let rule_id = uuid::Uuid::parse_str(&rule_id).context("invalid rule id")?;
+    let current = service.get(&owner, site_id).await?;
+    let rules = current
+        .rules()
+        .iter()
+        .filter(|rule| rule.id() != rule_id)
+        .cloned()
+        .collect();
+    let desired = openpanel_domain::waf::RuleSet::new(
+        site_id,
+        current.version().saturating_add(1),
+        current.default_action(),
+        rules,
+    )?;
+    service.put(&owner, desired).await?;
+    println!("removed WAF rule {rule_id}");
+    Ok(())
+}
+
+/// Enable or disable one rule in a site's policy.
+pub async fn waf_enabled(
+    config: Arc<Config>,
+    site: String,
+    rule_id: String,
+    enabled: bool,
+) -> anyhow::Result<()> {
+    let (service, identity) = build_waf(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let rule_id = uuid::Uuid::parse_str(&rule_id).context("invalid rule id")?;
+    let current = service.get(&owner, site_id).await?;
+    let mut rules = current.rules().to_vec();
+    let rule = rules
+        .iter_mut()
+        .find(|rule| rule.id() == rule_id)
+        .ok_or_else(|| anyhow::anyhow!("WAF rule not found"))?;
+    rule.set_enabled(enabled);
+    let desired = openpanel_domain::waf::RuleSet::new(
+        site_id,
+        current.version().saturating_add(1),
+        current.default_action(),
+        rules,
+    )?;
+    service.put(&owner, desired).await?;
+    println!(
+        "{} WAF rule {rule_id}",
+        if enabled { "enabled" } else { "disabled" }
+    );
+    Ok(())
+}
+
+/// Dry-run one strict JSON rule and request fixture.
+pub async fn waf_test(
+    config: Arc<Config>,
+    site: String,
+    rule_json: String,
+    request_json: String,
+) -> anyhow::Result<()> {
+    let (service, identity) = build_waf(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let rule = serde_json::from_str(&rule_json).context("invalid rule JSON")?;
+    let request = serde_json::from_str(&request_json).context("invalid request JSON")?;
+    let result = service
+        .dry_run(
+            &owner,
+            site_id,
+            openpanel_domain::waf::DryRunRequest { rule, request },
+        )
+        .await?;
+    println!("{}", serde_json::to_string_pretty(&result)?);
+    Ok(())
 }
 
 async fn build_databases(

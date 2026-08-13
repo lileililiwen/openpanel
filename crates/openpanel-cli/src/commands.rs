@@ -104,6 +104,65 @@ pub enum Command {
         #[command(subcommand)]
         action: SoftwareCommand,
     },
+    /// Manage typed per-site web application firewall rules.
+    Waf {
+        /// WAF operation.
+        #[command(subcommand)]
+        action: WafCommand,
+    },
+}
+
+/// Per-site WAF operations.
+#[derive(Debug, Subcommand)]
+#[allow(missing_docs)]
+pub enum WafCommand {
+    /// Print the complete rule set as JSON.
+    Rules {
+        #[arg(long)]
+        site: String,
+    },
+    /// Print per-rule hit totals as JSON.
+    Hits {
+        #[arg(long)]
+        site: String,
+    },
+    /// Add one strict JSON rule.
+    Add {
+        #[arg(long)]
+        site: String,
+        #[arg(long)]
+        rule_json: String,
+    },
+    /// Remove a rule by id.
+    Remove {
+        #[arg(long)]
+        site: String,
+        #[arg(long)]
+        rule_id: String,
+    },
+    /// Enable a rule by id.
+    Enable {
+        #[arg(long)]
+        site: String,
+        #[arg(long)]
+        rule_id: String,
+    },
+    /// Disable a rule by id.
+    Disable {
+        #[arg(long)]
+        site: String,
+        #[arg(long)]
+        rule_id: String,
+    },
+    /// Compile and simulate one rule without changing live policy.
+    Test {
+        #[arg(long)]
+        site: String,
+        #[arg(long)]
+        rule_json: String,
+        #[arg(long)]
+        request_json: String,
+    },
 }
 
 /// Curated Software Center operations.

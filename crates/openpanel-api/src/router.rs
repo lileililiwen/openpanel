@@ -6,8 +6,8 @@ use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
 use openpanel_app::{
     BackupService, CronService, DatabasesService, DnsService, FilesService, IdentityService,
     LogService, MailService, MonitoringService, SecurityService, SitesService,
-    SoftwareCenterService, SslService, identity::TwoFactorService, security::LoginThrottleService,
-    system_services::ServiceManager,
+    SoftwareCenterService, SslService, WafService, identity::TwoFactorService,
+    security::LoginThrottleService, system_services::ServiceManager,
 };
 
 use crate::{
@@ -20,6 +20,7 @@ use crate::{
         monitoring::router as monitoring_router, security::router as security_router,
         sites::router as sites_router, software_center::router as software_center_router,
         ssl::router as ssl_router, system_services::router as system_services_router,
+        waf::router as waf_router,
     },
 };
 
@@ -45,6 +46,7 @@ pub fn build_router(
     mail: Arc<MailService>,
     software_center: Arc<SoftwareCenterService>,
     two_factor: Arc<TwoFactorService>,
+    waf: Arc<WafService>,
 ) -> Router {
     let identity_for_layer = identity.clone();
 
@@ -54,6 +56,7 @@ pub fn build_router(
             identity_router(identity, two_factor, login_throttle),
         )
         .nest("/sites", sites_router(sites))
+        .nest("/sites", waf_router(waf))
         .nest("/databases", databases_router(databases))
         .nest("/files", files_router(files.clone()))
         .nest("/ssl", ssl_router(ssl))

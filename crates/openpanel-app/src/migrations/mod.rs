@@ -45,3 +45,5 @@ pub const SOFTWARE_CENTER_V002: &str = include_str!("software_center/V002__norma
 /// Adds `platforms_json` to `software_entries` for databases seeded
 /// before the column existed (idempotent on newer installs).
 pub const SOFTWARE_CENTER_V003: &str = include_str!("software_center/V003__platforms_backfill.sql");
+/// Per-site WAF rule sets and aggregated hit rows.
+pub const WAF_V001: &str = include_str!("waf/V001__init.sql");

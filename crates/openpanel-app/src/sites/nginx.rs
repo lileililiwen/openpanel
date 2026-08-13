@@ -102,6 +102,33 @@ impl NginxConfigGenerator {
         Self::render_full(site, None, None)
     }
 
+    /// Render an HTTP site config with a validated WAF snippet immediately
+    /// before the first location directive.
+    pub fn render_with_waf(site: &Site, snippet: &str) -> String {
+        let rendered = Self::render(site);
+        if snippet.is_empty() {
+            return rendered;
+        }
+        let mut global = String::new();
+        let mut local = Vec::new();
+        for line in snippet.lines() {
+            if line.starts_with("limit_req_zone ") || line.starts_with("limit_conn_zone ") {
+                global.push_str(line);
+                global.push('\n');
+            } else {
+                local.push(line);
+            }
+        }
+        let indented = local
+            .into_iter()
+            .map(|line| format!("    {line}\n"))
+            .collect::<String>();
+        format!(
+            "{global}{}",
+            rendered.replacen("    location ", &format!("{indented}\n    location "), 1)
+        )
+    }
+
     /// Render the full nginx config for a site, including an optional
     /// TLS vhost on `:443`, the ACME HTTP-01 challenge proxy block on
     /// `:80`, and the force-HTTPS 301 redirect.
@@ -275,6 +302,26 @@ server {{
     /// failing — useful for development environments.
     pub fn apply(&self, site: &Site) -> Result<(), SiteError> {
         self.apply_with_tls(site, None::<(&str, &str)>, None::<&str>)
+    }
+
+    /// Apply a rendered site candidate containing a compiled WAF snippet.
+    /// The same atomic write, `nginx -t`, rollback, and reload discipline as
+    /// ordinary site updates is used.
+    pub fn apply_with_waf(&self, site: &Site, snippet: &str) -> Result<(), SiteError> {
+        self.ensure_dirs()?;
+        let target = self.paths.active_path(site.primary_domain());
+        let rendered = Self::render_with_waf(site, snippet);
+
+        if !self.nginx_available() {
+            tracing::warn!(
+                domain = site.primary_domain(),
+                "nginx binary not found; writing WAF config but skipping -t and reload"
+            );
+            return self.write_only(&target, &rendered);
+        }
+
+        self.write_with_test(&target, &rendered)?;
+        self.reload()
     }
 
     /// Apply the rendered config with optional TLS + ACME challenge

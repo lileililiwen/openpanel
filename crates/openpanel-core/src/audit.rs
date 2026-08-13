@@ -140,6 +140,8 @@ pub enum AuditAction {
     /// A valid remember-device cookie skipped the second-factor
     /// challenge for a subsequent login.
     DeviceRemembered,
+    /// A per-site web application firewall policy changed.
+    WafChanged,
 }
 
 impl AuditAction {
@@ -195,6 +197,7 @@ impl AuditAction {
             AuditAction::TwoFactorRevoked => "two_factor_revoked",
             AuditAction::RecoveryCodeConsumed => "recovery_code_consumed",
             AuditAction::DeviceRemembered => "device_remembered",
+            AuditAction::WafChanged => "waf_changed",
         }
     }
 }

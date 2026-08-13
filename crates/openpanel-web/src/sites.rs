@@ -396,6 +396,7 @@ pub fn detail_section(site: &Site, owner: &str) -> Markup {
             nav class="links" {
                 a href=(format!("/files/{}", site.id())) { "Files" }
                 a href="/ssl" { "SSL" }
+                a href=(format!("/sites/{}/waf", site.id())) { "WAF" }
             }
         }
     }
