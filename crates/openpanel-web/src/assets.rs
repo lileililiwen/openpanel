@@ -8,6 +8,7 @@ use axum::{
 
 const HTMX_MIN_JS: &[u8] = include_bytes!("../assets/htmx.min.js");
 const APP_CSS: &[u8] = include_bytes!("../assets/app.css");
+const TOKENS_CSS: &[u8] = include_bytes!("../assets/tokens.css");
 
 /// GET /assets/htmx.min.js
 pub async fn htmx_min_js() -> Response {
@@ -26,6 +27,20 @@ pub async fn app_css() -> Response {
     (
         [(CONTENT_TYPE, HeaderValue::from_static("text/css"))],
         Bytes::from_static(APP_CSS),
+    )
+        .into_response()
+}
+
+/// GET /assets/tokens.css
+///
+/// The design-token source of truth. Served as a static asset so
+/// templates can `@import` or `<link rel="stylesheet" href="...">`
+/// it. The follow-on `themeable-ui` change layers per-reseller
+/// overrides on top of this base.
+pub async fn tokens_css() -> Response {
+    (
+        [(CONTENT_TYPE, HeaderValue::from_static("text/css"))],
+        Bytes::from_static(TOKENS_CSS),
     )
         .into_response()
 }

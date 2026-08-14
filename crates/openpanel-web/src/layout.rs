@@ -270,6 +270,7 @@ impl<'a> Shell<'a> {
                     meta charset="utf-8";
                     meta name="viewport" content="width=device-width, initial-scale=1";
                     title { (page_title) }
+                    link rel="stylesheet" href="/assets/tokens.css";
                     link rel="stylesheet" href="/assets/app.css";
                     script src="/assets/htmx.min.js" defer {}
                 }

@@ -222,10 +222,10 @@ impl StagingSlot {
         schedule: Option<String>,
         now: DateTime<Utc>,
     ) -> Result<(), SiteStagingError> {
-        if let Some(s) = schedule.as_ref() {
-            if s.trim().is_empty() {
-                return Err(SiteStagingError::Invalid("schedule is empty".into()));
-            }
+        if let Some(s) = schedule.as_ref()
+            && s.trim().is_empty()
+        {
+            return Err(SiteStagingError::Invalid("schedule is empty".into()));
         }
         if schedule.is_some() && !matches!(self.sync_policy, SyncPolicy::Scheduled) {
             return Err(SiteStagingError::Invalid(
@@ -243,13 +243,13 @@ impl StagingSlot {
         snapshot: SnapshotId,
         now: DateTime<Utc>,
     ) -> Result<(), SiteStagingError> {
-        if let Some(existing) = self.current_snapshot {
-            if snapshot <= existing {
-                return Err(SiteStagingError::Invalid(format!(
-                    "snapshot {snapshot} is not greater than current {}",
-                    existing
-                )));
-            }
+        if let Some(existing) = self.current_snapshot
+            && snapshot <= existing
+        {
+            return Err(SiteStagingError::Invalid(format!(
+                "snapshot {snapshot} is not greater than current {}",
+                existing
+            )));
         }
         self.current_snapshot = Some(snapshot);
         self.updated_at = now;

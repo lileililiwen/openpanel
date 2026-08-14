@@ -7,7 +7,7 @@ use axum::{
     Router,
     extract::{FromRequestParts, State},
     http::{HeaderMap, HeaderValue, StatusCode, header::LOCATION},
-    middleware::from_fn_with_state,
+    middleware::{from_fn, from_fn_with_state},
     response::{IntoResponse, Redirect, Response},
     routing::{get, post},
 };
@@ -518,8 +518,29 @@ pub fn router(
         .route("/databases/{id}/reveal", post(databases::reveal))
         .route("/databases/{id}/pitr", get(crate::db_pitr::page))
         .route("/sites/{id}/staging", get(crate::site_staging::page))
+        .route("/audit", get(crate::audit::audit_index))
+        .route("/audit/events", get(crate::audit::audit_list))
         .route("/assets/htmx.min.js", get(assets::htmx_min_js))
         .route("/assets/app.css", get(assets::app_css))
+        .route("/assets/tokens.css", get(assets::tokens_css))
+        .layer(from_fn(audit_role_guard))
         .layer(from_fn_with_state(identity, session_middleware))
         .with_state(state)
+}
+
+/// Middleware that enforces the Owner/Admin role for the `/audit` route
+/// group. Other routes pass through unchanged. The follow-on
+/// `add-log-viewer` change replaces this with a richer extractor.
+async fn audit_role_guard(req: axum::extract::Request, next: axum::middleware::Next) -> Response {
+    use openpanel_api::extract::AuthSessionExt;
+    let path = req.uri().path().to_string();
+    let is_audit = path == "/audit" || path == "/audit/events";
+    if !is_audit {
+        return next.run(req).await;
+    }
+    match req.auth_session() {
+        Some(auth) if crate::audit::role_guard(auth.user.role()) => next.run(req).await,
+        Some(_) => crate::audit::forbidden(),
+        None => unauth_redirect(),
+    }
 }

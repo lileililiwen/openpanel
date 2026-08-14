@@ -31,3 +31,5 @@ mod ssl;
 mod system_services;
 mod waf;
 mod web_ui;
+/// Web-UI audit route group integration tests.
+mod web_ui_audit;

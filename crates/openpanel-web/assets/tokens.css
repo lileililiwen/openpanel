@@ -1,0 +1,72 @@
+/*
+ * OpenPanel web UI design tokens.
+ *
+ * This file is the single source of truth for colors, spacing, and
+ * typography. No other CSS file or template may declare a literal
+ * color, spacing, or font-size value; every such value MUST source a
+ * CSS custom property declared here.
+ *
+ * The follow-on `themeable-ui` change adds per-reseller overrides
+ * keyed by the same custom properties.
+ */
+
+:root {
+    /* Surface */
+    --op-color-bg: #0f1115;
+    --op-color-surface: #161922;
+    --op-color-surface-raised: #1d2230;
+    --op-color-border: #2a2f3d;
+
+    /* Foreground */
+    --op-color-fg: #e7eaee;
+    --op-color-fg-muted: #9aa3b2;
+    --op-color-fg-subtle: #6b7280;
+
+    /* Brand */
+    --op-color-accent: #4f8cff;
+    --op-color-accent-strong: #3b75e0;
+    --op-color-accent-fg: #ffffff;
+
+    /* Semantic */
+    --op-color-success: #3fb950;
+    --op-color-warning: #d29922;
+    --op-color-danger: #f85149;
+    --op-color-info: #58a6ff;
+
+    /* Focus */
+    --op-color-focus-ring: #58a6ff;
+
+    /* Spacing */
+    --op-space-1: 4px;
+    --op-space-2: 8px;
+    --op-space-3: 12px;
+    --op-space-4: 16px;
+    --op-space-6: 24px;
+    --op-space-8: 32px;
+    --op-space-12: 48px;
+
+    /* Radii */
+    --op-radius-sm: 4px;
+    --op-radius-md: 6px;
+    --op-radius-lg: 10px;
+
+    /* Typography */
+    --op-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --op-font-family-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --op-font-size-xs: 12px;
+    --op-font-size-sm: 13px;
+    --op-font-size-md: 14px;
+    --op-font-size-lg: 16px;
+    --op-font-size-xl: 20px;
+    --op-font-size-2xl: 24px;
+    --op-line-height: 1.5;
+
+    /* Shadows */
+    --op-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+    --op-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
+
+    /* Motion */
+    --op-duration-fast: 120ms;
+    --op-duration-default: 200ms;
+    --op-ease: cubic-bezier(0.2, 0, 0, 1);
+}

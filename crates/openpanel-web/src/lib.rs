@@ -11,6 +11,8 @@
 
 pub mod api_tokens;
 pub mod assets;
+/// Audit log route stubs.
+pub mod audit;
 pub mod backups;
 pub mod cron;
 pub mod csrf;
@@ -37,6 +39,8 @@ pub mod sites;
 pub mod software_center;
 pub mod ssl;
 pub mod system_services;
+/// String-table stub used by every template.
+pub mod t;
 pub mod two_factor;
 pub mod users;
 /// Per-site WAF editor page.
