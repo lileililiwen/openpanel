@@ -672,13 +672,17 @@ fn group_thousands(mut value: u64, group: char) -> String {
     groups.reverse();
     // The first group carries no leading-zero padding; trim the
     // leading zeros off the first chunk only.
-    let first = groups.first_mut().expect("at least one group");
-    let trimmed = first.trim_start_matches('0').to_string();
-    if trimmed.is_empty() {
-        "0".to_string()
-    } else {
-        *first = trimmed;
-        groups.join(&group.to_string())
+    match groups.first_mut() {
+        Some(first) => {
+            let trimmed = first.trim_start_matches('0').to_string();
+            if trimmed.is_empty() {
+                "0".to_string()
+            } else {
+                *first = trimmed;
+                groups.join(&group.to_string())
+            }
+        }
+        None => "0".to_string(),
     }
 }
 

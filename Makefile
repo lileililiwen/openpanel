@@ -20,9 +20,9 @@
 # Every per-check script prints `step: <name> status: ok | failed` and
 # exits non-zero on failure; `make` short-circuits on the first one.
 
-.PHONY: check fmt clippy docs audit file-length test coverage install-lint-tools ensure-lint-tools split
+.PHONY: check fmt clippy docs audit file-length test coverage install-lint-tools ensure-lint-tools split a11y scan-literal
 
-check: fmt clippy docs audit test ensure-lint-tools file-length
+check: ensure-lint-tools fmt clippy docs audit file-length scan-literal test
 	@echo ""
 	@echo "=== All quality checks passed ==="
 
@@ -40,6 +40,13 @@ audit:
 
 file-length:
 	@scripts/check-file-length.sh
+
+scan-literal:
+	@scripts/scan-template-literals.sh
+
+a11y:
+	@echo "a11y: skipping — no dev server is running"
+	@echo "  (axe-core is run against the local dev server by .github/workflows/a11y.yml)"
 
 test:
 	@scripts/check-tests.sh

@@ -9,4 +9,5 @@
 
 disallowed-methods = [
     { path = "std::panic::catch_unwind", reason = "panics are forbidden in production code; let them propagate" },
+    { path = "std::string::String::from_utf8_unchecked", reason = "unchecked UTF-8 conversion is panic-prone" },
 ]
