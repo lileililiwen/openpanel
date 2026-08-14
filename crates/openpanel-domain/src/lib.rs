@@ -22,8 +22,6 @@ pub mod docker;
 pub mod files;
 /// Per-site FTP accounts, limits, and chroot path policy.
 pub mod ftp;
-/// Internationalization: locale, catalog, locale negotiation, formatter.
-pub mod i18n;
 pub mod identity;
 pub mod logs;
 /// Hosted mail domains, addresses, quotas, aliases, and relay policy.
@@ -40,6 +38,11 @@ pub mod ssl;
 pub mod system_services;
 /// Per-site typed web application firewall rules.
 pub mod waf;
+
+/// Internationalization: locale, catalog, locale negotiation, formatter.
+pub mod i18n;
+/// Observability export: Prometheus metrics, OTLP traces, JSONL logs.
+pub mod observability_export;
 
 pub use api_tokens::{
     ApiToken, ApiTokenError, ApiTokenMetadata, ApiTokenRepository, Cidr, TokenCredential,
