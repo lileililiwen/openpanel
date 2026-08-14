@@ -68,3 +68,5 @@ pub const PLUGIN_V001: &str = include_str!("plugin/V001__init.sql");
 pub const PLUGIN_MARKETPLACE_V001: &str = include_str!("plugin_marketplace/V001__init.sql");
 /// Per-site collaborators and site_grants tables.
 pub const COLLABORATORS_V001: &str = include_str!("collaborators/V001__init.sql");
+/// Container registry initial schema.
+pub const CONTAINER_REGISTRY_V001: &str = include_str!("container_registry/V001__init.sql");

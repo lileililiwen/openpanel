@@ -84,6 +84,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("collaborators migration");
+        sqlx::query(include_str!("migrations/container_registry/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("container_registry migration");
     }
 
     /// Access the underlying pool.

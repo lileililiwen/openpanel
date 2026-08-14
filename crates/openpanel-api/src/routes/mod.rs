@@ -5,6 +5,8 @@ pub mod api_tokens;
 pub mod backups;
 /// Per-site collaborator routes (`/sites/{id}/collaborators`).
 pub mod collaborators;
+/// Container registry routes (`/registry`).
+pub mod container_registry;
 /// Cron scheduling routes (`/cron`).
 pub mod cron;
 /// Databases resource routes (`/databases`).

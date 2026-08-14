@@ -47,6 +47,9 @@ pub mod plugin_marketplace;
 /// Per-site collaborator bounded context: invite collaborators
 /// scoped to specific sites with limited permission sets.
 pub mod collaborators;
+/// Container image registry bounded context: per-user namespaces,
+/// retention, scan hook, OCI Distribution push/pull.
+pub mod container_registry;
 
 /// Database point-in-time recovery: continuous binlog streaming,
 /// point-in-time restore, and incremental file-backup deltas.
@@ -70,6 +73,10 @@ pub use common::{
 pub use collaborators::{
     CollabStatus, Collaborator, CollaboratorError, CollaboratorId, CollaboratorRepository,
     Permission, PermissionSet, SiteGrant, SiteGrantRepository,
+};
+pub use container_registry::{
+    ImageDigest, ImageNamespace, NamespaceId, RegistryConfig, RegistryError, RetentionPolicy,
+    RetentionVerdict, ScanFinding, ScanResult, ScanStatus, StoredImage,
 };
 pub use databases::{
     database::Database, engine::DatabaseEngine, error::DatabaseError,

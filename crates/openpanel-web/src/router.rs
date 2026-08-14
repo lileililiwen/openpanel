@@ -21,7 +21,7 @@ use openpanel_app::{
     FilesService, FtpService, IdentityService, LogService, MailService, MonitoringService,
     NotificationService, PitrService, SecurityService, SitesService, SoftwareCenterService,
     SslService, StagingService, WafService, identity::TwoFactorService,
-    CollaboratorService,
+    CollaboratorService, ContainerRegistryService,
     security::LoginThrottleService, system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
@@ -124,6 +124,8 @@ pub struct WebState {
     pub staging: Arc<StagingService>,
     /// Per-site collaborator service.
     pub collaborators: Arc<CollaboratorService>,
+    /// Container registry service.
+    pub registry: Arc<ContainerRegistryService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -245,6 +247,7 @@ pub fn router(
     pitr: Arc<PitrService>,
     staging: Arc<StagingService>,
     collaborators: Arc<CollaboratorService>,
+    registry: Arc<ContainerRegistryService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -275,6 +278,7 @@ pub fn router(
 pitr,
             staging,
             collaborators,
+            registry,
             csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
@@ -524,6 +528,7 @@ pitr,
         .route("/databases/{id}/pitr", get(crate::db_pitr::page))
         .route("/sites/{id}/staging", get(crate::site_staging::page))
         .route("/sites/{id}/collaborators", get(crate::collaborators::page))
+        .route("/registry", get(crate::container_registry::page))
         .route("/audit", get(crate::audit::audit_index))
         .route("/audit/events", get(crate::audit::audit_list))
         .route("/marketplace", get(crate::plugin_marketplace::page))

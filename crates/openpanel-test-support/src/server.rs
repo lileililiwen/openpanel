@@ -254,6 +254,8 @@ pub struct TestServer {
     collaborators: Arc<CollaboratorService>,
     /// Grant resolver.
     grant_resolver: Arc<GrantResolver>,
+    /// Container registry service.
+    registry: Arc<openpanel_app::ContainerRegistryService>,
 }
 
 impl TestServer {
@@ -598,6 +600,23 @@ impl TestServer {
         let collaborators_svc = collaborators_module.service();
         let grant_resolver = collaborators_module.resolver();
 
+        // Container registry module: in-memory storage + no-op scan hook
+        // so tests can exercise push / quota / retention without
+        // touching the network.
+        let registry_module = openpanel_app::ContainerRegistryModule::new(
+            &ctx,
+            audit.clone(),
+            openpanel_domain::RegistryConfig::default(),
+            None,
+            None,
+        )
+        .await;
+        runner
+            .apply_module(registry_module.name(), &registry_module.migrations())
+            .await
+            .expect("registry migrations");
+        let registry_svc = registry_module.service();
+
         let settings_path = sandbox.path().join("web-preferences.json");
         let two_factor_svc = identity_module.two_factor();
         let app = build_router(
@@ -628,6 +647,7 @@ impl TestServer {
             mp_svc.clone(),
             collaborators_svc.clone(),
             grant_resolver.clone(),
+            registry_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -654,6 +674,7 @@ impl TestServer {
             pitr_svc.clone(),
             staging_svc.clone(),
             collaborators_svc.clone(),
+            registry_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -737,6 +758,7 @@ impl TestServer {
             marketplace: mp_svc,
             collaborators: collaborators_svc,
             grant_resolver,
+            registry: registry_svc,
         }
     }
 

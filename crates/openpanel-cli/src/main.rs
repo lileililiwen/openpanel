@@ -6,9 +6,9 @@ use openpanel_cli::{
     CronCommand, DatabaseCommand, DnsCommand, DockerCommand, FileCommand, FtpCommand,
     LogsCommand, MailCommand, MarketplaceCommand, MonitoringCommand,
     NotificationChannelCommand, NotificationCommand, NotificationSubscriptionCommand,
-    PitrCommand, PluginCommand, RecoveryCodeCommand, SecurityAllowlistCommand, SecurityCommand,
-    SecurityRuleCommand, ServicesCommand, SiteCommand, SoftwareCommand, SslCommand,
-    StagingCommand, TokenCommand, TwoFactorCommand, UserCommand, WafCommand, handlers,
+    PitrCommand, PluginCommand, RecoveryCodeCommand, RegistryCommand, SecurityAllowlistCommand,
+    SecurityCommand, SecurityRuleCommand, ServicesCommand, SiteCommand, SoftwareCommand,
+    SslCommand, StagingCommand, TokenCommand, TwoFactorCommand, UserCommand, WafCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -577,6 +577,20 @@ async fn main() -> anyhow::Result<()> {
             PluginCommand::Enable { id } => handlers::plugin_enable(config, id).await,
             PluginCommand::Disable { id } => handlers::plugin_disable(config, id).await,
             PluginCommand::Uninstall { id } => handlers::plugin_uninstall(config, id).await,
+        },
+        Command::Registry { action } => match action {
+            RegistryCommand::Config => handlers::registry_config(config).await,
+            RegistryCommand::Namespaces => handlers::registry_namespaces(config).await,
+            RegistryCommand::CreateNamespace {
+                namespace,
+                owner,
+                quota_bytes,
+            } => {
+                handlers::registry_create_namespace(config, namespace, owner, quota_bytes).await
+            }
+            RegistryCommand::Images { namespace } => {
+                handlers::registry_images(config, namespace).await
+            }
         },
     }
 }

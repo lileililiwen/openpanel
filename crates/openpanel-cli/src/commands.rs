@@ -110,6 +110,12 @@ pub enum Command {
         #[command(subcommand)]
         action: PluginCommand,
     },
+    /// Browse and manage the container registry.
+    Registry {
+        /// Registry operation.
+        #[command(subcommand)]
+        action: RegistryCommand,
+    },
     /// Manage typed per-site web application firewall rules.
     Waf {
         /// WAF operation.
@@ -1428,5 +1434,32 @@ pub enum MarketplaceCommand {
         /// Plugin id to show.
         #[arg(long)]
         id: String,
+    },
+}
+
+/// Subcommands for managing the container registry.
+#[derive(Debug, Subcommand)]
+pub enum RegistryCommand {
+    /// Show the registry configuration.
+    Config,
+    /// List namespaces.
+    Namespaces,
+    /// Create a namespace.
+    CreateNamespace {
+        /// Namespace id.
+        #[arg(long)]
+        namespace: String,
+        /// Owner user id.
+        #[arg(long)]
+        owner: String,
+        /// Quota in bytes.
+        #[arg(long)]
+        quota_bytes: u64,
+    },
+    /// List images in a namespace.
+    Images {
+        /// Namespace id.
+        #[arg(long)]
+        namespace: String,
     },
 }

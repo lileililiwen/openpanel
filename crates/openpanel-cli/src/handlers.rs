@@ -243,6 +243,21 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let collaborators_svc = collaborators_module.service();
     let grant_resolver = collaborators_module.resolver();
 
+    // Container registry module.
+    let registry_module = openpanel_app::ContainerRegistryModule::new(
+        &ctx,
+        audit.clone(),
+        openpanel_domain::RegistryConfig::default(),
+        None,
+        None,
+    )
+    .await;
+    runner
+        .apply_module(registry_module.name(), &registry_module.migrations())
+        .await
+        .context("apply registry migrations")?;
+    let registry_svc = registry_module.service();
+
     // Site-staging module: in-memory filesystem layer for the CLI
     // (no live nginx / rsync in offline mode).
     let staging_fs: Arc<dyn openpanel_app::StagingFilesystemLayer> =
@@ -285,6 +300,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         marketplace_svc.clone(),
         collaborators_svc.clone(),
         grant_resolver.clone(),
+        registry_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -311,6 +327,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         pitr_svc,
         staging_svc,
         collaborators_svc,
+        registry_svc,
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
@@ -4047,5 +4064,83 @@ pub async fn build_collaborator_bundle(
     Ok(CollaboratorBundle {
         service: module.service(),
         resolver: module.resolver(),
+    })
+}
+
+// ---- Container registry handlers ----
+
+pub async fn registry_config(config: Arc<Config>) -> anyhow::Result<()> {
+    let bundle = build_registry_bundle(config.clone()).await?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "storage_root": bundle.service.config().storage_root.display().to_string(),
+            "retention": bundle.service.config().retention,
+            "scan_on_push": bundle.service.config().scan_on_push,
+        }))?
+    );
+    Ok(())
+}
+
+pub async fn registry_namespaces(config: Arc<Config>) -> anyhow::Result<()> {
+    let bundle = build_registry_bundle(config.clone()).await?;
+    let list = bundle.service.list_namespaces().await?;
+    println!("{}", serde_json::to_string_pretty(&list)?);
+    Ok(())
+}
+
+pub async fn registry_create_namespace(
+    config: Arc<Config>,
+    namespace: String,
+    owner: String,
+    quota_bytes: u64,
+) -> anyhow::Result<()> {
+    let bundle = build_registry_bundle(config.clone()).await?;
+    let ns_id = openpanel_domain::NamespaceId::new(&namespace)
+        .map_err(|e| anyhow::anyhow!("invalid namespace id: {e}"))?;
+    let owner_uuid = uuid::Uuid::parse_str(&owner).context("invalid owner uuid")?;
+    let ns = bundle
+        .service
+        .create_namespace(ns_id, owner_uuid, quota_bytes)
+        .await?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "namespace_id": ns.namespace_id.to_string(),
+            "owner": ns.owner.to_string(),
+            "quota_bytes": ns.quota_bytes,
+        }))?
+    );
+    Ok(())
+}
+
+pub async fn registry_images(config: Arc<Config>, namespace: String) -> anyhow::Result<()> {
+    let bundle = build_registry_bundle(config.clone()).await?;
+    let ns_id = openpanel_domain::NamespaceId::new(&namespace)
+        .map_err(|e| anyhow::anyhow!("invalid namespace id: {e}"))?;
+    let list = bundle.service.list_images(&ns_id).await?;
+    println!("{}", serde_json::to_string_pretty(&list)?);
+    Ok(())
+}
+
+/// Bundle of registry services the CLI handlers reuse.
+pub struct RegistryBundle {
+    pub service: Arc<openpanel_app::ContainerRegistryService>,
+}
+
+pub async fn build_registry_bundle(config: Arc<Config>) -> anyhow::Result<RegistryBundle> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let _ = pool;
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
+    let module = openpanel_app::ContainerRegistryModule::new(
+        &ctx,
+        audit,
+        openpanel_domain::RegistryConfig::default(),
+        None,
+        None,
+    )
+    .await;
+    Ok(RegistryBundle {
+        service: module.service(),
     })
 }

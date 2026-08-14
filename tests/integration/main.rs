@@ -30,6 +30,8 @@ mod smoke;
 mod plugin_marketplace;
 /// Per-site collaborator HTTP integration tests.
 mod collaborators;
+/// Container registry HTTP integration tests.
+mod container_registry;
 mod software_center;
 mod ssl;
 mod system_services;

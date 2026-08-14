@@ -4,22 +4,23 @@ use std::sync::Arc;
 
 use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
 use openpanel_app::{
-    ApiTokenService, BackupService, CollaboratorService, CronService, DatabasesService, DnsService,
-    DockerService, FilesService, FtpService, GrantResolver, IdentityService, LogService,
-    MailService, MarketplaceService, MonitoringService, NotificationService, PitrService,
-    PluginService, SecurityService, SitesService, SoftwareCenterService, SslService,
-    StagingService, WafService, identity::TwoFactorService, security::LoginThrottleService,
-    system_services::ServiceManager,
+    ApiTokenService, BackupService, CollaboratorService, ContainerRegistryService, CronService,
+    DatabasesService, DnsService, DockerService, FilesService, FtpService, GrantResolver,
+    IdentityService, LogService, MailService, MarketplaceService, MonitoringService,
+    NotificationService, PitrService, PluginService, SecurityService, SitesService,
+    SoftwareCenterService, SslService, StagingService, WafService, identity::TwoFactorService,
+    security::LoginThrottleService, system_services::ServiceManager,
 };
 
 use crate::{
     middleware::session::{ApiAuthState, api_auth_middleware},
     routes::{
         api_tokens::router as api_tokens_router, backups::router as backups_router,
-        collaborators::router as collaborators_router, cron::router as cron_router,
-        databases::router as databases_router, db_pitr::router as db_pitr_router,
-        dns::router as dns_router, docker::router as docker_router,
-        files::router as files_router, ftp::router as ftp_router,
+        collaborators::router as collaborators_router,
+        container_registry::router as container_registry_router,
+        cron::router as cron_router, databases::router as databases_router,
+        db_pitr::router as db_pitr_router, dns::router as dns_router,
+        docker::router as docker_router, files::router as files_router, ftp::router as ftp_router,
         identity::router as identity_router, logs::router as logs_router,
         mail::router as mail_router, monitoring::router as monitoring_router,
         notifications::router as notifications_router, plugin_marketplace::router as
@@ -64,6 +65,7 @@ pub fn build_router(
     marketplace: Arc<MarketplaceService>,
     collaborators: Arc<CollaboratorService>,
     grant_resolver: Arc<GrantResolver>,
+    registry: Arc<ContainerRegistryService>,
 ) -> Router {
     let auth_state = ApiAuthState {
         identity: identity.clone(),
@@ -100,6 +102,7 @@ pub fn build_router(
             collaborators_router(collaborators, grant_resolver),
         )
         .nest("/marketplace", plugin_marketplace_router(marketplace))
+        .nest("/registry", container_registry_router(registry))
         .layer(from_fn_with_state(auth_state, api_auth_middleware));
 
     Router::new()

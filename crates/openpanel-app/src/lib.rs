@@ -32,6 +32,8 @@ pub mod plugin;
 pub mod plugin_marketplace;
 /// Per-site collaborator bounded context.
 pub mod collaborators;
+/// Container registry bounded context.
+pub mod container_registry;
 pub mod prelude;
 pub mod security;
 /// Per-site staging bounded context: staging slot creation, sync,
@@ -83,6 +85,12 @@ pub use plugin_marketplace::{
 pub use collaborators::{
     CollaboratorsModule, CollaboratorService, GrantResolver, InviteCollaboratorError,
     InviteRequest, SqliteCollaboratorRepository, SqliteSiteGrantRepository, UpdateRequest,
+};
+/// Container registry module.
+pub use container_registry::{
+    ContainerRegistryModule, ContainerRegistryService, ImageBlob, NoopScanHook,
+    PushError, PushRequest, PushResult, ScanHook, ScanHookError,
+    SqliteImageRepository, SqliteNamespaceRepository, SqliteScanResultRepository,
 };
 /// Re-export the `BinlogSink` trait so composition code can name it.
 pub use openpanel_domain::BinlogSink;

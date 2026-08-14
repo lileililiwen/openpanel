@@ -240,6 +240,10 @@ pub enum AuditAction {
     CollaboratorUpdated,
     /// A per-site collaborator was revoked from a site.
     CollaboratorRevoked,
+    /// A container image was pushed to the registry.
+    RegistryImagePushed,
+    /// A container image was pruned by the retention policy.
+    RegistryImagePruned,
 }
 
 impl AuditAction {
@@ -345,6 +349,8 @@ impl AuditAction {
             AuditAction::CollaboratorInvited => "collaborator_invited",
             AuditAction::CollaboratorUpdated => "collaborator_updated",
             AuditAction::CollaboratorRevoked => "collaborator_revoked",
+            AuditAction::RegistryImagePushed => "registry_image_pushed",
+            AuditAction::RegistryImagePruned => "registry_image_pruned",
         }
     }
 }
