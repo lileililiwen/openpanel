@@ -16,6 +16,8 @@ pub mod cron;
 pub mod csrf;
 pub mod dashboard;
 pub mod databases;
+/// Database point-in-time recovery web pages.
+pub mod db_pitr;
 pub mod dns;
 pub mod docker;
 pub mod files;

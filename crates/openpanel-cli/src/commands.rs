@@ -1106,6 +1106,44 @@ pub enum DatabaseCommand {
         #[arg(long)]
         id: String,
     },
+    /// Database point-in-time recovery subcommands.
+    Pitr {
+        /// PITR subcommand.
+        #[command(subcommand)]
+        action: PitrCommand,
+    },
+}
+
+/// Subcommands for the `openpanel db pitr` family: binlog
+/// streaming, point-in-time restore, and incremental file-backup
+/// deltas.
+#[derive(Debug, Subcommand)]
+pub enum PitrCommand {
+    /// Show the active binlog stream for a database (if any).
+    Status {
+        /// Database id.
+        #[arg(long)]
+        id: String,
+    },
+    /// Inspect the available binlog / WAL range for a database.
+    Inspect {
+        /// Database id.
+        #[arg(long)]
+        id: String,
+    },
+    /// Request a point-in-time restore. `--confirm` promotes the
+    /// staging database to live in the same call.
+    Restore {
+        /// Database id.
+        #[arg(long)]
+        id: String,
+        /// Wall-clock instant to restore to (RFC 3339).
+        #[arg(long)]
+        timestamp: String,
+        /// Promote the staging database to live after restore.
+        #[arg(long)]
+        confirm: bool,
+    },
 }
 
 /// Subcommands for managing TLS certificates for sites.

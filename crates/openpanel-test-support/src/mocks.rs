@@ -249,6 +249,25 @@ mock! {
     }
 }
 
+/// Thin adapter that exposes a [`MockDatabaseRepo`] (which
+/// implements `DatabaseRepository`) as a `DatabaseLookup` for
+/// composition code that only needs `find_by_id`. Used by
+/// `db_pitr` service tests.
+pub struct DatabaseRepoAsLookup(pub MockDatabaseRepo);
+
+#[async_trait::async_trait]
+impl openpanel_domain::DatabaseLookup for DatabaseRepoAsLookup {
+    async fn find_by_id(
+        &self,
+        id: uuid::Uuid,
+    ) -> Result<Option<openpanel_domain::Database>, openpanel_domain::databases::error::DatabaseError>
+    {
+        <MockDatabaseRepo as DatabaseRepository>::find_by_id(&self.0, id)
+            .await
+            .map_err(|e| openpanel_domain::databases::error::DatabaseError::Persistence(e.0))
+    }
+}
+
 /// Demonstrates `mockall` mock expectations against `MockAudit`.
 /// `mockall` checks expectations when the mock is dropped: meeting the
 /// expectations exactly is a no-op; over- or under-meeting panics.

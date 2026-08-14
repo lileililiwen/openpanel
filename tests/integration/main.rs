@@ -9,6 +9,8 @@ mod common;
 mod api_tokens;
 mod backups;
 mod cron;
+/// Database point-in-time recovery HTTP integration tests.
+mod db_pitr;
 mod databases;
 mod dns;
 mod docker;

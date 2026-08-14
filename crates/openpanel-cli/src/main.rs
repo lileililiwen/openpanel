@@ -5,7 +5,7 @@ use openpanel_cli::{
     BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, Command, CronCommand,
     DatabaseCommand, DnsCommand, DockerCommand, FileCommand, FtpCommand, LogsCommand, MailCommand,
     MonitoringCommand, NotificationChannelCommand, NotificationCommand,
-    NotificationSubscriptionCommand, RecoveryCodeCommand, SecurityAllowlistCommand,
+    NotificationSubscriptionCommand, PitrCommand, RecoveryCodeCommand, SecurityAllowlistCommand,
     SecurityCommand, SecurityRuleCommand, ServicesCommand, SiteCommand, SoftwareCommand,
     SslCommand, TokenCommand, TwoFactorCommand, UserCommand, WafCommand, handlers,
 };
@@ -195,6 +195,19 @@ async fn main() -> anyhow::Result<()> {
             DatabaseCommand::ChangePassword { id } => {
                 handlers::change_database_password(config, id).await
             }
+            DatabaseCommand::Pitr { action } => match action {
+                PitrCommand::Status { id } => {
+                    handlers::pitr_status(config, id).await
+                }
+                PitrCommand::Inspect { id } => {
+                    handlers::pitr_inspect(config, id).await
+                }
+                PitrCommand::Restore {
+                    id,
+                    timestamp,
+                    confirm,
+                } => handlers::pitr_restore(config, id, timestamp, confirm).await,
+            },
         },
         Command::File { action } => match action {
             FileCommand::List { site, path } => handlers::file_list(config, site, path).await,

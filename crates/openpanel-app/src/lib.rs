@@ -10,6 +10,9 @@ pub mod api_tokens;
 pub mod backups;
 pub mod cron;
 pub mod databases;
+/// Database point-in-time recovery: continuous binlog streaming,
+/// point-in-time restore, and incremental file-backup deltas.
+pub mod db_pitr;
 pub mod dns;
 pub mod docker;
 pub mod files;
@@ -35,6 +38,11 @@ pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
 pub use cron::{CronModule, CronService};
 pub use databases::{DatabasesModule, service::DatabasesService};
+/// Database point-in-time recovery bounded-context module.
+pub use db_pitr::{DbPitrModule, PitrService};
+/// In-memory `BinlogSink` / `LogTailer` adapters for tests and
+/// offline development.
+pub use db_pitr::{InMemoryBinlogSink, InMemoryLogTailer};
 pub use dns::{DnsModule, DnsService};
 pub use docker::{
     ApplyReport, BollardDockerAdapter, DockerAdapter, DockerModule, DockerService, ExecResult,
@@ -54,6 +62,8 @@ pub use logs::{LogService, LogsModule};
 pub use mail::{MailModule, MailService};
 pub use monitoring::{MonitoringModule, service::MonitoringService};
 pub use notifications::{NotificationModule, NotificationService};
+/// Re-export the `BinlogSink` trait so composition code can name it.
+pub use openpanel_domain::BinlogSink;
 pub use security::{SecurityModule, SecurityService};
 pub use sites::{
     SitesModule,

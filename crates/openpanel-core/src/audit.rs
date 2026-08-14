@@ -196,6 +196,22 @@ pub enum AuditAction {
     DeliverySucceeded,
     /// A notification delivery exhausted retries or failed permanently.
     DeliveryFailed,
+    /// A database point-in-time recovery binlog stream was enabled.
+    PitrStreamEnabled,
+    /// A database point-in-time recovery binlog stream was paused.
+    PitrStreamPaused,
+    /// A database point-in-time recovery binlog stream was resumed.
+    PitrStreamResumed,
+    /// A database point-in-time recovery binlog stream hit an error.
+    PitrStreamBroken,
+    /// A database point-in-time restore was requested.
+    PitrRestoreRequested,
+    /// A staging point-in-time restore was promoted to live.
+    PitrRestorePromoted,
+    /// A point-in-time restore failed.
+    PitrRestoreFailed,
+    /// An incremental database backup delta was captured.
+    PitrIncrementalCaptured,
 }
 
 impl AuditAction {
@@ -279,6 +295,14 @@ impl AuditAction {
             AuditAction::DeliveryRejected => "delivery_rejected",
             AuditAction::DeliverySucceeded => "delivery_succeeded",
             AuditAction::DeliveryFailed => "delivery_failed",
+            AuditAction::PitrStreamEnabled => "pitr_stream_enabled",
+            AuditAction::PitrStreamPaused => "pitr_stream_paused",
+            AuditAction::PitrStreamResumed => "pitr_stream_resumed",
+            AuditAction::PitrStreamBroken => "pitr_stream_broken",
+            AuditAction::PitrRestoreRequested => "pitr_restore_requested",
+            AuditAction::PitrRestorePromoted => "pitr_restore_promoted",
+            AuditAction::PitrRestoreFailed => "pitr_restore_failed",
+            AuditAction::PitrIncrementalCaptured => "pitr_incremental_captured",
         }
     }
 }
@@ -507,6 +531,14 @@ impl AuditService for SqliteAuditService {
                 "delivery_rejected" => AuditAction::DeliveryRejected,
                 "delivery_succeeded" => AuditAction::DeliverySucceeded,
                 "delivery_failed" => AuditAction::DeliveryFailed,
+                "pitr_stream_enabled" => AuditAction::PitrStreamEnabled,
+                "pitr_stream_paused" => AuditAction::PitrStreamPaused,
+                "pitr_stream_resumed" => AuditAction::PitrStreamResumed,
+                "pitr_stream_broken" => AuditAction::PitrStreamBroken,
+                "pitr_restore_requested" => AuditAction::PitrRestoreRequested,
+                "pitr_restore_promoted" => AuditAction::PitrRestorePromoted,
+                "pitr_restore_failed" => AuditAction::PitrRestoreFailed,
+                "pitr_incremental_captured" => AuditAction::PitrIncrementalCaptured,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

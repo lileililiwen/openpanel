@@ -7,11 +7,12 @@ use anyhow::Context;
 use base64::Engine;
 use openpanel_api::build_router;
 use openpanel_app::{
-    AcmeEndpoint, ApiTokenModule, BackupsModule, CronModule, DatabasesModule, DnsModule,
-    DockerModule, FilesModule, FtpModule, IdentityModule, LogService, LogsModule, MailModule,
-    MonitoringModule, NotificationModule, SecurityModule, SecurityService, SitesModule,
-    SoftwareCenterModule, SslModule, SslPaths, SystemServicesModule, WafModule,
-    databases::crypto as db_crypto,
+    AcmeEndpoint, ApiTokenModule, BackupsModule, CronModule, DatabasesModule, DbPitrModule,
+    DnsModule, DockerModule, FilesModule, FtpModule, IdentityModule, InMemoryBinlogSink,
+    LogService, LogsModule, MailModule, MonitoringModule, NotificationModule, SecurityModule,
+    SecurityService, SitesModule, SoftwareCenterModule, SslModule, SslPaths, SystemServicesModule,
+    WafModule,
+    databases::{crypto as db_crypto, repo::SqliteDatabaseRepository},
 };
 use openpanel_core::{
     AppContext, Config, JobSupervisor, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
@@ -197,6 +198,20 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let waf_svc = waf_module.service();
     let docker_svc = docker_module.service();
     let ftp_svc = ftp_module.service();
+
+    // PITR module: in-memory sink for now (no offsite targets yet).
+    // Future `add-offsite-backup-targets` change will swap the sink
+    // for an S3 / rsync / B2 / Wasabi adapter.
+    let pitr_db_lookup: Arc<dyn openpanel_domain::DatabaseLookup> =
+        Arc::new(SqliteDatabaseRepository::new(pool.clone()));
+    let pitr_sink: Arc<dyn openpanel_app::BinlogSink> = Arc::new(InMemoryBinlogSink::new());
+    let pitr_module =
+        DbPitrModule::new(&ctx, pitr_sink, Vec::new(), pitr_db_lookup, audit.clone()).await;
+    runner
+        .apply_module(pitr_module.name(), &pitr_module.migrations())
+        .await
+        .context("apply PITR migrations")?;
+    let pitr_svc = pitr_module.service();
     let app = build_router(
         identity_svc.clone(),
         sites_svc.clone(),
@@ -219,6 +234,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         ftp_svc.clone(),
         api_token_svc.clone(),
         notification_svc.clone(),
+        pitr_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -242,6 +258,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         ftp_svc,
         api_token_svc,
         notification_svc,
+        pitr_svc,
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
@@ -2915,6 +2932,111 @@ pub async fn change_database_password(config: Arc<Config>, id: String) -> anyhow
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     println!(
         "rotated password for {id}\n  new password: {new_password}\n  -> copy into your site config; it will not be shown again."
+    );
+    Ok(())
+}
+
+async fn build_pitr(
+    config: Arc<Config>,
+) -> anyhow::Result<(Arc<openpanel_app::PitrService>, Arc<openpanel_app::IdentityService>)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
+    let master_key = load_master_key(&config)?;
+    let identity_module = IdentityModule::new(&ctx, master_key).await;
+    let pitr_db_lookup: Arc<dyn openpanel_domain::DatabaseLookup> =
+        Arc::new(SqliteDatabaseRepository::new(pool.clone()));
+    let pitr_sink: Arc<dyn openpanel_app::BinlogSink> =
+        Arc::new(InMemoryBinlogSink::new());
+    let pitr_module = DbPitrModule::new(
+        &ctx,
+        pitr_sink,
+        Vec::new(),
+        pitr_db_lookup,
+        Arc::new(openpanel_core::NoopAuditService),
+    )
+    .await;
+    let _ = audit;
+    Ok((pitr_module.service(), identity_module.service()))
+}
+
+/// Show the active binlog stream for a database.
+pub async fn pitr_status(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let (pitr_svc, identity_svc) = build_pitr(config).await?;
+    let caller = identity_svc
+        .list_users()
+        .await?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("caller not found"))?;
+    let uuid = uuid::Uuid::parse_str(&id).context("invalid database id")?;
+    match pitr_svc.stream_for(&caller, uuid).await.map_err(anyhow::Error::msg)? {
+        Some(s) => println!(
+            "stream id={} status={} last_flushed={} target={}",
+            s.id(),
+            s.status().as_str(),
+            s.last_flushed().to_hex(),
+            s.target()
+        ),
+        None => println!("no active stream for database {id}"),
+    }
+    Ok(())
+}
+
+/// Inspect the available transaction-log range for a database.
+pub async fn pitr_inspect(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let (pitr_svc, _identity_svc) = build_pitr(config).await?;
+    let uuid = uuid::Uuid::parse_str(&id).context("invalid database id")?;
+    let range = pitr_svc
+        .inspect_range(uuid)
+        .await
+        .map_err(anyhow::Error::msg)?;
+    println!(
+        "earliest: {}\nlatest: {}\nstart: {}\nend: {}\nempty: {}",
+        range.earliest.to_hex(),
+        range.latest.to_hex(),
+        range.start.to_rfc3339(),
+        range.end.to_rfc3339(),
+        range.empty
+    );
+    Ok(())
+}
+
+/// Request a point-in-time restore.
+pub async fn pitr_restore(
+    config: Arc<Config>,
+    id: String,
+    timestamp: String,
+    confirm: bool,
+) -> anyhow::Result<()> {
+    let (pitr_svc, identity_svc) = build_pitr(config).await?;
+    let caller = identity_svc
+        .list_users()
+        .await?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("caller not found"))?;
+    let uuid = uuid::Uuid::parse_str(&id).context("invalid database id")?;
+    let ts: chrono::DateTime<chrono::Utc> = timestamp
+        .parse()
+        .with_context(|| format!("invalid RFC 3339 timestamp `{timestamp}`"))?;
+    let restore = pitr_svc
+        .request_restore(
+            &caller,
+            uuid,
+            openpanel_app::db_pitr::RestoreRequest {
+                timestamp: ts,
+                base_backup: None,
+                confirm,
+            },
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "restore id={}\nstatus={}\nstaging_db_id={}\nrequested_ts={}",
+        restore.id(),
+        restore.status().as_str(),
+        restore.staging_db_id().unwrap_or(uuid::Uuid::nil()),
+        restore.request_ts()
     );
     Ok(())
 }

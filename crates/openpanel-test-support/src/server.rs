@@ -18,14 +18,14 @@ use std::{
 use openpanel_api::build_router;
 use openpanel_app::{
     ApiTokenModule, ApiTokenService, ApplyReport, BackupService, BackupsModule, CronModule,
-    CronService, DatabasesModule, DatabasesService, DnsModule, DnsService, DockerAdapter,
-    DockerModule, DockerService, ExecResult, FilesModule, FilesService, FtpModule, FtpService,
-    IdentityModule, IdentityService, LogService, LogsModule, MailModule, MailService,
-    MonitoringModule, MonitoringService, NotificationModule, NotificationService, SecurityModule,
-    SecurityService, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
-    SslModule, SslPaths, SslService, SystemServicesModule, WafModule, WafService,
-    identity::two_factor::TwoFactorCrypto, security::MemoryFirewall, sites::nginx::NginxPaths,
-    software_center::ArtifactFetcher,
+    CronService, DatabasesModule, DatabasesService, DbPitrModule, DnsModule, DnsService,
+    DockerAdapter, DockerModule, DockerService, ExecResult, FilesModule, FilesService, FtpModule,
+    FtpService, IdentityModule, IdentityService, LogService, LogsModule, MailModule, MailService,
+    MonitoringModule, MonitoringService, NotificationModule, NotificationService, PitrService,
+    SecurityModule, SecurityService, SitesModule, SitesService, SoftwareCenterModule,
+    SoftwareCenterService, SslModule, SslPaths, SslService, SystemServicesModule, WafModule,
+    WafService, identity::two_factor::TwoFactorCrypto, security::MemoryFirewall,
+    sites::nginx::NginxPaths, software_center::ArtifactFetcher,
 };
 
 #[derive(Default)]
@@ -238,6 +238,8 @@ pub struct TestServer {
     staged_artifacts: Arc<Mutex<HashMap<String, Vec<u8>>>>,
     /// URLs the in-process fetcher served during the test.
     fetched_urls: Arc<Mutex<Vec<String>>>,
+    /// Database point-in-time recovery service.
+    pitr: Arc<PitrService>,
 }
 
 impl TestServer {
@@ -522,6 +524,23 @@ impl TestServer {
         let mail_svc = mail_module.service();
         let software_center_svc = software_center_module.service();
 
+        // PITR module: in-memory sink, no engine tailer wired in tests.
+        // The PITR service takes a `DatabaseLookup`; we pass the
+        // shared SQLite `SqliteDatabaseRepository` (which implements
+        // the slim lookup trait) so each test gets a real database
+        // row out of the seeded pool.
+        let pitr_db_lookup: Arc<dyn openpanel_domain::DatabaseLookup> =
+            Arc::new(openpanel_app::databases::repo::SqliteDatabaseRepository::new(pool.clone()));
+        let pitr_sink: Arc<dyn openpanel_app::BinlogSink> =
+            Arc::new(openpanel_app::InMemoryBinlogSink::new());
+        let pitr_module =
+            DbPitrModule::new(&ctx, pitr_sink, Vec::new(), pitr_db_lookup, audit.clone()).await;
+        runner
+            .apply_module(pitr_module.name(), &pitr_module.migrations())
+            .await
+            .expect("pitr migrations");
+        let pitr_svc = pitr_module.service();
+
         let settings_path = sandbox.path().join("web-preferences.json");
         let two_factor_svc = identity_module.two_factor();
         let app = build_router(
@@ -546,6 +565,7 @@ impl TestServer {
             ftp_svc.clone(),
             api_token_svc.clone(),
             notification_svc.clone(),
+            pitr_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -569,6 +589,7 @@ impl TestServer {
             ftp_svc.clone(),
             api_token_svc.clone(),
             notification_svc.clone(),
+            pitr_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -646,6 +667,7 @@ impl TestServer {
             config_root,
             staged_artifacts,
             fetched_urls,
+            pitr: pitr_svc,
         }
     }
 
@@ -682,6 +704,18 @@ impl TestServer {
     /// The databases service handle.
     pub fn databases(&self) -> Arc<DatabasesService> {
         self.databases.clone()
+    }
+
+    /// The point-in-time recovery service handle.
+    pub fn pitr(&self) -> Arc<openpanel_app::PitrService> {
+        self.pitr.clone()
+    }
+
+    /// The shared SQLite pool, exposed so integration tests can
+    /// seed rows directly when the public APIs require a real
+    /// database (e.g. to satisfy a foreign key).
+    pub fn pool(&self) -> sqlx::Pool<sqlx::Sqlite> {
+        self._db.pool()
     }
 
     /// The provider-backed DNS service handle.

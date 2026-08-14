@@ -57,3 +57,6 @@ pub const API_TOKENS_V001: &str = include_str!("api_tokens/V001__init.sql");
 pub const NOTIFICATIONS_V001: &str = include_str!("notifications/V001__init.sql");
 /// Per-user locale preferences and the signed translation store.
 pub const I18N_V001: &str = include_str!("i18n/V001__init.sql");
+/// Database point-in-time recovery: binlog streams, restore jobs,
+/// and incremental file-backup deltas.
+pub const DB_PITR_V001: &str = include_str!("db_pitr/V001__init.sql");

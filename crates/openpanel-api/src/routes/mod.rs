@@ -7,6 +7,9 @@ pub mod backups;
 pub mod cron;
 /// Databases resource routes (`/databases`).
 pub mod databases;
+/// Database point-in-time recovery routes
+/// (`/backups/databases/{id}/pitr/...`).
+pub mod db_pitr;
 /// Provider-backed DNS routes (`/dns`).
 pub mod dns;
 pub mod docker;

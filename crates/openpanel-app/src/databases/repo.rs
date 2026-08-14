@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use chrono::DateTime;
 use openpanel_domain::{
-    DatabaseRepository, RepoError,
+    DatabaseLookup, DatabaseRepository, RepoError,
     databases::{database::Database, engine::DatabaseEngine, status::DatabaseStatus},
 };
 use sqlx::{Pool, Sqlite};
@@ -19,6 +19,18 @@ impl SqliteDatabaseRepository {
     /// Build a repository over the given SQLite connection pool.
     pub fn new(pool: Pool<Sqlite>) -> Self {
         Self { pool }
+    }
+}
+
+#[async_trait]
+impl DatabaseLookup for SqliteDatabaseRepository {
+    async fn find_by_id(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<Database>, openpanel_domain::databases::error::DatabaseError> {
+        <Self as DatabaseRepository>::find_by_id(self, id)
+            .await
+            .map_err(|e| openpanel_domain::databases::error::DatabaseError::Persistence(e.0))
     }
 }
 

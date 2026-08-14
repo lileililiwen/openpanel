@@ -39,6 +39,10 @@ pub mod system_services;
 /// Per-site typed web application firewall rules.
 pub mod waf;
 
+/// Database point-in-time recovery: continuous binlog streaming,
+/// point-in-time restore, and incremental file-backup deltas.
+pub mod db_pitr;
+
 /// Internationalization: locale, catalog, locale negotiation, formatter.
 pub mod i18n;
 /// Observability export: Prometheus metrics, OTLP traces, JSONL logs.
@@ -55,6 +59,12 @@ pub use common::{
 pub use databases::{
     database::Database, engine::DatabaseEngine, error::DatabaseError,
     repository::DatabaseRepository, status::DatabaseStatus,
+};
+pub use db_pitr::{
+    BinlogRange, BinlogSegment, BinlogSink, BinlogStream, BinlogStreamRepository,
+    BinlogStreamStatus, DatabaseLookup, IncrementalBackup, IncrementalMode, IncrementalRepository,
+    LogSeq, LogTailer, PitrError, PitrRepository, PitrRestore, PitrRestoreStatus, ReplayOutcome,
+    RestoreReplayWindow, RestoreTimestamp, StreamTargetId,
 };
 pub use files::{
     error::FileError,
