@@ -262,6 +262,8 @@ pub enum AuditAction {
     AuditPurged,
     /// A GDPR export was generated for a user.
     GdprExportRequested,
+    /// An OS update was applied (security or other).
+    OsUpdateApplied,
 }
 
 impl AuditAction {
@@ -378,6 +380,7 @@ impl AuditAction {
             AuditAction::AuditRetentionChanged => "audit_retention_changed",
             AuditAction::AuditPurged => "audit_purged",
             AuditAction::GdprExportRequested => "gdpr_export_requested",
+            AuditAction::OsUpdateApplied => "os_update_applied",
         }
     }
 }

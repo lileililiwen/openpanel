@@ -100,6 +100,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("service_manager migration");
+        sqlx::query(include_str!("migrations/os_updates/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("os_updates migration");
     }
 
     /// Access the underlying pool.

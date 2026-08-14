@@ -67,6 +67,9 @@ pub mod compliance;
 /// Service manager bounded context: allow-listed systemctl
 /// surface with audited lifecycle actions.
 pub mod service_manager;
+/// OS update management bounded context: package updates,
+/// unattended-upgrades policy, reboot state.
+pub mod os_updates;
 /// Per-site staging slots, sync policies, and atomic promote.
 pub mod site_staging;
 
@@ -117,6 +120,10 @@ pub use compliance::{
 pub use service_manager::{
     DEFAULT_ALLOWLIST, ServiceAction, ServiceActionRecord, ServiceError, ServiceInfo,
     ServiceManagerRepository, ServiceStatus, is_allowed,
+};
+pub use os_updates::{
+    OsUpdateError, OsUpdateRepository, PackageUpdate, RebootState, UpdateHistoryRecord,
+    UpdateKind, UpdatePolicy,
 };
 pub use files::{
     error::FileError,

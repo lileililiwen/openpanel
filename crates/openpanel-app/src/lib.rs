@@ -55,6 +55,9 @@ pub mod compliance;
 /// Service manager bounded context: allow-listed systemctl
 /// surface with audited lifecycle actions.
 pub mod service_manager;
+/// OS update management bounded context: package updates,
+/// unattended-upgrades policy, reboot state.
+pub mod os_updates;
 
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
@@ -136,4 +139,8 @@ pub use compliance::{
 pub use service_manager::{
     ServiceManagerModule, RecordingSystemCtl, ServiceActor, ServiceLister,
     SqliteServiceManagerRepository,
+};
+pub use os_updates::{
+    OsUpdateModule, OsUpdateApplier, OsUpdateLister, PackageManager, RecordingPackageManager,
+    SqliteOsUpdateRepository, UnattendedConfig,
 };
