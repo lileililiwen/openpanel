@@ -74,3 +74,5 @@ pub const CONTAINER_REGISTRY_V001: &str = include_str!("container_registry/V001_
 pub const AI_OPS_V001: &str = include_str!("ai_ops/V001__init.sql");
 /// Compliance: hardening runs, audit retention policy, GDPR exports.
 pub const COMPLIANCE_V001: &str = include_str!("compliance/V001__init.sql");
+/// Service manager: lifecycle action history.
+pub const SERVICE_MANAGER_V001: &str = include_str!("service_manager/V001__init.sql");

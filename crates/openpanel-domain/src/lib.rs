@@ -64,6 +64,9 @@ pub mod ai_ops;
 /// Compliance bounded context: CIS hardening, audit retention,
 /// GDPR export with secret redaction.
 pub mod compliance;
+/// Service manager bounded context: allow-listed systemctl
+/// surface with audited lifecycle actions.
+pub mod service_manager;
 /// Per-site staging slots, sync policies, and atomic promote.
 pub mod site_staging;
 
@@ -110,6 +113,10 @@ pub use compliance::{
     AuditRetentionPolicy, ComplianceError, ComplianceRepository, GdprApiTokenRecord,
     GdprDatabaseRecord, GdprExport, GdprExportPayload, GdprMailRecord, GdprSiteRecord,
     HardeningRule, HardeningRun, REDACTED, RuleOutcome,
+};
+pub use service_manager::{
+    DEFAULT_ALLOWLIST, ServiceAction, ServiceActionRecord, ServiceError, ServiceInfo,
+    ServiceManagerRepository, ServiceStatus, is_allowed,
 };
 pub use files::{
     error::FileError,

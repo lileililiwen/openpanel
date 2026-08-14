@@ -96,6 +96,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("compliance migration");
+        sqlx::query(include_str!("migrations/service_manager/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("service_manager migration");
     }
 
     /// Access the underlying pool.

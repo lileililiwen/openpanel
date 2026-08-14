@@ -52,6 +52,9 @@ pub mod ai_ops;
 /// Compliance bounded context: CIS hardening, audit retention,
 /// GDPR export with secret redaction.
 pub mod compliance;
+/// Service manager bounded context: allow-listed systemctl
+/// surface with audited lifecycle actions.
+pub mod service_manager;
 
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
@@ -129,4 +132,8 @@ pub use ai_ops::{AiOpsModule, AskService, ActionApproval, SqliteAiOpsRepository,
 pub use compliance::{
     ComplianceModule, AuditRetentionService, GdprExporter, HardeningWizard,
     SqliteComplianceRepository, default_profile,
+};
+pub use service_manager::{
+    ServiceManagerModule, RecordingSystemCtl, ServiceActor, ServiceLister,
+    SqliteServiceManagerRepository,
 };
