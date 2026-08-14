@@ -1,0 +1,98 @@
+name: control-menu
+
+on:
+  push:
+    paths:
+      - 'packages/openpanel-menu/**'
+      - 'scripts/install.sh'
+      - 'scripts/dev-menu.sh'
+      - '.github/workflows/control-menu.yml'
+  pull_request:
+    paths:
+      - 'packages/openpanel-menu/**'
+      - 'scripts/install.sh'
+      - 'scripts/dev-menu.sh'
+      - '.github/workflows/control-menu.yml'
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/openpanel-menu
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: packages/openpanel-menu/package-lock.json
+      - name: Install dependencies
+        run: npm install
+      - name: Lint
+        run: npm run lint
+      - name: Test
+        run: npm test
+      - name: Pack smoke
+        run: |
+          tarball=$(npm pack 2>/dev/null | tail -1)
+          size=$(stat -c%s "$tarball")
+          echo "tarball=$tarball size=$size"
+          test "$size" -lt 1048576
+      - name: shellcheck install.sh
+        if: ${{ hashFiles('scripts/install.sh') != '' }}
+        run: |
+          if command -v shellcheck >/dev/null 2>&1; then
+            shellcheck -x packages/openpanel-menu/scripts/install.sh
+          else
+            echo "shellcheck not installed, skipping"
+          fi
+
+  install-debian:
+    runs-on: ubuntu-latest
+    container: debian:12
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run install.sh
+        run: bash packages/openpanel-menu/scripts/install.sh
+
+  install-fedora:
+    runs-on: ubuntu-latest
+    container: fedora:40
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run install.sh
+        run: bash packages/openpanel-menu/scripts/install.sh
+
+  install-arch:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run install.sh
+        run: bash packages/openpanel-menu/scripts/install.sh
+
+  install-alpine:
+    runs-on: ubuntu-latest
+    container: alpine:3.20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run install.sh
+        run: bash packages/openpanel-menu/scripts/install.sh
+
+  install-unsupported:
+    runs-on: ubuntu-latest
+    container: alpine:3.20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Override os-release and assert EX_CONFIG
+        run: |
+          printf 'ID=fakelinux\nVERSION_ID=99\n' > /etc/os-release.fake
+          sudo cp /etc/os-release /etc/os-release.real
+          sudo cp /etc/os-release.fake /etc/os-release
+          set +e
+          bash packages/openpanel-menu/scripts/install.sh
+          code=$?
+          set -e
+          sudo cp /etc/os-release.real /etc/os-release
+          test "$code" -eq 78
