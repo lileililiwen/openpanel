@@ -28,6 +28,8 @@ pub mod monitoring;
 pub mod notifications;
 /// Host firewall and login-abuse routes (`/security`).
 pub mod security;
+/// Per-site staging routes (`/sites/{id}/staging/...`).
+pub mod site_staging;
 /// Sites resource routes (`/sites`).
 pub mod sites;
 /// Curated Software Center routes (`/software`).

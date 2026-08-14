@@ -9,10 +9,11 @@ use openpanel_api::build_router;
 use openpanel_app::{
     AcmeEndpoint, ApiTokenModule, BackupsModule, CronModule, DatabasesModule, DbPitrModule,
     DnsModule, DockerModule, FilesModule, FtpModule, IdentityModule, InMemoryBinlogSink,
-    LogService, LogsModule, MailModule, MonitoringModule, NotificationModule, SecurityModule,
-    SecurityService, SitesModule, SoftwareCenterModule, SslModule, SslPaths, SystemServicesModule,
-    WafModule,
+    InMemoryStagingFilesystem, LogService, LogsModule, MailModule, MonitoringModule,
+    NotificationModule, SecurityModule, SecurityService, SiteStagingModule, SitesModule,
+    SoftwareCenterModule, SslModule, SslPaths, StagingService, SystemServicesModule, WafModule,
     databases::{crypto as db_crypto, repo::SqliteDatabaseRepository},
+    sites::repo::SqliteSiteRepository,
 };
 use openpanel_core::{
     AppContext, Config, JobSupervisor, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
@@ -212,6 +213,21 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .await
         .context("apply PITR migrations")?;
     let pitr_svc = pitr_module.service();
+
+    // Site-staging module: in-memory filesystem layer for the CLI
+    // (no live nginx / rsync in offline mode).
+    let staging_fs: Arc<dyn openpanel_app::StagingFilesystemLayer> =
+        Arc::new(InMemoryStagingFilesystem::new());
+    let staging_sites_repo: Arc<dyn openpanel_domain::SiteRepository> =
+        Arc::new(SqliteSiteRepository::new(pool.clone()));
+    let staging_module =
+        SiteStagingModule::new(&ctx, staging_sites_repo, staging_fs, audit.clone()).await;
+    runner
+        .apply_module(staging_module.name(), &staging_module.migrations())
+        .await
+        .context("apply staging migrations")?;
+    let staging_svc: Arc<StagingService> = staging_module.service();
+    let _ = staging_svc;
     let app = build_router(
         identity_svc.clone(),
         sites_svc.clone(),
@@ -235,6 +251,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         api_token_svc.clone(),
         notification_svc.clone(),
         pitr_svc.clone(),
+        staging_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -259,6 +276,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         api_token_svc,
         notification_svc,
         pitr_svc,
+        staging_svc,
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
@@ -2088,6 +2106,147 @@ pub async fn disable_site(config: Arc<Config>, id: String) -> anyhow::Result<()>
     Ok(())
 }
 
+async fn build_staging(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::StagingService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    use openpanel_app::site_staging;
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
+    let master_key = load_master_key(&config)?;
+    let identity_module = IdentityModule::new(&ctx, master_key).await;
+    let sites_svc = SitesModule::new(&ctx).await.service();
+    let staging_fs: Arc<dyn openpanel_app::StagingFilesystemLayer> =
+        Arc::new(InMemoryStagingFilesystem::new());
+    let sites_repo: Arc<dyn openpanel_domain::SiteRepository> = Arc::new(
+        openpanel_app::sites::repo::SqliteSiteRepository::new(pool.clone()),
+    );
+    let module = SiteStagingModule::new(
+        &ctx,
+        sites_repo,
+        staging_fs,
+        Arc::new(openpanel_core::NoopAuditService),
+    )
+    .await;
+    let _ = sites_svc; // suppress
+    let _ = site_staging::MODULE_NAME; // suppress
+    Ok((module.service(), identity_module.service()))
+}
+
+/// `openpanel site staging create`.
+pub async fn staging_create(
+    config: Arc<Config>,
+    id: String,
+    subdomain: Option<String>,
+) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_staging(config).await?;
+    let caller = identity_svc
+        .list_users()
+        .await?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("caller not found"))?;
+    let site_id = uuid::Uuid::parse_str(&id).context("invalid site id")?;
+    let req = openpanel_app::site_staging::CreateSlotRequest {
+        subdomain,
+        document_root: None,
+        sync_policy: None,
+        php_version: None,
+        schedule: None,
+    };
+    let slot = svc
+        .create_slot(&caller, site_id, req)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "staging slot id={} subdomain={} document_root={} db_name={}",
+        slot.id(),
+        slot.subdomain(),
+        slot.document_root(),
+        slot.db_name()
+    );
+    Ok(())
+}
+
+/// `openpanel site staging sync`.
+pub async fn staging_sync(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_staging(config).await?;
+    let caller = identity_svc
+        .list_users()
+        .await?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("caller not found"))?;
+    let site_id = uuid::Uuid::parse_str(&id).context("invalid site id")?;
+    let slot = svc
+        .sync_snapshot(&caller, site_id)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "snapshot id={:?}",
+        slot.current_snapshot().map(|s| s.as_i64())
+    );
+    Ok(())
+}
+
+/// `openpanel site staging promote`.
+pub async fn staging_promote(
+    config: Arc<Config>,
+    id: String,
+    snapshot: i64,
+    confirmed_at: String,
+) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_staging(config).await?;
+    let caller = identity_svc
+        .list_users()
+        .await?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("caller not found"))?;
+    let site_id = uuid::Uuid::parse_str(&id).context("invalid site id")?;
+    let snapshot =
+        openpanel_domain::SnapshotId::new(snapshot).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let ts: chrono::DateTime<chrono::Utc> = confirmed_at
+        .parse()
+        .with_context(|| format!("invalid RFC 3339 timestamp `{confirmed_at}`"))?;
+    let run = svc
+        .promote(&caller, site_id, snapshot, ts)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "promotion id={} status={} snapshot={}",
+        run.id(),
+        match run.status() {
+            openpanel_domain::PromotionStatus::Pending => "pending",
+            openpanel_domain::PromotionStatus::Promoting => "promoting",
+            openpanel_domain::PromotionStatus::Promoted => "promoted",
+            openpanel_domain::PromotionStatus::RolledBack => "rolled_back",
+            openpanel_domain::PromotionStatus::Failed => "failed",
+        },
+        run.snapshot().as_i64()
+    );
+    Ok(())
+}
+
+/// `openpanel site staging delete`.
+pub async fn staging_delete(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_staging(config).await?;
+    let caller = identity_svc
+        .list_users()
+        .await?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("caller not found"))?;
+    let site_id = uuid::Uuid::parse_str(&id).context("invalid site id")?;
+    svc.delete_slot(&caller, site_id, false)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("destroyed staging for {id}");
+    Ok(())
+}
+
 async fn bootstrap_persistence(
     config: &Arc<Config>,
 ) -> anyhow::Result<(
@@ -2938,15 +3097,17 @@ pub async fn change_database_password(config: Arc<Config>, id: String) -> anyhow
 
 async fn build_pitr(
     config: Arc<Config>,
-) -> anyhow::Result<(Arc<openpanel_app::PitrService>, Arc<openpanel_app::IdentityService>)> {
+) -> anyhow::Result<(
+    Arc<openpanel_app::PitrService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
     let (pool, audit, db) = bootstrap_persistence(&config).await?;
     let ctx = AppContext::new(config.clone(), db, audit.clone());
     let master_key = load_master_key(&config)?;
     let identity_module = IdentityModule::new(&ctx, master_key).await;
     let pitr_db_lookup: Arc<dyn openpanel_domain::DatabaseLookup> =
         Arc::new(SqliteDatabaseRepository::new(pool.clone()));
-    let pitr_sink: Arc<dyn openpanel_app::BinlogSink> =
-        Arc::new(InMemoryBinlogSink::new());
+    let pitr_sink: Arc<dyn openpanel_app::BinlogSink> = Arc::new(InMemoryBinlogSink::new());
     let pitr_module = DbPitrModule::new(
         &ctx,
         pitr_sink,
@@ -2969,7 +3130,11 @@ pub async fn pitr_status(config: Arc<Config>, id: String) -> anyhow::Result<()> 
         .find(|u| u.username().as_str() == "admin")
         .ok_or_else(|| anyhow::anyhow!("caller not found"))?;
     let uuid = uuid::Uuid::parse_str(&id).context("invalid database id")?;
-    match pitr_svc.stream_for(&caller, uuid).await.map_err(anyhow::Error::msg)? {
+    match pitr_svc
+        .stream_for(&caller, uuid)
+        .await
+        .map_err(anyhow::Error::msg)?
+    {
         Some(s) => println!(
             "stream id={} status={} last_flushed={} target={}",
             s.id(),

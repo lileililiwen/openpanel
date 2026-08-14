@@ -60,3 +60,5 @@ pub const I18N_V001: &str = include_str!("i18n/V001__init.sql");
 /// Database point-in-time recovery: binlog streams, restore jobs,
 /// and incremental file-backup deltas.
 pub const DB_PITR_V001: &str = include_str!("db_pitr/V001__init.sql");
+/// Per-site staging slots, snapshots, and promotion runs.
+pub const SITE_STAGING_V001: &str = include_str!("site_staging/V001__init.sql");

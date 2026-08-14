@@ -1075,6 +1075,12 @@ pub enum SiteCommand {
         #[arg(long)]
         id: String,
     },
+    /// Per-site staging subcommands.
+    Staging {
+        /// Staging subcommand.
+        #[command(subcommand)]
+        action: StagingCommand,
+    },
 }
 
 /// Subcommands for managing MySQL databases used by sites.
@@ -1111,6 +1117,52 @@ pub enum DatabaseCommand {
         /// PITR subcommand.
         #[command(subcommand)]
         action: PitrCommand,
+    },
+    /// Per-site staging subcommands.
+    Staging {
+        /// Staging subcommand.
+        #[command(subcommand)]
+        action: StagingCommand,
+    },
+}
+
+/// Subcommands for the `openpanel site staging` family: create
+/// the staging slot, sync a snapshot, promote it to production,
+/// and destroy the slot.
+#[derive(Debug, Subcommand)]
+pub enum StagingCommand {
+    /// Create a staging slot for a site.
+    Create {
+        /// Site id.
+        #[arg(long)]
+        id: String,
+        /// Optional subdomain prefix (default: `staging`).
+        #[arg(long)]
+        subdomain: Option<String>,
+    },
+    /// Take a fresh snapshot of production into staging.
+    Sync {
+        /// Site id.
+        #[arg(long)]
+        id: String,
+    },
+    /// Promote the current staging snapshot to production.
+    Promote {
+        /// Site id.
+        #[arg(long)]
+        id: String,
+        /// Snapshot id to promote.
+        #[arg(long)]
+        snapshot: i64,
+        /// Operator confirmation instant (RFC 3339).
+        #[arg(long)]
+        confirmed_at: String,
+    },
+    /// Destroy the staging slot.
+    Delete {
+        /// Site id.
+        #[arg(long)]
+        id: String,
     },
 }
 

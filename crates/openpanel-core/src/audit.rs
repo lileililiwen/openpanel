@@ -212,6 +212,16 @@ pub enum AuditAction {
     PitrRestoreFailed,
     /// An incremental database backup delta was captured.
     PitrIncrementalCaptured,
+    /// A per-site staging slot was created.
+    StagingSlotCreated,
+    /// A per-site staging slot was deleted.
+    StagingSlotDeleted,
+    /// A staging snapshot was taken.
+    StagingSnapshotTaken,
+    /// A staging snapshot was promoted to live.
+    StagingPromoted,
+    /// A staging promotion was rolled back.
+    StagingPromotionRolledBack,
 }
 
 impl AuditAction {
@@ -303,6 +313,11 @@ impl AuditAction {
             AuditAction::PitrRestorePromoted => "pitr_restore_promoted",
             AuditAction::PitrRestoreFailed => "pitr_restore_failed",
             AuditAction::PitrIncrementalCaptured => "pitr_incremental_captured",
+            AuditAction::StagingSlotCreated => "staging_slot_created",
+            AuditAction::StagingSlotDeleted => "staging_slot_deleted",
+            AuditAction::StagingSnapshotTaken => "staging_snapshot_taken",
+            AuditAction::StagingPromoted => "staging_promoted",
+            AuditAction::StagingPromotionRolledBack => "staging_promotion_rolled_back",
         }
     }
 }
@@ -539,6 +554,11 @@ impl AuditService for SqliteAuditService {
                 "pitr_restore_promoted" => AuditAction::PitrRestorePromoted,
                 "pitr_restore_failed" => AuditAction::PitrRestoreFailed,
                 "pitr_incremental_captured" => AuditAction::PitrIncrementalCaptured,
+                "staging_slot_created" => AuditAction::StagingSlotCreated,
+                "staging_slot_deleted" => AuditAction::StagingSlotDeleted,
+                "staging_snapshot_taken" => AuditAction::StagingSnapshotTaken,
+                "staging_promoted" => AuditAction::StagingPromoted,
+                "staging_promotion_rolled_back" => AuditAction::StagingPromotionRolledBack,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

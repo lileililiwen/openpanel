@@ -9,9 +9,9 @@ mod common;
 mod api_tokens;
 mod backups;
 mod cron;
+mod databases;
 /// Database point-in-time recovery HTTP integration tests.
 mod db_pitr;
-mod databases;
 mod dns;
 mod docker;
 mod files;
@@ -22,6 +22,8 @@ mod mail;
 mod monitoring;
 mod quality;
 mod security;
+/// Per-site staging HTTP integration tests.
+mod site_staging;
 mod sites;
 mod smoke;
 mod software_center;

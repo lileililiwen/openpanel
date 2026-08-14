@@ -20,12 +20,15 @@ use openpanel_app::{
     ApiTokenModule, ApiTokenService, ApplyReport, BackupService, BackupsModule, CronModule,
     CronService, DatabasesModule, DatabasesService, DbPitrModule, DnsModule, DnsService,
     DockerAdapter, DockerModule, DockerService, ExecResult, FilesModule, FilesService, FtpModule,
-    FtpService, IdentityModule, IdentityService, LogService, LogsModule, MailModule, MailService,
-    MonitoringModule, MonitoringService, NotificationModule, NotificationService, PitrService,
-    SecurityModule, SecurityService, SitesModule, SitesService, SoftwareCenterModule,
-    SoftwareCenterService, SslModule, SslPaths, SslService, SystemServicesModule, WafModule,
-    WafService, identity::two_factor::TwoFactorCrypto, security::MemoryFirewall,
-    sites::nginx::NginxPaths, software_center::ArtifactFetcher,
+    FtpService, IdentityModule, IdentityService, InMemoryBinlogSink, InMemoryStagingFilesystem,
+    LogService, LogsModule, MailModule, MailService, MonitoringModule, MonitoringService,
+    NotificationModule, NotificationService, PitrService, SecurityModule, SecurityService,
+    SiteStagingModule, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
+    SslModule, SslPaths, SslService, StagingService, SystemServicesModule, WafModule, WafService,
+    identity::two_factor::TwoFactorCrypto,
+    security::MemoryFirewall,
+    sites::{nginx::NginxPaths, repo::SqliteSiteRepository},
+    software_center::ArtifactFetcher,
 };
 
 #[derive(Default)]
@@ -240,6 +243,8 @@ pub struct TestServer {
     fetched_urls: Arc<Mutex<Vec<String>>>,
     /// Database point-in-time recovery service.
     pitr: Arc<PitrService>,
+    /// Per-site staging service.
+    staging: Arc<StagingService>,
 }
 
 impl TestServer {
@@ -524,6 +529,19 @@ impl TestServer {
         let mail_svc = mail_module.service();
         let software_center_svc = software_center_module.service();
 
+        // Site-staging module: in-memory filesystem layer for tests.
+        let staging_fs: Arc<dyn openpanel_app::StagingFilesystemLayer> =
+            Arc::new(InMemoryStagingFilesystem::new());
+        let staging_sites_repo: Arc<dyn openpanel_domain::SiteRepository> =
+            Arc::new(SqliteSiteRepository::new(pool.clone()));
+        let staging_module =
+            SiteStagingModule::new(&ctx, staging_sites_repo, staging_fs, audit.clone()).await;
+        runner
+            .apply_module(staging_module.name(), &staging_module.migrations())
+            .await
+            .expect("staging migrations");
+        let staging_svc = staging_module.service();
+
         // PITR module: in-memory sink, no engine tailer wired in tests.
         // The PITR service takes a `DatabaseLookup`; we pass the
         // shared SQLite `SqliteDatabaseRepository` (which implements
@@ -566,6 +584,7 @@ impl TestServer {
             api_token_svc.clone(),
             notification_svc.clone(),
             pitr_svc.clone(),
+            staging_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -590,6 +609,7 @@ impl TestServer {
             api_token_svc.clone(),
             notification_svc.clone(),
             pitr_svc.clone(),
+            staging_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -668,6 +688,7 @@ impl TestServer {
             staged_artifacts,
             fetched_urls,
             pitr: pitr_svc,
+            staging: staging_svc,
         }
     }
 
@@ -709,6 +730,11 @@ impl TestServer {
     /// The point-in-time recovery service handle.
     pub fn pitr(&self) -> Arc<openpanel_app::PitrService> {
         self.pitr.clone()
+    }
+
+    /// The per-site staging service handle.
+    pub fn staging(&self) -> Arc<openpanel_app::StagingService> {
+        self.staging.clone()
     }
 
     /// The shared SQLite pool, exposed so integration tests can

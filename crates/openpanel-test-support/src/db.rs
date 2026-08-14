@@ -68,6 +68,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("db_pitr migration");
+        sqlx::query(include_str!("migrations/site_staging/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("site_staging migration");
     }
 
     /// Access the underlying pool.

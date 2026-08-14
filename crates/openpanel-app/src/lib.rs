@@ -28,6 +28,9 @@ pub mod monitoring;
 pub mod notifications;
 pub mod prelude;
 pub mod security;
+/// Per-site staging bounded context: staging slot creation, sync,
+/// and atomic promote.
+pub mod site_staging;
 pub mod sites;
 pub mod software_center;
 pub mod ssl;
@@ -65,6 +68,10 @@ pub use notifications::{NotificationModule, NotificationService};
 /// Re-export the `BinlogSink` trait so composition code can name it.
 pub use openpanel_domain::BinlogSink;
 pub use security::{SecurityModule, SecurityService};
+/// Per-site staging bounded-context module.
+pub use site_staging::{
+    InMemoryStagingFilesystem, SiteStagingModule, StagingFilesystemLayer, StagingService,
+};
 pub use sites::{
     SitesModule,
     nginx::{NginxConfigGenerator, NginxPaths},

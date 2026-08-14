@@ -31,6 +31,8 @@ pub mod notifications;
 pub mod router;
 pub mod security;
 pub mod settings;
+/// Per-site staging web pages.
+pub mod site_staging;
 pub mod sites;
 pub mod software_center;
 pub mod ssl;

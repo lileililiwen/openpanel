@@ -7,7 +7,7 @@ use openpanel_cli::{
     MonitoringCommand, NotificationChannelCommand, NotificationCommand,
     NotificationSubscriptionCommand, PitrCommand, RecoveryCodeCommand, SecurityAllowlistCommand,
     SecurityCommand, SecurityRuleCommand, ServicesCommand, SiteCommand, SoftwareCommand,
-    SslCommand, TokenCommand, TwoFactorCommand, UserCommand, WafCommand, handlers,
+    SslCommand, StagingCommand, TokenCommand, TwoFactorCommand, UserCommand, WafCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -68,6 +68,18 @@ async fn main() -> anyhow::Result<()> {
             SiteCommand::Delete { id } => handlers::delete_site(config, id).await,
             SiteCommand::Enable { id } => handlers::enable_site(config, id).await,
             SiteCommand::Disable { id } => handlers::disable_site(config, id).await,
+            SiteCommand::Staging { action } => match action {
+                StagingCommand::Create { id, subdomain } => {
+                    handlers::staging_create(config, id, subdomain).await
+                }
+                StagingCommand::Sync { id } => handlers::staging_sync(config, id).await,
+                StagingCommand::Promote {
+                    id,
+                    snapshot,
+                    confirmed_at,
+                } => handlers::staging_promote(config, id, snapshot, confirmed_at).await,
+                StagingCommand::Delete { id } => handlers::staging_delete(config, id).await,
+            },
         },
         Command::Waf { action } => match action {
             WafCommand::Rules { site } => handlers::waf_rules(config, site).await,
@@ -196,18 +208,17 @@ async fn main() -> anyhow::Result<()> {
                 handlers::change_database_password(config, id).await
             }
             DatabaseCommand::Pitr { action } => match action {
-                PitrCommand::Status { id } => {
-                    handlers::pitr_status(config, id).await
-                }
-                PitrCommand::Inspect { id } => {
-                    handlers::pitr_inspect(config, id).await
-                }
+                PitrCommand::Status { id } => handlers::pitr_status(config, id).await,
+                PitrCommand::Inspect { id } => handlers::pitr_inspect(config, id).await,
                 PitrCommand::Restore {
                     id,
                     timestamp,
                     confirm,
                 } => handlers::pitr_restore(config, id, timestamp, confirm).await,
             },
+            DatabaseCommand::Staging { .. } => Err(anyhow::anyhow!(
+                "use `openpanel site staging ...`; staging is per-site, not per-database"
+            )),
         },
         Command::File { action } => match action {
             FileCommand::List { site, path } => handlers::file_list(config, site, path).await,

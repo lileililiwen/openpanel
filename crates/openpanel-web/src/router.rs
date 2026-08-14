@@ -20,8 +20,8 @@ use openpanel_app::{
     ApiTokenService, BackupService, CronService, DatabasesService, DnsService, DockerService,
     FilesService, FtpService, IdentityService, LogService, MailService, MonitoringService,
     NotificationService, PitrService, SecurityService, SitesService, SoftwareCenterService,
-    SslService, WafService, identity::TwoFactorService, security::LoginThrottleService,
-    system_services::ServiceManager,
+    SslService, StagingService, WafService, identity::TwoFactorService,
+    security::LoginThrottleService, system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
 use openpanel_domain::{Session, SessionToken, User};
@@ -119,6 +119,8 @@ pub struct WebState {
     pub notifications: Arc<NotificationService>,
     /// Database point-in-time recovery service.
     pub pitr: Arc<PitrService>,
+    /// Per-site staging service.
+    pub staging: Arc<StagingService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -238,6 +240,7 @@ pub fn router(
     api_tokens: Arc<ApiTokenService>,
     notifications: Arc<NotificationService>,
     pitr: Arc<PitrService>,
+    staging: Arc<StagingService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -266,6 +269,7 @@ pub fn router(
         api_tokens,
         notifications,
         pitr,
+        staging,
         csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
@@ -513,6 +517,7 @@ pub fn router(
         .route("/databases/{id}/password", post(databases::change_password))
         .route("/databases/{id}/reveal", post(databases::reveal))
         .route("/databases/{id}/pitr", get(crate::db_pitr::page))
+        .route("/sites/{id}/staging", get(crate::site_staging::page))
         .route("/assets/htmx.min.js", get(assets::htmx_min_js))
         .route("/assets/app.css", get(assets::app_css))
         .layer(from_fn_with_state(identity, session_middleware))

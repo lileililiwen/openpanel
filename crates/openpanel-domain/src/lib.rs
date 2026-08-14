@@ -42,6 +42,8 @@ pub mod waf;
 /// Database point-in-time recovery: continuous binlog streaming,
 /// point-in-time restore, and incremental file-backup deltas.
 pub mod db_pitr;
+/// Per-site staging slots, sync policies, and atomic promote.
+pub mod site_staging;
 
 /// Internationalization: locale, catalog, locale negotiation, formatter.
 pub mod i18n;
@@ -86,6 +88,10 @@ pub use identity::{
 pub use monitoring::{
     Alert, AlertRule, DiskReading, MetricKind, MetricSample, MonitoringError, NetworkReading,
     SnapshotRepository, SystemSnapshot, Unit,
+};
+pub use site_staging::{
+    PromotionRepository, PromotionRun, PromotionStatus, SiteStagingError, SnapshotId, StagingSlot,
+    StagingSlotRepository, StagingSnapshotRepository, SyncMode, SyncPolicy,
 };
 pub use sites::{error::SiteError, repository::SiteRepository, site::Site, status::SiteStatus};
 pub use ssl::{

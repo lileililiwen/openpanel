@@ -7,8 +7,8 @@ use openpanel_app::{
     ApiTokenService, BackupService, CronService, DatabasesService, DnsService, DockerService,
     FilesService, FtpService, IdentityService, LogService, MailService, MonitoringService,
     NotificationService, PitrService, SecurityService, SitesService, SoftwareCenterService,
-    SslService, WafService, identity::TwoFactorService, security::LoginThrottleService,
-    system_services::ServiceManager,
+    SslService, StagingService, WafService, identity::TwoFactorService,
+    security::LoginThrottleService, system_services::ServiceManager,
 };
 
 use crate::{
@@ -21,9 +21,9 @@ use crate::{
         identity::router as identity_router, logs::router as logs_router,
         mail::router as mail_router, monitoring::router as monitoring_router,
         notifications::router as notifications_router, security::router as security_router,
-        sites::router as sites_router, software_center::router as software_center_router,
-        ssl::router as ssl_router, system_services::router as system_services_router,
-        waf::router as waf_router,
+        site_staging::router as site_staging_router, sites::router as sites_router,
+        software_center::router as software_center_router, ssl::router as ssl_router,
+        system_services::router as system_services_router, waf::router as waf_router,
     },
 };
 
@@ -55,6 +55,7 @@ pub fn build_router(
     api_tokens: Arc<ApiTokenService>,
     notifications: Arc<NotificationService>,
     pitr: Arc<PitrService>,
+    staging: Arc<StagingService>,
 ) -> Router {
     let auth_state = ApiAuthState {
         identity: identity.clone(),
@@ -70,6 +71,7 @@ pub fn build_router(
         .nest("/sites", sites_router(sites))
         .nest("/sites", waf_router(waf))
         .nest("/sites", ftp_router(ftp))
+        .nest("/sites", site_staging_router(staging))
         .nest("/databases", databases_router(databases))
         .nest("/files", files_router(files.clone()))
         .nest("/ssl", ssl_router(ssl))
