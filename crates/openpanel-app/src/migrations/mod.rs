@@ -55,3 +55,5 @@ pub const FTP_V001: &str = include_str!("ftp/V001__init.sql");
 pub const API_TOKENS_V001: &str = include_str!("api_tokens/V001__init.sql");
 /// Durable notification channels, subscriptions, events, and deliveries.
 pub const NOTIFICATIONS_V001: &str = include_str!("notifications/V001__init.sql");
+/// Per-user locale preferences and the signed translation store.
+pub const I18N_V001: &str = include_str!("i18n/V001__init.sql");

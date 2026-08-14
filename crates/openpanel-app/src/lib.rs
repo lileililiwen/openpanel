@@ -14,6 +14,9 @@ pub mod dns;
 pub mod docker;
 pub mod files;
 pub mod ftp;
+/// Internationalization bounded context: `LocaleService`, catalog
+/// resolution, locale-aware formatting, and per-user preferences.
+pub mod i18n;
 pub mod identity;
 pub mod logs;
 pub mod mail;
@@ -42,6 +45,9 @@ pub use ftp::{
     ChrootStorage, CreateFtpAccount, CreatedFtpAccount, FtpAccountView, FtpAuthenticator,
     FtpModule, FtpServerConfig, FtpServerTask, FtpService, FtpSessionRegistry, SqliteFtpRepository,
     UpdateFtpAccount,
+};
+pub use i18n::{
+    I18nAppError, LocaleService, SqliteLocaleUserPrefsRepository, TranslationEntry, default_catalog,
 };
 pub use identity::{IdentityModule, service::IdentityService};
 pub use logs::{LogService, LogsModule};

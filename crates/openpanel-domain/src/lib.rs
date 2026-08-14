@@ -22,6 +22,8 @@ pub mod docker;
 pub mod files;
 /// Per-site FTP accounts, limits, and chroot path policy.
 pub mod ftp;
+/// Internationalization: locale, catalog, locale negotiation, formatter.
+pub mod i18n;
 pub mod identity;
 pub mod logs;
 /// Hosted mail domains, addresses, quotas, aliases, and relay policy.
