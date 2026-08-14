@@ -1,0 +1,38 @@
+name: file-length
+
+on:
+  push:
+    paths:
+      - 'crates/**/*.rs'
+      - 'lint-extra.toml'
+      - 'scripts/check-file-length.sh'
+      - 'scripts/install-lint-tools.sh'
+      - 'Makefile'
+      - '.github/workflows/file-length.yml'
+  pull_request:
+    paths:
+      - 'crates/**/*.rs'
+      - 'lint-extra.toml'
+      - 'scripts/check-file-length.sh'
+      - 'scripts/install-lint-tools.sh'
+      - 'Makefile'
+      - '.github/workflows/file-length.yml'
+
+jobs:
+  file-length:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-file-length-${{ hashFiles('Cargo.lock') }}
+      - name: Install lint tools
+        run: make install-lint-tools
+      - name: Run file-length gate
+        run: make file-length

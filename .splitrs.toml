@@ -1,0 +1,20 @@
+# .splitrs.toml — auto-refactor plan for over-threshold files.
+#
+# Read by `splitrs` (a Rust-AST-based file splitter). The same
+# config is consumed by `make split FILE=<path>` so contributors
+# and CI see the same plan.
+
+max_lines = 850
+max_impl_lines = 400
+split_impl_blocks = true
+preserve_comments = true
+format_output = true
+
+# Splitting convention: `<name>_types.rs` for type-only modules,
+# `<name>_impl.rs` for method-heavy modules. Keeps `lib.rs` as
+# the public re-export surface.
+naming = "underscore"
+
+[output]
+dir = "src"
+preserve_tree = true

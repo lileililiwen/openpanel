@@ -10,6 +10,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 toml = "0.8"
+glob = "0.3"
 thiserror = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
@@ -24,6 +25,9 @@ axum = { workspace = true }
 clap = { workspace = true }
 
 openpanel-domain = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
 
 [lints]
 workspace = true

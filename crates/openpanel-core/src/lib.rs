@@ -22,6 +22,8 @@ pub mod jobs;
 pub mod migration;
 /// Module trait and registry for the composition root.
 pub mod module;
+/// Per-file line-count thresholds and exclude glob list.
+pub mod quality;
 /// Tracing subscriber initialization.
 pub mod tracing_init;
 
@@ -41,5 +43,7 @@ pub use jobs::{BackgroundTask, Job, JobSupervisor, SupervisorHandle};
 pub use migration::{Migration, MigrationRecord, MigrationRunner};
 /// Re-export of the module trait, registry, and context types.
 pub use module::{AppContext, Module, ModuleRegistry, RouteMount};
+/// Re-export of the file-length threshold value object.
+pub use quality::{DEFAULT_HARD_LIMIT, DEFAULT_SOFT_LIMIT, FileLengthThresholds, LintExtraFile};
 /// Re-export of the tracing initializer.
 pub use tracing_init::init_tracing;

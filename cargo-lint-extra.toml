@@ -1,0 +1,59 @@
+# cargo-lint-extra configuration for OpenPanel.
+#
+# Read by `cargo lint-extra` (via `--config` or auto-discovery of
+# `cargo-lint-extra.toml` at the repo root) and by the
+# `print-thresholds` binary in `openpanel-core` (via
+# `FileLengthThresholds::load`). Both the shell script and the
+# Rust app therefore share one source of truth.
+#
+# Only `file-length` is enabled here; the spec for
+# `add-file-length-pipeline` is specifically about per-file line
+# counts. Line-length, inline-comments, etc. are governed by
+# separate changes (see `openspec/changes/` for `add-line-*` etc.).
+
+[rules.file-length]
+soft_limit = 850
+hard_limit = 1000
+
+[global]
+# Globs to skip. Each entry MUST be commented with the reason
+# (generated / vendored / intentionally large fixture / pre-existing
+# baseline violation that a follow-up change will address).
+exclude = [
+  # Cargo build output.
+  "**/target/**",
+  # npm install output (e.g. packages/openpanel-menu/node_modules).
+  "**/node_modules/**",
+  # Git internals.
+  "**/.git/**",
+  # TypeScript build output.
+  "**/dist/**",
+  # Proptest auto-generated regression cases.
+  "**/proptest-regressions/**",
+  # Hand-written fixtures used by integration tests; their
+  # length is part of the test contract.
+  "**/tests/fixtures/**",
+  # Snapshot files (intentionally long).
+  "**/snapshot/**",
+  # Pre-existing baseline violations (> 1000 lines). The gate
+  # catches NEW violations but excludes the current baseline so
+  # `make check` stays green. Each excluded file is followed by
+  # the change that will refactor it (or "TBD" if no change
+  # has been opened yet).
+  "crates/openpanel-cli/src/handlers.rs",                  # TBD: refactor into per-domain modules
+  "crates/openpanel-app/src/software_center/mod.rs",       # TBD
+  "crates/openpanel-web/src/software_center.rs",           # TBD
+  "crates/openpanel-app/src/software_center/store.rs",     # TBD
+  "crates/openpanel-app/src/software_center/seed.rs",      # TBD
+  "crates/openpanel-app/src/identity/two_factor.rs",       # TBD
+  "crates/openpanel-domain/src/identity/factor.rs",        # TBD
+  "crates/openpanel-cli/src/commands.rs",                  # TBD
+  "crates/openpanel-domain/src/notifications/mod.rs",      # TBD
+  "crates/openpanel-app/src/backups/service.rs",           # TBD
+  "crates/openpanel-web/src/files.rs",                     # TBD
+  "crates/openpanel-test-support/src/server.rs",           # TBD (just over soft)
+  "crates/openpanel-app/tests/software_center.rs",         # TBD
+  "tests/integration/identity.rs",                         # TBD
+  "tests/integration/software_center.rs",                  # TBD
+  "tests/integration/web_ui.rs",                           # TBD
+]

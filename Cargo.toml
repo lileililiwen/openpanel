@@ -183,6 +183,9 @@ codegen-units = 1
 strip = "symbols"
 opt-level = 3
 
+[workspace.metadata.lint-extra]
+config = "lint-extra.toml"
+
 # Workspace-wide lints. See `clippy.toml` and `Agents.md` § Quality.
 [workspace.lints.rust]
 unsafe_code = "forbid"
