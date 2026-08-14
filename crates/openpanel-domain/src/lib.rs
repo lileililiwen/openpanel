@@ -58,6 +58,9 @@ pub mod iac;
 /// Database point-in-time recovery: continuous binlog streaming,
 /// point-in-time restore, and incremental file-backup deltas.
 pub mod db_pitr;
+/// AI Ops bounded context: conversational session, tool-call
+/// allowlist, proposed/approved/executed/denied actions.
+pub mod ai_ops;
 /// Per-site staging slots, sync policies, and atomic promote.
 pub mod site_staging;
 
@@ -95,6 +98,10 @@ pub use db_pitr::{
     BinlogStreamStatus, DatabaseLookup, IncrementalBackup, IncrementalMode, IncrementalRepository,
     LogSeq, LogTailer, PitrError, PitrRepository, PitrRestore, PitrRestoreStatus, ReplayOutcome,
     RestoreReplayWindow, RestoreTimestamp, StreamTargetId,
+};
+pub use ai_ops::{
+    AiAction, AiActionId, AiActionStatus, AiMessage, AiOpsError, AiOpsRepository, AiSession,
+    AiSessionId, MessageRole, ToolCallAllowlist, ToolKind, ToolName, ToolResult, ToolSpec,
 };
 pub use files::{
     error::FileError,

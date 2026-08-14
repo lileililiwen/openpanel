@@ -88,6 +88,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("container_registry migration");
+        sqlx::query(include_str!("migrations/ai_ops/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("ai_ops migration");
     }
 
     /// Access the underlying pool.

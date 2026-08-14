@@ -244,6 +244,14 @@ pub enum AuditAction {
     RegistryImagePushed,
     /// A container image was pruned by the retention policy.
     RegistryImagePruned,
+    /// A user posted a question to the AI Ops agent.
+    AiAsked,
+    /// The AI Ops agent invoked an allowlisted tool.
+    AiToolCalled,
+    /// An AI Ops write action was approved and executed.
+    AiActionExecuted,
+    /// An AI Ops write action was denied by a human approver.
+    AiActionDenied,
 }
 
 impl AuditAction {
@@ -351,6 +359,10 @@ impl AuditAction {
             AuditAction::CollaboratorRevoked => "collaborator_revoked",
             AuditAction::RegistryImagePushed => "registry_image_pushed",
             AuditAction::RegistryImagePruned => "registry_image_pruned",
+            AuditAction::AiAsked => "ai_asked",
+            AuditAction::AiToolCalled => "ai_tool_called",
+            AuditAction::AiActionExecuted => "ai_action_executed",
+            AuditAction::AiActionDenied => "ai_action_denied",
         }
     }
 }

@@ -70,3 +70,5 @@ pub const PLUGIN_MARKETPLACE_V001: &str = include_str!("plugin_marketplace/V001_
 pub const COLLABORATORS_V001: &str = include_str!("collaborators/V001__init.sql");
 /// Container registry initial schema.
 pub const CONTAINER_REGISTRY_V001: &str = include_str!("container_registry/V001__init.sql");
+/// AI Ops sessions, messages, and actions.
+pub const AI_OPS_V001: &str = include_str!("ai_ops/V001__init.sql");

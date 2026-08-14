@@ -46,6 +46,9 @@ pub mod software_center;
 pub mod ssl;
 pub mod system_services;
 pub mod waf;
+/// AI Ops bounded context: conversational agent with tool-call
+/// allowlist and human-in-the-loop approval gate.
+pub mod ai_ops;
 
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
@@ -119,3 +122,4 @@ pub use ssl::{
 };
 pub use system_services::{ServiceManager, SystemServicesModule};
 pub use waf::{WafModule, WafService};
+pub use ai_ops::{AiOpsModule, AskService, ActionApproval, SqliteAiOpsRepository, ToolExecutor, default_allowlist};
