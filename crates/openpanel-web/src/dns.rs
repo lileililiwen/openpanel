@@ -24,18 +24,18 @@ pub async fn page(State(state): State<WebState>, WebUser(user, session): WebUser
             @for provider in providers {
                 li {
                     (provider.name) " (" (provider.kind) ")"
-                    form method="post" action=(format!("/dns/providers/{}/sync", provider.id)) {
+                    form method="post" action=(format!("/dns/providers/{}/sync", provider.id)) class="form form-inline" {
                         input type="hidden" name="_csrf" value=(csrf);
                         button { "Synchronize" }
                     }
                 }
             }
         }
-        form method="post" action="/dns/providers" {
+        form method="post" action="/dns/providers" class="form" {
             input type="hidden" name="_csrf" value=(csrf);
-            input name="kind" placeholder="cloudflare";
-            input name="name" placeholder="Account name";
-            input type="password" name="credential";
+            label { "Provider kind" input name="kind" placeholder="cloudflare"; }
+            label { "Account name" input name="name" placeholder="Account name"; }
+            label { "API credential" input type="password" name="credential"; }
             button { "Add provider" }
         }
         h2 { "Zones" }
@@ -210,7 +210,7 @@ pub async fn zone_page(
             @for record in records {
                 li {
                     (record.name.as_str()) " " (record.data.to_string())
-                    form method="post" action=(format!("/dns/zones/{id}/records/{}/update", record.remote_id)) {
+                    form method="post" action=(format!("/dns/zones/{id}/records/{}/update", record.remote_id)) class="form form-inline-row" {
                         input type="hidden" name="_csrf" value=(csrf);
                         input type="hidden" name="name" value=(record.name.as_str());
                         input type="hidden" name="kind" value=(record_kind_name(record.data.kind()));
@@ -219,7 +219,7 @@ pub async fn zone_page(
                         input type="hidden" name="expected_version" value=(record.remote_version.as_str());
                         button { "Update" }
                     }
-                    form method="post" action=(format!("/dns/zones/{id}/records/{}/delete", record.remote_id)) {
+                    form method="post" action=(format!("/dns/zones/{id}/records/{}/delete", record.remote_id)) class="form form-inline" {
                         input type="hidden" name="_csrf" value=(csrf);
                         input type="hidden" name="expected_version" value=(record.remote_version.as_str());
                         button { "Delete" }
@@ -227,16 +227,16 @@ pub async fn zone_page(
                 }
             }
         }
-        form method="post" action=(format!("/dns/zones/{id}/records")) {
+        form method="post" action=(format!("/dns/zones/{id}/records")) class="form form-grid" {
             input type="hidden" name="_csrf" value=(csrf);
             input type="hidden" name="expected_version" value=(zone.remote_version.as_str());
-            input name="name";
-            input name="kind";
-            input name="value";
-            input name="ttl" value="300";
+            label { "Name" input name="name"; }
+            label { "Kind" input name="kind"; }
+            label { "Value" input name="value"; }
+            label { "TTL" input name="ttl" value="300"; }
             button { "Add record" }
         }
-        form method="post" action=(format!("/dns/zones/{id}/check")) {
+        form method="post" action=(format!("/dns/zones/{id}/check")) class="form form-inline" {
             input type="hidden" name="_csrf" value=(csrf);
             button { "Check propagation" }
         }

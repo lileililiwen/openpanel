@@ -32,7 +32,17 @@ pub async fn page(State(state): State<WebState>, WebUser(user, session): WebUser
 /// Render plan creation form.
 pub async fn new_form(State(state): State<WebState>, WebUser(user, session): WebUser) -> Response {
     let csrf = state.csrf.token_for(session.id());
-    let content = html! {h1{"Create backup plan"}form method="post" action="/backups/plans"{(crate::layout::csrf_field(&csrf))input name="name" required;input name="schedule" value="0 2 * * *";input name="timezone" value="UTC";input name="retention_copies" type="number" value="3";button type="submit"{"Create"}}};
+    let content = html! {
+        h1 { "Create backup plan" }
+        form method="post" action="/backups/plans" class="form" {
+            (crate::layout::csrf_field(&csrf))
+            label { "Name" input name="name" required; }
+            label { "Schedule (cron expression)" input name="schedule" value="0 2 * * *"; }
+            label { "Timezone" input name="timezone" value="UTC"; }
+            label { "Retention copies" input name="retention_copies" type="number" value="3" min="1"; }
+            button type="submit" { "Create" }
+        }
+    };
     state
         .render_shell(&user, &csrf, "/backups/new", content)
         .await

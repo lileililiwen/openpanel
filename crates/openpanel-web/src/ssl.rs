@@ -412,14 +412,14 @@ pub fn issue_form(csrf: &str, error: Option<&str>, values: Option<&SafeForm<'_>>
         }
         form method="post" action="/ssl/issue" class="form" {
             (csrf_field(csrf))
-            label { "Source" }
-            select name="source" {
-                @if source == "acme" { option value="acme" selected { "ACME (Let's Encrypt)" } } @else { option value="acme" { "ACME (Let's Encrypt)" } }
-                @if source == "manual" { option value="manual" selected { "Manual PEM upload" } } @else { option value="manual" { "Manual PEM upload" } }
-                @if source == "self_signed" { option value="self_signed" selected { "Self-signed" } } @else { option value="self_signed" { "Self-signed" } }
+            label { "Source"
+                select name="source" {
+                    @if source == "acme" { option value="acme" selected { "ACME (Let's Encrypt)" } } @else { option value="acme" { "ACME (Let's Encrypt)" } }
+                    @if source == "manual" { option value="manual" selected { "Manual PEM upload" } } @else { option value="manual" { "Manual PEM upload" } }
+                    @if source == "self_signed" { option value="self_signed" selected { "Self-signed" } } @else { option value="self_signed" { "Self-signed" } }
+                }
             }
-            label { "Domain" }
-            input type="text" name="domain" value=(domain) required;
+            label { "Domain" input type="text" name="domain" value=(domain) required; }
             @if source == "acme" {
                 label class="checkbox" {
                     input type="checkbox" name="production" checked[production];
@@ -427,16 +427,12 @@ pub fn issue_form(csrf: &str, error: Option<&str>, values: Option<&SafeForm<'_>>
                 }
             }
             @if source == "self_signed" {
-                label { "Valid for (days)" }
-                input type="number" name="valid_for_days" value=(valid_for_days) min="1" max="3650";
+                label { "Valid for (days)" input type="number" name="valid_for_days" value=(valid_for_days) min="1" max="3650"; }
             }
             @if source == "manual" {
-                label { "Certificate (PEM)" }
-                textarea name="cert_pem" rows="6" required {}
-                label { "Chain (PEM, optional)" }
-                textarea name="chain_pem" rows="4" {}
-                label { "Private key (PEM)" }
-                textarea name="key_pem" rows="6" required {}
+                label { "Certificate (PEM)" textarea name="cert_pem" rows="6" required {} }
+                label { "Chain (PEM, optional)" textarea name="chain_pem" rows="4" {} }
+                label { "Private key (PEM)" textarea name="key_pem" rows="6" required {} }
             }
             button type="submit" { "Issue" }
         }
@@ -460,11 +456,11 @@ pub fn detail_section(cert: &Certificate, csrf: &str) -> Markup {
                 a href="/ssl" { "Back to list" }
             }
             section class="actions" {
-                form method="post" action=(format!("/ssl/{}/renew", cert.domain)) class="inline" {
+                form method="post" action=(format!("/ssl/{}/renew", cert.domain)) class="form form-inline" {
                     (csrf_field(csrf))
                     button type="submit" { "Force renew" }
                 }
-                form method="post" action=(format!("/ssl/{}/revoke", cert.domain)) class="inline" {
+                form method="post" action=(format!("/ssl/{}/revoke", cert.domain)) class="form form-inline" {
                     (csrf_field(csrf))
                     button type="submit" class="danger" { "Revoke + delete" }
                 }

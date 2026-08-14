@@ -14,6 +14,10 @@ pub mod assets;
 /// Audit log route stubs.
 pub mod audit;
 pub mod backups;
+/// Per-site collaborator web page.
+pub mod collaborators;
+/// Container registry web page.
+pub mod container_registry;
 pub mod cron;
 pub mod csrf;
 pub mod dashboard;
@@ -30,6 +34,8 @@ pub mod logs;
 pub mod mail;
 pub mod monitoring;
 pub mod notifications;
+/// Plugin marketplace web page.
+pub mod plugin_marketplace;
 pub mod router;
 pub mod security;
 pub mod settings;
@@ -39,17 +45,15 @@ pub mod sites;
 pub mod software_center;
 pub mod ssl;
 pub mod system_services;
-/// Per-site collaborator web page.
-pub mod collaborators;
-/// Container registry web page.
-pub mod container_registry;
-/// Plugin marketplace web page.
-pub mod plugin_marketplace;
 /// String-table stub used by every template.
 pub mod t;
 pub mod two_factor;
 pub mod users;
 /// Per-site WAF editor page.
 pub mod waf;
+/// Static-asset contract assertions for the web UI styling
+/// OpenSpec change (token-only styling, mobile-first layout,
+/// focus ring, etc.).
+pub mod web_ui_styling;
 
 pub use router::{WebRuntime, WebState, router};

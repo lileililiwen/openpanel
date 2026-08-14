@@ -142,7 +142,7 @@ async fn render(
         h1 { "Web application firewall" }
         p { "Typed rules are compiled into the managed nginx site configuration and validated before activation." }
         @if let Some(notice) = notice { p class="banner banner--ok" { (notice) } }
-        form method="post" action=(format!("/sites/{id}/waf")) {
+        form method="post" action=(format!("/sites/{id}/waf")) class="form" {
             (csrf_field(csrf))
             label { "Version" input type="number" min="1" name="version" value=(set.version()); }
             label { "Default action" select name="default_action" {
@@ -156,7 +156,7 @@ async fn render(
         h2 { "Rule hits" }
         @if hits.is_empty() { p { "No rule hits recorded." } } @else { ul { @for hit in hits { li { (hit.kind) ": " (hit.count) } } } }
         h2 { "Test one rule" }
-        form method="post" action=(format!("/sites/{id}/waf/test")) {
+        form method="post" action=(format!("/sites/{id}/waf/test")) class="form" {
             (csrf_field(csrf))
             label { "Rule (strict JSON)" textarea name="rule_json" rows="8" { "{}" } }
             label { "Request (strict JSON)" textarea name="request_json" rows="6" { r#"{"path":"/","method":"GET","user_agent":"Browser","country":null}"# } }

@@ -132,7 +132,7 @@ fn content(tokens: &[ApiTokenMetadata], csrf: &str, plaintext: Option<&str>) -> 
                 code { (value) }
             }
         }
-        form method="post" action="/settings/tokens" {
+        form method="post" action="/settings/tokens" class="form" {
             (csrf_field(csrf))
             label { "Label" input name="label" required maxlength="120"; }
             label { "Scopes (comma separated)" input name="scopes" required placeholder="sites:read"; }
@@ -151,11 +151,11 @@ fn content(tokens: &[ApiTokenMetadata], csrf: &str, plaintext: Option<&str>) -> 
                         td { @if token.revoked_at.is_some() { "revoked" } @else { "active" } }
                         td {
                             @if token.revoked_at.is_none() {
-                                form method="post" action=(format!("/settings/tokens/{}/rotate", token.id)) {
+                                form method="post" action=(format!("/settings/tokens/{}/rotate", token.id)) class="form form-inline" {
                                     (csrf_field(csrf))
                                     button type="submit" { "Rotate" }
                                 }
-                                form method="post" action=(format!("/settings/tokens/{}/revoke", token.id)) {
+                                form method="post" action=(format!("/settings/tokens/{}/revoke", token.id)) class="form form-inline" {
                                     (csrf_field(csrf))
                                     button type="submit" { "Revoke" }
                                 }

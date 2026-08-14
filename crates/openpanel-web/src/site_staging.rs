@@ -24,14 +24,12 @@ pub async fn page(State(state): State<WebState>, Path(site_id): Path<Uuid>) -> R
                 code { "staging.<primary_domain>" }
                 " and shares the production PHP runtime."
             }
-            form method="post" action={ "/api/v1/sites/" (site_id) "/staging/sync" } {
+            form method="post" action={ "/api/v1/sites/" (site_id) "/staging/sync" } class="form form-inline" {
                 button type="submit" { "Take snapshot" }
             }
-            form method="post" action={ "/api/v1/sites/" (site_id) "/staging/promote" } {
-                label { "Snapshot id: " input type="number" name="snapshot" min="1" {} }
-                label { "Confirmed at (RFC 3339): "
-                    input type="text" name="confirmed_at" required="true" {}
-                }
+            form method="post" action={ "/api/v1/sites/" (site_id) "/staging/promote" } class="form" {
+                label { "Snapshot id" input type="number" name="snapshot" min="1" required; }
+                label { "Confirmed at (RFC 3339)" input type="text" name="confirmed_at" required; }
                 button type="submit" { "Promote" }
             }
         }

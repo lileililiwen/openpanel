@@ -31,10 +31,8 @@ pub async fn page(State(state): State<WebState>, Path(database_id): Path<Uuid>) 
                 @if r.empty {
                     p class="muted" { "No binlog segments have been streamed yet." }
                 } @else {
-                    form method="post" action={ "/api/v1/backups/databases/" (database_id) "/pitr/restore" } {
-                        label { "Restore to (RFC 3339): "
-                            input type="text" name="timestamp" required="true" {}
-                        }
+                    form method="post" action={ "/api/v1/backups/databases/" (database_id) "/pitr/restore" } class="form" {
+                        label { "Restore to (RFC 3339)" input type="text" name="timestamp" required; }
                         button type="submit" { "Request restore" }
                     }
                 }

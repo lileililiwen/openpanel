@@ -121,7 +121,7 @@ async fn render(
         h1 { "Containers" }
         p class="banner banner--warning" { "Forbidden capabilities, root users, unsafe mounts, and untrusted images are rejected before the daemon is contacted." }
         @if let Some(notice) = notice { p class="banner banner--ok" { (notice) } }
-        form method="post" action="/docker" {
+        form method="post" action="/docker" class="form" {
             (csrf_field(csrf))
             label { "Container specification (strict JSON)" textarea name="spec_json" rows="12" { "{}" } }
             button type="submit" { "Create container" }
@@ -132,7 +132,7 @@ async fn render(
                 (row.spec.name) " — " (row.status) " "
                 a href=(format!("/docker/{}/logs", row.spec.id)) { "Logs" }
                 @for action in ["start", "stop", "restart", "remove"] {
-                    form method="post" action=(format!("/docker/{}/{action}", row.spec.id)) {
+                    form method="post" action=(format!("/docker/{}/{action}", row.spec.id)) class="form form-inline" {
                         (csrf_field(csrf)) button type="submit" { (action) }
                     }
                 }

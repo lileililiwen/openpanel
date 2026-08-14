@@ -1,21 +1,37 @@
-/* OpenPanel minimal shell stylesheet */
+/* OpenPanel minimal shell stylesheet.
+ *
+ * Two layers of variables:
+ *
+ *   --op-*   — design-token vocabulary from tokens.css. Every new
+ *              CSS rule MUST source values from --op-*; literal
+ *              colours, spacings, and font families are forbidden
+ *              here. The CI scan enforces this.
+ *   legacy   — `--bg`, `--panel`, `--border`, `--text`, `--muted`,
+ *              `--accent`. Aliased to the tokens so the existing
+ *              pre-token rules continue to work and the
+ *              light-theme switch keeps functioning.
+ */
 
 :root {
-  --bg: #0f1420;
-  --panel: #171e2e;
-  --border: #263043;
-  --text: #e6e9f0;
-  --muted: #8b93a7;
-  --accent: #4f8cff;
+  --bg: var(--op-color-bg);
+  --panel: var(--op-color-surface);
+  --border: var(--op-color-border);
+  --text: var(--op-color-fg);
+  --muted: var(--op-color-fg-muted);
+  --accent: var(--op-color-accent);
 }
 
 * { box-sizing: border-box; }
 
+html { font-family: var(--op-font-family); }
+
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: var(--op-font-family);
   background: var(--bg);
   color: var(--text);
+  font-size: var(--op-font-size-md);
+  line-height: var(--op-line-height);
 }
 
 html[data-theme="light"] {
@@ -27,11 +43,7 @@ html[data-theme="light"] {
   --accent: #2869dc;
 }
 
-.layout {
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  min-height: 100vh;
-}
+/* .layout is defined under the responsive section below (mobile-first). */
 
 .nav-disclosure {
   min-width: 0;
@@ -39,19 +51,22 @@ html[data-theme="light"] {
   border-right: 1px solid var(--border);
 }
 
-.nav-disclosure > summary { display: none; }
+/* .nav-disclosure > summary { display: none; } — see the 640 px
+   breakpoint below for the desktop reset. */
 
+/* .sidebar inner layout. Outer layout + .sidebar are defined under
+   the responsive section below (mobile-first). */
 .sidebar {
-  padding: 1rem 0.5rem;
+  padding: var(--op-space-4) var(--op-space-2);
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--op-space-1);
 }
 
 .nav-section h2 {
-  margin: 1rem 0.9rem 0.35rem;
+  margin: var(--op-space-4) var(--op-space-3) var(--op-space-1);
   color: var(--muted);
-  font-size: 0.72rem;
+  font-size: var(--op-font-size-xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -63,8 +78,56 @@ html[data-theme="light"] {
 .sidebar a {
   color: var(--muted);
   text-decoration: none;
-  padding: 0.6rem 0.9rem;
-  border-radius: 6px;
+  padding: var(--op-space-2) var(--op-space-3);
+  border-radius: var(--op-radius-md);
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Plain-element baselines — beat UA defaults with tokenised styling.
+   Specific rules (`.sidebar a`, `.btn`, `.alerts ul`, etc.) still win
+   because of their higher specificity.  */
+a {
+  color: var(--op-color-accent);
+  text-decoration: none;
+  transition: color var(--op-duration-fast) var(--op-ease);
+}
+
+a:hover {
+  color: var(--op-color-accent-strong);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+a:focus-visible {
+  outline: 2px solid var(--op-color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--op-radius-sm);
+}
+
+ul,
+ol {
+  margin-block: var(--op-space-3);
+  padding-inline-start: var(--op-space-6);
+  list-style: none;
+}
+
+ul ul,
+ol ul,
+ul ol,
+ol ol {
+  margin-block: var(--op-space-2);
+  padding-inline-start: var(--op-space-4);
+}
+
+li::marker {
+  color: var(--op-color-fg-muted);
+}
+
+code, kbd, pre, samp {
+  font-family: var(--op-font-family-mono);
+  font-size: 0.95em;
 }
 
 .sidebar a:hover { color: var(--text); background: rgba(79, 140, 255, 0.1); }
@@ -81,9 +144,11 @@ html[data-theme="light"] {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.8rem 1.5rem;
+  padding: var(--op-space-3) var(--op-space-4);
   border-bottom: 1px solid var(--border);
   background: var(--panel);
+  gap: var(--op-space-3);
+  flex-wrap: wrap;
 }
 
 .topbar .user { font-weight: 600; }
@@ -92,145 +157,213 @@ html[data-theme="light"] {
   background: none;
   border: 1px solid var(--border);
   color: var(--text);
-  padding: 0.4rem 0.9rem;
-  border-radius: 6px;
+  padding: var(--op-space-2) var(--op-space-3);
+  border-radius: var(--op-radius-md);
   cursor: pointer;
+  min-height: 44px;
 }
 
 .topbar button:hover { border-color: var(--accent); color: var(--accent); }
 
-#content { padding: 1.5rem; }
+#content { padding: var(--op-space-4); min-width: 0; }
 
-.breadcrumbs { color: var(--muted); font-size: 0.85rem; margin-bottom: 1rem; }
+.breadcrumbs { color: var(--muted); font-size: var(--op-font-size-sm); margin-bottom: var(--op-space-4); }
 .breadcrumbs a { color: var(--accent); text-decoration: none; }
 
-@media (max-width: 768px) {
-  .layout { grid-template-columns: minmax(0, 1fr); }
+/* ============================================================
+   Responsive layout — mobile-first.
+   Default = < 768 px (mobile). 768 px+ = tablet. 1280 px+ = desktop.
+   Token-driven; no max-width queries (contract).
+   ============================================================ */
 
-  .nav-disclosure {
-    border-right: 0;
-    border-bottom: 1px solid var(--border);
+/* Default (mobile): stacked layout, full-width shell. */
+.layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.nav-disclosure > summary {
+  display: block;
+  padding: var(--op-space-3) var(--op-space-4);
+  cursor: pointer;
+  font-weight: 600;
+  border-bottom: 1px solid var(--op-color-border);
+}
+
+.sidebar {
+  max-height: 70vh;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--op-color-border);
+}
+
+/* === Contract breakpoints: 360 / 768 / 1280 px (mobile-first min-width). === */
+
+@media (min-width: 768px) {
+  .layout {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
   }
+  .nav-disclosure > summary { display: none; }
+  .nav-disclosure { border-bottom: 0; border-right: 1px solid var(--op-color-border); }
+  .sidebar { max-height: none; overflow-y: visible; border-bottom: 0; }
+  .topbar { padding: var(--op-space-3) var(--op-space-4); }
+  #content { padding: var(--op-space-4); }
+}
 
-  .nav-disclosure > summary {
-    display: block;
-    padding: 0.8rem 1rem;
-    cursor: pointer;
-    font-weight: 600;
-  }
+@media (min-width: 1280px) {
+  .layout { grid-template-columns: 260px minmax(0, 1fr); }
+  .topbar { padding: var(--op-space-3) var(--op-space-6); }
+  #content { padding: var(--op-space-4) var(--op-space-6); }
+}
 
-  .sidebar { max-height: 70vh; overflow-y: auto; }
-  .topbar, #content { padding-left: 1rem; padding-right: 1rem; }
-  #content { overflow-x: auto; }
+/* Containers that opt in to a max width on wide viewports. */
+.content-narrow {
+  width: 100%;
+  max-width: 720px;
+}
+
+@media (min-width: 1280px) {
+  .content-narrow { max-width: 960px; }
+}
+
+/* Wide-table container: lets wide tables scroll horizontally while the
+   page body never overflows at 360 px.  */
+.table-card {
+  width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--op-color-border);
+  border-radius: var(--op-radius-md);
+  background: var(--op-color-surface);
 }
 
 .login {
   max-width: 360px;
   margin: 12vh auto;
-  padding: 2rem;
+  padding: var(--op-space-6);
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--op-radius-lg);
 }
 
 .login h1 { margin-top: 0; }
 
-.login label { display: block; margin-top: 1rem; color: var(--muted); }
+.login label {
+  display: block;
+  margin-top: var(--op-space-4);
+  color: var(--muted);
+  font-size: var(--op-font-size-sm);
+  font-weight: 500;
+  line-height: var(--op-line-height);
+}
+
+.login label.field-inline {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--op-space-2);
+  margin-top: var(--op-space-3);
+}
 
 .login input {
   width: 100%;
-  margin-top: 0.3rem;
-  padding: 0.6rem;
+  margin-top: var(--op-space-1);
+  padding: var(--op-space-2) var(--op-space-3);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--op-radius-md);
   background: var(--bg);
   color: var(--text);
+  font: inherit;
+  font-size: var(--op-font-size-md);
+  line-height: var(--op-line-height);
+  min-height: 44px;
 }
 
 .login button {
   width: 100%;
-  margin-top: 1.5rem;
-  padding: 0.7rem;
+  margin-top: var(--op-space-4);
+  padding: var(--op-space-3);
   border: none;
-  border-radius: 6px;
+  border-radius: var(--op-radius-md);
   background: var(--accent);
-  color: #fff;
+  color: var(--op-color-accent-fg);
   cursor: pointer;
+  min-height: 44px;
 }
 
 .login .error {
-  color: #ff6b6b;
-  border: 1px solid #ff6b6b;
-  padding: 0.6rem;
-  border-radius: 6px;
+  color: var(--op-color-danger);
+  border: 1px solid var(--op-color-danger);
+  padding: var(--op-space-2) var(--op-space-3);
+  border-radius: var(--op-radius-md);
 }
 
 /* Dashboard */
 .gauges {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+  gap: var(--op-space-4);
+  margin-bottom: var(--op-space-6);
 }
 
 .gauge {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 1rem;
+  border-radius: var(--op-radius-md);
+  padding: var(--op-space-4);
 }
 
 .gauge-label {
   display: block;
   color: var(--muted);
-  font-size: 0.85rem;
-  margin-bottom: 0.5rem;
+  font-size: var(--op-font-size-sm);
+  margin-bottom: var(--op-space-2);
 }
 
 .gauge-bar {
   height: 8px;
   background: var(--bg);
-  border-radius: 4px;
+  border-radius: var(--op-radius-sm);
   overflow: hidden;
-  margin-bottom: 0.5rem;
+  margin-bottom: var(--op-space-2);
 }
 
 .gauge-fill {
   height: 100%;
   background: var(--accent);
-  border-radius: 4px;
+  border-radius: var(--op-radius-sm);
 }
 
 .gauge-value {
   font-weight: 600;
-  font-size: 1.1rem;
+  font-size: var(--op-font-size-lg);
 }
 
-.cards { margin-bottom: 1.5rem; }
+.cards { margin-bottom: var(--op-space-6); }
 
 .card-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-  gap: 1rem;
+  gap: var(--op-space-4);
 }
 
 .card {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--op-space-1);
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 1rem;
+  border-radius: var(--op-radius-md);
+  padding: var(--op-space-4);
   text-decoration: none;
   color: var(--text);
 }
 
 .card:hover { border-color: var(--accent); }
 
-.card-count { font-size: 1.5rem; font-weight: 700; }
+.card-count { font-size: var(--op-font-size-2xl); font-weight: 700; }
 
-.card-label { color: var(--muted); font-size: 0.85rem; }
+.card-label { color: var(--muted); font-size: var(--op-font-size-sm); }
 
 .alerts ul {
   list-style: none;
@@ -241,7 +374,7 @@ html[data-theme="light"] {
 .alerts li {
   display: flex;
   justify-content: space-between;
-  padding: 0.6rem 0.8rem;
+  padding: var(--op-space-2) var(--op-space-3);
   border-bottom: 1px solid var(--border);
 }
 
@@ -252,52 +385,64 @@ html[data-theme="light"] {
 /* Shared page elements */
 .btn {
   display: inline-block;
-  padding: 0.55rem 1rem;
+  padding: var(--op-space-2) var(--op-space-4);
   border: 1px solid var(--accent);
-  border-radius: 6px;
+  border-radius: var(--op-radius-md);
   color: var(--accent);
   text-decoration: none;
   font-weight: 600;
   cursor: pointer;
   background: none;
+  min-height: 44px;
 }
 
-.btn:hover { background: rgba(79, 140, 255, 0.1); }
+.btn:hover { background: rgba(79, 140, 255, 0.1); text-decoration: none; }
 
 .empty { color: var(--muted); }
 
 .alert {
-  padding: 0.7rem 0.9rem;
+  padding: var(--op-space-3);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  margin-bottom: 1rem;
+  border-radius: var(--op-radius-md);
+  margin-bottom: var(--op-space-4);
 }
 
-.alert.error { color: #ff6b6b; border-color: #ff6b6b; }
+.alert.error { color: var(--op-color-danger); border-color: var(--op-color-danger); }
 
 .table {
   width: 100%;
   border-collapse: collapse;
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--op-radius-md);
   overflow: hidden;
-  margin-top: 1rem;
+  margin-top: var(--op-space-4);
 }
 
 .table th, .table td {
   text-align: left;
-  padding: 0.6rem 0.9rem;
+  padding: var(--op-space-2) var(--op-space-3);
   border-bottom: 1px solid var(--border);
 }
 
-.table th { color: var(--muted); font-size: 0.85rem; font-weight: 600; }
+.table th { color: var(--muted); font-size: var(--op-font-size-sm); font-weight: 600; }
 
 .table tr:last-child td { border-bottom: none; }
 
 .table td.actions { white-space: nowrap; }
 
-.table td.actions form { display: inline; margin-right: 0.4rem; }
+/* Forms inside table action cells render inline; no card visual. */
+.table td.actions form {
+  display: inline-flex;
+  flex-direction: row;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  width: auto;
+  max-width: none;
+  gap: var(--op-space-1);
+}
 
 .table .status {
   display: inline-block;
@@ -321,37 +466,293 @@ html[data-theme="light"] {
 
 .table button.danger:hover { border-color: #ff6b6b; color: #ff6b6b; }
 
-/* Forms */
-.form {
-  max-width: 480px;
+/* ============================================================
+   Forms — GLOBAL CONTRACT.
+   Every <form> in the web UI MUST declare one of:
+     class="form"           — stacked, single column
+     class="form form-grid" — two-column grid (wider forms)
+     class="form form-row"  — single row, input + button
+     class="form form-inline" / class="inline"
+                             — single button inline with siblings
+     class="form form-inline-row"
+                             — single input+button inline pair
+   Plain `form` selectors (not `:where(form)`) give the global form
+   rules full author specificity so they reliably beat UA defaults
+   and any third-party override.  Card visuals are scoped to
+   `form.form` so the shell's bare <form>s (logout, per-row
+   actions) do not become bordered cards.
+   ============================================================ */
+
+form {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 1.2rem;
-  margin-top: 1rem;
+  gap: var(--op-space-3);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  width: auto;
+  max-width: none;
+  box-sizing: border-box;
 }
 
-.form label { color: var(--muted); font-size: 0.9rem; }
-
-.form input[type="text"], .form select {
-  padding: 0.5rem;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--text);
+form label {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--op-space-1);
+  color: var(--op-color-fg-muted);
+  font-size: var(--op-font-size-sm);
+  line-height: var(--op-line-height);
+  font-weight: 500;
+  min-width: 0;
 }
 
-.form button {
-  margin-top: 0.8rem;
-  padding: 0.6rem;
-  border: none;
-  border-radius: 6px;
-  background: var(--accent);
-  color: #fff;
+form label > input[type="checkbox"],
+form label > input[type="radio"] {
+  width: auto;
+  align-self: start;
+}
+
+form input,
+form input[type="email"],
+form input[type="password"],
+form input[type="number"],
+form input[type="search"],
+form input[type="tel"],
+form input[type="url"],
+form input[type="date"],
+form input[type="time"],
+form input[type="datetime-local"],
+form input[type="file"],
+form input[type="color"],
+form input[type="range"],
+form textarea,
+form select {
+  padding: var(--op-space-2) var(--op-space-3);
+  border: 1px solid var(--op-color-border);
+  border-radius: var(--op-radius-md);
+  background: var(--op-color-bg);
+  color: var(--op-color-fg);
+  font: inherit;
+  font-size: var(--op-font-size-md);
+  line-height: var(--op-line-height);
+  min-height: 44px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+form input[type="checkbox"],
+form input[type="radio"],
+form input[type="color"],
+form input[type="range"] {
+  padding: 0;
+  min-height: 0;
+  width: auto;
+  background: transparent;
+  border: 0;
+}
+
+form input[type="file"] {
+  padding: var(--op-space-2);
+  background: transparent;
+  color: var(--op-color-fg);
+}
+
+form input:focus-visible,
+form textarea:focus-visible,
+form select:focus-visible,
+form button:focus-visible {
+  outline: 2px solid var(--op-color-focus-ring);
+  outline-offset: 1px;
+  border-color: var(--op-color-accent);
+}
+
+form input[type="checkbox"]:focus-visible,
+form input[type="radio"]:focus-visible {
+  outline-offset: 2px;
+}
+
+form textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+form button,
+form input[type="submit"],
+form input[type="button"] {
+  margin-top: var(--op-space-2);
+  padding: var(--op-space-3) var(--op-space-4);
+  border: 0;
+  border-radius: var(--op-radius-md);
+  background: var(--op-color-accent);
+  color: var(--op-color-accent-fg);
+  font: inherit;
+  font-size: var(--op-font-size-md);
+  font-weight: 600;
+  line-height: var(--op-line-height);
   cursor: pointer;
+  min-height: 44px;
+  min-width: 44px;
+  transition: background-color var(--op-duration-fast) var(--op-ease);
+}
+
+form button:hover,
+form input[type="submit"]:hover,
+form input[type="button"]:hover {
+  background: var(--op-color-accent-strong);
+}
+
+form button:disabled,
+form input[type="submit"]:disabled,
+form input[type="button"]:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+form button[type="button"] {
+  background: transparent;
+  color: var(--op-color-fg);
+  border: 1px solid var(--op-color-border);
+}
+
+form button[type="button"]:hover {
+  border-color: var(--op-color-accent);
+  color: var(--op-color-accent);
+}
+
+/* The official card form. Stacked, single column, surfaces only on
+   the .form variant so the shell's bare <form>s do not break. */
+form.form {
+  background: var(--op-color-surface);
+  border: 1px solid var(--op-color-border);
+  border-radius: var(--op-radius-md);
+  padding: var(--op-space-4);
+  margin-block: var(--op-space-3);
+  width: 100%;
+  max-width: 480px;
+}
+
+@media (min-width: 1280px) {
+  form.form { max-width: 720px; }
+}
+
+/* Two-column layout for wider forms. */
+form.form.form-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--op-space-3);
+  max-width: 720px;
+}
+
+@media (min-width: 768px) {
+  form.form.form-grid { grid-template-columns: 1fr 1fr; }
+}
+
+form.form.form-grid > button,
+form.form.form-grid > input[type="submit"],
+form.form.form-grid > input[type="button"] {
+  grid-column: 1 / -1;
+}
+
+/* Single-row input + button (used for "Add record", "Run now", ...). */
+form.form.form-row {
+  flex-direction: row;
+  align-items: end;
+  flex-wrap: wrap;
+  gap: var(--op-space-2);
+}
+
+form.form.form-row > label { flex: 1 1 200px; }
+form.form.form-row > button,
+form.form.form-row > input[type="submit"] { margin-top: 0; }
+
+/* Inline forms in table rows / shell actions. */
+form.form-inline,
+form[class~="inline"] {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--op-space-2);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  width: auto;
+  max-width: none;
+}
+
+form.form-inline button,
+form[class~="inline"] button {
+  margin: 0;
+  padding: var(--op-space-1) var(--op-space-3);
+  background: transparent;
+  color: var(--op-color-accent);
+  border: 1px solid var(--op-color-border);
+  min-height: 32px;
+}
+
+form.form-inline button:hover,
+form[class~="inline"] button:hover {
+  border-color: var(--op-color-accent);
+  background: transparent;
+}
+
+/* Inline form-row pattern: input + button in a single line. */
+form.form-inline-row {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--op-space-2);
+  background: transparent;
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+form.form-inline-row input {
+  width: auto;
+  min-height: 32px;
+  padding: var(--op-space-1) var(--op-space-2);
+}
+
+form.form-inline-row button {
+  margin: 0;
+  padding: var(--op-space-1) var(--op-space-3);
+  min-height: 32px;
+}
+
+/* Anti-regression hint: anything the integration test flags as a
+   "bare form" lights up in dev so contributors fix it immediately. */
+form[data-form="bare"] {
+  outline: 1px dashed var(--op-color-warning);
+  outline-offset: 2px;
+}
+
+/* Form errors. */
+.form-error {
+  margin: 0;
+  padding: var(--op-space-2) var(--op-space-3);
+  border-radius: var(--op-radius-md);
+  border: 1px solid var(--op-color-danger);
+  color: var(--op-color-danger);
+  background: rgba(248, 81, 73, 0.08);
+  font-size: var(--op-font-size-sm);
+}
+
+.form-ok {
+  margin: 0;
+  padding: var(--op-space-2) var(--op-space-3);
+  border-radius: var(--op-radius-md);
+  border: 1px solid var(--op-color-success);
+  color: var(--op-color-success);
+  background: rgba(63, 185, 80, 0.08);
+  font-size: var(--op-font-size-sm);
+}
+
+@media (min-width: 768px) {
+  /* Reserved for form layout adjustments at tablet width;
+     the form-grid 2-col switch is handled by the rule above. */
 }
 
 /* Detail */

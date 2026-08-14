@@ -230,7 +230,7 @@ fn content(
         h1 { "Notifications" }
         @if owner {
             h2 { "Add channel" }
-            form method="post" action="/settings/notifications" {
+            form method="post" action="/settings/notifications" class="form" {
                 (csrf_field(csrf))
                 label { "Kind" select name="kind" { option value="smtp" { "SMTP" } option value="webhook" { "Webhook" } } }
                 label { "Name" input name="name" required; }
@@ -247,12 +247,12 @@ fn content(
         h2 { "Channels" }
         @for channel in channels {
             article { strong { (&channel.name) } " " (channel.kind.to_string()) " " (&channel.endpoint)
-                form method="post" action=(format!("/settings/notifications/channels/{}/test", channel.id)) { (csrf_field(csrf)) input name="destination" placeholder="allowed destination" required; button type="submit" { "Test send" } }
-                form method="post" action=(format!("/settings/notifications/channels/{}/disable", channel.id)) { (csrf_field(csrf)) button type="submit" { "Disable" } }
+                form method="post" action=(format!("/settings/notifications/channels/{}/test", channel.id)) class="form form-inline-row" { (csrf_field(csrf)) label { "Destination" input name="destination" placeholder="allowed destination" required; button type="submit" { "Test send" } } }
+                form method="post" action=(format!("/settings/notifications/channels/{}/disable", channel.id)) class="form form-inline" { (csrf_field(csrf)) button type="submit" { "Disable" } }
             }
         }
         h2 { "Add subscription" }
-        form method="post" action="/settings/notifications/subscriptions" {
+        form method="post" action="/settings/notifications/subscriptions" class="form" {
             (csrf_field(csrf))
             label { "Channel ID" input name="channel_id" required; }
             label { "Destination" input name="destination" required; }
@@ -262,7 +262,7 @@ fn content(
         }
         @for subscription in subscriptions {
             article { code { (subscription.id) } " " (&subscription.destination) " " (if subscription.enabled { "enabled" } else { "disabled" })
-                @if subscription.enabled { form method="post" action=(format!("/settings/notifications/subscriptions/{}/disable", subscription.id)) { (csrf_field(csrf)) button type="submit" { "Disable" } } }
+                @if subscription.enabled { form method="post" action=(format!("/settings/notifications/subscriptions/{}/disable", subscription.id)) class="form form-inline" { (csrf_field(csrf)) button type="submit" { "Disable" } } }
             }
         }
     }

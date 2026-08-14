@@ -299,7 +299,7 @@ impl<'a> Shell<'a> {
                         div class="main" {
                             header class="topbar" {
                                 span class="user" { (self.user) }
-                                form method="post" action="/logout" {
+                                form method="post" action="/logout" class="form form-inline" {
                                     (csrf_field(self.csrf))
                                     button type="submit" { "Log out" }
                                 }

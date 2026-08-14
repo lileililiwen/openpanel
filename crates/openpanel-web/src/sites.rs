@@ -323,29 +323,30 @@ pub fn create_form(
         }
         form method="post" action="/sites" class="form" {
             (csrf_field(csrf))
-            label { "Primary domain" }
-            input type="text" name="primary_domain" value=(domain) required;
-            label { "Aliases (space-separated)" }
-            input type="text" name="aliases" value=(aliases);
-            label { "Owner" }
-            select name="owner_id" {
-                @for (id, name) in owners {
-                    option value=(id.to_string()) { (name) }
+            label { "Primary domain" input type="text" name="primary_domain" value=(domain) required; }
+            label { "Aliases (space-separated)" input type="text" name="aliases" value=(aliases); }
+            label { "Owner"
+                select name="owner_id" {
+                    @for (id, name) in owners {
+                        option value=(id.to_string()) { (name) }
+                    }
                 }
             }
-            label { "PHP" }
-            input type="checkbox" name="php_enabled" checked[php_checked];
-            label { "PHP version" }
-            select name="php_version" {
-                @if php_versions.is_empty() {
-                    option value="" disabled selected { "Install or adopt PHP in Software Center" }
-                }
-                @for version in php_versions {
-                    option value=(version) selected[version == php_version] { (version) }
+            label { "PHP version"
+                select name="php_version" {
+                    @if php_versions.is_empty() {
+                        option value="" disabled selected { "Install or adopt PHP in Software Center" }
+                    }
+                    @for version in php_versions {
+                        option value=(version) selected[version == php_version] { (version) }
+                    }
                 }
             }
-            label { "Document root (optional)" }
-            input type="text" name="document_root" value=(doc_root);
+            label class="checkbox" {
+                input type="checkbox" name="php_enabled" checked[php_checked];
+                " Enable PHP for this site"
+            }
+            label { "Document root (optional)" input type="text" name="document_root" value=(doc_root); }
             button type="submit" { "Create site" }
         }
     }

@@ -30,9 +30,9 @@ pub async fn page(State(state): State<WebState>, WebUser(user, session): WebUser
                 li { (domain.name.as_str()) }
             }
         }
-        form method="post" action="/mail/domains" {
-            input type="hidden" name="_csrf" value=(csrf);
-            input name="name";
+        form method="post" action="/mail/domains" class="form" {
+            (crate::layout::csrf_field(&csrf))
+            label { "Mail domain" input name="name" required; }
             button { "Add mail domain" }
         }
     };

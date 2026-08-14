@@ -40,7 +40,7 @@ pub async fn list(State(state): State<WebState>, WebUser(user, session): WebUser
 /// Render a basic create form. API clients may use the richer JSON endpoint.
 pub async fn new_form(State(state): State<WebState>, WebUser(user, session): WebUser) -> Response {
     let csrf = state.csrf.token_for(session.id());
-    let content = html! { h1 { "Create cron job" } form method="post" action="/cron/jobs" {
+    let content = html! { h1 { "Create cron job" } form method="post" action="/cron/jobs" class="form" {
         (crate::layout::csrf_field(&csrf))
         label { "Name" input name="name" required; }
         label { "Schedule" input name="schedule" value="0 * * * *" required; }
@@ -119,7 +119,7 @@ pub async fn detail(
         Err(_) => return StatusCode::NOT_FOUND.into_response(),
     };
     let csrf = state.csrf.token_for(session.id());
-    let content = html! { h1 { (job.name()) } p { (job.schedule().expression()) " " (job.schedule().timezone()) } @for action in ["run", if job.enabled() { "disable" } else { "enable" }, "delete"] { form method="post" action=(format!("/cron/jobs/{id}/{action}")) { (crate::layout::csrf_field(&csrf)) button type="submit" { (action) } } } };
+    let content = html! { h1 { (job.name()) } p { (job.schedule().expression()) " " (job.schedule().timezone()) } @for action in ["run", if job.enabled() { "disable" } else { "enable" }, "delete"] { form method="post" action=(format!("/cron/jobs/{id}/{action}")) class="form form-inline" { (crate::layout::csrf_field(&csrf)) button type="submit" { (action) } } } };
     state
         .render_shell(&user, &csrf, "/cron", content)
         .await

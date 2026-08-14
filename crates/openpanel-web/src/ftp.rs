@@ -126,7 +126,25 @@ fn content(
     html! {
         h1 { "FTP accounts" }
         @if let Some(message)=banner { p class="notice" { (message) } }
-        form method="post" action=(format!("/sites/{site_id}/ftp")) { (csrf_field(csrf)) label { "Username" input name="username" required; } label { "Password" input name="password" type="password" minlength="12" required; } label { input name="read_only" type="checkbox" value="true"; " Read only" } label { "Bandwidth KiB/session" input name="bandwidth_kb_per_session" type="number" min="1" value="1048576"; } label { "Max connections" input name="max_concurrent_connections" type="number" min="1" max="256" value="4"; } button type="submit" { "Create account" } }
-        table { thead { tr { th { "Username" } th { "Home" } th { "Mode" } th { "Status" } th { "Actions" } } } tbody { @for account in accounts { tr { td { (&account.username) } td { (&account.home) } td { @if account.read_only { "read only" } @else { "read/write" } } td { @if account.enabled { "enabled" } @else { "disabled" } } td { @if account.enabled { form method="post" action=(format!("/sites/{site_id}/ftp/{}/disable",account.id)) { (csrf_field(csrf)) button { "Disable" } } } @else { form method="post" action=(format!("/sites/{site_id}/ftp/{}/enable",account.id)) { (csrf_field(csrf)) button { "Enable" } } } form method="post" action=(format!("/sites/{site_id}/ftp/{}/delete",account.id)) { (csrf_field(csrf)) button { "Delete" } } } } } } }
+        form method="post" action=(format!("/sites/{site_id}/ftp")) class="form" {
+            (csrf_field(csrf))
+            label { "Username" input name="username" required; }
+            label { "Password" input name="password" type="password" minlength="12" required; }
+            label class="checkbox" { input name="read_only" type="checkbox" value="true"; " Read only" }
+            label { "Bandwidth KiB/session" input name="bandwidth_kb_per_session" type="number" min="1" value="1048576"; }
+            label { "Max connections" input name="max_concurrent_connections" type="number" min="1" max="256" value="4"; }
+            button type="submit" { "Create account" }
+        }
+        table {
+            thead { tr { th { "Username" } th { "Home" } th { "Mode" } th { "Status" } th { "Actions" } } }
+            tbody { @for account in accounts { tr { td { (&account.username) } td { (&account.home) } td { @if account.read_only { "read only" } @else { "read/write" } } td { @if account.enabled { "enabled" } @else { "disabled" } } td {
+                @if account.enabled {
+                    form method="post" action=(format!("/sites/{site_id}/ftp/{}/disable", account.id)) class="form form-inline" { (csrf_field(csrf)) button { "Disable" } }
+                } @else {
+                    form method="post" action=(format!("/sites/{site_id}/ftp/{}/enable", account.id)) class="form form-inline" { (csrf_field(csrf)) button { "Enable" } }
+                }
+                form method="post" action=(format!("/sites/{site_id}/ftp/{}/delete", account.id)) class="form form-inline" { (csrf_field(csrf)) button { "Delete" } }
+            } } } }
+        }
     }
 }

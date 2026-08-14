@@ -54,6 +54,7 @@ pub fn login_page(error: Option<&str>) -> Markup {
                 meta charset="utf-8";
                 meta name="viewport" content="width=device-width, initial-scale=1";
                 title { "OpenPanel — Log in" }
+                link rel="stylesheet" href="/assets/tokens.css";
                 link rel="stylesheet" href="/assets/app.css";
             }
             body {
@@ -63,10 +64,8 @@ pub fn login_page(error: Option<&str>) -> Markup {
                         p class="error" { (msg) }
                     }
                     form method="post" action="/login" {
-                        label { "Username or email" }
-                        input type="text" name="username_or_email" required;
-                        label { "Password" }
-                        input type="password" name="password" required;
+                        label { "Username or email" input type="text" name="username_or_email" required; }
+                        label { "Password" input type="password" name="password" required; }
                         button type="submit" { "Log in" }
                     }
                 }
@@ -179,6 +178,7 @@ pub fn login_factor_page(
                 meta charset="utf-8";
                 meta name="viewport" content="width=device-width, initial-scale=1";
                 title { "OpenPanel — Second factor" }
+                link rel="stylesheet" href="/assets/tokens.css";
                 link rel="stylesheet" href="/assets/app.css";
             }
             body {
@@ -191,8 +191,7 @@ pub fn login_factor_page(
                     form method="post" action="/login/factor" {
                         input type="hidden" name="challenge_id" value=(challenge_id);
                         input type="hidden" name="challenge_token" value=(challenge_token);
-                        label { "TOTP code or recovery code" }
-                        input type="text" name="code" required autofocus;
+                        label { "TOTP code or recovery code" input type="text" name="code" required autofocus; }
                         label class="field-inline" {
                             input type="checkbox" name="remember" value="true";
                             "Remember this device for 30 days"

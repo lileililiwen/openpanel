@@ -361,14 +361,10 @@ pub fn create_form(csrf: &str, error: Option<&str>, values: Option<&SafeCreateFo
         }
         form method="post" action="/databases" class="form" {
             (csrf_field(csrf))
-            label { "Owner id (UUID)" }
-            input type="text" name="owner_id" value=(owner_id) required;
-            label { "Owner username" }
-            input type="text" name="owner_username" value=(owner_username) required;
-            label { "Suffix" }
-            input type="text" name="suffix" value=(suffix) required;
-            label { "Charset" }
-            input type="text" name="charset" value=(charset);
+            label { "Owner id (UUID)" input type="text" name="owner_id" value=(owner_id) required; }
+            label { "Owner username" input type="text" name="owner_username" value=(owner_username) required; }
+            label { "Suffix" input type="text" name="suffix" value=(suffix) required; }
+            label { "Charset" input type="text" name="charset" value=(charset); }
             button type="submit" { "Create database" }
         }
     }

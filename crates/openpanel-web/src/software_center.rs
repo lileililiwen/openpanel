@@ -158,7 +158,7 @@ fn storefront_content(
                     @if diag.stale {
                         span class="badge badge--warning" { "stale" }
                     }
-                    form method="post" action="/software/refresh" {
+                    form method="post" action="/software/refresh" class="form form-inline" {
                         input type="hidden" name="_csrf" value=(csrf);
                         button class="button" { "Refresh catalog" }
                     }
@@ -243,7 +243,7 @@ fn storefront_content(
                         div class="task-progress" {
                             (progress_fragment(&LiveProgress::from_system(job)))
                             @if job_is_live(&job.state) {
-                                form method="post" action={"/software/jobs/" (job.id) "/cancel"} {
+                                form method="post" action={"/software/jobs/" (job.id) "/cancel"} class="form form-inline" {
                                     input type="hidden" name="_csrf" value=(csrf);
                                     button class="button button--ghost" { "Cancel" }
                                 }
@@ -317,17 +317,17 @@ fn action_for_state(
     let install_blocked = require_verified_digests && placeholder_digest && kind == EntryKind::Web;
     match state {
         "panel_managed" => html! {
-            form method="post" action={"/software/components/" (id) "/update/preview"} {
+            form method="post" action={"/software/components/" (id) "/update/preview"} class="form form-inline" {
                 input type="hidden" name="_csrf" value=(csrf);
                 button class="button button--ghost" { "Update" }
             }
-            form method="post" action={"/software/components/" (id) "/remove/preview"} {
+            form method="post" action={"/software/components/" (id) "/remove/preview"} class="form form-inline" {
                 input type="hidden" name="_csrf" value=(csrf);
                 button class="button button--danger" { "Remove" }
             }
         },
         "externally_managed" => html! {
-            form method="post" action={"/software/components/" (id) "/adopt/preview"} {
+            form method="post" action={"/software/components/" (id) "/adopt/preview"} class="form form-inline" {
                 input type="hidden" name="_csrf" value=(csrf);
                 button class="button" { "Adopt" }
             }
@@ -336,13 +336,13 @@ fn action_for_state(
             button class="button" disabled="disabled" title="recovery seed ships a placeholder digest; run software refresh against a remote catalog" { "Install (refresh required)" }
         },
         "available" if kind == EntryKind::Web => html! {
-            form method="post" action={"/software/components/" (id) "/install"} {
+            form method="post" action={"/software/components/" (id) "/install"} class="form form-inline" {
                 input type="hidden" name="_csrf" value=(csrf);
                 button class="button" { "Install" }
             }
         },
         "available" => html! {
-            form method="post" action={"/software/components/" (id) "/preview"} {
+            form method="post" action={"/software/components/" (id) "/preview"} class="form form-inline" {
                 input type="hidden" name="_csrf" value=(csrf);
                 button class="button" { "Install" }
             }
@@ -473,7 +473,7 @@ fn deploy_form_content(entry: &StorefrontEntry, csrf: &str) -> Markup {
             }
             p class="detail__lead" { (entry.description) }
             p { "Provide the destination domain and runtime options. The next page will summarize the full transaction before any change is made." }
-            form method="post" action="/software/applications/preview" class="deploy-form" {
+            form method="post" action="/software/applications/preview" class="form deploy-form" {
                 input type="hidden" name="_csrf" value=(csrf);
                 input type="hidden" name="application" value=(entry.id);
                 label class="field" {
@@ -621,11 +621,11 @@ fn config_content(
                 @if document.exists { "Editing: " } @else { "Creating: " }
                 code { (document.path) }
             }
-            form method="post" action={"/software/components/" (document.component) "/config"} {
+            form method="post" action={"/software/components/" (document.component) "/config"} class="form" {
                 input type="hidden" name="_csrf" value=(csrf);
-                textarea name="content" rows="24" spellcheck="false" aria-label="Configuration" {
+                label { "Configuration" textarea name="content" rows="24" spellcheck="false" {
                     (document.content.as_deref().unwrap_or(""))
-                }
+                } }
                 div class="deploy-form__actions" {
                     a class="button button--ghost" href={"/software/entries/" (document.component)} { "Cancel" }
                     button class="button" { "Save configuration" }
@@ -888,19 +888,19 @@ fn detail_content(
             button class="button" disabled="disabled" { "Install (refresh required)" }
         }),
         "available" if entry.kind == EntryKind::Web => Some(html! {
-            form method="post" action={"/software/components/" (entry.id) "/install"} {
+            form method="post" action={"/software/components/" (entry.id) "/install"} class="form form-inline" {
                 input type="hidden" name="_csrf" value=(csrf);
                 button class="button" { "Install" }
             }
         }),
         "available" => Some(html! {
-            form method="post" action={"/software/components/" (entry.id) "/preview"} {
+            form method="post" action={"/software/components/" (entry.id) "/preview"} class="form form-inline" {
                 input type="hidden" name="_csrf" value=(csrf);
                 button class="button" { "Install" }
             }
         }),
         "externally_managed" => Some(html! {
-            form method="post" action={"/software/components/" (entry.id) "/adopt/preview"} {
+            form method="post" action={"/software/components/" (entry.id) "/adopt/preview"} class="form form-inline" {
                 input type="hidden" name="_csrf" value=(csrf);
                 button class="button" { "Adopt" }
             }
@@ -910,11 +910,11 @@ fn detail_content(
                 @if has_config {
                     a class="button" href={"/software/components/" (entry.id) "/config"} { "Configuration" }
                 }
-                form method="post" action={"/software/components/" (entry.id) "/update/preview"} {
+                form method="post" action={"/software/components/" (entry.id) "/update/preview"} class="form form-inline" {
                     input type="hidden" name="_csrf" value=(csrf);
                     button class="button" { "Update" }
                 }
-                form method="post" action={"/software/components/" (entry.id) "/remove/preview"} {
+                form method="post" action={"/software/components/" (entry.id) "/remove/preview"} class="form form-inline" {
                     input type="hidden" name="_csrf" value=(csrf);
                     button class="button button--danger" { "Remove" }
                 }
@@ -1083,7 +1083,7 @@ pub async fn preview(
         h1 { "Review software transaction" }
         p { "Affected services: " (preview.affected_services.join(", ")) }
         code { (preview.plan.digest()) }
-        form method="post" action={"/software/plans/" (preview.plan.digest()) "/execute"} {
+        form method="post" action={"/software/plans/" (preview.plan.digest()) "/execute"} class="form form-inline" {
             input type="hidden" name="_csrf" value=(csrf);
             input type="hidden" name="confirmation_token" value=(preview.confirmation_token);
             button class="button" { "Confirm installation" }
@@ -1119,7 +1119,7 @@ pub async fn preview_component_action(
         p { "Action: " (format!("{action:?}")) }
         p { "Affected services: " (preview.affected_services.join(", ")) }
         code { (preview.plan.digest()) }
-        form method="post" action={"/software/plans/" (preview.plan.digest()) "/execute"} {
+        form method="post" action={"/software/plans/" (preview.plan.digest()) "/execute"} class="form form-inline" {
             input type="hidden" name="_csrf" value=(csrf);
             input type="hidden" name="confirmation_token" value=(preview.confirmation_token);
             button class="button" { "Confirm transaction" }
@@ -1175,7 +1175,7 @@ pub async fn preview_deployment(
         h1 { "Review application deployment" }
         p { "Affected services: " (preview.affected_services.join(", ")) }
         code { (preview.plan.digest()) }
-        form method="post" action={"/software/applications/plans/" (preview.plan.digest()) "/execute"} {
+        form method="post" action={"/software/applications/plans/" (preview.plan.digest()) "/execute"} class="form form-inline" {
             input type="hidden" name="_csrf" value=(csrf);
             input type="hidden" name="confirmation_token" value=(preview.confirmation_token);
             button class="button" { "Confirm deployment" }
@@ -1356,7 +1356,7 @@ pub async fn retry(
         h1 { "Review interrupted transaction retry" }
         p { "Packages: " (preview.packages.join(", ")) }
         code { (preview.plan_digest) }
-        form method="post" action={"/software/plans/" (preview.plan_digest) "/execute"} {
+        form method="post" action={"/software/plans/" (preview.plan_digest) "/execute"} class="form form-inline" {
             input type="hidden" name="_csrf" value=(csrf);
             input type="hidden" name="confirmation_token" value=(preview.confirmation_token);
             button class="button" { "Confirm retry" }

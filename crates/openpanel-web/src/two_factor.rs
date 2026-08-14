@@ -296,7 +296,7 @@ fn security_content(factors: &[Factor], recovery_remaining: u8, csrf: &str) -> M
                                             td { @if factor.revoked_at().is_some() { "revoked" } @else { "active" } }
                                             td {
                                                 @if factor.revoked_at().is_none() {
-                                                    form method="post" action={"/settings/security/factors/" (factor.id()) "/revoke"} {
+                                                    form method="post" action={"/settings/security/factors/" (factor.id()) "/revoke"} class="form form-inline" {
                                                         input type="hidden" name="_csrf" value=(csrf);
                                                         button type="submit" { "Revoke" }
                                                     }
@@ -307,7 +307,7 @@ fn security_content(factors: &[Factor], recovery_remaining: u8, csrf: &str) -> M
                                 }
                             }
                         }
-                        form method="post" action="/settings/security/totp/enroll" {
+                        form method="post" action="/settings/security/totp/enroll" class="form form-inline" {
                             input type="hidden" name="_csrf" value=(csrf);
                             button type="submit" class="button" { "Enroll TOTP" }
                         }
@@ -317,7 +317,7 @@ fn security_content(factors: &[Factor], recovery_remaining: u8, csrf: &str) -> M
                     section class="card" {
                         h2 { "Recovery codes" }
                         p { "Remaining: " (recovery_remaining) }
-                        form method="post" action="/settings/security/recovery/regenerate" {
+                        form method="post" action="/settings/security/recovery/regenerate" class="form form-inline" {
                             input type="hidden" name="_csrf" value=(csrf);
                             button type="submit" class="button" { "Regenerate recovery codes" }
                         }
@@ -389,11 +389,10 @@ fn enrollment_content(
                         p class="config__path" { code { (secret_base32) } }
                         p { "Provisioning URI: " code { (provisioning_uri) } }
                     }
-                    form method="post" action="/settings/security/totp/verify" {
+                    form method="post" action="/settings/security/totp/verify" class="form" {
                         input type="hidden" name="_csrf" value=(csrf);
                         input type="hidden" name="enrollment_id" value=(enrollment_id);
-                        label for="totp-code" { "Authenticator code" }
-                        input id="totp-code" name="code" inputmode="numeric" autocomplete="one-time-code" required;
+                        label { "Authenticator code" input id="totp-code" name="code" inputmode="numeric" autocomplete="one-time-code" required; }
                         button type="submit" class="button" { "Verify and activate" }
                         }
                 }

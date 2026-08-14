@@ -16,10 +16,7 @@ use crate::router::WebState;
 const COLLAB_UI_HEADER: &str = "collaborators-ui-pending";
 
 /// Render the collaborators page for a given site.
-pub async fn page(
-    State(state): State<WebState>,
-    Path(site_id): Path<Uuid>,
-) -> Response {
+pub async fn page(State(state): State<WebState>, Path(site_id): Path<Uuid>) -> Response {
     let grants = state
         .collaborators
         .grants_for_site(site_id)
@@ -37,9 +34,9 @@ fn render(site_id: &Uuid, grants: &[openpanel_domain::SiteGrant]) -> Markup {
             @for g in grants {
                 p { (format!("{} -> {}", g.collaborator_id, g.permissions.iter().map(|p| p.as_str()).collect::<Vec<_>>().join(","))) }
             }
-            form method="post" action={ "/api/v1/sites/" (site_id) "/collaborators" } {
-                input name="email" type="email" placeholder="email";
-                input name="scopes" type="text" placeholder="file,database,mail,cron";
+            form method="post" action={ "/api/v1/sites/" (site_id) "/collaborators" } class="form form-inline-row" {
+                label { "Email" input name="email" type="email" placeholder="email" required; }
+                label { "Scopes" input name="scopes" type="text" placeholder="file,database,mail,cron" required; }
                 button type="submit" { "Invite" }
             }
         }

@@ -29,11 +29,11 @@ pub async fn page(State(state): State<WebState>, WebUser(user, session): WebUser
         p { "OpenPanel manages only the isolated nftables table " code { "inet openpanel" } "." }
         h2 { "Firewall rules" }
         ul { @for rule in rules { li { (rule.comment()) " — " (rule.source()) ":" (rule.ports()) } } }
-        form method="post" action="/security/rules" {
+        form method="post" action="/security/rules" class="form form-grid" {
             (crate::layout::csrf_field(&csrf))
-            input name="port" type="number" min="1" max="65535" required;
-            input name="source" value="0.0.0.0/0" required;
-            input name="comment" required;
+            label { "Port" input name="port" type="number" min="1" max="65535" required; }
+            label { "Source CIDR" input name="source" value="0.0.0.0/0" required; }
+            label { "Comment" input name="comment" required; }
             button type="submit" { "Add TCP allow rule" }
         }
         h2 { "Login abuse blocks" }

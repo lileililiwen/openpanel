@@ -412,17 +412,15 @@ pub fn create_form(csrf: &str, error: Option<&str>, values: Option<&CreateUserFo
         }
         form method="post" action="/users" class="form" {
             (csrf_field(csrf))
-            label { "Username" }
-            input type="text" name="username" value=(username) required;
-            label { "Email" }
-            input type="email" name="email" value=(email) required;
-            label { "Password" }
-            input type="password" name="password" required;
-            label { "Role" }
-            select name="role" {
-                @if role == "owner" { option value="owner" selected { "owner" } } @else { option value="owner" { "owner" } }
-                @if role == "admin" { option value="admin" selected { "admin" } } @else { option value="admin" { "admin" } }
-                @if role == "user" { option value="user" selected { "user" } } @else { option value="user" { "user" } }
+            label { "Username" input type="text" name="username" value=(username) required; }
+            label { "Email" input type="email" name="email" value=(email) required; }
+            label { "Password" input type="password" name="password" required; }
+            label { "Role"
+                select name="role" {
+                    @if role == "owner" { option value="owner" selected { "owner" } } @else { option value="owner" { "owner" } }
+                    @if role == "admin" { option value="admin" selected { "admin" } } @else { option value="admin" { "admin" } }
+                    @if role == "user" { option value="user" selected { "user" } } @else { option value="user" { "user" } }
+                }
             }
             button type="submit" { "Create user" }
         }
