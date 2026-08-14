@@ -4,7 +4,7 @@ use clap::Parser;
 use openpanel_cli::{
     BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, CollaboratorCommand, Command,
     CronCommand, DatabaseCommand, DnsCommand, DockerCommand, FileCommand, FtpCommand,
-    LogsCommand, MailCommand, MarketplaceCommand, MonitoringCommand,
+    IacCommand, LogsCommand, MailCommand, MarketplaceCommand, MonitoringCommand,
     NotificationChannelCommand, NotificationCommand, NotificationSubscriptionCommand,
     PitrCommand, PluginCommand, RecoveryCodeCommand, RegistryCommand, SecurityAllowlistCommand,
     SecurityCommand, SecurityRuleCommand, ServicesCommand, SiteCommand, SoftwareCommand,
@@ -590,6 +590,22 @@ async fn main() -> anyhow::Result<()> {
             }
             RegistryCommand::Images { namespace } => {
                 handlers::registry_images(config, namespace).await
+            }
+        },
+        Command::Iac { action } => match action {
+            IacCommand::Generate { openapi } => handlers::iac_generate(config, openapi).await,
+            IacCommand::DriftCheck {
+                openapi,
+                committed_rust,
+                committed_provider,
+            } => {
+                handlers::iac_drift_check(
+                    config,
+                    openapi,
+                    committed_rust,
+                    committed_provider,
+                )
+                .await
             }
         },
     }

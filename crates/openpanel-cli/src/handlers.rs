@@ -4144,3 +4144,122 @@ pub async fn build_registry_bundle(config: Arc<Config>) -> anyhow::Result<Regist
         service: module.service(),
     })
 }
+
+// ---- IaC contract handlers ----
+
+const IAC_SAMPLE: &str = r#"{
+    "openapi": "3.0.0",
+    "info": { "version": "1.0.0", "title": "OpenPanel" },
+    "paths": {
+        "/sites": {
+            "get": { "operationId": "sites.list", "tags": ["sites"] },
+            "post": { "operationId": "sites.create", "tags": ["sites"] }
+        },
+        "/sites/{id}": {
+            "get": { "operationId": "sites.read", "tags": ["sites"] },
+            "delete": { "operationId": "sites.delete", "tags": ["sites"] }
+        },
+        "/identity/users": {
+            "get": { "operationId": "users.list", "tags": ["identity/users"] },
+            "post": { "operationId": "users.create", "tags": ["identity/users"] },
+            "delete": { "operationId": "users.delete", "tags": ["identity/users"] }
+        },
+        "/dns/zones": {
+            "get": { "operationId": "dns_zones.list", "tags": ["dns/zones"] },
+            "post": { "operationId": "dns_zones.create", "tags": ["dns/zones"] }
+        },
+        "/dns/zones/{id}": {
+            "get": { "operationId": "dns_zones.read", "tags": ["dns/zones"] },
+            "delete": { "operationId": "dns_zones.delete", "tags": ["dns/zones"] }
+        },
+        "/backups/plans": {
+            "get": { "operationId": "backups.list", "tags": ["backups/plans"] },
+            "post": { "operationId": "backups.create", "tags": ["backups/plans"] }
+        },
+        "/backups/plans/{id}": {
+            "get": { "operationId": "backups.read", "tags": ["backups/plans"] },
+            "delete": { "operationId": "backups.delete", "tags": ["backups/plans"] }
+        }
+    }
+}"#;
+
+pub async fn iac_generate(
+    _config: Arc<Config>,
+    openapi: Option<String>,
+) -> anyhow::Result<()> {
+    let json = match openapi {
+        Some(path) => tokio::fs::read_to_string(&path).await
+            .map_err(|e| anyhow::anyhow!("read openapi {path}: {e}"))?,
+        None => IAC_SAMPLE.to_string(),
+    };
+    let parsed = openpanel_app::ParsedOpenApi::parse_json(&json)
+        .map_err(|e| anyhow::anyhow!("parse openapi: {e}"))?;
+    let contract = parsed.into_contract();
+    let codegen = openpanel_app::CodegenContract::new(contract.openapi_version.clone());
+    let surface = codegen.build(&contract);
+    println!("rust:\n{}", serde_json::to_string_pretty(&surface.rust)?);
+    println!(
+        "\ngo:\n{}",
+        serde_json::to_string_pretty(&surface.go)?
+    );
+    println!(
+        "\nts:\n{}",
+        serde_json::to_string_pretty(&surface.ts)?
+    );
+    println!(
+        "\nprovider:\n{}",
+        serde_json::to_string_pretty(&surface.provider)?
+    );
+    println!("\n----- Rust scaffold -----\n{}", openpanel_app::render_rust_stub(&contract));
+    println!("\n----- Go scaffold -----\n{}", openpanel_app::render_go_stub(&contract));
+    println!("\n----- TS scaffold -----\n{}", openpanel_app::render_typescript_stub(&contract));
+    println!("\n----- Terraform scaffold -----\n{}", openpanel_app::render_provider_stub(&contract));
+    Ok(())
+}
+
+pub async fn iac_drift_check(
+    _config: Arc<Config>,
+    openapi: Option<String>,
+    committed_rust: Option<String>,
+    committed_provider: Option<String>,
+) -> anyhow::Result<()> {
+    let json = match openapi {
+        Some(path) => tokio::fs::read_to_string(&path).await
+            .map_err(|e| anyhow::anyhow!("read openapi {path}: {e}"))?,
+        None => IAC_SAMPLE.to_string(),
+    };
+    let parsed = openpanel_app::ParsedOpenApi::parse_json(&json)
+        .map_err(|e| anyhow::anyhow!("parse openapi: {e}"))?;
+    let contract = parsed.into_contract();
+    let codegen = openpanel_app::CodegenContract::new(contract.openapi_version.clone());
+    // When committed paths are absent, generate fresh and report
+    // a clean drift result (the caller can use this as a "what
+    // would we generate" check).
+    let committed = match (committed_rust, committed_provider) {
+        (Some(r), Some(p)) => {
+            let rust = tokio::fs::read_to_string(&r).await
+                .map_err(|e| anyhow::anyhow!("read rust {r}: {e}"))?;
+            let provider = tokio::fs::read_to_string(&p).await
+                .map_err(|e| anyhow::anyhow!("read provider {p}: {e}"))?;
+            openpanel_app::CommittedArtifacts {
+                rust_sdk_json: rust,
+                provider_json: provider,
+            }
+        }
+        _ => {
+            let surface = codegen.build(&contract);
+            openpanel_app::CommittedArtifacts {
+                rust_sdk_json: serde_json::to_string_pretty(&surface.rust)?,
+                provider_json: serde_json::to_string_pretty(&surface.provider)?,
+            }
+        }
+    };
+    let outcome = codegen
+        .drift(&contract, &committed)
+        .map_err(|e| anyhow::anyhow!("drift: {e}"))?;
+    println!("{}", serde_json::to_string_pretty(&outcome)?);
+    if !outcome.clean {
+        std::process::exit(2);
+    }
+    Ok(())
+}

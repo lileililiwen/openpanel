@@ -34,6 +34,8 @@ pub mod plugin_marketplace;
 pub mod collaborators;
 /// Container registry bounded context.
 pub mod container_registry;
+/// Infrastructure-as-Code bounded context.
+pub mod iac;
 pub mod prelude;
 pub mod security;
 /// Per-site staging bounded context: staging slot creation, sync,
@@ -91,6 +93,12 @@ pub use container_registry::{
     ContainerRegistryModule, ContainerRegistryService, ImageBlob, NoopScanHook,
     PushError, PushRequest, PushResult, ScanHook, ScanHookError,
     SqliteImageRepository, SqliteNamespaceRepository, SqliteScanResultRepository,
+};
+/// Infrastructure-as-Code module.
+pub use iac::{
+    CodegenContract, CommittedArtifacts, DriftOutcome, GeneratedSurface, OpenApiRef,
+    ParsedOpenApi, render_go_stub, render_provider_stub, render_rust_stub,
+    render_typescript_stub,
 };
 /// Re-export the `BinlogSink` trait so composition code can name it.
 pub use openpanel_domain::BinlogSink;

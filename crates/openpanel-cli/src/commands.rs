@@ -116,6 +116,12 @@ pub enum Command {
         #[command(subcommand)]
         action: RegistryCommand,
     },
+    /// Infrastructure-as-Code contract tooling.
+    Iac {
+        /// IaC operation.
+        #[command(subcommand)]
+        action: IacCommand,
+    },
     /// Manage typed per-site web application firewall rules.
     Waf {
         /// WAF operation.
@@ -1461,5 +1467,31 @@ pub enum RegistryCommand {
         /// Namespace id.
         #[arg(long)]
         namespace: String,
+    },
+}
+
+/// Subcommands for the IaC contract.
+#[derive(Debug, Subcommand)]
+pub enum IacCommand {
+    /// Print the SDK + provider surfaces generated from the
+    /// built-in contract.
+    Generate {
+        /// Path to an OpenAPI JSON document; if omitted, the
+        /// bundled sample is used.
+        #[arg(long)]
+        openapi: Option<String>,
+    },
+    /// Run the drift check against the committed artefacts.
+    DriftCheck {
+        /// Path to the OpenAPI JSON document.
+        #[arg(long)]
+        openapi: Option<String>,
+        /// Path to the committed Rust SDK descriptor (JSON).
+        #[arg(long)]
+        committed_rust: Option<String>,
+        /// Path to the committed Terraform provider descriptor
+        /// (JSON).
+        #[arg(long)]
+        committed_provider: Option<String>,
     },
 }

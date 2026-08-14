@@ -50,6 +50,10 @@ pub mod collaborators;
 /// Container image registry bounded context: per-user namespaces,
 /// retention, scan hook, OCI Distribution push/pull.
 pub mod container_registry;
+/// Infrastructure-as-Code bounded context: SDK and Terraform
+/// provider contract descriptors, regenerated from the OpenAPI
+/// spec.
+pub mod iac;
 
 /// Database point-in-time recovery: continuous binlog streaming,
 /// point-in-time restore, and incremental file-backup deltas.
@@ -77,6 +81,10 @@ pub use collaborators::{
 pub use container_registry::{
     ImageDigest, ImageNamespace, NamespaceId, RegistryConfig, RegistryError, RetentionPolicy,
     RetentionVerdict, ScanFinding, ScanResult, ScanStatus, StoredImage,
+};
+pub use iac::{
+    ApiContract, IacError, Language, Operation, OperationId, ProviderResource, ResourceEndpoint,
+    ResourceKind, SdkPackage, SdkSurface, TerraformProvider,
 };
 pub use databases::{
     database::Database, engine::DatabaseEngine, error::DatabaseError,
