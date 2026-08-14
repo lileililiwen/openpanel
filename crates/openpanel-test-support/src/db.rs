@@ -108,6 +108,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("synthetic_monitoring migration");
+        sqlx::query(include_str!("migrations/log_viewer/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("log_viewer migration");
     }
 
     /// Access the underlying pool.

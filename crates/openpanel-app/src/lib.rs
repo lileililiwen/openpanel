@@ -61,6 +61,9 @@ pub mod os_updates;
 /// Synthetic monitoring bounded context: periodic HTTP / TCP / SSL
 /// checks with a per-check throttle and typed alert decision.
 pub mod synthetic_monitoring;
+/// Log viewer bounded context: typed queries over a JSONL store
+/// with role-based authorization.
+pub mod log_viewer;
 
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
@@ -150,4 +153,7 @@ pub use os_updates::{
 pub use synthetic_monitoring::{
     SyntheticMonitoringModule, CheckRunner, ProbeScheduler, RecordingProbe,
     SqliteSyntheticRepository,
+};
+pub use log_viewer::{
+    LogViewerModule, InMemoryLogReader, LogAggregator, SqliteLogViewerRepository,
 };

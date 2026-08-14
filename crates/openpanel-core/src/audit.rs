@@ -381,6 +381,7 @@ impl AuditAction {
             AuditAction::AuditPurged => "audit_purged",
             AuditAction::GdprExportRequested => "gdpr_export_requested",
             AuditAction::OsUpdateApplied => "os_update_applied",
+            AuditAction::LogDownloaded => "log_downloaded",
         }
     }
 }
