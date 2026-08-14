@@ -61,6 +61,9 @@ pub mod db_pitr;
 /// AI Ops bounded context: conversational session, tool-call
 /// allowlist, proposed/approved/executed/denied actions.
 pub mod ai_ops;
+/// Compliance bounded context: CIS hardening, audit retention,
+/// GDPR export with secret redaction.
+pub mod compliance;
 /// Per-site staging slots, sync policies, and atomic promote.
 pub mod site_staging;
 
@@ -102,6 +105,11 @@ pub use db_pitr::{
 pub use ai_ops::{
     AiAction, AiActionId, AiActionStatus, AiMessage, AiOpsError, AiOpsRepository, AiSession,
     AiSessionId, MessageRole, ToolCallAllowlist, ToolKind, ToolName, ToolResult, ToolSpec,
+};
+pub use compliance::{
+    AuditRetentionPolicy, ComplianceError, ComplianceRepository, GdprApiTokenRecord,
+    GdprDatabaseRecord, GdprExport, GdprExportPayload, GdprMailRecord, GdprSiteRecord,
+    HardeningRule, HardeningRun, REDACTED, RuleOutcome,
 };
 pub use files::{
     error::FileError,

@@ -72,3 +72,5 @@ pub const COLLABORATORS_V001: &str = include_str!("collaborators/V001__init.sql"
 pub const CONTAINER_REGISTRY_V001: &str = include_str!("container_registry/V001__init.sql");
 /// AI Ops sessions, messages, and actions.
 pub const AI_OPS_V001: &str = include_str!("ai_ops/V001__init.sql");
+/// Compliance: hardening runs, audit retention policy, GDPR exports.
+pub const COMPLIANCE_V001: &str = include_str!("compliance/V001__init.sql");

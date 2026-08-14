@@ -92,6 +92,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("ai_ops migration");
+        sqlx::query(include_str!("migrations/compliance/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("compliance migration");
     }
 
     /// Access the underlying pool.

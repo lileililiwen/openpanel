@@ -252,6 +252,16 @@ pub enum AuditAction {
     AiActionExecuted,
     /// An AI Ops write action was denied by a human approver.
     AiActionDenied,
+    /// A CIS hardening profile was applied.
+    HardeningApplied,
+    /// A previously applied CIS rule was rolled back.
+    HardeningReverted,
+    /// The audit retention policy was changed.
+    AuditRetentionChanged,
+    /// Audit records older than the retention cutoff were purged.
+    AuditPurged,
+    /// A GDPR export was generated for a user.
+    GdprExportRequested,
 }
 
 impl AuditAction {
@@ -363,6 +373,11 @@ impl AuditAction {
             AuditAction::AiToolCalled => "ai_tool_called",
             AuditAction::AiActionExecuted => "ai_action_executed",
             AuditAction::AiActionDenied => "ai_action_denied",
+            AuditAction::HardeningApplied => "hardening_applied",
+            AuditAction::HardeningReverted => "hardening_reverted",
+            AuditAction::AuditRetentionChanged => "audit_retention_changed",
+            AuditAction::AuditPurged => "audit_purged",
+            AuditAction::GdprExportRequested => "gdpr_export_requested",
         }
     }
 }
