@@ -66,3 +66,5 @@ pub const SITE_STAGING_V001: &str = include_str!("site_staging/V001__init.sql");
 pub const PLUGIN_V001: &str = include_str!("plugin/V001__init.sql");
 /// Plugin marketplace: cached verified catalogs.
 pub const PLUGIN_MARKETPLACE_V001: &str = include_str!("plugin_marketplace/V001__init.sql");
+/// Per-site collaborators and site_grants tables.
+pub const COLLABORATORS_V001: &str = include_str!("collaborators/V001__init.sql");

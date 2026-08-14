@@ -2,13 +2,13 @@
 
 use clap::Parser;
 use openpanel_cli::{
-    BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, Command, CronCommand,
-    DatabaseCommand, DnsCommand, DockerCommand, FileCommand, FtpCommand, LogsCommand, MailCommand,
-    MarketplaceCommand, MonitoringCommand, NotificationChannelCommand, NotificationCommand,
-    NotificationSubscriptionCommand, PitrCommand, PluginCommand, RecoveryCodeCommand,
-    SecurityAllowlistCommand, SecurityCommand, SecurityRuleCommand, ServicesCommand, SiteCommand,
-    SoftwareCommand, SslCommand, StagingCommand, TokenCommand, TwoFactorCommand, UserCommand,
-    WafCommand, handlers,
+    BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, CollaboratorCommand, Command,
+    CronCommand, DatabaseCommand, DnsCommand, DockerCommand, FileCommand, FtpCommand,
+    LogsCommand, MailCommand, MarketplaceCommand, MonitoringCommand,
+    NotificationChannelCommand, NotificationCommand, NotificationSubscriptionCommand,
+    PitrCommand, PluginCommand, RecoveryCodeCommand, SecurityAllowlistCommand, SecurityCommand,
+    SecurityRuleCommand, ServicesCommand, SiteCommand, SoftwareCommand, SslCommand,
+    StagingCommand, TokenCommand, TwoFactorCommand, UserCommand, WafCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -80,6 +80,17 @@ async fn main() -> anyhow::Result<()> {
                     confirmed_at,
                 } => handlers::staging_promote(config, id, snapshot, confirmed_at).await,
                 StagingCommand::Delete { id } => handlers::staging_delete(config, id).await,
+            },
+            SiteCommand::Collaborator { action } => match action {
+                CollaboratorCommand::Invite { site, email, scopes } => {
+                    handlers::collab_invite(config, site, email, scopes).await
+                }
+                CollaboratorCommand::List { site } => {
+                    handlers::collab_list(config, site).await
+                }
+                CollaboratorCommand::Revoke { site, collaborator } => {
+                    handlers::collab_revoke(config, site, collaborator).await
+                }
             },
         },
         Command::Waf { action } => match action {

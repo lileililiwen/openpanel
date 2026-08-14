@@ -28,6 +28,8 @@ mod sites;
 mod smoke;
 /// Plugin marketplace HTTP integration tests.
 mod plugin_marketplace;
+/// Per-site collaborator HTTP integration tests.
+mod collaborators;
 mod software_center;
 mod ssl;
 mod system_services;

@@ -1087,9 +1087,45 @@ pub enum SiteCommand {
         #[command(subcommand)]
         action: StagingCommand,
     },
+    /// Per-site collaborator subcommands.
+    Collaborator {
+        /// Collaborator subcommand.
+        #[command(subcommand)]
+        action: CollaboratorCommand,
+    },
 }
 
-/// Subcommands for managing MySQL databases used by sites.
+/// Subcommands for managing per-site collaborators.
+#[derive(Debug, Subcommand)]
+pub enum CollaboratorCommand {
+    /// Invite a collaborator to a site with one or more scopes.
+    Invite {
+        /// Site id.
+        #[arg(long)]
+        site: String,
+        /// Collaborator email.
+        #[arg(long)]
+        email: String,
+        /// Scopes (comma-separated): file, database, mail, cron.
+        #[arg(long, value_delimiter = ',', default_values_t = Vec::<String>::new())]
+        scopes: Vec<String>,
+    },
+    /// List collaborators granted on a site.
+    List {
+        /// Site id.
+        #[arg(long)]
+        site: String,
+    },
+    /// Revoke a collaborator from a single site.
+    Revoke {
+        /// Site id.
+        #[arg(long)]
+        site: String,
+        /// Collaborator id.
+        #[arg(long)]
+        collaborator: String,
+    },
+}
 #[derive(Debug, Subcommand)]
 pub enum DatabaseCommand {
     /// Provision a new MySQL database + DB user.

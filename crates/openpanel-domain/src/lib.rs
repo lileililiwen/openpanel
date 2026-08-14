@@ -44,6 +44,9 @@ pub mod plugin;
 /// Plugin marketplace: remote catalog discovery, publisher CA
 /// verification, and rating/metadata cache.
 pub mod plugin_marketplace;
+/// Per-site collaborator bounded context: invite collaborators
+/// scoped to specific sites with limited permission sets.
+pub mod collaborators;
 
 /// Database point-in-time recovery: continuous binlog streaming,
 /// point-in-time restore, and incremental file-backup deltas.
@@ -63,6 +66,10 @@ pub use api_tokens::{
 pub use common::{
     Email, Password, PasswordError, Username, UsernameError,
     error::{DomainError, RepoError},
+};
+pub use collaborators::{
+    CollabStatus, Collaborator, CollaboratorError, CollaboratorId, CollaboratorRepository,
+    Permission, PermissionSet, SiteGrant, SiteGrantRepository,
 };
 pub use databases::{
     database::Database, engine::DatabaseEngine, error::DatabaseError,

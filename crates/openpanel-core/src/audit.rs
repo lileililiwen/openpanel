@@ -234,6 +234,12 @@ pub enum AuditAction {
     PluginManifestRejected,
     /// A plugin was installed from the marketplace catalog.
     PluginInstalledFromMarketplace,
+    /// A per-site collaborator was invited.
+    CollaboratorInvited,
+    /// A per-site collaborator's permissions were updated.
+    CollaboratorUpdated,
+    /// A per-site collaborator was revoked from a site.
+    CollaboratorRevoked,
 }
 
 impl AuditAction {
@@ -336,6 +342,9 @@ impl AuditAction {
             AuditAction::PluginUninstalled => "plugin_uninstalled",
             AuditAction::PluginManifestRejected => "plugin_manifest_rejected",
             AuditAction::PluginInstalledFromMarketplace => "plugin_installed_from_marketplace",
+            AuditAction::CollaboratorInvited => "collaborator_invited",
+            AuditAction::CollaboratorUpdated => "collaborator_updated",
+            AuditAction::CollaboratorRevoked => "collaborator_revoked",
         }
     }
 }

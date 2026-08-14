@@ -41,6 +41,8 @@ pub mod ssl;
 pub mod system_services;
 /// Plugin marketplace web page.
 pub mod plugin_marketplace;
+/// Per-site collaborator web page.
+pub mod collaborators;
 /// String-table stub used by every template.
 pub mod t;
 pub mod two_factor;

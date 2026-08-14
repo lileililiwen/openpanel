@@ -80,6 +80,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("plugin_marketplace migration");
+        sqlx::query(include_str!("migrations/collaborators/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("collaborators migration");
     }
 
     /// Access the underlying pool.

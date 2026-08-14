@@ -17,13 +17,13 @@ use std::{
 
 use openpanel_api::build_router;
 use openpanel_app::{
-    ApiTokenModule, ApiTokenService, ApplyReport, BackupService, BackupsModule, CronModule,
-    CronService, DatabasesModule, DatabasesService, DbPitrModule, DnsModule, DnsService,
+    ApiTokenModule, ApiTokenService, ApplyReport, BackupService, BackupsModule, CollaboratorService,
+    CronModule, CronService, DatabasesModule, DatabasesService, DbPitrModule, DnsModule, DnsService,
     DockerAdapter, DockerModule, DockerService, ExecResult, FilesModule, FilesService, FtpModule,
-    FtpService, IdentityModule, IdentityService, InMemoryBinlogSink, InMemoryStagingFilesystem,
-    LogService, LogsModule, MailModule, MailService, MarketplaceService, MonitoringModule,
-    MonitoringService, NotificationModule, NotificationService, PitrService, PluginService,
-    SecurityModule, SecurityService, SiteStagingModule, SitesModule, SitesService,
+    FtpService, GrantResolver, IdentityModule, IdentityService, InMemoryBinlogSink,
+    InMemoryStagingFilesystem, LogService, LogsModule, MailModule, MailService, MarketplaceService,
+    MonitoringModule, MonitoringService, NotificationModule, NotificationService, PitrService,
+    PluginService, SecurityModule, SecurityService, SiteStagingModule, SitesModule, SitesService,
     SoftwareCenterModule, SoftwareCenterService, SslModule, SslPaths, SslService, StagingService,
     SystemServicesModule, WafModule, WafService,
     identity::two_factor::TwoFactorCrypto,
@@ -250,6 +250,10 @@ pub struct TestServer {
     plugins: Arc<PluginService>,
     /// Plugin marketplace service.
     marketplace: Arc<MarketplaceService>,
+    /// Collaborator service.
+    collaborators: Arc<CollaboratorService>,
+    /// Grant resolver.
+    grant_resolver: Arc<GrantResolver>,
 }
 
 impl TestServer {
@@ -584,6 +588,16 @@ impl TestServer {
             .expect("plugin marketplace migrations");
         let mp_svc = mp_module.service();
 
+        // Per-site collaborators module.
+        let collaborators_module =
+            openpanel_app::CollaboratorsModule::new(&ctx, audit.clone()).await;
+        runner
+            .apply_module(collaborators_module.name(), &collaborators_module.migrations())
+            .await
+            .expect("collaborators migrations");
+        let collaborators_svc = collaborators_module.service();
+        let grant_resolver = collaborators_module.resolver();
+
         let settings_path = sandbox.path().join("web-preferences.json");
         let two_factor_svc = identity_module.two_factor();
         let app = build_router(
@@ -612,6 +626,8 @@ impl TestServer {
             staging_svc.clone(),
             plugin_svc.clone(),
             mp_svc.clone(),
+            collaborators_svc.clone(),
+            grant_resolver.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -637,6 +653,7 @@ impl TestServer {
             notification_svc.clone(),
             pitr_svc.clone(),
             staging_svc.clone(),
+            collaborators_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -718,6 +735,8 @@ impl TestServer {
             staging: staging_svc,
             plugins: plugin_svc,
             marketplace: mp_svc,
+            collaborators: collaborators_svc,
+            grant_resolver,
         }
     }
 

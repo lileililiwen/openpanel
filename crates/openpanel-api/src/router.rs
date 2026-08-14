@@ -4,20 +4,22 @@ use std::sync::Arc;
 
 use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
 use openpanel_app::{
-    ApiTokenService, BackupService, CronService, DatabasesService, DnsService, DockerService,
-    FilesService, FtpService, IdentityService, LogService, MailService, MarketplaceService,
-    MonitoringService, NotificationService, PitrService, PluginService, SecurityService,
-    SitesService, SoftwareCenterService, SslService, StagingService, WafService,
-    identity::TwoFactorService, security::LoginThrottleService, system_services::ServiceManager,
+    ApiTokenService, BackupService, CollaboratorService, CronService, DatabasesService, DnsService,
+    DockerService, FilesService, FtpService, GrantResolver, IdentityService, LogService,
+    MailService, MarketplaceService, MonitoringService, NotificationService, PitrService,
+    PluginService, SecurityService, SitesService, SoftwareCenterService, SslService,
+    StagingService, WafService, identity::TwoFactorService, security::LoginThrottleService,
+    system_services::ServiceManager,
 };
 
 use crate::{
     middleware::session::{ApiAuthState, api_auth_middleware},
     routes::{
         api_tokens::router as api_tokens_router, backups::router as backups_router,
-        cron::router as cron_router, databases::router as databases_router,
-        db_pitr::router as db_pitr_router, dns::router as dns_router,
-        docker::router as docker_router, files::router as files_router, ftp::router as ftp_router,
+        collaborators::router as collaborators_router, cron::router as cron_router,
+        databases::router as databases_router, db_pitr::router as db_pitr_router,
+        dns::router as dns_router, docker::router as docker_router,
+        files::router as files_router, ftp::router as ftp_router,
         identity::router as identity_router, logs::router as logs_router,
         mail::router as mail_router, monitoring::router as monitoring_router,
         notifications::router as notifications_router, plugin_marketplace::router as
@@ -60,6 +62,8 @@ pub fn build_router(
     staging: Arc<StagingService>,
     plugins: Arc<PluginService>,
     marketplace: Arc<MarketplaceService>,
+    collaborators: Arc<CollaboratorService>,
+    grant_resolver: Arc<GrantResolver>,
 ) -> Router {
     let auth_state = ApiAuthState {
         identity: identity.clone(),
@@ -91,6 +95,10 @@ pub fn build_router(
         .nest("/software", software_center_router(software_center))
         .nest("/docker", docker_router(docker))
         .nest("/notifications", notifications_router(notifications))
+        .nest(
+            "/sites",
+            collaborators_router(collaborators, grant_resolver),
+        )
         .nest("/marketplace", plugin_marketplace_router(marketplace))
         .layer(from_fn_with_state(auth_state, api_auth_middleware));
 

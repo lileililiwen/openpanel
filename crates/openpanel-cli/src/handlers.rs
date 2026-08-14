@@ -233,6 +233,16 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .context("apply plugin marketplace migrations")?;
     let marketplace_svc = mp_module.service();
 
+    // Per-site collaborators module.
+    let collaborators_module =
+        openpanel_app::CollaboratorsModule::new(&ctx, audit.clone()).await;
+    runner
+        .apply_module(collaborators_module.name(), &collaborators_module.migrations())
+        .await
+        .context("apply collaborators migrations")?;
+    let collaborators_svc = collaborators_module.service();
+    let grant_resolver = collaborators_module.resolver();
+
     // Site-staging module: in-memory filesystem layer for the CLI
     // (no live nginx / rsync in offline mode).
     let staging_fs: Arc<dyn openpanel_app::StagingFilesystemLayer> =
@@ -273,6 +283,8 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         staging_svc.clone(),
         plugin_svc.clone(),
         marketplace_svc.clone(),
+        collaborators_svc.clone(),
+        grant_resolver.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -298,6 +310,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         notification_svc,
         pitr_svc,
         staging_svc,
+        collaborators_svc,
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
@@ -3942,4 +3955,97 @@ pub async fn build_plugin_bundle(
 pub struct PluginBundle {
     pub plugins: Arc<openpanel_app::PluginService>,
     pub marketplace: Arc<openpanel_app::MarketplaceService>,
+}
+
+// ---- Per-site collaborator handlers ----
+
+pub async fn collab_invite(
+    config: Arc<Config>,
+    site_id: String,
+    email: String,
+    scopes: Vec<String>,
+) -> anyhow::Result<()> {
+    use openpanel_app::collaborators::InviteRequest;
+    use openpanel_domain::Permission;
+    let bundle = build_collaborator_bundle(config.clone()).await?;
+    let site_uuid = uuid::Uuid::parse_str(&site_id).context("invalid site id")?;
+    let mut set = openpanel_domain::PermissionSet::EMPTY;
+    for s in &scopes {
+        let p = Permission::parse(s).ok_or_else(|| anyhow::anyhow!("unknown scope `{s}`"))?;
+        set.insert(p);
+    }
+    let collaborator = bundle
+        .service
+        .invite(
+            uuid::Uuid::nil(),
+            InviteRequest {
+                email,
+                site_id: site_uuid,
+                permissions: set,
+            },
+            "admin",
+        )
+        .await
+        .context("invite collaborator")?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "collaborator_id": collaborator.collaborator_id.to_string(),
+            "status": collaborator.status.as_str(),
+        }))?
+    );
+    Ok(())
+}
+
+pub async fn collab_list(config: Arc<Config>, site_id: String) -> anyhow::Result<()> {
+    let bundle = build_collaborator_bundle(config.clone()).await?;
+    let site_uuid = uuid::Uuid::parse_str(&site_id).context("invalid site id")?;
+    let grants = bundle
+        .service
+        .grants_for_site(site_uuid)
+        .await
+        .context("list grants")?;
+    println!("{}", serde_json::to_string_pretty(&grants)?);
+    Ok(())
+}
+
+pub async fn collab_revoke(
+    config: Arc<Config>,
+    site_id: String,
+    collaborator: String,
+) -> anyhow::Result<()> {
+    use std::str::FromStr;
+    let bundle = build_collaborator_bundle(config.clone()).await?;
+    let site_uuid = uuid::Uuid::parse_str(&site_id).context("invalid site id")?;
+    let id = openpanel_domain::CollaboratorId::from_str(&collaborator)
+        .map_err(|e| anyhow::anyhow!("invalid collaborator id: {e}"))?;
+    bundle
+        .service
+        .revoke(&id, site_uuid, "admin")
+        .await
+        .context("revoke")?;
+    println!(
+        "{{\"revoked\":\"{}\",\"site\":\"{}\"}}",
+        collaborator, site_id
+    );
+    Ok(())
+}
+
+/// Bundle of collaborator services the CLI handlers reuse.
+pub struct CollaboratorBundle {
+    pub service: Arc<openpanel_app::CollaboratorService>,
+    pub resolver: Arc<openpanel_app::GrantResolver>,
+}
+
+pub async fn build_collaborator_bundle(
+    config: Arc<Config>,
+) -> anyhow::Result<CollaboratorBundle> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let _ = pool;
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
+    let module = openpanel_app::CollaboratorsModule::new(&ctx, audit).await;
+    Ok(CollaboratorBundle {
+        service: module.service(),
+        resolver: module.resolver(),
+    })
 }

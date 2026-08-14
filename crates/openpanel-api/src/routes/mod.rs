@@ -3,6 +3,8 @@
 pub mod api_tokens;
 /// Backup and restore routes (`/backups`).
 pub mod backups;
+/// Per-site collaborator routes (`/sites/{id}/collaborators`).
+pub mod collaborators;
 /// Cron scheduling routes (`/cron`).
 pub mod cron;
 /// Databases resource routes (`/databases`).
