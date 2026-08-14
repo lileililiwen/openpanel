@@ -78,3 +78,5 @@ pub const COMPLIANCE_V001: &str = include_str!("compliance/V001__init.sql");
 pub const SERVICE_MANAGER_V001: &str = include_str!("service_manager/V001__init.sql");
 /// OS update management: policy and apply history.
 pub const OS_UPDATES_V001: &str = include_str!("os_updates/V001__init.sql");
+/// Synthetic monitoring: checks and per-run results.
+pub const SYNTHETIC_MONITORING_V001: &str = include_str!("synthetic_monitoring/V001__init.sql");

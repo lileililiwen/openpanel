@@ -58,6 +58,9 @@ pub mod service_manager;
 /// OS update management bounded context: package updates,
 /// unattended-upgrades policy, reboot state.
 pub mod os_updates;
+/// Synthetic monitoring bounded context: periodic HTTP / TCP / SSL
+/// checks with a per-check throttle and typed alert decision.
+pub mod synthetic_monitoring;
 
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
@@ -143,4 +146,8 @@ pub use service_manager::{
 pub use os_updates::{
     OsUpdateModule, OsUpdateApplier, OsUpdateLister, PackageManager, RecordingPackageManager,
     SqliteOsUpdateRepository, UnattendedConfig,
+};
+pub use synthetic_monitoring::{
+    SyntheticMonitoringModule, CheckRunner, ProbeScheduler, RecordingProbe,
+    SqliteSyntheticRepository,
 };

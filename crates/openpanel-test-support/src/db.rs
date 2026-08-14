@@ -104,6 +104,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("os_updates migration");
+        sqlx::query(include_str!("migrations/synthetic_monitoring/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("synthetic_monitoring migration");
     }
 
     /// Access the underlying pool.

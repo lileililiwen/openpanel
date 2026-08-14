@@ -70,6 +70,9 @@ pub mod service_manager;
 /// OS update management bounded context: package updates,
 /// unattended-upgrades policy, reboot state.
 pub mod os_updates;
+/// Synthetic monitoring bounded context: periodic HTTP / TCP / SSL
+/// checks with a per-check throttle and typed alert decision.
+pub mod synthetic_monitoring;
 /// Per-site staging slots, sync policies, and atomic promote.
 pub mod site_staging;
 
@@ -124,6 +127,10 @@ pub use service_manager::{
 pub use os_updates::{
     OsUpdateError, OsUpdateRepository, PackageUpdate, RebootState, UpdateHistoryRecord,
     UpdateKind, UpdatePolicy,
+};
+pub use synthetic_monitoring::{
+    CheckResult, CheckStatus, CheckType, SyntheticCheck, SyntheticError, SyntheticRepository,
+    classify,
 };
 pub use files::{
     error::FileError,
