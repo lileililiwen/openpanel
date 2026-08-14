@@ -327,7 +327,134 @@ When asked to implement a feature or spec:
 
 ---
 
-## 10. References
+## 11. Web UI Styling & Responsive Layout (anti-regression)
+
+> **Every web UI route ships styled AND responsive.** Browser-default
+> `<input>` / `<textarea>` / `<button>` styling and fixed-width
+> desktop layouts that break on a phone are a regression and MUST
+> NOT ship.
+
+### 11.1 Form styling is a global contract, not per-form opt-in
+
+The legacy ad-hoc `.form` / `.login` classes are **forbidden for new
+code**. Every `<form>` MUST use the global `tokens.css` design
+language and the shared `form`, `form-row`, `form-actions`, and
+`form-grid` classes declared in the web-ui styling spec (see
+`openspec/specs/web-ui-styling/spec.md`).
+
+Concretely, a new `<form>` MUST:
+
+- Be wrapped in `<form class="form" novalidate>` (or `form form-row`,
+  `form form-grid`) so its descendants inherit the token vocabulary.
+- Source colours, spacing, radii, and typography **only** from the
+  custom properties in `tokens.css`. Hard-coded hex codes,
+  pixel-spacing, or non-token fonts are rejected at code review.
+- Pair every `<input>`, `<textarea>`, `<select>` with a sibling
+  `<label>` (a11y baseline) and a typed `:focus-visible` ring
+  (`outline: 2px solid var(--op-color-focus-ring)`).
+- Use `<button type="submit">` for primary actions and
+  `<button type="button">` for in-page toggles; never bare
+  `<button>` without a type.
+- Show validation errors via `<p class="form-error" role="alert">`
+  (announced by screen readers).
+
+### 11.2 Responsive layout is mandatory at three breakpoints
+
+Every page MUST be tested at three widths before merging:
+
+| Breakpoint | Target | Layout |
+|---|---|---|
+| ≥ 1024 px | desktop | full sidebar + content |
+| 640 px – 1023 px | tablet | collapsible sidebar; content fits without horizontal scroll |
+| < 640 px | mobile | stacked top bar; full-width forms; tables switch to card layout or scroll horizontally inside the card |
+
+CSS uses the **mobile-first** pattern:
+
+```css
+/* Default = mobile */
+.card { padding: var(--op-space-3); }
+
+@media (min-width: 640px) {
+  /* tablet */
+  .card { padding: var(--op-space-4); }
+}
+
+@media (min-width: 1024px) {
+  /* desktop */
+  .layout { grid-template-columns: 240px 1fr; }
+}
+```
+
+`max-width: <number>` queries are forbidden — they cascade
+incorrectly and break on viewports in between.
+
+### 11.3 Accessibility baseline (do not regress)
+
+- Every interactive element has accessible text (`aria-label` or
+  visible label).
+- Focus is always visible (`:focus-visible` ring is mandatory).
+- All text meets WCAG 2.1 AA contrast against `tokens.css` colours;
+  the follow-on `refine-quality-with-i18n-and-theme-policy` change
+  ships the contrast test that enforces this.
+- Every page has a single `<h1>`; heading levels never skip.
+
+### 11.4 How to add a new form (checklist)
+
+1. Pick the smallest token vocabulary that fits the form
+   (`form`, `form form-row`, or `form form-grid`).
+2. Render the form with `<form novalidate>` (the browser's native
+   validation is replaced by `tokens.css` styling).
+3. Pair every input with a `<label>`.
+4. Add a `@media (min-width: 640px)` block only if the mobile layout
+   needs tablet-specific spacing.
+5. Smoke-test at 360 px (iPhone), 768 px (iPad portrait), and
+   1280 px (laptop). Capture a screenshot at each width.
+6. Run `scripts/scan-template-literals.sh` (the literal-string
+   scan). It MUST pass.
+7. Re-run `make check`. New clippy lints for non-token literals in
+   `app.css` will reject the change.
+
+### 11.5 What NOT to do
+
+- **Don't** ship a `<form>` without a class. The default styling
+  IS the regression; this is what we are guarding against.
+- **Don't** introduce a one-off form class (`.foo-form`, `.bar-form`).
+  Extend the shared `form` vocabulary or open a spec change first.
+- **Don't** use `px` in CSS. Use `var(--op-space-*)`.
+- **Don't** declare a new colour, font, or radius outside `tokens.css`.
+- **Don't** write `@media (max-width: ...)`. Use `min-width`.
+- **Don't** hide content with `display: none` to "fix" a responsive
+  bug. Restructure the markup.
+- **Don't** skip the three-breakpoint smoke test. If you can't run
+  it, the change is not ready for review.
+
+### 11.6 CI enforcement
+
+The follow-on `web-ui-styling` change ships:
+
+- A `tests/web_ui_styling.rs` integration suite that loads each
+  public web route at 360 / 768 / 1280 px and asserts no horizontal
+  overflow at any width.
+- A `templates-no-browser-defaults` clippy-style lint that fails
+  the build when a `<form>` lacks a class.
+- A `tokens-only` lint that fails when CSS outside `tokens.css`
+  declares a literal colour, spacing value, or font family.
+
+Until those land, **every PR adding or modifying a web route must
+include a screenshot** at the three breakpoints above in the PR
+description.
+
+### 11.7 References
+
+- `openspec/specs/web-ui-styling/spec.md` — single source of truth
+  for the styling + responsive contract
+- `crates/openpanel-web/assets/tokens.css` — design-token vocabulary
+- `crates/openpanel-web/assets/app.css` — current stylesheet
+- `crates/openpanel-web/src/layout.rs` — shell / sidebar / topbar
+- `crates/openpanel-web/src/login.rs` — canonical styled-form example
+  (login form), referenced as the pattern to follow
+
+---
 
 - `openspec/specs/architecture/spec.md` — DDD layering contract
 - `openspec/specs/identity/spec.md` — auth model
@@ -340,6 +467,36 @@ When asked to implement a feature or spec:
 - `openspec/changes/add-web-ui-foundation/specs/web-ui/spec.md` — web UI (login, shell, CSRF)
 - `openspec/specs/testing/spec.md` — TDD infrastructure (TBD)
 - `openspec/specs/quality/spec.md` — quality engineering (TBD)
+- `openspec/changes/archive/` — frozen history of every shipped change
+- `crates/openpanel-test-support/README.md` — test helpers API
+- `crates/openpanel-app/src/ssl/README.md` — SSL module internals
+- `crates/openpanel-app/src/monitoring/README.md` — monitoring module internals
+- `crates/openpanel-web/` — pure-Rust HTMX web UI (`layout`, `login`, `csrf`, `assets`, `router`)
+- `tests/README.md` — how to run each test category
+- `Makefile` — single-entry quality gate (`make check`)
+- `scripts/check-fmt.sh`, `scripts/check-clippy.sh`,
+  `scripts/check-docs.sh`, `scripts/check-audit.sh` — per-gate scripts
+- `scripts/check-tests.sh` — test gate
+- `scripts/coverage.sh` — coverage report (informational)
+- `.github/workflows/ci.yml` — CI pipeline
+- `clippy.toml` + `rustfmt.toml` — quality policy files
+
+---
+
+## 12. References
+
+- `openspec/specs/architecture/spec.md` — DDD layering contract
+- `openspec/specs/identity/spec.md` — auth model
+- `openspec/specs/sites/spec.md` — vhost provisioning
+- `openspec/specs/databases/spec.md` — MySQL provisioning
+- `openspec/specs/files/spec.md` — chrooted file manager
+- `openspec/specs/ssl/spec.md` — TLS certificate lifecycle
+- `openspec/specs/monitoring/spec.md` — host resource monitoring
+- `openspec/specs/mail/spec.md` — hosted mail domains, mailboxes, and safe MTA/IMAP configuration
+- `openspec/specs/web-ui-styling/spec.md` — form styling + responsive contract
+- `openspec/specs/web-ui/spec.md` — web UI (login, shell, CSRF)
+- `openspec/specs/testing/spec.md` — TDD infrastructure
+- `openspec/specs/quality/spec.md` — quality engineering
 - `openspec/changes/archive/` — frozen history of every shipped change
 - `crates/openpanel-test-support/README.md` — test helpers API
 - `crates/openpanel-app/src/ssl/README.md` — SSL module internals
