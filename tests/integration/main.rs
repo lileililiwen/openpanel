@@ -26,6 +26,8 @@ mod security;
 mod site_staging;
 mod sites;
 mod smoke;
+/// Plugin marketplace HTTP integration tests.
+mod plugin_marketplace;
 mod software_center;
 mod ssl;
 mod system_services;

@@ -21,10 +21,11 @@ use openpanel_app::{
     CronService, DatabasesModule, DatabasesService, DbPitrModule, DnsModule, DnsService,
     DockerAdapter, DockerModule, DockerService, ExecResult, FilesModule, FilesService, FtpModule,
     FtpService, IdentityModule, IdentityService, InMemoryBinlogSink, InMemoryStagingFilesystem,
-    LogService, LogsModule, MailModule, MailService, MonitoringModule, MonitoringService,
-    NotificationModule, NotificationService, PitrService, SecurityModule, SecurityService,
-    SiteStagingModule, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
-    SslModule, SslPaths, SslService, StagingService, SystemServicesModule, WafModule, WafService,
+    LogService, LogsModule, MailModule, MailService, MarketplaceService, MonitoringModule,
+    MonitoringService, NotificationModule, NotificationService, PitrService, PluginService,
+    SecurityModule, SecurityService, SiteStagingModule, SitesModule, SitesService,
+    SoftwareCenterModule, SoftwareCenterService, SslModule, SslPaths, SslService, StagingService,
+    SystemServicesModule, WafModule, WafService,
     identity::two_factor::TwoFactorCrypto,
     security::MemoryFirewall,
     sites::{nginx::NginxPaths, repo::SqliteSiteRepository},
@@ -245,6 +246,10 @@ pub struct TestServer {
     pitr: Arc<PitrService>,
     /// Per-site staging service.
     staging: Arc<StagingService>,
+    /// Plugin extension framework service.
+    plugins: Arc<PluginService>,
+    /// Plugin marketplace service.
+    marketplace: Arc<MarketplaceService>,
 }
 
 impl TestServer {
@@ -559,6 +564,26 @@ impl TestServer {
             .expect("pitr migrations");
         let pitr_svc = pitr_module.service();
 
+        // Plugin extension framework module.
+        let plugin_module = openpanel_app::PluginModule::new(&ctx, audit.clone()).await;
+        runner
+            .apply_module(plugin_module.name(), &plugin_module.migrations())
+            .await
+            .expect("plugin migrations");
+        let plugin_svc = plugin_module.service();
+
+        // Plugin marketplace module: in-process mock client + empty
+        // CA so the routes are reachable but the install path must
+        // verify signatures before delegating.
+        let mp_client: Arc<dyn openpanel_app::MarketplaceClient> =
+            Arc::new(openpanel_app::MockMarketplaceClient::new());
+        let mp_module = openpanel_app::PluginMarketplaceModule::new(&ctx, mp_client, plugin_svc.clone()).await;
+        runner
+            .apply_module(mp_module.name(), &mp_module.migrations())
+            .await
+            .expect("plugin marketplace migrations");
+        let mp_svc = mp_module.service();
+
         let settings_path = sandbox.path().join("web-preferences.json");
         let two_factor_svc = identity_module.two_factor();
         let app = build_router(
@@ -585,6 +610,8 @@ impl TestServer {
             notification_svc.clone(),
             pitr_svc.clone(),
             staging_svc.clone(),
+            plugin_svc.clone(),
+            mp_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -689,6 +716,8 @@ impl TestServer {
             fetched_urls,
             pitr: pitr_svc,
             staging: staging_svc,
+            plugins: plugin_svc,
+            marketplace: mp_svc,
         }
     }
 

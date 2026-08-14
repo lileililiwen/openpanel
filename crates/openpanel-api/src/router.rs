@@ -5,10 +5,10 @@ use std::sync::Arc;
 use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
 use openpanel_app::{
     ApiTokenService, BackupService, CronService, DatabasesService, DnsService, DockerService,
-    FilesService, FtpService, IdentityService, LogService, MailService, MonitoringService,
-    NotificationService, PitrService, SecurityService, SitesService, SoftwareCenterService,
-    SslService, StagingService, WafService, identity::TwoFactorService,
-    security::LoginThrottleService, system_services::ServiceManager,
+    FilesService, FtpService, IdentityService, LogService, MailService, MarketplaceService,
+    MonitoringService, NotificationService, PitrService, PluginService, SecurityService,
+    SitesService, SoftwareCenterService, SslService, StagingService, WafService,
+    identity::TwoFactorService, security::LoginThrottleService, system_services::ServiceManager,
 };
 
 use crate::{
@@ -20,7 +20,9 @@ use crate::{
         docker::router as docker_router, files::router as files_router, ftp::router as ftp_router,
         identity::router as identity_router, logs::router as logs_router,
         mail::router as mail_router, monitoring::router as monitoring_router,
-        notifications::router as notifications_router, security::router as security_router,
+        notifications::router as notifications_router, plugin_marketplace::router as
+        plugin_marketplace_router,
+        security::router as security_router,
         site_staging::router as site_staging_router, sites::router as sites_router,
         software_center::router as software_center_router, ssl::router as ssl_router,
         system_services::router as system_services_router, waf::router as waf_router,
@@ -56,6 +58,8 @@ pub fn build_router(
     notifications: Arc<NotificationService>,
     pitr: Arc<PitrService>,
     staging: Arc<StagingService>,
+    plugins: Arc<PluginService>,
+    marketplace: Arc<MarketplaceService>,
 ) -> Router {
     let auth_state = ApiAuthState {
         identity: identity.clone(),
@@ -87,6 +91,7 @@ pub fn build_router(
         .nest("/software", software_center_router(software_center))
         .nest("/docker", docker_router(docker))
         .nest("/notifications", notifications_router(notifications))
+        .nest("/marketplace", plugin_marketplace_router(marketplace))
         .layer(from_fn_with_state(auth_state, api_auth_middleware));
 
     Router::new()

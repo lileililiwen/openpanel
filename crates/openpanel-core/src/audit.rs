@@ -222,6 +222,18 @@ pub enum AuditAction {
     StagingPromoted,
     /// A staging promotion was rolled back.
     StagingPromotionRolledBack,
+    /// A plugin manifest was installed.
+    PluginInstalled,
+    /// An installed plugin was enabled.
+    PluginEnabled,
+    /// An installed plugin was disabled.
+    PluginDisabled,
+    /// An installed plugin was uninstalled.
+    PluginUninstalled,
+    /// A plugin manifest was rejected during signature verification.
+    PluginManifestRejected,
+    /// A plugin was installed from the marketplace catalog.
+    PluginInstalledFromMarketplace,
 }
 
 impl AuditAction {
@@ -318,6 +330,12 @@ impl AuditAction {
             AuditAction::StagingSnapshotTaken => "staging_snapshot_taken",
             AuditAction::StagingPromoted => "staging_promoted",
             AuditAction::StagingPromotionRolledBack => "staging_promotion_rolled_back",
+            AuditAction::PluginInstalled => "plugin_installed",
+            AuditAction::PluginEnabled => "plugin_enabled",
+            AuditAction::PluginDisabled => "plugin_disabled",
+            AuditAction::PluginUninstalled => "plugin_uninstalled",
+            AuditAction::PluginManifestRejected => "plugin_manifest_rejected",
+            AuditAction::PluginInstalledFromMarketplace => "plugin_installed_from_marketplace",
         }
     }
 }

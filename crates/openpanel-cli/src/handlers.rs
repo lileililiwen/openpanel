@@ -214,6 +214,25 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .context("apply PITR migrations")?;
     let pitr_svc = pitr_module.service();
 
+    // Plugin extension framework module.
+    let plugin_module = openpanel_app::PluginModule::new(&ctx, audit.clone()).await;
+    runner
+        .apply_module(plugin_module.name(), &plugin_module.migrations())
+        .await
+        .context("apply plugin migrations")?;
+    let plugin_svc = plugin_module.service();
+
+    // Plugin marketplace module: empty CA + in-process mock client.
+    let mp_client: Arc<dyn openpanel_app::MarketplaceClient> =
+        Arc::new(openpanel_app::MockMarketplaceClient::new());
+    let mp_module =
+        openpanel_app::PluginMarketplaceModule::new(&ctx, mp_client, plugin_svc.clone()).await;
+    runner
+        .apply_module(mp_module.name(), &mp_module.migrations())
+        .await
+        .context("apply plugin marketplace migrations")?;
+    let marketplace_svc = mp_module.service();
+
     // Site-staging module: in-memory filesystem layer for the CLI
     // (no live nginx / rsync in offline mode).
     let staging_fs: Arc<dyn openpanel_app::StagingFilesystemLayer> =
@@ -252,6 +271,8 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         notification_svc.clone(),
         pitr_svc.clone(),
         staging_svc.clone(),
+        plugin_svc.clone(),
+        marketplace_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -3790,4 +3811,135 @@ pub async fn monitoring_history(
         println!("{}  {} {metric}", s.ts.to_rfc3339(), s.value);
     }
     Ok(())
+}
+
+// ---- Plugin marketplace handlers ----
+
+pub async fn marketplace_discover(
+    config: Arc<Config>,
+) -> anyhow::Result<()> {
+    let bundle = build_plugin_bundle(config.clone()).await?;
+    let service = &bundle.marketplace;
+    let outcome = service
+        .discover(None)
+        .await
+        .context("marketplace discover")?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "from_cache": outcome.from_cache,
+            "digest": outcome.catalog.digest,
+            "publisher_id": outcome.catalog.publisher_id,
+            "entries": outcome.catalog.entries.len(),
+        }))?
+    );
+    Ok(())
+}
+
+pub async fn marketplace_cached(config: Arc<Config>) -> anyhow::Result<()> {
+    let bundle = build_plugin_bundle(config.clone()).await?;
+    let snapshot = bundle
+        .marketplace
+        .cached()
+        .await
+        .context("marketplace cached")?;
+    match snapshot {
+        Some(snapshot) => {
+            println!("{}", serde_json::to_string_pretty(&snapshot.catalog)?);
+        }
+        None => {
+            println!("{{\"catalog\":null,\"hint\":\"run `openpanel plugin marketplace discover` first\"}}");
+        }
+    }
+    Ok(())
+}
+
+pub async fn marketplace_show(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let bundle = build_plugin_bundle(config.clone()).await?;
+    let snapshot = bundle
+        .marketplace
+        .cached()
+        .await
+        .context("marketplace cached")?
+        .ok_or_else(|| anyhow::anyhow!("no cached marketplace; run `discover` first"))?;
+    let entry = snapshot
+        .catalog
+        .find(&id)
+        .ok_or_else(|| anyhow::anyhow!("plugin {id} not in catalog"))?;
+    println!("{}", serde_json::to_string_pretty(&entry)?);
+    Ok(())
+}
+
+// ---- Plugin lifecycle handlers ----
+
+pub async fn plugin_list(config: Arc<Config>) -> anyhow::Result<()> {
+    let bundle = build_plugin_bundle(config.clone()).await?;
+    let records = bundle.plugins.list().await.context("plugin list")?;
+    println!("{}", serde_json::to_string_pretty(&records)?);
+    Ok(())
+}
+
+pub async fn plugin_enable(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let bundle = build_plugin_bundle(config.clone()).await?;
+    let plugin_id = openpanel_domain::PluginId::new(id)
+        .map_err(|e| anyhow::anyhow!("invalid plugin id: {e}"))?;
+    bundle
+        .plugins
+        .enable(&plugin_id, "admin")
+        .await
+        .context("plugin enable")?;
+    println!("{{\"enabled\":\"{}\"}}", plugin_id);
+    Ok(())
+}
+
+pub async fn plugin_disable(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let bundle = build_plugin_bundle(config.clone()).await?;
+    let plugin_id = openpanel_domain::PluginId::new(id)
+        .map_err(|e| anyhow::anyhow!("invalid plugin id: {e}"))?;
+    bundle
+        .plugins
+        .disable(&plugin_id, "admin")
+        .await
+        .context("plugin disable")?;
+    println!("{{\"disabled\":\"{}\"}}", plugin_id);
+    Ok(())
+}
+
+pub async fn plugin_uninstall(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let bundle = build_plugin_bundle(config.clone()).await?;
+    let plugin_id = openpanel_domain::PluginId::new(id)
+        .map_err(|e| anyhow::anyhow!("invalid plugin id: {e}"))?;
+    bundle
+        .plugins
+        .uninstall(&plugin_id, "admin")
+        .await
+        .context("plugin uninstall")?;
+    println!("{{\"uninstalled\":\"{}\"}}", plugin_id);
+    Ok(())
+}
+
+/// Build the small bundle of plugin services the CLI needs without
+/// spinning up the full router.
+pub async fn build_plugin_bundle(
+    config: Arc<Config>,
+) -> anyhow::Result<PluginBundle> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let _ = pool;
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
+    let plugin_module = openpanel_app::PluginModule::new(&ctx, audit.clone()).await;
+    let mp_client: Arc<dyn openpanel_app::MarketplaceClient> =
+        Arc::new(openpanel_app::MockMarketplaceClient::new());
+    let mp_module =
+        openpanel_app::PluginMarketplaceModule::new(&ctx, mp_client, plugin_module.service())
+            .await;
+    Ok(PluginBundle {
+        plugins: plugin_module.service(),
+        marketplace: mp_module.service(),
+    })
+}
+
+/// Bundle of plugin services the CLI handlers reuse.
+pub struct PluginBundle {
+    pub plugins: Arc<openpanel_app::PluginService>,
+    pub marketplace: Arc<openpanel_app::MarketplaceService>,
 }

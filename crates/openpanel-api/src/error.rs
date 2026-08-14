@@ -56,6 +56,11 @@ pub enum ApiError {
     #[error("conflict: {0}")]
     Conflict(String),
 
+    /// The requested resource is not yet available (e.g. catalog
+    /// cache empty, remote endpoint unreachable).
+    #[error("service unavailable: {0}")]
+    ServiceUnavailable(String),
+
     /// The request body exceeded the configured size limit.
     #[error("payload too large: {0} bytes")]
     PayloadTooLarge(u64),
@@ -128,6 +133,7 @@ impl IntoResponse for ApiError {
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             ApiError::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
             ApiError::PayloadTooLarge(_) => (StatusCode::PAYLOAD_TOO_LARGE, "payload_too_large"),
+            ApiError::ServiceUnavailable(_) => (StatusCode::SERVICE_UNAVAILABLE, "service_unavailable"),
             ApiError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal"),
         };
         let body = Json(ErrorBody::new(code));

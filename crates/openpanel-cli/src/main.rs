@@ -4,10 +4,11 @@ use clap::Parser;
 use openpanel_cli::{
     BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, Command, CronCommand,
     DatabaseCommand, DnsCommand, DockerCommand, FileCommand, FtpCommand, LogsCommand, MailCommand,
-    MonitoringCommand, NotificationChannelCommand, NotificationCommand,
-    NotificationSubscriptionCommand, PitrCommand, RecoveryCodeCommand, SecurityAllowlistCommand,
-    SecurityCommand, SecurityRuleCommand, ServicesCommand, SiteCommand, SoftwareCommand,
-    SslCommand, StagingCommand, TokenCommand, TwoFactorCommand, UserCommand, WafCommand, handlers,
+    MarketplaceCommand, MonitoringCommand, NotificationChannelCommand, NotificationCommand,
+    NotificationSubscriptionCommand, PitrCommand, PluginCommand, RecoveryCodeCommand,
+    SecurityAllowlistCommand, SecurityCommand, SecurityRuleCommand, ServicesCommand, SiteCommand,
+    SoftwareCommand, SslCommand, StagingCommand, TokenCommand, TwoFactorCommand, UserCommand,
+    WafCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -554,6 +555,17 @@ async fn main() -> anyhow::Result<()> {
             SoftwareCommand::Retry { job } => handlers::software_retry(config, job).await,
             SoftwareCommand::Rollback { job } => handlers::software_rollback(config, job).await,
             SoftwareCommand::Jobs => handlers::software_jobs(config).await,
+        },
+        Command::Plugin { action } => match action {
+            PluginCommand::Marketplace { action } => match action {
+                MarketplaceCommand::Discover => handlers::marketplace_discover(config).await,
+                MarketplaceCommand::Cached => handlers::marketplace_cached(config).await,
+                MarketplaceCommand::Show { id } => handlers::marketplace_show(config, id).await,
+            },
+            PluginCommand::List => handlers::plugin_list(config).await,
+            PluginCommand::Enable { id } => handlers::plugin_enable(config, id).await,
+            PluginCommand::Disable { id } => handlers::plugin_disable(config, id).await,
+            PluginCommand::Uninstall { id } => handlers::plugin_uninstall(config, id).await,
         },
     }
 }

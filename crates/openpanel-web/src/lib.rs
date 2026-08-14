@@ -39,6 +39,8 @@ pub mod sites;
 pub mod software_center;
 pub mod ssl;
 pub mod system_services;
+/// Plugin marketplace web page.
+pub mod plugin_marketplace;
 /// String-table stub used by every template.
 pub mod t;
 pub mod two_factor;

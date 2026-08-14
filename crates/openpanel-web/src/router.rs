@@ -520,6 +520,11 @@ pub fn router(
         .route("/sites/{id}/staging", get(crate::site_staging::page))
         .route("/audit", get(crate::audit::audit_index))
         .route("/audit/events", get(crate::audit::audit_list))
+        .route("/marketplace", get(crate::plugin_marketplace::page))
+        .route(
+            "/marketplace/{plugin_id}",
+            get(crate::plugin_marketplace::page),
+        )
         .route("/assets/htmx.min.js", get(assets::htmx_min_js))
         .route("/assets/app.css", get(assets::app_css))
         .route("/assets/tokens.css", get(assets::tokens_css))
@@ -528,14 +533,17 @@ pub fn router(
         .with_state(state)
 }
 
-/// Middleware that enforces the Owner/Admin role for the `/audit` route
-/// group. Other routes pass through unchanged. The follow-on
-/// `add-log-viewer` change replaces this with a richer extractor.
+/// Middleware that enforces the Owner/Admin role for the `/audit`
+/// and `/marketplace` route groups. Other routes pass through
+/// unchanged.
 async fn audit_role_guard(req: axum::extract::Request, next: axum::middleware::Next) -> Response {
     use openpanel_api::extract::AuthSessionExt;
     let path = req.uri().path().to_string();
-    let is_audit = path == "/audit" || path == "/audit/events";
-    if !is_audit {
+    let gated = path == "/audit"
+        || path == "/audit/events"
+        || path == "/marketplace"
+        || path.starts_with("/marketplace/");
+    if !gated {
         return next.run(req).await;
     }
     match req.auth_session() {

@@ -38,6 +38,12 @@ pub mod ssl;
 pub mod system_services;
 /// Per-site typed web application firewall rules.
 pub mod waf;
+/// Plugin extension framework: signed manifests, capability gating,
+/// lifecycle, and supervisor-facing repository trait.
+pub mod plugin;
+/// Plugin marketplace: remote catalog discovery, publisher CA
+/// verification, and rating/metadata cache.
+pub mod plugin_marketplace;
 
 /// Database point-in-time recovery: continuous binlog streaming,
 /// point-in-time restore, and incremental file-backup deltas.
@@ -88,6 +94,15 @@ pub use identity::{
 pub use monitoring::{
     Alert, AlertRule, DiskReading, MetricKind, MetricSample, MonitoringError, NetworkReading,
     SnapshotRepository, SystemSnapshot, Unit,
+};
+pub use plugin::{
+    Capability, CapabilitySet, ManifestRuntime, PluginError, PluginId, PluginManifest,
+    PluginRecord, PluginRegistry, PluginStatus, PluginVersion, PublisherKey,
+};
+pub use plugin_marketplace::{
+    CatalogCache, CatalogSnapshot, MarketplaceCa, MarketplaceCatalog, MarketplacePlugin,
+    PluginMarketplaceError, PluginRating, PublisherSignature, SignedCatalogEnvelope,
+    verify_envelope,
 };
 pub use site_staging::{
     PromotionRepository, PromotionRun, PromotionStatus, SiteStagingError, SnapshotId, StagingSlot,

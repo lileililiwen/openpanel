@@ -26,6 +26,8 @@ pub mod mail;
 /// Monitoring resource routes (`/monitoring`).
 pub mod monitoring;
 pub mod notifications;
+/// Plugin marketplace discovery routes (`/marketplace`).
+pub mod plugin_marketplace;
 /// Host firewall and login-abuse routes (`/security`).
 pub mod security;
 /// Per-site staging routes (`/sites/{id}/staging/...`).

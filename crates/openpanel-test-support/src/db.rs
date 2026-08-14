@@ -72,6 +72,14 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("site_staging migration");
+        sqlx::query(include_str!("migrations/plugin/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("plugin migration");
+        sqlx::query(include_str!("migrations/plugin_marketplace/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("plugin_marketplace migration");
     }
 
     /// Access the underlying pool.

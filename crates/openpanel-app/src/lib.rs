@@ -26,6 +26,10 @@ pub mod mail;
 pub mod migrations;
 pub mod monitoring;
 pub mod notifications;
+/// Plugin extension framework bounded context.
+pub mod plugin;
+/// Plugin marketplace bounded context.
+pub mod plugin_marketplace;
 pub mod prelude;
 pub mod security;
 /// Per-site staging bounded context: staging slot creation, sync,
@@ -65,6 +69,14 @@ pub use logs::{LogService, LogsModule};
 pub use mail::{MailModule, MailService};
 pub use monitoring::{MonitoringModule, service::MonitoringService};
 pub use notifications::{NotificationModule, NotificationService};
+/// Plugin extension framework module.
+pub use plugin::{PluginModule, PluginService, SqlitePluginRegistry};
+/// Plugin marketplace module.
+pub use plugin_marketplace::{
+    DiscoverOutcome, HttpMarketplaceClient, InstallFromMarketplaceError,
+    InstallFromMarketplaceRequest, MarketplaceClient, MarketplaceService, MockMarketplaceClient,
+    PluginMarketplaceModule, SqliteCatalogCache,
+};
 /// Re-export the `BinlogSink` trait so composition code can name it.
 pub use openpanel_domain::BinlogSink;
 pub use security::{SecurityModule, SecurityService};

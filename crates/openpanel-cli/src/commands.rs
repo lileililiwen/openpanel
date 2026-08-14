@@ -104,6 +104,12 @@ pub enum Command {
         #[command(subcommand)]
         action: SoftwareCommand,
     },
+    /// Discover, install, and manage plugins.
+    Plugin {
+        /// Plugin operation.
+        #[command(subcommand)]
+        action: PluginCommand,
+    },
     /// Manage typed per-site web application firewall rules.
     Waf {
         /// WAF operation.
@@ -1340,5 +1346,51 @@ pub enum FileCommand {
         /// Permission mode (e.g. `755`, `u=rw,g=r`).
         #[arg(long)]
         mode: String,
+    },
+}
+
+/// Subcommands for the plugin extension framework + marketplace.
+#[derive(Debug, Subcommand)]
+pub enum PluginCommand {
+    /// Marketplace subcommand.
+    Marketplace {
+        /// Marketplace operation.
+        #[command(subcommand)]
+        action: MarketplaceCommand,
+    },
+    /// List installed plugins.
+    List,
+    /// Enable an installed plugin.
+    Enable {
+        /// Plugin id to enable.
+        #[arg(long)]
+        id: String,
+    },
+    /// Disable an installed plugin.
+    Disable {
+        /// Plugin id to disable.
+        #[arg(long)]
+        id: String,
+    },
+    /// Uninstall a plugin.
+    Uninstall {
+        /// Plugin id to remove.
+        #[arg(long)]
+        id: String,
+    },
+}
+
+/// Subcommands for the marketplace discovery surface.
+#[derive(Debug, Subcommand)]
+pub enum MarketplaceCommand {
+    /// Fetch a fresh catalog from the configured marketplace.
+    Discover,
+    /// Print the latest cached catalog as JSON.
+    Cached,
+    /// Print one plugin's detail from the cached catalog.
+    Show {
+        /// Plugin id to show.
+        #[arg(long)]
+        id: String,
     },
 }

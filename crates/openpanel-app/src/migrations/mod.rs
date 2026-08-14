@@ -62,3 +62,7 @@ pub const I18N_V001: &str = include_str!("i18n/V001__init.sql");
 pub const DB_PITR_V001: &str = include_str!("db_pitr/V001__init.sql");
 /// Per-site staging slots, snapshots, and promotion runs.
 pub const SITE_STAGING_V001: &str = include_str!("site_staging/V001__init.sql");
+/// Plugin extension framework: installed_plugins table.
+pub const PLUGIN_V001: &str = include_str!("plugin/V001__init.sql");
+/// Plugin marketplace: cached verified catalogs.
+pub const PLUGIN_MARKETPLACE_V001: &str = include_str!("plugin_marketplace/V001__init.sql");
