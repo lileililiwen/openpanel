@@ -132,7 +132,7 @@ pub async fn alerts(State(state): State<WebState>, WebUser(_user, _session): Web
 /// partial — no page navigation.
 fn selectors(metric: MetricKind, range: i64) -> Markup {
     html! {
-        form class="form inline-form"
+        form class="form form-inline"
             hx-get="/monitoring/history"
             hx-target="#history-chart"
             hx-trigger="change"

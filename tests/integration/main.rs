@@ -39,3 +39,5 @@ mod waf;
 mod web_ui;
 /// Web-UI audit route group integration tests.
 mod web_ui_audit;
+/// Web-UI styling + responsive layout integration tests.
+mod web_ui_styling;

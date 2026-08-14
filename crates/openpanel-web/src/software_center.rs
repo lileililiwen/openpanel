@@ -177,8 +177,10 @@ fn storefront_content(
                 }
             }
 
-            form method="get" action="/software" class="storefront__search" {
-                input type="search" name="q" value=(params.q.clone().unwrap_or_default()) placeholder="Search the catalog…";
+            form method="get" action="/software" class="form form-row" {
+                label { "Search the catalog"
+                    input type="search" name="q" value=(params.q.clone().unwrap_or_default()) placeholder="Search the catalog…";
+                }
                 @if let Some(category) = &params.category {
                     input type="hidden" name="category" value=(category);
                 }
