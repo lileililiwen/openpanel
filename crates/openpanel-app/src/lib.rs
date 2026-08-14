@@ -19,6 +19,7 @@ pub mod logs;
 pub mod mail;
 pub mod migrations;
 pub mod monitoring;
+pub mod notifications;
 pub mod prelude;
 pub mod security;
 pub mod sites;
@@ -46,6 +47,7 @@ pub use identity::{IdentityModule, service::IdentityService};
 pub use logs::{LogService, LogsModule};
 pub use mail::{MailModule, MailService};
 pub use monitoring::{MonitoringModule, service::MonitoringService};
+pub use notifications::{NotificationModule, NotificationService};
 pub use security::{SecurityModule, SecurityService};
 pub use sites::{
     SitesModule,

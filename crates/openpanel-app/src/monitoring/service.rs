@@ -12,6 +12,7 @@ use openpanel_domain::{
 };
 
 use super::{AlertEvaluator, Collector};
+use crate::notifications::NotificationService;
 
 /// Application service orchestrating metric collection, persistence,
 /// history, retention, and alert evaluation.
@@ -21,6 +22,7 @@ pub struct MonitoringService {
     audit: Arc<dyn AuditService>,
     evaluator: Arc<Mutex<AlertEvaluator>>,
     retention_days: u64,
+    notifications: std::sync::RwLock<Option<Arc<NotificationService>>>,
 }
 
 impl MonitoringService {
@@ -38,6 +40,14 @@ impl MonitoringService {
             audit,
             evaluator: Arc::new(Mutex::new(evaluator)),
             retention_days,
+            notifications: std::sync::RwLock::new(None),
+        }
+    }
+
+    /// Attach the notification publisher during composition.
+    pub fn attach_notifications(&self, service: Arc<NotificationService>) {
+        if let Ok(mut notifications) = self.notifications.write() {
+            *notifications = Some(service);
         }
     }
 
@@ -157,6 +167,36 @@ impl MonitoringService {
                 )
                 .await
                 .ok();
+            let notifications = self
+                .notifications
+                .read()
+                .ok()
+                .and_then(|value| value.clone());
+            if let Some(notifications) = notifications {
+                let notification_metric = match alert.kind {
+                    MetricKind::Cpu => "cpu_percent",
+                    MetricKind::Memory => "memory_percent",
+                    MetricKind::Disk => "disk_percent",
+                    MetricKind::Network => "network_bytes_per_second",
+                };
+                let event = openpanel_domain::notifications::NotificationEvent::new(
+                    uuid::Uuid::new_v4(),
+                    openpanel_domain::notifications::EventKind::Alert,
+                    format!("{notification_metric} threshold crossed"),
+                    openpanel_domain::notifications::Severity::Warning,
+                    serde_json::json!({
+                        "metric": notification_metric,
+                        "value": alert.value,
+                        "threshold": alert.threshold,
+                    }),
+                    Utc::now(),
+                );
+                if let Ok(event) = event
+                    && let Err(error) = notifications.publish(event).await
+                {
+                    tracing::warn!(error = %error, "monitoring notification publish failed");
+                }
+            }
         }
         Ok(fired)
     }

@@ -53,3 +53,5 @@ pub const DOCKER_V001: &str = include_str!("docker/V001__init.sql");
 pub const FTP_V001: &str = include_str!("ftp/V001__init.sql");
 /// Scoped personal access tokens.
 pub const API_TOKENS_V001: &str = include_str!("api_tokens/V001__init.sql");
+/// Durable notification channels, subscriptions, events, and deliveries.
+pub const NOTIFICATIONS_V001: &str = include_str!("notifications/V001__init.sql");

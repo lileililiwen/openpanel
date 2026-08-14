@@ -19,8 +19,9 @@ use openpanel_api::{
 use openpanel_app::{
     ApiTokenService, BackupService, CronService, DatabasesService, DnsService, DockerService,
     FilesService, FtpService, IdentityService, LogService, MailService, MonitoringService,
-    SecurityService, SitesService, SoftwareCenterService, SslService, WafService,
-    identity::TwoFactorService, security::LoginThrottleService, system_services::ServiceManager,
+    NotificationService, SecurityService, SitesService, SoftwareCenterService, SslService,
+    WafService, identity::TwoFactorService, security::LoginThrottleService,
+    system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
 use openpanel_domain::{Session, SessionToken, User};
@@ -114,6 +115,8 @@ pub struct WebState {
     pub ftp: Arc<FtpService>,
     /// Scoped personal API-token lifecycle.
     pub api_tokens: Arc<ApiTokenService>,
+    /// Durable notification lifecycle.
+    pub notifications: Arc<NotificationService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -231,6 +234,7 @@ pub fn router(
     docker: Arc<DockerService>,
     ftp: Arc<FtpService>,
     api_tokens: Arc<ApiTokenService>,
+    notifications: Arc<NotificationService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -257,6 +261,7 @@ pub fn router(
         docker,
         ftp,
         api_tokens,
+        notifications,
         csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
@@ -298,6 +303,22 @@ pub fn router(
         .route(
             "/settings/tokens/{id}/{action}",
             post(crate::api_tokens::action),
+        )
+        .route(
+            "/settings/notifications",
+            get(crate::notifications::page).post(crate::notifications::create_channel),
+        )
+        .route(
+            "/settings/notifications/channels/{id}/{action}",
+            post(crate::notifications::channel_action),
+        )
+        .route(
+            "/settings/notifications/subscriptions",
+            post(crate::notifications::create_subscription),
+        )
+        .route(
+            "/settings/notifications/subscriptions/{id}/disable",
+            post(crate::notifications::disable_subscription),
         )
         .route("/settings/security", get(crate::two_factor::page))
         .route(

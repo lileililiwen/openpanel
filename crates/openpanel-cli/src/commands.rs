@@ -128,6 +128,87 @@ pub enum Command {
         #[command(subcommand)]
         action: TokenCommand,
     },
+    /// Manage SMTP/webhook notifications.
+    Notifications {
+        /// Notification operation.
+        #[command(subcommand)]
+        action: NotificationCommand,
+    },
+}
+
+/// Notification CLI operations.
+#[derive(Debug, Subcommand)]
+pub enum NotificationCommand {
+    /// Manage Owner channels.
+    Channel {
+        /// Channel operation.
+        #[command(subcommand)]
+        action: NotificationChannelCommand,
+    },
+    /// Manage owner subscriptions.
+    Subscription {
+        /// Subscription operation.
+        #[command(subcommand)]
+        action: NotificationSubscriptionCommand,
+    },
+    /// Print rolling channel health.
+    Health,
+}
+
+/// Notification channel operations.
+#[derive(Debug, Subcommand)]
+#[allow(missing_docs)]
+pub enum NotificationChannelCommand {
+    Add {
+        #[arg(long)]
+        kind: String,
+        #[arg(long)]
+        name: String,
+        #[arg(long)]
+        endpoint: String,
+        #[arg(long, default_value_t = 587)]
+        port: u16,
+        #[arg(long, default_value = "")]
+        username: String,
+        #[arg(long)]
+        credential: String,
+        #[arg(long, default_value = "")]
+        from_addr: String,
+        #[arg(long = "allow", required = true)]
+        allowlist: Vec<String>,
+    },
+    List,
+    Test {
+        #[arg(long)]
+        id: String,
+        #[arg(long)]
+        destination: String,
+    },
+    Rm {
+        #[arg(long)]
+        id: String,
+    },
+}
+
+/// Notification subscription operations.
+#[derive(Debug, Subcommand)]
+#[allow(missing_docs)]
+pub enum NotificationSubscriptionCommand {
+    Add {
+        #[arg(long)]
+        channel: String,
+        #[arg(long)]
+        destination: String,
+        #[arg(long)]
+        kind: String,
+        #[arg(long)]
+        filter_json: String,
+    },
+    List,
+    Rm {
+        #[arg(long)]
+        id: String,
+    },
 }
 
 /// Personal API-token lifecycle operations.

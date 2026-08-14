@@ -188,6 +188,14 @@ pub enum AuditAction {
     TokenCidrRejected,
     /// A bearer exhausted its per-token bucket.
     TokenRateLimited,
+    /// A notification channel or subscription changed.
+    NotificationChanged,
+    /// A notification destination was rejected by policy.
+    DeliveryRejected,
+    /// A notification adapter accepted a delivery.
+    DeliverySucceeded,
+    /// A notification delivery exhausted retries or failed permanently.
+    DeliveryFailed,
 }
 
 impl AuditAction {
@@ -267,6 +275,10 @@ impl AuditAction {
             AuditAction::TokenScopeRejected => "token_scope_rejected",
             AuditAction::TokenCidrRejected => "token_cidr_rejected",
             AuditAction::TokenRateLimited => "token_rate_limited",
+            AuditAction::NotificationChanged => "notification_changed",
+            AuditAction::DeliveryRejected => "delivery_rejected",
+            AuditAction::DeliverySucceeded => "delivery_succeeded",
+            AuditAction::DeliveryFailed => "delivery_failed",
         }
     }
 }
@@ -457,6 +469,8 @@ impl AuditService for SqliteAuditService {
                 "firewall_changed" => AuditAction::FirewallChanged,
                 "security_block_changed" => AuditAction::SecurityBlockChanged,
                 "service_changed" => AuditAction::ServiceChanged,
+                "dns_changed" => AuditAction::DnsChanged,
+                "mail_changed" => AuditAction::MailChanged,
                 "software_changed" => AuditAction::SoftwareChanged,
                 "software_artifact_installed" => AuditAction::SoftwareArtifactInstalled,
                 "two_factor_enrolled" => AuditAction::TwoFactorEnrolled,
@@ -465,6 +479,34 @@ impl AuditService for SqliteAuditService {
                 "two_factor_revoked" => AuditAction::TwoFactorRevoked,
                 "recovery_code_consumed" => AuditAction::RecoveryCodeConsumed,
                 "device_remembered" => AuditAction::DeviceRemembered,
+                "waf_changed" => AuditAction::WafChanged,
+                "docker_image_pulled" => AuditAction::DockerImagePulled,
+                "docker_spec_rejected" => AuditAction::DockerSpecRejected,
+                "docker_capability_denied" => AuditAction::DockerCapabilityDenied,
+                "docker_oom_killed" => AuditAction::DockerOomKilled,
+                "docker_changed" => AuditAction::DockerChanged,
+                "docker_egress_denied" => AuditAction::DockerEgressDenied,
+                "ftp_changed" => AuditAction::FtpChanged,
+                "ftp_login" => AuditAction::FtpLogin,
+                "ftp_login_denied" => AuditAction::FtpLoginDenied,
+                "ftp_chroot_escape" => AuditAction::FtpChrootEscape,
+                "ftp_tls_required" => AuditAction::FtpTlsRequired,
+                "ftp_concurrent_limit" => AuditAction::FtpConcurrentLimit,
+                "ftp_transfer_limit" => AuditAction::FtpTransferLimit,
+                "ftp_bind_failed" => AuditAction::FtpBindFailed,
+                "ftp_listener_restart" => AuditAction::FtpListenerRestart,
+                "token_created" => AuditAction::TokenCreated,
+                "token_rotated" => AuditAction::TokenRotated,
+                "token_revoked" => AuditAction::TokenRevoked,
+                "token_request" => AuditAction::TokenRequest,
+                "token_expired" => AuditAction::TokenExpired,
+                "token_scope_rejected" => AuditAction::TokenScopeRejected,
+                "token_cidr_rejected" => AuditAction::TokenCidrRejected,
+                "token_rate_limited" => AuditAction::TokenRateLimited,
+                "notification_changed" => AuditAction::NotificationChanged,
+                "delivery_rejected" => AuditAction::DeliveryRejected,
+                "delivery_succeeded" => AuditAction::DeliverySucceeded,
+                "delivery_failed" => AuditAction::DeliveryFailed,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

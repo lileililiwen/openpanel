@@ -9,8 +9,9 @@ use openpanel_api::build_router;
 use openpanel_app::{
     AcmeEndpoint, ApiTokenModule, BackupsModule, CronModule, DatabasesModule, DnsModule,
     DockerModule, FilesModule, FtpModule, IdentityModule, LogService, LogsModule, MailModule,
-    MonitoringModule, SecurityModule, SecurityService, SitesModule, SoftwareCenterModule,
-    SslModule, SslPaths, SystemServicesModule, WafModule, databases::crypto as db_crypto,
+    MonitoringModule, NotificationModule, SecurityModule, SecurityService, SitesModule,
+    SoftwareCenterModule, SslModule, SslPaths, SystemServicesModule, WafModule,
+    databases::crypto as db_crypto,
 };
 use openpanel_core::{
     AppContext, Config, JobSupervisor, MigrationRunner, Module, SqliteAuditService, SqliteDriver,
@@ -37,6 +38,9 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let master_key = load_master_key(&config)?;
     let identity_module = IdentityModule::new(&ctx, master_key).await;
     let api_token_module = ApiTokenModule::new(&ctx, master_key).await;
+    let notification_module = NotificationModule::new(&ctx, master_key)
+        .await
+        .map_err(anyhow::Error::msg)?;
     let sites_module = SitesModule::new(&ctx).await;
     let waf_module = WafModule::new(&ctx, sites_module.generator().clone()).await;
     let docker_module = DockerModule::new(&ctx, master_key)
@@ -49,6 +53,9 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let files_module = FilesModule::new(&ctx).await;
     let ssl_module = SslModule::new(&ctx, master_key, ssl_contact_email(&config)).await;
     let monitoring_module = MonitoringModule::new(&ctx).await;
+    monitoring_module
+        .service()
+        .attach_notifications(notification_module.service());
     let cron_module = CronModule::new(&ctx).await;
     let backup_root = std::env::var("OPENPANEL__BACKUPS__ROOT")
         .map(std::path::PathBuf::from)
@@ -90,6 +97,13 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .apply_module(api_token_module.name(), &api_token_module.migrations())
         .await
         .context("apply API-token migrations")?;
+    runner
+        .apply_module(
+            notification_module.name(),
+            &notification_module.migrations(),
+        )
+        .await
+        .context("apply notification migrations")?;
     runner
         .apply_module(sites_module.name(), &sites_module.migrations())
         .await
@@ -159,10 +173,12 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
 
     let mut background_tasks = docker_module.background_tasks(&ctx);
     background_tasks.extend(ftp_module.background_tasks(&ctx));
+    background_tasks.extend(notification_module.background_tasks(&ctx));
     let docker_supervisor = JobSupervisor::new().spawn(background_tasks);
 
     let identity_svc = identity_module.service();
     let api_token_svc = api_token_module.service();
+    let notification_svc = notification_module.service();
     let sites_svc = sites_module.service();
     let databases_svc = databases_module.service();
     let files_svc = files_module.service();
@@ -202,6 +218,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         docker_svc.clone(),
         ftp_svc.clone(),
         api_token_svc.clone(),
+        notification_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -224,6 +241,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         docker_svc,
         ftp_svc,
         api_token_svc,
+        notification_svc,
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
@@ -1757,11 +1775,20 @@ pub async fn migrate(config: Arc<Config>) -> anyhow::Result<()> {
     let master_key = load_master_key(&ctx.config)?;
 
     let identity_module = IdentityModule::new(&ctx, master_key).await;
+    let notification_module = NotificationModule::new(&ctx, master_key)
+        .await
+        .map_err(anyhow::Error::msg)?;
     let sites_module = SitesModule::new(&ctx).await;
 
     let runner = MigrationRunner::for_sqlite(pool.clone());
     runner
         .apply_module(identity_module.name(), &identity_module.migrations())
+        .await?;
+    runner
+        .apply_module(
+            notification_module.name(),
+            &notification_module.migrations(),
+        )
         .await?;
     runner
         .apply_module(sites_module.name(), &sites_module.migrations())
@@ -2215,6 +2242,192 @@ async fn build_api_tokens(
         .await
         .context("apply API-token migrations")?;
     Ok((tokens.service(), identity.service()))
+}
+
+async fn build_notifications(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::NotificationService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config, db, audit);
+    let master_key = load_master_key(&ctx.config)?;
+    let identity = IdentityModule::new(&ctx, master_key).await;
+    let notifications = NotificationModule::new(&ctx, master_key)
+        .await
+        .map_err(anyhow::Error::msg)?;
+    let runner = MigrationRunner::for_sqlite(pool);
+    runner
+        .apply_module(identity.name(), &identity.migrations())
+        .await
+        .context("apply identity migrations")?;
+    runner
+        .apply_module(notifications.name(), &notifications.migrations())
+        .await
+        .context("apply notification migrations")?;
+    Ok((notifications.service(), identity.service()))
+}
+
+/// Add an SMTP or webhook notification channel.
+#[allow(clippy::too_many_arguments)]
+pub async fn notification_channel_add(
+    config: Arc<Config>,
+    kind: String,
+    name: String,
+    endpoint: String,
+    port: u16,
+    username: String,
+    credential: String,
+    from_addr: String,
+    allowlist: Vec<String>,
+) -> anyhow::Result<()> {
+    let (service, identity) = build_notifications(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let value = if kind == "webhook" {
+        service
+            .create_webhook(
+                &owner,
+                openpanel_app::notifications::CreateWebhookChannel {
+                    name,
+                    url: endpoint,
+                    signing_secret: credential,
+                    allowlist,
+                },
+            )
+            .await?
+    } else if kind == "smtp" {
+        service
+            .create_smtp(
+                &owner,
+                openpanel_app::notifications::CreateSmtpChannel {
+                    name,
+                    host: endpoint,
+                    port,
+                    username,
+                    password: credential,
+                    from_addr,
+                    tls_mode: openpanel_domain::notifications::TlsMode::StartTls,
+                    allowlist,
+                },
+            )
+            .await?
+    } else {
+        anyhow::bail!("kind must be smtp or webhook")
+    };
+    println!("{}", serde_json::to_string_pretty(&value)?);
+    Ok(())
+}
+
+/// List safe channel metadata.
+pub async fn notification_channel_list(config: Arc<Config>) -> anyhow::Result<()> {
+    let (service, identity) = build_notifications(config).await?;
+    let owner = waf_owner(&identity).await?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&service.channels(&owner).await?)?
+    );
+    Ok(())
+}
+
+/// Send a channel diagnostic.
+pub async fn notification_channel_test(
+    config: Arc<Config>,
+    id: String,
+    destination: String,
+) -> anyhow::Result<()> {
+    let (service, identity) = build_notifications(config).await?;
+    let owner = waf_owner(&identity).await?;
+    service
+        .test_channel(
+            &owner,
+            uuid::Uuid::parse_str(&id).context("invalid channel id")?,
+            &destination,
+        )
+        .await?;
+    println!("sent");
+    Ok(())
+}
+
+/// Disable a channel while retaining history.
+pub async fn notification_channel_rm(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let (service, identity) = build_notifications(config).await?;
+    let owner = waf_owner(&identity).await?;
+    service
+        .disable_channel(
+            &owner,
+            uuid::Uuid::parse_str(&id).context("invalid channel id")?,
+        )
+        .await?;
+    println!("disabled");
+    Ok(())
+}
+
+/// Add an owner subscription.
+pub async fn notification_subscription_add(
+    config: Arc<Config>,
+    channel: String,
+    destination: String,
+    kind: String,
+    filter_json: String,
+) -> anyhow::Result<()> {
+    let (service, identity) = build_notifications(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let kind = match kind.as_str() {
+        "alert" => openpanel_domain::notifications::EventKind::Alert,
+        "audit" => openpanel_domain::notifications::EventKind::Audit,
+        "job-terminal" => openpanel_domain::notifications::EventKind::JobTerminal,
+        _ => anyhow::bail!("invalid event kind"),
+    };
+    let value = service
+        .create_subscription(
+            &owner,
+            openpanel_app::notifications::CreateSubscription {
+                channel_id: uuid::Uuid::parse_str(&channel).context("invalid channel id")?,
+                destination,
+                kind,
+                filter: serde_json::from_str(&filter_json).context("invalid filter JSON")?,
+            },
+        )
+        .await?;
+    println!("{}", serde_json::to_string_pretty(&value)?);
+    Ok(())
+}
+
+/// List owner subscriptions.
+pub async fn notification_subscription_list(config: Arc<Config>) -> anyhow::Result<()> {
+    let (service, identity) = build_notifications(config).await?;
+    let owner = waf_owner(&identity).await?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&service.subscriptions(&owner).await?)?
+    );
+    Ok(())
+}
+
+/// Disable an owner subscription.
+pub async fn notification_subscription_rm(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let (service, identity) = build_notifications(config).await?;
+    let owner = waf_owner(&identity).await?;
+    service
+        .disable_subscription(
+            &owner,
+            uuid::Uuid::parse_str(&id).context("invalid subscription id")?,
+        )
+        .await?;
+    println!("disabled");
+    Ok(())
+}
+
+/// Print rolling per-channel health.
+pub async fn notification_health(config: Arc<Config>) -> anyhow::Result<()> {
+    let (service, identity) = build_notifications(config).await?;
+    let owner = waf_owner(&identity).await?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&service.health(&owner).await?)?
+    );
+    Ok(())
 }
 
 /// Create a scoped token for the installation owner and show plaintext once.

@@ -21,10 +21,11 @@ use openpanel_app::{
     CronService, DatabasesModule, DatabasesService, DnsModule, DnsService, DockerAdapter,
     DockerModule, DockerService, ExecResult, FilesModule, FilesService, FtpModule, FtpService,
     IdentityModule, IdentityService, LogService, LogsModule, MailModule, MailService,
-    MonitoringModule, MonitoringService, SecurityModule, SecurityService, SitesModule,
-    SitesService, SoftwareCenterModule, SoftwareCenterService, SslModule, SslPaths, SslService,
-    SystemServicesModule, WafModule, WafService, identity::two_factor::TwoFactorCrypto,
-    security::MemoryFirewall, sites::nginx::NginxPaths, software_center::ArtifactFetcher,
+    MonitoringModule, MonitoringService, NotificationModule, NotificationService, SecurityModule,
+    SecurityService, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
+    SslModule, SslPaths, SslService, SystemServicesModule, WafModule, WafService,
+    identity::two_factor::TwoFactorCrypto, security::MemoryFirewall, sites::nginx::NginxPaths,
+    software_center::ArtifactFetcher,
 };
 
 #[derive(Default)]
@@ -217,6 +218,7 @@ pub struct TestServer {
     docker: Arc<DockerService>,
     ftp: Arc<FtpService>,
     api_tokens: Arc<ApiTokenService>,
+    notifications: Arc<NotificationService>,
     audit: Arc<dyn AuditService>,
     settings_path: PathBuf,
     _handle: JoinHandle<()>,
@@ -348,6 +350,9 @@ impl TestServer {
             IdentityModule::new(&ctx, master_key).await
         };
         let api_token_module = ApiTokenModule::new(&ctx, master_key).await;
+        let notification_module = NotificationModule::new(&ctx, master_key)
+            .await
+            .expect("notification module");
         let sites_module = SitesModule::with_paths(&ctx, paths).await;
         let waf_module = WafModule::new(&ctx, sites_module.generator().clone()).await;
         let docker_runtime = Arc::new(MemoryDocker::default());
@@ -382,6 +387,13 @@ impl TestServer {
             .await
             .expect("API-token migrations");
         runner
+            .apply_module(
+                notification_module.name(),
+                &notification_module.migrations(),
+            )
+            .await
+            .expect("notification migrations");
+        runner
             .apply_module(sites_module.name(), &sites_module.migrations())
             .await
             .expect("sites migrations");
@@ -407,6 +419,9 @@ impl TestServer {
             .expect("ssl migrations");
 
         let monitoring_module = MonitoringModule::new(&ctx).await;
+        monitoring_module
+            .service()
+            .attach_notifications(notification_module.service());
         let cron_module = CronModule::with_roots(&ctx, vec![sandbox.path().to_path_buf()]).await;
         let backups_module = BackupsModule::with_root(
             &ctx,
@@ -488,6 +503,7 @@ impl TestServer {
 
         let identity_svc = identity_module.service();
         let api_token_svc = api_token_module.service();
+        let notification_svc = notification_module.service();
         let sites_svc = sites_module.service();
         let waf_svc = waf_module.service();
         let docker_svc = docker_module.service();
@@ -529,6 +545,7 @@ impl TestServer {
             docker_svc.clone(),
             ftp_svc.clone(),
             api_token_svc.clone(),
+            notification_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -551,6 +568,7 @@ impl TestServer {
             docker_svc.clone(),
             ftp_svc.clone(),
             api_token_svc.clone(),
+            notification_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -617,6 +635,7 @@ impl TestServer {
             docker: docker_svc,
             ftp: ftp_svc,
             api_tokens: api_token_svc,
+            notifications: notification_svc,
             audit,
             settings_path,
             _handle: handle,
@@ -648,6 +667,11 @@ impl TestServer {
     /// API-token lifecycle service handle.
     pub fn api_tokens(&self) -> Arc<ApiTokenService> {
         self.api_tokens.clone()
+    }
+
+    /// Notification lifecycle and dispatch service handle.
+    pub fn notifications(&self) -> Arc<NotificationService> {
+        self.notifications.clone()
     }
 
     /// The sites service handle.
@@ -817,5 +841,62 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(resp2.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn notification_rest_metadata_and_browser_test_send_enforce_csrf() {
+        let server = TestServer::new().await;
+        let token = server
+            .bootstrap_owner("notify-owner", "correct horse battery staple")
+            .await;
+        let created = server
+            .client()
+            .post(format!(
+                "{}/api/v1/notifications/channels",
+                server.base_url()
+            ))
+            .bearer_auth(&token)
+            .json(&serde_json::json!({
+                "kind":"smtp",
+                "name":"test relay",
+                "host":"smtp.example.test",
+                "port":587,
+                "username":"mailer",
+                "password":"must-never-be-returned",
+                "from_addr":"sender@example.test",
+                "tls_mode":"start_tls",
+                "allowlist":["ops@example.test"]
+            }))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(created.status(), 201);
+        let channel: serde_json::Value = created.json().await.unwrap();
+        assert!(!channel.to_string().contains("must-never-be-returned"));
+        let id = channel["id"].as_str().unwrap();
+
+        let page = server
+            .client()
+            .get(format!("{}/settings/notifications", server.base_url()))
+            .header("cookie", format!("openpanel_session={token}"))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(page.status(), 200);
+        assert!(page.text().await.unwrap().contains("Notifications"));
+
+        let rejected = server
+            .client()
+            .post(format!(
+                "{}/settings/notifications/channels/{id}/test",
+                server.base_url()
+            ))
+            .header("cookie", format!("openpanel_session={token}"))
+            .header("content-type", "application/x-www-form-urlencoded")
+            .body("destination=ops%40example.test")
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(rejected.status(), 403);
     }
 }

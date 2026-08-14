@@ -4,9 +4,10 @@ use clap::Parser;
 use openpanel_cli::{
     BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, Command, CronCommand,
     DatabaseCommand, DnsCommand, DockerCommand, FileCommand, FtpCommand, LogsCommand, MailCommand,
-    MonitoringCommand, RecoveryCodeCommand, SecurityAllowlistCommand, SecurityCommand,
-    SecurityRuleCommand, ServicesCommand, SiteCommand, SoftwareCommand, SslCommand, TokenCommand,
-    TwoFactorCommand, UserCommand, WafCommand, handlers,
+    MonitoringCommand, NotificationChannelCommand, NotificationCommand,
+    NotificationSubscriptionCommand, RecoveryCodeCommand, SecurityAllowlistCommand,
+    SecurityCommand, SecurityRuleCommand, ServicesCommand, SiteCommand, SoftwareCommand,
+    SslCommand, TokenCommand, TwoFactorCommand, UserCommand, WafCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -129,6 +130,59 @@ async fn main() -> anyhow::Result<()> {
             TokenCommand::List => handlers::token_list(config).await,
             TokenCommand::Revoke { id } => handlers::token_revoke(config, id).await,
             TokenCommand::Rotate { id } => handlers::token_rotate(config, id).await,
+        },
+        Command::Notifications { action } => match action {
+            NotificationCommand::Channel { action } => match action {
+                NotificationChannelCommand::Add {
+                    kind,
+                    name,
+                    endpoint,
+                    port,
+                    username,
+                    credential,
+                    from_addr,
+                    allowlist,
+                } => {
+                    handlers::notification_channel_add(
+                        config, kind, name, endpoint, port, username, credential, from_addr,
+                        allowlist,
+                    )
+                    .await
+                }
+                NotificationChannelCommand::List => {
+                    handlers::notification_channel_list(config).await
+                }
+                NotificationChannelCommand::Test { id, destination } => {
+                    handlers::notification_channel_test(config, id, destination).await
+                }
+                NotificationChannelCommand::Rm { id } => {
+                    handlers::notification_channel_rm(config, id).await
+                }
+            },
+            NotificationCommand::Subscription { action } => match action {
+                NotificationSubscriptionCommand::Add {
+                    channel,
+                    destination,
+                    kind,
+                    filter_json,
+                } => {
+                    handlers::notification_subscription_add(
+                        config,
+                        channel,
+                        destination,
+                        kind,
+                        filter_json,
+                    )
+                    .await
+                }
+                NotificationSubscriptionCommand::List => {
+                    handlers::notification_subscription_list(config).await
+                }
+                NotificationSubscriptionCommand::Rm { id } => {
+                    handlers::notification_subscription_rm(config, id).await
+                }
+            },
+            NotificationCommand::Health => handlers::notification_health(config).await,
         },
         Command::Database { action } => match action {
             DatabaseCommand::Create {

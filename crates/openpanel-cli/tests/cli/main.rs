@@ -18,6 +18,7 @@ mod ftp;
 mod logs;
 mod mail;
 mod monitoring;
+mod notifications;
 mod security;
 mod serve;
 mod site;

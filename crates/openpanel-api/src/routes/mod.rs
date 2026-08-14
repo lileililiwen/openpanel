@@ -22,6 +22,7 @@ pub mod logs;
 pub mod mail;
 /// Monitoring resource routes (`/monitoring`).
 pub mod monitoring;
+pub mod notifications;
 /// Host firewall and login-abuse routes (`/security`).
 pub mod security;
 /// Sites resource routes (`/sites`).

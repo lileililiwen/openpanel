@@ -27,6 +27,8 @@ pub mod logs;
 /// Hosted mail domains, addresses, quotas, aliases, and relay policy.
 pub mod mail;
 pub mod monitoring;
+/// Notification channels, subscriptions, events, and durable delivery state.
+pub mod notifications;
 pub mod security;
 pub mod sites;
 /// Trusted software catalog, transaction plans, and job lifecycle invariants.
