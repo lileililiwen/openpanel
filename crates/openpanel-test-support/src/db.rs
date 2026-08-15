@@ -132,6 +132,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("wordpress_toolkit migration");
+        sqlx::query(include_str!("migrations/wildcard_ssl/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("wildcard_ssl migration");
     }
 
     /// Access the underlying pool.

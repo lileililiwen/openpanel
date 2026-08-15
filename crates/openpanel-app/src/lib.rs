@@ -82,6 +82,10 @@ pub mod load_balancing;
 /// WordPress toolkit bounded context: staging, clone, update
 /// (with rollback on failure), security scan, and cache layer.
 pub mod wordpress_toolkit;
+/// Wildcard SSL with DNS-01 challenge bounded context: cert
+/// request with `ChallengeKind::Dns01`, ACME endpoint mode, and
+/// a DNS lease lifecycle.
+pub mod wildcard_ssl;
 
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
@@ -192,4 +196,8 @@ pub use load_balancing::{
 pub use wordpress_toolkit::{
     WordPressToolkitModule, FakeWpFilesystem, SqliteWpRepository, WpCacheLayer, WpScanner,
     WpToolkitService, WpUpdater,
+};
+pub use wildcard_ssl::{
+    WildcardSslModule, CertRenewalScheduler, Dns01ChallengeSolver, RecordingDnsProvider,
+    SqliteWildcardRepository, WildcardIssuer,
 };

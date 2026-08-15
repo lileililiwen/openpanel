@@ -92,3 +92,5 @@ pub const BILLING_V001: &str = include_str!("billing/V001__init.sql");
 pub const LOAD_BALANCING_V001: &str = include_str!("load_balancing/V001__init.sql");
 /// WordPress toolkit: managed sites and update runs.
 pub const WORDPRESS_TOOLKIT_V001: &str = include_str!("wordpress_toolkit/V001__init.sql");
+/// Wildcard SSL with DNS-01: cert requests and TXT leases.
+pub const WILDCARD_SSL_V001: &str = include_str!("wildcard_ssl/V001__init.sql");

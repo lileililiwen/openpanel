@@ -142,6 +142,10 @@ pub enum AuditAction {
     WpUpdateRolledBack,
     /// A WordPress cache mode was changed.
     WpCacheChanged,
+    /// A wildcard cert was issued successfully.
+    WildcardCertIssued,
+    /// A wildcard cert attempt failed.
+    WildcardCertFailed,
     /// OpenPanel firewall rules were applied or rolled back.
     FirewallChanged,
     /// A login-abuse block was created or ended.
@@ -428,6 +432,8 @@ impl AuditAction {
             AuditAction::WpUpdated => "wp_updated",
             AuditAction::WpUpdateRolledBack => "wp_update_rolled_back",
             AuditAction::WpCacheChanged => "wp_cache_changed",
+            AuditAction::WildcardCertIssued => "wildcard_cert_issued",
+            AuditAction::WildcardCertFailed => "wildcard_cert_failed",
             AuditAction::OsUpdateApplied => "os_update_applied",
             AuditAction::LogDownloaded => "log_downloaded",
         }
