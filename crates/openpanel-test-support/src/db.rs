@@ -128,6 +128,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("load_balancing migration");
+        sqlx::query(include_str!("migrations/wordpress_toolkit/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("wordpress_toolkit migration");
     }
 
     /// Access the underlying pool.

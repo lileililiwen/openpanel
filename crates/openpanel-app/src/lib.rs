@@ -79,6 +79,9 @@ pub mod billing;
 /// Load balancing and failover bounded context: pools of
 /// members with health probes and weighted rotation.
 pub mod load_balancing;
+/// WordPress toolkit bounded context: staging, clone, update
+/// (with rollback on failure), security scan, and cache layer.
+pub mod wordpress_toolkit;
 
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
@@ -185,4 +188,8 @@ pub use billing::{
 };
 pub use load_balancing::{
     LoadBalancingModule, LbService, MemberRotator, RecordingHealthProbe, SqliteLbRepository,
+};
+pub use wordpress_toolkit::{
+    WordPressToolkitModule, FakeWpFilesystem, SqliteWpRepository, WpCacheLayer, WpScanner,
+    WpToolkitService, WpUpdater,
 };

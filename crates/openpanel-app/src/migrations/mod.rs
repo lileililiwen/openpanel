@@ -90,3 +90,5 @@ pub const IP_ALLOCATION_V001: &str = include_str!("ip_allocation/V001__init.sql"
 pub const BILLING_V001: &str = include_str!("billing/V001__init.sql");
 /// Load balancing and failover: pools and members.
 pub const LOAD_BALANCING_V001: &str = include_str!("load_balancing/V001__init.sql");
+/// WordPress toolkit: managed sites and update runs.
+pub const WORDPRESS_TOOLKIT_V001: &str = include_str!("wordpress_toolkit/V001__init.sql");

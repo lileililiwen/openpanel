@@ -91,6 +91,9 @@ pub mod billing;
 /// Load balancing and failover bounded context: pools of
 /// members with health probes and weighted rotation.
 pub mod load_balancing;
+/// WordPress toolkit bounded context: staging, clone, update
+/// (with rollback on failure), security scan, and cache layer.
+pub mod wordpress_toolkit;
 /// Per-site staging slots, sync policies, and atomic promote.
 pub mod site_staging;
 
@@ -169,6 +172,10 @@ pub use billing::{
 pub use load_balancing::{
     HealthCheck, HealthProbe, LbError, LbRepository, LbStatus, Member, Pool, PoolAlgorithm,
     ProbeDecision, next_member,
+};
+pub use wordpress_toolkit::{
+    WpCacheMode, WpError, WpRepository, WpSecurityFinding, WpSecurityReport, WpSite, WpUpdateResult,
+    WpUpdateSet, compare_versions,
 };
 pub use files::{
     error::FileError,

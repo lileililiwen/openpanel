@@ -134,6 +134,14 @@ pub enum AuditAction {
     BillingWebhookRejected,
     /// A load-balancer member's status was updated.
     LbMemberChanged,
+    /// A WordPress security scan completed.
+    WpScanned,
+    /// A WordPress update applied cleanly.
+    WpUpdated,
+    /// A WordPress update failed and was rolled back.
+    WpUpdateRolledBack,
+    /// A WordPress cache mode was changed.
+    WpCacheChanged,
     /// OpenPanel firewall rules were applied or rolled back.
     FirewallChanged,
     /// A login-abuse block was created or ended.
@@ -416,6 +424,10 @@ impl AuditAction {
             AuditAction::BillingWebhookAccepted => "billing_webhook_accepted",
             AuditAction::BillingWebhookRejected => "billing_webhook_rejected",
             AuditAction::LbMemberChanged => "lb_member_changed",
+            AuditAction::WpScanned => "wp_scanned",
+            AuditAction::WpUpdated => "wp_updated",
+            AuditAction::WpUpdateRolledBack => "wp_update_rolled_back",
+            AuditAction::WpCacheChanged => "wp_cache_changed",
             AuditAction::OsUpdateApplied => "os_update_applied",
             AuditAction::LogDownloaded => "log_downloaded",
         }
