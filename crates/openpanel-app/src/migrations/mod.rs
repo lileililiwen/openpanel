@@ -98,3 +98,5 @@ pub const WILDCARD_SSL_V001: &str = include_str!("wildcard_ssl/V001__init.sql");
 pub const APP_RUNTIMES_V001: &str = include_str!("app_runtimes/V001__init.sql");
 /// Kernel resource isolation: cgroup limits + namespace + policy.
 pub const KERNEL_ISOLATION_V001: &str = include_str!("kernel_isolation/V001__init.sql");
+/// DNSSEC + secondary DNS: policies, keys, secondaries, glue, DS.
+pub const DNSSEC_SECONDARY_V001: &str = include_str!("dnssec_secondary/V001__init.sql");

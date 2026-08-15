@@ -94,6 +94,9 @@ pub mod app_runtimes;
 /// Kernel resource isolation bounded context: per-user cgroup
 /// limits and namespace configuration.
 pub mod kernel_isolation;
+/// DNSSEC + secondary DNS bounded context: zone signing keys,
+/// secondary nameserver ACLs, glue records, and DS records.
+pub mod dnssec_secondary;
 
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
@@ -216,4 +219,8 @@ pub use app_runtimes::{
 pub use kernel_isolation::{
     KernelIsolationModule, CgroupEnforcer, CgroupWriter, NamespaceIsolator, QuotaBridge,
     RecordingCgroupWriter, SqliteIsolationRepository,
+};
+pub use dnssec_secondary::{
+    DnsSecSecondaryModule, AxfrSender, DnsSecService, GlueRecordService, KeyRolloverEngine,
+    RecordingRegistrar, Registrar, SqliteDnsSecRepository,
 };

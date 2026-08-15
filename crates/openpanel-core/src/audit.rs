@@ -152,6 +152,12 @@ pub enum AuditAction {
     IsolationApplied,
     /// An isolation policy enforce failed (isolation retained).
     IsolationEnforceFailed,
+    /// DNSSEC was enabled for a zone.
+    DnsSecEnabled,
+    /// DNSSEC was disabled for a zone.
+    DnsSecDisabled,
+    /// A DS record was published to the parent zone.
+    DnsSecDsPublished,
     /// OpenPanel firewall rules were applied or rolled back.
     FirewallChanged,
     /// A login-abuse block was created or ended.
@@ -443,6 +449,9 @@ impl AuditAction {
             AuditAction::RuntimeChanged => "runtime_changed",
             AuditAction::IsolationApplied => "isolation_applied",
             AuditAction::IsolationEnforceFailed => "isolation_enforce_failed",
+            AuditAction::DnsSecEnabled => "dnssec_enabled",
+            AuditAction::DnsSecDisabled => "dnssec_disabled",
+            AuditAction::DnsSecDsPublished => "dnssec_ds_published",
             AuditAction::OsUpdateApplied => "os_update_applied",
             AuditAction::LogDownloaded => "log_downloaded",
         }

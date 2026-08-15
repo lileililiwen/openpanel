@@ -144,6 +144,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("kernel_isolation migration");
+        sqlx::query(include_str!("migrations/dnssec_secondary/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("dnssec_secondary migration");
     }
 
     /// Access the underlying pool.

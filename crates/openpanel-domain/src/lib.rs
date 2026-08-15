@@ -106,6 +106,9 @@ pub mod app_runtimes;
 /// Kernel resource isolation bounded context: per-user cgroup
 /// limits and namespace configuration.
 pub mod kernel_isolation;
+/// DNSSEC + secondary DNS bounded context: zone signing keys,
+/// secondary nameserver ACLs, glue records, and DS records.
+pub mod dnssec_secondary;
 /// Per-site staging slots, sync policies, and atomic promote.
 pub mod site_staging;
 
@@ -202,6 +205,10 @@ pub use app_runtimes::{
 pub use kernel_isolation::{
     CgroupLimit, IsolationError, IsolationPolicy, IsolationRepository, ROOT_CGROUP,
     UserNamespaceConfig, user_cgroup_path,
+};
+pub use dnssec_secondary::{
+    DsRecord, DnsSecError, DnsSecPolicy, DnsSecRepository, GlueRecord, KeyRole, KskRolloverState,
+    SecondaryNs, SigningAlgorithm, ZoneSigningKey,
 };
 pub use files::{
     error::FileError,
