@@ -118,6 +118,14 @@ pub enum AuditAction {
     DbRemoteAccessChanged,
     /// A short-lived SSO session was issued for the admin tool.
     DbAdminToolLaunched,
+    /// An IP address pool was created or updated.
+    IpPoolChanged,
+    /// An IP address was allocated to a site.
+    IpAllocated,
+    /// An IP address was released back to its pool.
+    IpReleased,
+    /// A site's vhost was rebound to its current address set.
+    IpVhostRebound,
     /// OpenPanel firewall rules were applied or rolled back.
     FirewallChanged,
     /// A login-abuse block was created or ended.
@@ -392,6 +400,10 @@ impl AuditAction {
             AuditAction::DbPrivilegeRevoked => "db_privilege_revoked",
             AuditAction::DbRemoteAccessChanged => "db_remote_access_changed",
             AuditAction::DbAdminToolLaunched => "db_admin_tool_launched",
+            AuditAction::IpPoolChanged => "ip_pool_changed",
+            AuditAction::IpAllocated => "ip_allocated",
+            AuditAction::IpReleased => "ip_released",
+            AuditAction::IpVhostRebound => "ip_vhost_rebound",
             AuditAction::OsUpdateApplied => "os_update_applied",
             AuditAction::LogDownloaded => "log_downloaded",
         }

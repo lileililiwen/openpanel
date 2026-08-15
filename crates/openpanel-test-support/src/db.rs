@@ -116,6 +116,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("db_privileges migration");
+        sqlx::query(include_str!("migrations/ip_allocation/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("ip_allocation migration");
     }
 
     /// Access the underlying pool.

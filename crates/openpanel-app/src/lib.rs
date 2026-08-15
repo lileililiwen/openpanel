@@ -68,6 +68,10 @@ pub mod log_viewer;
 /// scopes, remote access with an explicit wildcard opt-in, and
 /// short-lived single-use SSO tokens for the admin tool launcher.
 pub mod db_privileges;
+/// IPv6 + address-pool bounded context: typed pools, allocations
+/// to sites, and the vhost binder that attaches the address set
+/// to a vhost.
+pub mod ip_allocation;
 
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
@@ -164,4 +168,7 @@ pub use log_viewer::{
 pub use db_privileges::{
     DbPrivilegeModule, AdminToolSso, PrivilegeService, RemoteAccessController,
     SqliteDbPrivilegeRepository,
+};
+pub use ip_allocation::{
+    IpAllocationModule, Allocator, IpService, SqliteIpRepository, VhostBinder,
 };

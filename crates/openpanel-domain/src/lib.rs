@@ -80,6 +80,10 @@ pub mod log_viewer;
 /// scopes, remote access with an explicit wildcard opt-in, and
 /// short-lived single-use SSO tokens for the admin tool launcher.
 pub mod db_privileges;
+/// IPv6 + address-pool bounded context: typed pools, allocations
+/// to sites, and the vhost binder that attaches the address set
+/// to a vhost.
+pub mod ip_allocation;
 /// Per-site staging slots, sync policies, and atomic promote.
 pub mod site_staging;
 
@@ -146,6 +150,10 @@ pub use log_viewer::{
 pub use db_privileges::{
     AdminToolSession, DbGrant, DbPrivilegeError, DbPrivilegeRepository, GrantScope, Privilege,
     RemoteAccess,
+};
+pub use ip_allocation::{
+    IpAllocation, IpError, IpFamily, IpPool, IpRepository, IpStatus, PoolKind, SiteAddress,
+    validate_cidr,
 };
 pub use files::{
     error::FileError,
