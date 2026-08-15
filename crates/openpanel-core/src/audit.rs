@@ -146,6 +146,8 @@ pub enum AuditAction {
     WildcardCertIssued,
     /// A wildcard cert attempt failed.
     WildcardCertFailed,
+    /// A site's runtime was created, updated, or started.
+    RuntimeChanged,
     /// OpenPanel firewall rules were applied or rolled back.
     FirewallChanged,
     /// A login-abuse block was created or ended.
@@ -434,6 +436,7 @@ impl AuditAction {
             AuditAction::WpCacheChanged => "wp_cache_changed",
             AuditAction::WildcardCertIssued => "wildcard_cert_issued",
             AuditAction::WildcardCertFailed => "wildcard_cert_failed",
+            AuditAction::RuntimeChanged => "runtime_changed",
             AuditAction::OsUpdateApplied => "os_update_applied",
             AuditAction::LogDownloaded => "log_downloaded",
         }

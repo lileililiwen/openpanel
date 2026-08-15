@@ -136,6 +136,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("wildcard_ssl migration");
+        sqlx::query(include_str!("migrations/app_runtimes/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("app_runtimes migration");
     }
 
     /// Access the underlying pool.

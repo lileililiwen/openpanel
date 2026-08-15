@@ -98,6 +98,11 @@ pub mod wordpress_toolkit;
 /// request with `ChallengeKind::Dns01`, ACME endpoint mode, and
 /// a DNS lease lifecycle.
 pub mod wildcard_ssl;
+/// Non-PHP runtime bounded context: per-site runtime choice
+/// (Node / Python / Go / Ruby / .NET), pinned version, app port,
+/// supervisor unit, and the nginx reverse-proxy block that
+/// targets `127.0.0.1:APP_PORT`.
+pub mod app_runtimes;
 /// Per-site staging slots, sync policies, and atomic promote.
 pub mod site_staging;
 
@@ -185,6 +190,11 @@ pub use wildcard_ssl::{
     AcmeEndpointMode, ALLOWED_DNS_PROVIDERS, CHALLENGE_SERVER_BIND, CertRequest, ChallengeKind,
     DnsLease, DnsProviderPort, RecordingDnsProvider, WildcardError, WildcardRepository,
     is_provider_allowed,
+};
+pub use app_runtimes::{
+    ALLOWED_RUNTIME_KINDS, RESERVED_PORTS, RuntimeError, RuntimeKind, RuntimeRepository,
+    RuntimeStatus, SiteRuntime, is_kind_allowed, is_version_allowed, is_workdir_inside_chroot,
+    is_port_allowed, render_nginx_proxy_block, render_supervisor_unit,
 };
 pub use files::{
     error::FileError,

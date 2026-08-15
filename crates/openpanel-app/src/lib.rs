@@ -86,6 +86,11 @@ pub mod wordpress_toolkit;
 /// request with `ChallengeKind::Dns01`, ACME endpoint mode, and
 /// a DNS lease lifecycle.
 pub mod wildcard_ssl;
+/// Non-PHP runtime bounded context: per-site runtime choice
+/// (Node / Python / Go / Ruby / .NET), pinned version, app port,
+/// supervisor unit, and the nginx reverse-proxy block that
+/// targets `127.0.0.1:APP_PORT`.
+pub mod app_runtimes;
 
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
@@ -200,4 +205,8 @@ pub use wordpress_toolkit::{
 pub use wildcard_ssl::{
     WildcardSslModule, CertRenewalScheduler, Dns01ChallengeSolver, RecordingDnsProvider,
     SqliteWildcardRepository, WildcardIssuer,
+};
+pub use app_runtimes::{
+    AppRuntimesModule, ReverseProxyLayer, RuntimeService, SqliteRuntimeRepository,
+    SupervisorUnitBuilder,
 };
