@@ -91,6 +91,9 @@ pub mod wildcard_ssl;
 /// supervisor unit, and the nginx reverse-proxy block that
 /// targets `127.0.0.1:APP_PORT`.
 pub mod app_runtimes;
+/// Kernel resource isolation bounded context: per-user cgroup
+/// limits and namespace configuration.
+pub mod kernel_isolation;
 
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
@@ -209,4 +212,8 @@ pub use wildcard_ssl::{
 pub use app_runtimes::{
     AppRuntimesModule, ReverseProxyLayer, RuntimeService, SqliteRuntimeRepository,
     SupervisorUnitBuilder,
+};
+pub use kernel_isolation::{
+    KernelIsolationModule, CgroupEnforcer, CgroupWriter, NamespaceIsolator, QuotaBridge,
+    RecordingCgroupWriter, SqliteIsolationRepository,
 };

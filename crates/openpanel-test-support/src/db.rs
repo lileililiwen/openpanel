@@ -140,6 +140,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("app_runtimes migration");
+        sqlx::query(include_str!("migrations/kernel_isolation/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("kernel_isolation migration");
     }
 
     /// Access the underlying pool.

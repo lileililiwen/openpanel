@@ -96,3 +96,5 @@ pub const WORDPRESS_TOOLKIT_V001: &str = include_str!("wordpress_toolkit/V001__i
 pub const WILDCARD_SSL_V001: &str = include_str!("wildcard_ssl/V001__init.sql");
 /// Non-PHP runtime: per-site runtime config.
 pub const APP_RUNTIMES_V001: &str = include_str!("app_runtimes/V001__init.sql");
+/// Kernel resource isolation: cgroup limits + namespace + policy.
+pub const KERNEL_ISOLATION_V001: &str = include_str!("kernel_isolation/V001__init.sql");

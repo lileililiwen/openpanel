@@ -103,6 +103,9 @@ pub mod wildcard_ssl;
 /// supervisor unit, and the nginx reverse-proxy block that
 /// targets `127.0.0.1:APP_PORT`.
 pub mod app_runtimes;
+/// Kernel resource isolation bounded context: per-user cgroup
+/// limits and namespace configuration.
+pub mod kernel_isolation;
 /// Per-site staging slots, sync policies, and atomic promote.
 pub mod site_staging;
 
@@ -195,6 +198,10 @@ pub use app_runtimes::{
     ALLOWED_RUNTIME_KINDS, RESERVED_PORTS, RuntimeError, RuntimeKind, RuntimeRepository,
     RuntimeStatus, SiteRuntime, is_kind_allowed, is_version_allowed, is_workdir_inside_chroot,
     is_port_allowed, render_nginx_proxy_block, render_supervisor_unit,
+};
+pub use kernel_isolation::{
+    CgroupLimit, IsolationError, IsolationPolicy, IsolationRepository, ROOT_CGROUP,
+    UserNamespaceConfig, user_cgroup_path,
 };
 pub use files::{
     error::FileError,
