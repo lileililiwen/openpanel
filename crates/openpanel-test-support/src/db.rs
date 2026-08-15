@@ -152,6 +152,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("mail_filtering migration");
+        sqlx::query(include_str!("migrations/git_deployment/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("git_deployment migration");
     }
 
     /// Access the underlying pool.

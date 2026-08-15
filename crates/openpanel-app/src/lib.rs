@@ -101,6 +101,9 @@ pub mod dnssec_secondary;
 /// anti-spam policy, greylist, Sieve filter scripts, autoresponder
 /// windows, forwarders, catch-all, and mailing lists.
 pub mod mail_filtering;
+/// Git deployment bounded context: a per-site git repo, deploy
+/// runs, and webhook HMAC verification.
+pub mod git_deployment;
 
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
@@ -231,4 +234,8 @@ pub use dnssec_secondary::{
 pub use mail_filtering::{
     MailFilteringModule, MailFilterService, MailingListService, SieveCompiler, SpamScorer,
     SqliteMailFilterRepository,
+};
+pub use git_deployment::{
+    GitDeploymentModule, DeployService, SqliteDeployRepository, WebhookVerifier,
+    verify_webhook_with_secret,
 };

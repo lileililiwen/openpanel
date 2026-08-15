@@ -162,6 +162,8 @@ pub enum AuditAction {
     AntispamChanged,
     /// A Sieve filter was compiled and saved.
     SieveApplied,
+    /// A git deploy was triggered for a site.
+    GitDeployed,
     /// OpenPanel firewall rules were applied or rolled back.
     FirewallChanged,
     /// A login-abuse block was created or ended.
@@ -458,6 +460,7 @@ impl AuditAction {
             AuditAction::DnsSecDsPublished => "dnssec_ds_published",
             AuditAction::AntispamChanged => "antispam_changed",
             AuditAction::SieveApplied => "sieve_applied",
+            AuditAction::GitDeployed => "git_deployed",
             AuditAction::OsUpdateApplied => "os_update_applied",
             AuditAction::LogDownloaded => "log_downloaded",
         }

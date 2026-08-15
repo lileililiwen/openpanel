@@ -113,6 +113,9 @@ pub mod dnssec_secondary;
 /// anti-spam policy, greylist, Sieve filter scripts, autoresponder
 /// windows, forwarders, catch-all, and mailing lists.
 pub mod mail_filtering;
+/// Git deployment bounded context: a per-site git repo, deploy
+/// runs, and webhook HMAC verification.
+pub mod git_deployment;
 /// Per-site staging slots, sync policies, and atomic promote.
 pub mod site_staging;
 
@@ -217,6 +220,10 @@ pub use dnssec_secondary::{
 pub use mail_filtering::{
     AntiSpamPolicy, AutoResponder, AutoResponderMode, CatchAll, Forwarder, GreylistEntry,
     MailFilterError, MailFilterRepository, MailingList, SIEVE_MAX_BYTES, SieveScript,
+};
+pub use git_deployment::{
+    DeployError, DeployRepo, DeployRepository, DeployRun, DeployStatus, WebhookSecret,
+    commit_placeholder, verify_webhook,
 };
 pub use files::{
     error::FileError,
