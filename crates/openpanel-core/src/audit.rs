@@ -164,6 +164,8 @@ pub enum AuditAction {
     SieveApplied,
     /// A git deploy was triggered for a site.
     GitDeployed,
+    /// A maintenance window was created.
+    MaintenanceWindowCreated,
     /// OpenPanel firewall rules were applied or rolled back.
     FirewallChanged,
     /// A login-abuse block was created or ended.
@@ -461,6 +463,7 @@ impl AuditAction {
             AuditAction::AntispamChanged => "antispam_changed",
             AuditAction::SieveApplied => "sieve_applied",
             AuditAction::GitDeployed => "git_deployed",
+            AuditAction::MaintenanceWindowCreated => "maintenance_window_created",
             AuditAction::OsUpdateApplied => "os_update_applied",
             AuditAction::LogDownloaded => "log_downloaded",
         }

@@ -104,3 +104,5 @@ pub const DNSSEC_SECONDARY_V001: &str = include_str!("dnssec_secondary/V001__ini
 pub const MAIL_FILTERING_V001: &str = include_str!("mail_filtering/V001__init.sql");
 /// Git deployment: repos and deploy runs.
 pub const GIT_DEPLOYMENT_V001: &str = include_str!("git_deployment/V001__init.sql");
+/// Scheduled maintenance windows: windows + overrides.
+pub const MAINTENANCE_WINDOWS_V001: &str = include_str!("maintenance_windows/V001__init.sql");

@@ -104,6 +104,10 @@ pub mod mail_filtering;
 /// Git deployment bounded context: a per-site git repo, deploy
 /// runs, and webhook HMAC verification.
 pub mod git_deployment;
+/// Scheduled maintenance windows bounded context: a panel-wide
+/// schedule that blocks destructive actions, with a
+/// single-use override that lifts the lock for a bounded TTL.
+pub mod maintenance_windows;
 
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
@@ -238,4 +242,7 @@ pub use mail_filtering::{
 pub use git_deployment::{
     GitDeploymentModule, DeployService, SqliteDeployRepository, WebhookVerifier,
     verify_webhook_with_secret,
+};
+pub use maintenance_windows::{
+    MaintenanceWindowsModule, MaintenanceEnforcer, SqliteMaintenanceRepository,
 };
