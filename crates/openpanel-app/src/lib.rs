@@ -64,6 +64,10 @@ pub mod synthetic_monitoring;
 /// Log viewer bounded context: typed queries over a JSONL store
 /// with role-based authorization.
 pub mod log_viewer;
+/// Database privilege management bounded context: per-user grant
+/// scopes, remote access with an explicit wildcard opt-in, and
+/// short-lived single-use SSO tokens for the admin tool launcher.
+pub mod db_privileges;
 
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
@@ -156,4 +160,8 @@ pub use synthetic_monitoring::{
 };
 pub use log_viewer::{
     LogViewerModule, InMemoryLogReader, LogAggregator, SqliteLogViewerRepository,
+};
+pub use db_privileges::{
+    DbPrivilegeModule, AdminToolSso, PrivilegeService, RemoteAccessController,
+    SqliteDbPrivilegeRepository,
 };

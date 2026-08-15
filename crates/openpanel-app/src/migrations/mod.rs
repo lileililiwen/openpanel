@@ -82,3 +82,5 @@ pub const OS_UPDATES_V001: &str = include_str!("os_updates/V001__init.sql");
 pub const SYNTHETIC_MONITORING_V001: &str = include_str!("synthetic_monitoring/V001__init.sql");
 /// Log viewer: download audit rows.
 pub const LOG_VIEWER_V001: &str = include_str!("log_viewer/V001__init.sql");
+/// Database privilege management: grants, remote access, SSO.
+pub const DB_PRIVILEGES_V001: &str = include_str!("db_privileges/V001__init.sql");

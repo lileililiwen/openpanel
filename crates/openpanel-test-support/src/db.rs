@@ -112,6 +112,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("log_viewer migration");
+        sqlx::query(include_str!("migrations/db_privileges/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("db_privileges migration");
     }
 
     /// Access the underlying pool.

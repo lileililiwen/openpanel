@@ -110,6 +110,14 @@ pub enum AuditAction {
     BackupRestore,
     /// An authorized bounded log export was downloaded.
     LogDownloaded,
+    /// A database privilege was granted.
+    DbPrivilegeGranted,
+    /// A database privilege was revoked.
+    DbPrivilegeRevoked,
+    /// Remote access was toggled for a managed database.
+    DbRemoteAccessChanged,
+    /// A short-lived SSO session was issued for the admin tool.
+    DbAdminToolLaunched,
     /// OpenPanel firewall rules were applied or rolled back.
     FirewallChanged,
     /// A login-abuse block was created or ended.
@@ -380,6 +388,10 @@ impl AuditAction {
             AuditAction::AuditRetentionChanged => "audit_retention_changed",
             AuditAction::AuditPurged => "audit_purged",
             AuditAction::GdprExportRequested => "gdpr_export_requested",
+            AuditAction::DbPrivilegeGranted => "db_privilege_granted",
+            AuditAction::DbPrivilegeRevoked => "db_privilege_revoked",
+            AuditAction::DbRemoteAccessChanged => "db_remote_access_changed",
+            AuditAction::DbAdminToolLaunched => "db_admin_tool_launched",
             AuditAction::OsUpdateApplied => "os_update_applied",
             AuditAction::LogDownloaded => "log_downloaded",
         }
