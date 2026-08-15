@@ -9,12 +9,78 @@ schema: spec-driven
 #     We use conventional commits
 #     Domain: e-commerce platform
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always include a "Non-goals" section
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+context: |
+  OpenPanel — a memory-safe, Rust-based, open-source server-management
+  panel (a Baota / cPanel alternative without PHP). Single static
+  binary, no script engine at runtime, MIT licensed.
+
+  Tech stack: Rust (Cargo workspace), axum + tower (HTTP), SQLite
+  (per-module migrations), tokio (background tasks), clap (CLI),
+  maud (server-rendered HTMX web UI), serde_json + jsonschema (config),
+  rustls (mTLS), mockall (test doubles), proptest (property tests).
+
+  Architecture — strict DDD, four layers (inner MUST NOT depend on
+  outer; enforced by separate crates):
+    1. openpanel-domain — entities, VOs, aggregates, repository TRAITS.
+       ZERO I/O: no sqlx, no axum, no tokio.
+    2. openpanel-app — use-case services, repository IMPLs (SQLite),
+       migrations. Depends only on domain + core.
+    3. Adapters — openpanel-api (HTTP), openpanel-cli, openpanel-agent.
+       Depend on app + core.
+    4. Composition root — binary main.rs wires modules via ModuleRegistry.
+
+  Every bounded context is the SAME shape:
+    domain/<ctx>/ (aggregate, VOs, error, repo trait)
+    app/<ctx>/    (service, repo impl, adapters, module)
+    api/routes/<ctx>.rs (handlers, DTOs)
+    cli/handlers.rs (dispatch)
+  Adding a context = one `app.register(XModule)` call. Do not edit
+  unrelated files.
+
+  Conventions: TDD (tests first, red before green); `unwrap`/`expect`/
+  `panic`/`todo`/`unreachable` FORBIDDEN in production code;
+  `unsafe_code = "forbid"`; conventional commits; specs are the source
+  of truth (OpenSpec). Read openspec/specs/<cap>/spec.md before coding.
+
+  Domain knowledge: manages sites, databases (MySQL), files (chrooted),
+  SSL/TLS (ACME), mail, DNS, monitoring, identity/auth, backups, cron,
+  and a per-host agent fleet over mTLS. Secrets (passwords, tokens,
+  private keys) are AES-256-GCM at rest and MUST NEVER be logged or
+  returned in API/CLI responses.
+
+rules:
+  proposal:
+    - >-
+      State WHY before WHAT; name the existing module/logic this change
+      will reuse, or justify why new code is unavoidable.
+    - >-
+      List capabilities as New / Modified; reference the source-of-truth
+      spec the change is a delta on.
+    - >-
+      Keep proposals under 600 words; always include a Non-goals
+      section so scope (and architectural boundaries) are explicit.
+  design:
+    - >-
+      Design MUST include an Explore & Reuse section naming the
+      specific existing utilities, traits, and modules that satisfy the
+      requirement; do not reintroduce logic that already exists.
+    - >-
+      Respect DDD layering; domain stays I/O-free; app depends only on
+      domain + core; adapters depend on app + core.
+    - >-
+      Must be approved by a human principal before implementation (apply).
+  tasks:
+    - >-
+      The first numbered group MUST be "## 1. Testing" (unit per public
+      fn, integration per route, property per invariant, E2E per CLI
+      subcommand). No implementation group may appear before it.
+    - >-
+      Walk tasks top-to-bottom; tests first and failing (TDD red), then
+      implementation; mark boxes as completed in order.
+  specs:
+    - >-
+      Every Requirement needs at least one "#### Scenario:" (WHEN/THEN).
+    - >-
+      Specs are the source of truth; code that drifts from a spec is a
+      bug. Do not soften a requirement to match existing code.
+

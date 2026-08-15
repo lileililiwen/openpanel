@@ -283,26 +283,47 @@ When asked to implement a feature or spec:
 
 1. **Read** the OpenSpec change folder: `proposal.md`, the cap's
    `specs/<cap>/spec.md`, `design.md`, `tasks.md`. These are
-   authoritative.
+   authoritative. Also load `openspec/specs/agent-quality/spec.md` —
+   it is the top-level contract for how you must work.
 2. **Check** the source-of-truth specs in `openspec/specs/` for any
    relevant capability (the change's spec is a *delta* on top of
    the source of truth).
-3. **Plan** the work by walking `tasks.md` top-to-bottom. The
+3. **Explore & Reuse** *(mandatory, before planning or coding)* —
+   run `scripts/repo-map.sh` and grep the tree for existing
+   utilities, traits, repository implementations, and modules that
+   already satisfy the requirement. In `design.md`, **name the exact
+   existing code you will reuse** and justify any new code. Do not
+   re-implement something that already exists (the `reuse` gate in
+   `make check` will reject duplicates).
+4. **Plan** the work by walking `tasks.md` top-to-bottom. The
    `## 1. Testing` group comes first; do not skip ahead.
-4. **Implement** in layer order: domain → app → api/cli. Add the
+5. **Compaction check** — keep your working context focused. After the
+   plan phase, write a one-paragraph status (goal, approach, done,
+   current blocker) into the change folder so the context window does
+   not fill with noise that causes mid-task hallucination.
+6. **Implement** in layer order: domain → app → api/cli. Add the
    tests first; ensure they fail; then add the production code; ensure
    they pass.
-5. **Smoke-test** at the HTTP layer (`curl` against the local
+7. **Smoke-test** at the HTTP layer (`curl` against the local
    server) before declaring done. End-to-end CLI tests live in
    `tests/cli/`.
-6. **Run** `make check` locally. Fix every clippy
+8. **Run** `make check` locally. Fix every clippy
    warning. Fix every fmt diff.
-7. **Update** the change's `tasks.md` — every box checked.
-8. **Archive** via `openspec archive <name>`. The delta is folded
-   into `openspec/specs/<cap>/spec.md`.
-9. **Commit** with a message that follows the existing convention
-   (short title on the first line, blank line, detailed body
-   explaining *why* and *what*, not just *what*).
+9. **Update** the change's `tasks.md` — every box checked.
+10. **Human review gate** — a change MUST NOT be implemented (`apply`)
+    until its `design.md` has been reviewed and approved by a human
+    principal. Reviewing the research and plan catches architectural
+    drift and hallucinated assumptions *before* they reach the tree.
+11. **Archive** via `openspec archive <name>`. The delta is folded
+    into `openspec/specs/<cap>/spec.md`.
+12. **Commit** with a message that follows the existing convention
+    (short title on the first line, blank line, detailed body
+    explaining *why* and *what*, not just *what*).
+
+> **Global-view rule:** if you cannot point at the existing module or
+> utility your change depends on, stop and explore (`scripts/repo-map.sh`)
+> before writing code. Confidently inventing an API that already exists
+> elsewhere is the most expensive failure mode.
 
 ---
 

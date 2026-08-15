@@ -3,7 +3,8 @@
 # The Makefile is the *manager*: it knows the checks that exist and in
 # what order they run, but the actual work lives in one small script per
 # concern under `scripts/` (fmt, clippy, docs, audit, file-length, tests,
-# coverage).
+# coverage, and the agent-quality gates: tasks-testing-first, reuse,
+# layering, spec-test-drift).
 #
 # Entry points:
 #   make check     — run every quality gate in order (CI entry point)
@@ -16,13 +17,15 @@
 #   make coverage  — informational coverage report
 #   make install-lint-tools — install the optional file-length tools
 #   make split FILE=<path>  — auto-refactor preview for one file
+#   make repo-map  — print a structural map of public APIs (agent aid)
+#   make reuse | layering | tasks-testing-first | spec-test-drift — gates only
 #
 # Every per-check script prints `step: <name> status: ok | failed` and
 # exits non-zero on failure; `make` short-circuits on the first one.
 
-.PHONY: check fmt clippy docs audit file-length test coverage install-lint-tools ensure-lint-tools split a11y scan-literal
+.PHONY: check fmt clippy docs audit file-length test coverage install-lint-tools ensure-lint-tools split a11y scan-literal tasks-testing-first reuse layering spec-test-drift repo-map
 
-check: ensure-lint-tools fmt clippy docs audit file-length scan-literal test
+check: ensure-lint-tools fmt clippy docs audit file-length scan-literal tasks-testing-first reuse layering spec-test-drift test
 	@echo ""
 	@echo "=== All quality checks passed ==="
 
@@ -43,6 +46,24 @@ file-length:
 
 scan-literal:
 	@scripts/scan-template-literals.sh
+
+tasks-testing-first:
+	@scripts/check-tasks-testing-first.sh
+
+reuse:
+	@scripts/check-reuse.sh
+
+reuse-strict:
+	@scripts/check-reuse.sh --strict
+
+layering:
+	@scripts/check-layering.sh
+
+spec-test-drift:
+	@scripts/check-spec-test-drift.sh
+
+repo-map:
+	@scripts/repo-map.sh
 
 a11y:
 	@echo "a11y: skipping — no dev server is running"

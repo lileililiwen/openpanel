@@ -62,3 +62,21 @@ jobs:
           name: coverage-lcov
           path: target/coverage/lcov.info
           if-no-files-found: ignore
+
+  agent-quality:
+    name: Agent Quality Gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Reuse / duplication gate
+        run: make reuse
+      - name: Intra-crate layering gate
+        run: make layering
+      - name: Tasks testing-first gate
+        run: make tasks-testing-first
+      - name: Spec-to-test drift gate
+        run: make spec-test-drift
+      - name: OpenSpec validation
+        run: npx -y @fission-ai/openspec-cli@latest validate --all || openspec validate --all
+        continue-on-error: true
