@@ -109,6 +109,10 @@ pub mod kernel_isolation;
 /// DNSSEC + secondary DNS bounded context: zone signing keys,
 /// secondary nameserver ACLs, glue records, and DS records.
 pub mod dnssec_secondary;
+/// Mail anti-spam and filtering bounded context: per-mailbox
+/// anti-spam policy, greylist, Sieve filter scripts, autoresponder
+/// windows, forwarders, catch-all, and mailing lists.
+pub mod mail_filtering;
 /// Per-site staging slots, sync policies, and atomic promote.
 pub mod site_staging;
 
@@ -209,6 +213,10 @@ pub use kernel_isolation::{
 pub use dnssec_secondary::{
     DsRecord, DnsSecError, DnsSecPolicy, DnsSecRepository, GlueRecord, KeyRole, KskRolloverState,
     SecondaryNs, SigningAlgorithm, ZoneSigningKey,
+};
+pub use mail_filtering::{
+    AntiSpamPolicy, AutoResponder, AutoResponderMode, CatchAll, Forwarder, GreylistEntry,
+    MailFilterError, MailFilterRepository, MailingList, SIEVE_MAX_BYTES, SieveScript,
 };
 pub use files::{
     error::FileError,

@@ -97,6 +97,10 @@ pub mod kernel_isolation;
 /// DNSSEC + secondary DNS bounded context: zone signing keys,
 /// secondary nameserver ACLs, glue records, and DS records.
 pub mod dnssec_secondary;
+/// Mail anti-spam and filtering bounded context: per-mailbox
+/// anti-spam policy, greylist, Sieve filter scripts, autoresponder
+/// windows, forwarders, catch-all, and mailing lists.
+pub mod mail_filtering;
 
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
@@ -223,4 +227,8 @@ pub use kernel_isolation::{
 pub use dnssec_secondary::{
     DnsSecSecondaryModule, AxfrSender, DnsSecService, GlueRecordService, KeyRolloverEngine,
     RecordingRegistrar, Registrar, SqliteDnsSecRepository,
+};
+pub use mail_filtering::{
+    MailFilteringModule, MailFilterService, MailingListService, SieveCompiler, SpamScorer,
+    SqliteMailFilterRepository,
 };

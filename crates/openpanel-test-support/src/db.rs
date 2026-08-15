@@ -148,6 +148,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("dnssec_secondary migration");
+        sqlx::query(include_str!("migrations/mail_filtering/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("mail_filtering migration");
     }
 
     /// Access the underlying pool.

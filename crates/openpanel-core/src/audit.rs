@@ -158,6 +158,10 @@ pub enum AuditAction {
     DnsSecDisabled,
     /// A DS record was published to the parent zone.
     DnsSecDsPublished,
+    /// An anti-spam policy was applied.
+    AntispamChanged,
+    /// A Sieve filter was compiled and saved.
+    SieveApplied,
     /// OpenPanel firewall rules were applied or rolled back.
     FirewallChanged,
     /// A login-abuse block was created or ended.
@@ -452,6 +456,8 @@ impl AuditAction {
             AuditAction::DnsSecEnabled => "dnssec_enabled",
             AuditAction::DnsSecDisabled => "dnssec_disabled",
             AuditAction::DnsSecDsPublished => "dnssec_ds_published",
+            AuditAction::AntispamChanged => "antispam_changed",
+            AuditAction::SieveApplied => "sieve_applied",
             AuditAction::OsUpdateApplied => "os_update_applied",
             AuditAction::LogDownloaded => "log_downloaded",
         }
