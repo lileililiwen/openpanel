@@ -126,6 +126,12 @@ pub enum AuditAction {
     IpReleased,
     /// A site's vhost was rebound to its current address set.
     IpVhostRebound,
+    /// A chargeback was computed for an owner.
+    BillingChargebackComputed,
+    /// A signed billing webhook was accepted.
+    BillingWebhookAccepted,
+    /// A billing webhook was rejected (bad signature, disabled, …).
+    BillingWebhookRejected,
     /// OpenPanel firewall rules were applied or rolled back.
     FirewallChanged,
     /// A login-abuse block was created or ended.
@@ -404,6 +410,9 @@ impl AuditAction {
             AuditAction::IpAllocated => "ip_allocated",
             AuditAction::IpReleased => "ip_released",
             AuditAction::IpVhostRebound => "ip_vhost_rebound",
+            AuditAction::BillingChargebackComputed => "billing_chargeback_computed",
+            AuditAction::BillingWebhookAccepted => "billing_webhook_accepted",
+            AuditAction::BillingWebhookRejected => "billing_webhook_rejected",
             AuditAction::OsUpdateApplied => "os_update_applied",
             AuditAction::LogDownloaded => "log_downloaded",
         }

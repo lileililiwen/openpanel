@@ -86,3 +86,5 @@ pub const LOG_VIEWER_V001: &str = include_str!("log_viewer/V001__init.sql");
 pub const DB_PRIVILEGES_V001: &str = include_str!("db_privileges/V001__init.sql");
 /// IPv6 + address-pool: pools and per-site allocations.
 pub const IP_ALLOCATION_V001: &str = include_str!("ip_allocation/V001__init.sql");
+/// Reseller billing: meters, chargebacks, integrations.
+pub const BILLING_V001: &str = include_str!("billing/V001__init.sql");

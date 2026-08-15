@@ -72,6 +72,10 @@ pub mod db_privileges;
 /// to sites, and the vhost binder that attaches the address set
 /// to a vhost.
 pub mod ip_allocation;
+/// Reseller billing integration bounded context: usage meters,
+/// chargeback pricing, integration state, and webhook HMAC
+/// verification.
+pub mod billing;
 
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
@@ -171,4 +175,8 @@ pub use db_privileges::{
 };
 pub use ip_allocation::{
     IpAllocationModule, Allocator, IpService, SqliteIpRepository, VhostBinder,
+};
+pub use billing::{
+    BillingModule, BillingService, ChargebackEngine, SqliteBillingRepository, UsageExporter,
+    WebhookRelay,
 };

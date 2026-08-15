@@ -84,6 +84,10 @@ pub mod db_privileges;
 /// to sites, and the vhost binder that attaches the address set
 /// to a vhost.
 pub mod ip_allocation;
+/// Reseller billing integration bounded context: usage meters,
+/// chargeback pricing, integration state, and webhook HMAC
+/// verification.
+pub mod billing;
 /// Per-site staging slots, sync policies, and atomic promote.
 pub mod site_staging;
 
@@ -154,6 +158,10 @@ pub use db_privileges::{
 pub use ip_allocation::{
     IpAllocation, IpError, IpFamily, IpPool, IpRepository, IpStatus, PoolKind, SiteAddress,
     validate_cidr,
+};
+pub use billing::{
+    BillingError, BillingRepository, BillingStatus, Chargeback, ChargebackLine, Integration,
+    UsageMeter, UsageUnit, compute_chargeback, hmac_sha256_hex, verify_signature,
 };
 pub use files::{
     error::FileError,
