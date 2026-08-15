@@ -132,6 +132,8 @@ pub enum AuditAction {
     BillingWebhookAccepted,
     /// A billing webhook was rejected (bad signature, disabled, …).
     BillingWebhookRejected,
+    /// A load-balancer member's status was updated.
+    LbMemberChanged,
     /// OpenPanel firewall rules were applied or rolled back.
     FirewallChanged,
     /// A login-abuse block was created or ended.
@@ -413,6 +415,7 @@ impl AuditAction {
             AuditAction::BillingChargebackComputed => "billing_chargeback_computed",
             AuditAction::BillingWebhookAccepted => "billing_webhook_accepted",
             AuditAction::BillingWebhookRejected => "billing_webhook_rejected",
+            AuditAction::LbMemberChanged => "lb_member_changed",
             AuditAction::OsUpdateApplied => "os_update_applied",
             AuditAction::LogDownloaded => "log_downloaded",
         }

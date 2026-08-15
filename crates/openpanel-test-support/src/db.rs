@@ -124,6 +124,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("billing migration");
+        sqlx::query(include_str!("migrations/load_balancing/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("load_balancing migration");
     }
 
     /// Access the underlying pool.

@@ -76,6 +76,9 @@ pub mod ip_allocation;
 /// chargeback pricing, integration state, and webhook HMAC
 /// verification.
 pub mod billing;
+/// Load balancing and failover bounded context: pools of
+/// members with health probes and weighted rotation.
+pub mod load_balancing;
 
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use backups::{BackupService, BackupsModule};
@@ -179,4 +182,7 @@ pub use ip_allocation::{
 pub use billing::{
     BillingModule, BillingService, ChargebackEngine, SqliteBillingRepository, UsageExporter,
     WebhookRelay,
+};
+pub use load_balancing::{
+    LoadBalancingModule, LbService, MemberRotator, RecordingHealthProbe, SqliteLbRepository,
 };
