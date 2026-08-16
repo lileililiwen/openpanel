@@ -167,6 +167,7 @@ fn map(error: DockerError) -> ApiError {
         DockerError::Forbidden | DockerError::ImageDenied(_) => ApiError::Forbidden,
         DockerError::Invalid(message) => ApiError::Unprocessable(message),
         DockerError::NotFound(message) => ApiError::NotFound(message),
+        DockerError::QuotaExceeded => ApiError::Unprocessable("container quota exceeded".into()),
         DockerError::Adapter(message) | DockerError::Persistence(message) => {
             ApiError::Internal(message)
         }

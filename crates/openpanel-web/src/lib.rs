@@ -18,6 +18,8 @@ pub mod backups;
 pub mod collaborators;
 /// Container registry web page.
 pub mod container_registry;
+/// Container runtime web pages (quota editor + registry credentials).
+pub mod container_runtime;
 pub mod cron;
 pub mod csrf;
 pub mod dashboard;

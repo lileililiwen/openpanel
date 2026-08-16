@@ -32,6 +32,8 @@ mod plugin_marketplace;
 mod collaborators;
 /// Container registry HTTP integration tests.
 mod container_registry;
+/// Container runtime HTTP + web integration tests.
+mod container_runtime;
 mod software_center;
 mod ssl;
 mod system_services;

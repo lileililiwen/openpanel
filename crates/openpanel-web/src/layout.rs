@@ -127,6 +127,18 @@ const ADMINISTRATION: &[NavItem] = &[
         role: RequiredRole::Owner,
     },
     NavItem {
+        href: "/container/quota",
+        label: "Container quota",
+        capability: "docker",
+        role: RequiredRole::Owner,
+    },
+    NavItem {
+        href: "/registry/credentials",
+        label: "Registry credentials",
+        capability: "docker",
+        role: RequiredRole::Owner,
+    },
+    NavItem {
         href: "/software",
         label: "Software Center",
         capability: "software-center",

@@ -160,6 +160,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("maintenance_windows migration");
+        sqlx::query(include_str!("migrations/container_runtime/V001__init.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("container_runtime migration");
     }
 
     /// Access the underlying pool.

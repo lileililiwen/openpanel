@@ -28,6 +28,9 @@ pub enum DockerError {
     /// Stored object was not found.
     #[error("docker object not found: {0}")]
     NotFound(String),
+    /// A container create would exceed the per-user quota.
+    #[error("container quota exceeded")]
+    QuotaExceeded,
     /// Persistence failed.
     #[error("docker persistence failed: {0}")]
     Persistence(String),

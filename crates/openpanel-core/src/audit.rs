@@ -320,6 +320,24 @@ pub enum AuditAction {
     GdprExportRequested,
     /// An OS update was applied (security or other).
     OsUpdateApplied,
+    /// A container start was blocked because it would exceed a
+    /// per-user quota axis. Metadata records the axis.
+    ContainerStartQuotaBlocked,
+    /// A plan cap tightened a user-set container quota axis; the
+    /// audit metadata records the tightened value.
+    ContainerQuotaPlanOverride,
+    /// An image was pulled for a container using a registry
+    /// credential; metadata records `{owner_id, container_id,
+    /// image_ref, ref_count}` only — never the manifest body
+    /// or any credential secret.
+    ContainerImagePulled,
+    /// An owner raised a container's monthly egress limit; the
+    /// throttle that was applied at 80% is removed.
+    ContainerEgressLimitRaised,
+    /// A container crossed 80% of its monthly egress quota; the
+    /// container is throttled (1 Mbps) until the owner raises the
+    /// limit. Consumed by the bandwidth accounting bounded context.
+    BandwidthThresholdCrossed,
 }
 
 impl AuditAction {
@@ -466,6 +484,11 @@ impl AuditAction {
             AuditAction::MaintenanceWindowCreated => "maintenance_window_created",
             AuditAction::OsUpdateApplied => "os_update_applied",
             AuditAction::LogDownloaded => "log_downloaded",
+            AuditAction::ContainerStartQuotaBlocked => "container_start_quota_blocked",
+            AuditAction::ContainerQuotaPlanOverride => "container_quota_plan_override",
+            AuditAction::ContainerImagePulled => "container_image_pulled",
+            AuditAction::ContainerEgressLimitRaised => "container_egress_limit_raised",
+            AuditAction::BandwidthThresholdCrossed => "bandwidth_threshold_crossed",
         }
     }
 }
@@ -707,6 +730,11 @@ impl AuditService for SqliteAuditService {
                 "staging_snapshot_taken" => AuditAction::StagingSnapshotTaken,
                 "staging_promoted" => AuditAction::StagingPromoted,
                 "staging_promotion_rolled_back" => AuditAction::StagingPromotionRolledBack,
+                "container_start_quota_blocked" => AuditAction::ContainerStartQuotaBlocked,
+                "container_quota_plan_override" => AuditAction::ContainerQuotaPlanOverride,
+                "container_image_pulled" => AuditAction::ContainerImagePulled,
+                "container_egress_limit_raised" => AuditAction::ContainerEgressLimitRaised,
+                "bandwidth_threshold_crossed" => AuditAction::BandwidthThresholdCrossed,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

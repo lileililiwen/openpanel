@@ -17,11 +17,11 @@ use openpanel_api::{
     middleware::session::{SESSION_COOKIE, session_middleware},
 };
 use openpanel_app::{
-    ApiTokenService, BackupService, CronService, DatabasesService, DnsService, DockerService,
+    ApiTokenService, BackupService, CollaboratorService, ContainerRegistryService,
+    ContainerRuntimeService, CronService, DatabasesService, DnsService, DockerService,
     FilesService, FtpService, IdentityService, LogService, MailService, MonitoringService,
     NotificationService, PitrService, SecurityService, SitesService, SoftwareCenterService,
     SslService, StagingService, WafService, identity::TwoFactorService,
-    CollaboratorService, ContainerRegistryService,
     security::LoginThrottleService, system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
@@ -126,6 +126,8 @@ pub struct WebState {
     pub collaborators: Arc<CollaboratorService>,
     /// Container registry service.
     pub registry: Arc<ContainerRegistryService>,
+    /// Per-user container quota, registry credentials, metrics, and egress.
+    pub container_runtime: Arc<ContainerRuntimeService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -248,6 +250,7 @@ pub fn router(
     staging: Arc<StagingService>,
     collaborators: Arc<CollaboratorService>,
     registry: Arc<ContainerRegistryService>,
+    container_runtime: Arc<ContainerRuntimeService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -275,11 +278,12 @@ pub fn router(
         ftp,
         api_tokens,
         notifications,
-pitr,
-            staging,
-            collaborators,
-            registry,
-            csrf: Arc::new(CsrfStore::new()),
+        pitr,
+        staging,
+        collaborators,
+        registry,
+        container_runtime,
+        csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
             initial_preferences,
@@ -298,6 +302,19 @@ pitr,
         )
         .route("/docker/{id}/{action}", post(crate::docker::action))
         .route("/docker/{id}/logs", get(crate::docker::logs))
+        .route(
+            "/container/quota",
+            get(crate::container_runtime::quota_page).post(crate::container_runtime::quota_update),
+        )
+        .route(
+            "/registry/credentials",
+            get(crate::container_runtime::registry_page)
+                .post(crate::container_runtime::registry_create),
+        )
+        .route(
+            "/registry/credentials/{id}/remove",
+            post(crate::container_runtime::registry_remove),
+        )
         .route(
             "/sites/{id}/ftp",
             get(crate::ftp::page).post(crate::ftp::create),

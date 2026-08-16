@@ -106,3 +106,6 @@ pub const MAIL_FILTERING_V001: &str = include_str!("mail_filtering/V001__init.sq
 pub const GIT_DEPLOYMENT_V001: &str = include_str!("git_deployment/V001__init.sql");
 /// Scheduled maintenance windows: windows + overrides.
 pub const MAINTENANCE_WINDOWS_V001: &str = include_str!("maintenance_windows/V001__init.sql");
+/// Container runtime: per-user quota, registry credentials,
+/// metrics samples, and monthly egress accounts.
+pub const CONTAINER_RUNTIME_V001: &str = include_str!("container_runtime/V001__init.sql");

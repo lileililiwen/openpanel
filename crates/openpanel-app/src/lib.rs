@@ -34,6 +34,9 @@ pub mod plugin_marketplace;
 pub mod collaborators;
 /// Container registry bounded context.
 pub mod container_registry;
+/// Container runtime bounded context: per-user quota, registry
+/// credentials, metrics, and monthly egress accounting.
+pub mod container_runtime;
 /// Infrastructure-as-Code bounded context.
 pub mod iac;
 pub mod prelude;
@@ -155,6 +158,11 @@ pub use container_registry::{
     ContainerRegistryModule, ContainerRegistryService, ImageBlob, NoopScanHook,
     PushError, PushRequest, PushResult, ScanHook, ScanHookError,
     SqliteImageRepository, SqliteNamespaceRepository, SqliteScanResultRepository,
+};
+/// Container runtime module.
+pub use container_runtime::{
+    ContainerRuntimeModule, ContainerRuntimeService, CreateCredentialResult, PullError,
+    PullRequest, PullResult, RegistryHostAdapter,
 };
 /// Infrastructure-as-Code module.
 pub use iac::{

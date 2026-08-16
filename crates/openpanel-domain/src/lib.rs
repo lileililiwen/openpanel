@@ -50,6 +50,10 @@ pub mod collaborators;
 /// Container image registry bounded context: per-user namespaces,
 /// retention, scan hook, OCI Distribution push/pull.
 pub mod container_registry;
+/// Container runtime bounded context: per-user quota, registry
+/// credentials, metrics, and monthly egress accounting. The docker
+/// service consumes the quota gate before every container create.
+pub mod container_runtime;
 /// Infrastructure-as-Code bounded context: SDK and Terraform
 /// provider contract descriptors, regenerated from the OpenAPI
 /// spec.
@@ -143,6 +147,12 @@ pub use collaborators::{
 pub use container_registry::{
     ImageDigest, ImageNamespace, NamespaceId, RegistryConfig, RegistryError, RetentionPolicy,
     RetentionVerdict, ScanFinding, ScanResult, ScanStatus, StoredImage,
+};
+pub use container_runtime::{
+    ContainerMetrics, ContainerQuota, ContainerRuntimeError, ContainerRuntimeRepository,
+    EffectiveQuota, NetworkEgressAccount, PlanQuotaCaps, QuotaAxis, RegistryCredential,
+    RegistryCredentialId, check_concurrent, check_cpu, check_egress, check_memory, check_total,
+    effective_quota, egress_threshold_crossed,
 };
 pub use iac::{
     ApiContract, IacError, Language, Operation, OperationId, ProviderResource, ResourceEndpoint,

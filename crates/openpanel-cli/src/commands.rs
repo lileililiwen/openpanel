@@ -152,6 +152,14 @@ pub enum Command {
         #[command(subcommand)]
         action: NotificationCommand,
     },
+    /// Manage the per-user container runtime: quota, metrics,
+    /// registry credentials. Builds on top of the `docker`
+    /// bounded context (which holds the container lifecycle).
+    ContainerRuntime {
+        /// Container-runtime operation.
+        #[command(subcommand)]
+        action: ContainerRuntimeCommand,
+    },
 }
 
 /// Notification CLI operations.
@@ -1467,6 +1475,81 @@ pub enum RegistryCommand {
         /// Namespace id.
         #[arg(long)]
         namespace: String,
+    },
+}
+
+/// Subcommands for the container runtime bounded context
+/// (per-user quota, registry credentials, metrics, and pull).
+#[derive(Debug, Subcommand)]
+#[allow(missing_docs)]
+pub enum ContainerRuntimeCommand {
+    /// Show the per-user container quota (with plan overrides
+    /// applied).
+    QuotaShow,
+    /// Update one or more axes of the per-user container quota.
+    /// Missing axes preserve the previous value.
+    QuotaSet {
+        /// New `max_concurrent` value.
+        #[arg(long)]
+        max_concurrent: Option<u32>,
+        /// New `max_total` value.
+        #[arg(long)]
+        max_total: Option<u32>,
+        /// New `cpu_pct_max` value (0..=100).
+        #[arg(long)]
+        cpu: Option<u8>,
+        /// New `memory_bytes_max` value (bytes).
+        #[arg(long)]
+        memory_bytes: Option<u64>,
+        /// New `egress_bytes_per_month` value (bytes).
+        #[arg(long)]
+        egress_bytes: Option<u64>,
+    },
+    /// List the latest metrics samples for a container.
+    Metrics {
+        /// Container id (UUID).
+        container_id: String,
+        /// Max number of samples to print.
+        #[arg(long, default_value_t = 60)]
+        limit: u32,
+    },
+    /// Pull an image on behalf of a container using an optional
+    /// registry credential.
+    Pull {
+        /// Container id (UUID).
+        container_id: String,
+        /// Image reference (`repo[:tag]` or `repo@sha256:...`).
+        #[arg(long)]
+        image: String,
+        /// Optional registry credential id (UUID).
+        #[arg(long)]
+        credential_id: Option<String>,
+    },
+    /// Raise the per-user monthly egress limit (bytes per month).
+    RaiseEgressLimit {
+        /// New egress limit in bytes per month.
+        #[arg(long)]
+        bytes_per_month: u64,
+    },
+    /// Add a registry credential. The plaintext password is
+    /// returned exactly once on stdout.
+    RegistryCredentialAdd {
+        /// Registry hostname (e.g. `registry.example.com`).
+        #[arg(long)]
+        registry: String,
+        /// Username on the registry.
+        #[arg(long)]
+        user: String,
+        /// Password / PAT (≥ 16 chars with mixed classes).
+        #[arg(long)]
+        password: String,
+    },
+    /// List the caller's registry credentials (redacted).
+    RegistryCredentialList,
+    /// Remove a registry credential by id.
+    RegistryCredentialRemove {
+        /// Credential id (UUID).
+        id: String,
     },
 }
 

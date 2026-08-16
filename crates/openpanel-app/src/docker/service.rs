@@ -17,6 +17,8 @@ use openpanel_domain::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::container_runtime::{ContainerRuntimeService, ProposedContainer, UsageSnapshot};
+
 /// Bounded runtime inspection result.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RuntimeContainerState {
@@ -96,6 +98,7 @@ pub struct DockerService {
     network: Arc<dyn NetworkAdapter>,
     audit: Arc<dyn AuditService>,
     allowed_ports: RangeInclusive<u16>,
+    quota_gate: std::sync::RwLock<Option<Arc<ContainerRuntimeService>>>,
 }
 
 impl DockerService {
@@ -112,7 +115,16 @@ impl DockerService {
             network,
             audit,
             allowed_ports: 8080..=8999,
+            quota_gate: std::sync::RwLock::new(None),
         }
+    }
+
+    /// Attach the per-user container quota gate. The docker
+    /// service is the *consumer* of the gate: every create reads
+    /// the caller's effective quota and refuses to start a
+    /// container that would exceed any axis.
+    pub fn attach_quota_gate(&self, gate: Arc<ContainerRuntimeService>) {
+        *self.quota_gate.write().expect("invariant: rwlock poisoned") = Some(gate);
     }
 
     /// List trusted image patterns.
@@ -191,6 +203,32 @@ impl DockerService {
             return Err(DockerError::Invalid(
                 "production image requires a sha256 digest pin".into(),
             ));
+        }
+        let gate: Option<Arc<ContainerRuntimeService>> = self
+            .quota_gate
+            .read()
+            .expect("invariant: rwlock poisoned")
+            .clone();
+        if let Some(gate) = gate {
+            let containers = self.repo.list_containers().await.map_err(persist)?;
+            let running = containers
+                .iter()
+                .filter(|container| container.status == "running")
+                .count() as u32;
+            let usage = UsageSnapshot {
+                running_concurrent: running,
+                total: containers.len() as u32,
+                egress_used: 0,
+            };
+            let proposed = ProposedContainer {
+                count: 1,
+                cpu_pct: 0,
+                memory_bytes: spec.limits.mem_mb.saturating_mul(1024 * 1024),
+                egress_delta: 0,
+            };
+            gate.check_quota(caller, caller.id(), usage, proposed)
+                .await
+                .map_err(|_| DockerError::QuotaExceeded)?;
         }
         self.network.ensure(spec.site_id).await?;
         let runtime_id = match self.adapter.create(&spec).await {

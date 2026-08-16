@@ -3,12 +3,12 @@
 use clap::Parser;
 use openpanel_cli::{
     BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, CollaboratorCommand, Command,
-    CronCommand, DatabaseCommand, DnsCommand, DockerCommand, FileCommand, FtpCommand,
-    IacCommand, LogsCommand, MailCommand, MarketplaceCommand, MonitoringCommand,
-    NotificationChannelCommand, NotificationCommand, NotificationSubscriptionCommand,
-    PitrCommand, PluginCommand, RecoveryCodeCommand, RegistryCommand, SecurityAllowlistCommand,
-    SecurityCommand, SecurityRuleCommand, ServicesCommand, SiteCommand, SoftwareCommand,
-    SslCommand, StagingCommand, TokenCommand, TwoFactorCommand, UserCommand, WafCommand, handlers,
+    ContainerRuntimeCommand, CronCommand, DatabaseCommand, DnsCommand, DockerCommand, FileCommand,
+    FtpCommand, IacCommand, LogsCommand, MailCommand, MarketplaceCommand, MonitoringCommand,
+    NotificationChannelCommand, NotificationCommand, NotificationSubscriptionCommand, PitrCommand,
+    PluginCommand, RecoveryCodeCommand, RegistryCommand, SecurityAllowlistCommand, SecurityCommand,
+    SecurityRuleCommand, ServicesCommand, SiteCommand, SoftwareCommand, SslCommand, StagingCommand,
+    TokenCommand, TwoFactorCommand, UserCommand, WafCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -82,12 +82,12 @@ async fn main() -> anyhow::Result<()> {
                 StagingCommand::Delete { id } => handlers::staging_delete(config, id).await,
             },
             SiteCommand::Collaborator { action } => match action {
-                CollaboratorCommand::Invite { site, email, scopes } => {
-                    handlers::collab_invite(config, site, email, scopes).await
-                }
-                CollaboratorCommand::List { site } => {
-                    handlers::collab_list(config, site).await
-                }
+                CollaboratorCommand::Invite {
+                    site,
+                    email,
+                    scopes,
+                } => handlers::collab_invite(config, site, email, scopes).await,
+                CollaboratorCommand::List { site } => handlers::collab_list(config, site).await,
                 CollaboratorCommand::Revoke { site, collaborator } => {
                     handlers::collab_revoke(config, site, collaborator).await
                 }
@@ -585,9 +585,7 @@ async fn main() -> anyhow::Result<()> {
                 namespace,
                 owner,
                 quota_bytes,
-            } => {
-                handlers::registry_create_namespace(config, namespace, owner, quota_bytes).await
-            }
+            } => handlers::registry_create_namespace(config, namespace, owner, quota_bytes).await,
             RegistryCommand::Images { namespace } => {
                 handlers::registry_images(config, namespace).await
             }
@@ -599,13 +597,57 @@ async fn main() -> anyhow::Result<()> {
                 committed_rust,
                 committed_provider,
             } => {
-                handlers::iac_drift_check(
+                handlers::iac_drift_check(config, openapi, committed_rust, committed_provider).await
+            }
+        },
+        Command::ContainerRuntime { action } => match action {
+            ContainerRuntimeCommand::QuotaShow => {
+                handlers::container_runtime_quota_show(config).await
+            }
+            ContainerRuntimeCommand::QuotaSet {
+                max_concurrent,
+                max_total,
+                cpu,
+                memory_bytes,
+                egress_bytes,
+            } => {
+                handlers::container_runtime_quota_set(
                     config,
-                    openapi,
-                    committed_rust,
-                    committed_provider,
+                    max_concurrent,
+                    max_total,
+                    cpu,
+                    memory_bytes,
+                    egress_bytes,
                 )
                 .await
+            }
+            ContainerRuntimeCommand::Metrics {
+                container_id,
+                limit,
+            } => handlers::container_runtime_metrics(config, container_id, limit).await,
+            ContainerRuntimeCommand::Pull {
+                container_id,
+                image,
+                credential_id,
+            } => handlers::container_runtime_pull(config, container_id, image, credential_id).await,
+            ContainerRuntimeCommand::RaiseEgressLimit { bytes_per_month } => {
+                handlers::container_runtime_raise_egress_limit(config, bytes_per_month).await
+            }
+            ContainerRuntimeCommand::RegistryCredentialAdd {
+                registry,
+                user,
+                password,
+            } => {
+                handlers::container_runtime_registry_credential_add(
+                    config, registry, user, password,
+                )
+                .await
+            }
+            ContainerRuntimeCommand::RegistryCredentialList => {
+                handlers::container_runtime_registry_credential_list(config).await
+            }
+            ContainerRuntimeCommand::RegistryCredentialRemove { id } => {
+                handlers::container_runtime_registry_credential_remove(config, id).await
             }
         },
     }

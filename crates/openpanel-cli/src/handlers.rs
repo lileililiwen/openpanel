@@ -234,10 +234,12 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let marketplace_svc = mp_module.service();
 
     // Per-site collaborators module.
-    let collaborators_module =
-        openpanel_app::CollaboratorsModule::new(&ctx, audit.clone()).await;
+    let collaborators_module = openpanel_app::CollaboratorsModule::new(&ctx, audit.clone()).await;
     runner
-        .apply_module(collaborators_module.name(), &collaborators_module.migrations())
+        .apply_module(
+            collaborators_module.name(),
+            &collaborators_module.migrations(),
+        )
         .await
         .context("apply collaborators migrations")?;
     let collaborators_svc = collaborators_module.service();
@@ -257,6 +259,28 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .await
         .context("apply registry migrations")?;
     let registry_svc = registry_module.service();
+
+    // Container runtime module: per-user quota, registry
+    // credentials (encrypted at rest under the master key),
+    // per-container metrics, and monthly network egress
+    // accounting. Built on top of the docker bounded context.
+    let container_runtime_module = openpanel_app::ContainerRuntimeModule::new(
+        &ctx,
+        audit.clone(),
+        master_key,
+        openpanel_domain::PlanQuotaCaps::default(),
+        None,
+    )
+    .await;
+    runner
+        .apply_module(
+            container_runtime_module.name(),
+            &container_runtime_module.migrations(),
+        )
+        .await
+        .context("apply container-runtime migrations")?;
+    let container_runtime_svc = container_runtime_module.service();
+    docker_svc.attach_quota_gate(container_runtime_svc.clone());
 
     // Site-staging module: in-memory filesystem layer for the CLI
     // (no live nginx / rsync in offline mode).
@@ -301,6 +325,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         collaborators_svc.clone(),
         grant_resolver.clone(),
         registry_svc.clone(),
+        container_runtime_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -328,6 +353,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         staging_svc,
         collaborators_svc,
         registry_svc,
+        container_runtime_svc,
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
@@ -3845,9 +3871,7 @@ pub async fn monitoring_history(
 
 // ---- Plugin marketplace handlers ----
 
-pub async fn marketplace_discover(
-    config: Arc<Config>,
-) -> anyhow::Result<()> {
+pub async fn marketplace_discover(config: Arc<Config>) -> anyhow::Result<()> {
     let bundle = build_plugin_bundle(config.clone()).await?;
     let service = &bundle.marketplace;
     let outcome = service
@@ -3878,7 +3902,9 @@ pub async fn marketplace_cached(config: Arc<Config>) -> anyhow::Result<()> {
             println!("{}", serde_json::to_string_pretty(&snapshot.catalog)?);
         }
         None => {
-            println!("{{\"catalog\":null,\"hint\":\"run `openpanel plugin marketplace discover` first\"}}");
+            println!(
+                "{{\"catalog\":null,\"hint\":\"run `openpanel plugin marketplace discover` first\"}}"
+            );
         }
     }
     Ok(())
@@ -3950,9 +3976,7 @@ pub async fn plugin_uninstall(config: Arc<Config>, id: String) -> anyhow::Result
 
 /// Build the small bundle of plugin services the CLI needs without
 /// spinning up the full router.
-pub async fn build_plugin_bundle(
-    config: Arc<Config>,
-) -> anyhow::Result<PluginBundle> {
+pub async fn build_plugin_bundle(config: Arc<Config>) -> anyhow::Result<PluginBundle> {
     let (pool, audit, db) = bootstrap_persistence(&config).await?;
     let _ = pool;
     let ctx = AppContext::new(config.clone(), db, audit.clone());
@@ -3960,8 +3984,7 @@ pub async fn build_plugin_bundle(
     let mp_client: Arc<dyn openpanel_app::MarketplaceClient> =
         Arc::new(openpanel_app::MockMarketplaceClient::new());
     let mp_module =
-        openpanel_app::PluginMarketplaceModule::new(&ctx, mp_client, plugin_module.service())
-            .await;
+        openpanel_app::PluginMarketplaceModule::new(&ctx, mp_client, plugin_module.service()).await;
     Ok(PluginBundle {
         plugins: plugin_module.service(),
         marketplace: mp_module.service(),
@@ -4054,9 +4077,7 @@ pub struct CollaboratorBundle {
     pub resolver: Arc<openpanel_app::GrantResolver>,
 }
 
-pub async fn build_collaborator_bundle(
-    config: Arc<Config>,
-) -> anyhow::Result<CollaboratorBundle> {
+pub async fn build_collaborator_bundle(config: Arc<Config>) -> anyhow::Result<CollaboratorBundle> {
     let (pool, audit, db) = bootstrap_persistence(&config).await?;
     let _ = pool;
     let ctx = AppContext::new(config.clone(), db, audit.clone());
@@ -4183,12 +4204,10 @@ const IAC_SAMPLE: &str = r#"{
     }
 }"#;
 
-pub async fn iac_generate(
-    _config: Arc<Config>,
-    openapi: Option<String>,
-) -> anyhow::Result<()> {
+pub async fn iac_generate(_config: Arc<Config>, openapi: Option<String>) -> anyhow::Result<()> {
     let json = match openapi {
-        Some(path) => tokio::fs::read_to_string(&path).await
+        Some(path) => tokio::fs::read_to_string(&path)
+            .await
             .map_err(|e| anyhow::anyhow!("read openapi {path}: {e}"))?,
         None => IAC_SAMPLE.to_string(),
     };
@@ -4198,22 +4217,28 @@ pub async fn iac_generate(
     let codegen = openpanel_app::CodegenContract::new(contract.openapi_version.clone());
     let surface = codegen.build(&contract);
     println!("rust:\n{}", serde_json::to_string_pretty(&surface.rust)?);
-    println!(
-        "\ngo:\n{}",
-        serde_json::to_string_pretty(&surface.go)?
-    );
-    println!(
-        "\nts:\n{}",
-        serde_json::to_string_pretty(&surface.ts)?
-    );
+    println!("\ngo:\n{}", serde_json::to_string_pretty(&surface.go)?);
+    println!("\nts:\n{}", serde_json::to_string_pretty(&surface.ts)?);
     println!(
         "\nprovider:\n{}",
         serde_json::to_string_pretty(&surface.provider)?
     );
-    println!("\n----- Rust scaffold -----\n{}", openpanel_app::render_rust_stub(&contract));
-    println!("\n----- Go scaffold -----\n{}", openpanel_app::render_go_stub(&contract));
-    println!("\n----- TS scaffold -----\n{}", openpanel_app::render_typescript_stub(&contract));
-    println!("\n----- Terraform scaffold -----\n{}", openpanel_app::render_provider_stub(&contract));
+    println!(
+        "\n----- Rust scaffold -----\n{}",
+        openpanel_app::render_rust_stub(&contract)
+    );
+    println!(
+        "\n----- Go scaffold -----\n{}",
+        openpanel_app::render_go_stub(&contract)
+    );
+    println!(
+        "\n----- TS scaffold -----\n{}",
+        openpanel_app::render_typescript_stub(&contract)
+    );
+    println!(
+        "\n----- Terraform scaffold -----\n{}",
+        openpanel_app::render_provider_stub(&contract)
+    );
     Ok(())
 }
 
@@ -4224,7 +4249,8 @@ pub async fn iac_drift_check(
     committed_provider: Option<String>,
 ) -> anyhow::Result<()> {
     let json = match openapi {
-        Some(path) => tokio::fs::read_to_string(&path).await
+        Some(path) => tokio::fs::read_to_string(&path)
+            .await
             .map_err(|e| anyhow::anyhow!("read openapi {path}: {e}"))?,
         None => IAC_SAMPLE.to_string(),
     };
@@ -4237,9 +4263,11 @@ pub async fn iac_drift_check(
     // would we generate" check).
     let committed = match (committed_rust, committed_provider) {
         (Some(r), Some(p)) => {
-            let rust = tokio::fs::read_to_string(&r).await
+            let rust = tokio::fs::read_to_string(&r)
+                .await
                 .map_err(|e| anyhow::anyhow!("read rust {r}: {e}"))?;
-            let provider = tokio::fs::read_to_string(&p).await
+            let provider = tokio::fs::read_to_string(&p)
+                .await
                 .map_err(|e| anyhow::anyhow!("read provider {p}: {e}"))?;
             openpanel_app::CommittedArtifacts {
                 rust_sdk_json: rust,
@@ -4261,5 +4289,251 @@ pub async fn iac_drift_check(
     if !outcome.clean {
         std::process::exit(2);
     }
+    Ok(())
+}
+
+// ---- Container runtime handlers ----
+
+/// Bundle of container-runtime services the CLI handlers reuse.
+pub struct ContainerRuntimeBundle {
+    /// Container runtime service.
+    pub service: Arc<openpanel_app::ContainerRuntimeService>,
+    /// Identity service (used to resolve the owner caller).
+    pub identity: Arc<openpanel_app::IdentityService>,
+}
+
+async fn build_container_runtime_bundle(
+    config: Arc<Config>,
+) -> anyhow::Result<ContainerRuntimeBundle> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
+    let master_key = load_master_key(&ctx.config)?;
+    let identity = IdentityModule::new(&ctx, master_key).await;
+    let module = openpanel_app::ContainerRuntimeModule::new(
+        &ctx,
+        audit,
+        master_key,
+        openpanel_domain::PlanQuotaCaps::default(),
+        None,
+    )
+    .await;
+    let runner = MigrationRunner::for_sqlite(pool);
+    runner
+        .apply_module(identity.name(), &identity.migrations())
+        .await
+        .context("apply identity migrations")?;
+    runner
+        .apply_module(module.name(), &module.migrations())
+        .await
+        .context("apply container-runtime migrations")?;
+    Ok(ContainerRuntimeBundle {
+        service: module.service(),
+        identity: identity.service(),
+    })
+}
+
+/// Show the per-user container quota (with plan overrides applied).
+pub async fn container_runtime_quota_show(config: Arc<Config>) -> anyhow::Result<()> {
+    let bundle = build_container_runtime_bundle(config).await?;
+    let caller = waf_owner(&bundle.identity).await?;
+    let eff = bundle
+        .service
+        .get_quota(&caller, caller.id())
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "quota": {
+                "user_id": eff.quota.user_id.to_string(),
+                "max_concurrent": eff.quota.max_concurrent,
+                "max_total": eff.quota.max_total,
+                "cpu_pct_max": eff.quota.cpu_pct_max,
+                "memory_bytes_max": eff.quota.memory_bytes_max,
+                "egress_bytes_per_month": eff.quota.egress_bytes_per_month,
+                "updated_at": eff.quota.updated_at.to_rfc3339(),
+            },
+            "plan_overrides": eff.plan_overrides.iter().map(|a| format!("{a:?}")).collect::<Vec<_>>(),
+        }))?
+    );
+    Ok(())
+}
+
+/// Update one or more axes of the per-user container quota.
+pub async fn container_runtime_quota_set(
+    config: Arc<Config>,
+    max_concurrent: Option<u32>,
+    max_total: Option<u32>,
+    cpu: Option<u8>,
+    memory_bytes: Option<u64>,
+    egress_bytes: Option<u64>,
+) -> anyhow::Result<()> {
+    let bundle = build_container_runtime_bundle(config).await?;
+    let caller = waf_owner(&bundle.identity).await?;
+    let update = openpanel_app::container_runtime::QuotaUpdate {
+        max_concurrent,
+        max_total,
+        cpu_pct_max: cpu,
+        memory_bytes_max: memory_bytes,
+        egress_bytes_per_month: egress_bytes,
+    };
+    let eff = bundle
+        .service
+        .set_quota(&caller, caller.id(), update)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "quota": {
+                "max_concurrent": eff.quota.max_concurrent,
+                "max_total": eff.quota.max_total,
+                "cpu_pct_max": eff.quota.cpu_pct_max,
+                "memory_bytes_max": eff.quota.memory_bytes_max,
+                "egress_bytes_per_month": eff.quota.egress_bytes_per_month,
+            },
+            "plan_overrides": eff.plan_overrides.iter().map(|a| format!("{a:?}")).collect::<Vec<_>>(),
+        }))?
+    );
+    Ok(())
+}
+
+/// List the latest metrics samples for a container.
+pub async fn container_runtime_metrics(
+    config: Arc<Config>,
+    container_id: String,
+    limit: u32,
+) -> anyhow::Result<()> {
+    let bundle = build_container_runtime_bundle(config).await?;
+    let caller = waf_owner(&bundle.identity).await?;
+    let container_id = uuid::Uuid::parse_str(&container_id).context("invalid container id")?;
+    let list = bundle
+        .service
+        .list_metrics(&caller, container_id, limit)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("{}", serde_json::to_string_pretty(&list)?);
+    Ok(())
+}
+
+/// Pull an image on behalf of a container.
+pub async fn container_runtime_pull(
+    config: Arc<Config>,
+    container_id: String,
+    image: String,
+    credential_id: Option<String>,
+) -> anyhow::Result<()> {
+    let bundle = build_container_runtime_bundle(config).await?;
+    let caller = waf_owner(&bundle.identity).await?;
+    let container_id = uuid::Uuid::parse_str(&container_id).context("invalid container id")?;
+    let cred_id = match credential_id {
+        Some(s) => Some(uuid::Uuid::parse_str(&s).context("invalid credential id")?),
+        None => None,
+    };
+    let result = bundle
+        .service
+        .pull_image(&caller, container_id, image, cred_id)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "image_digest": result.image_digest,
+            "ref_count": result.ref_count,
+        }))?
+    );
+    Ok(())
+}
+
+/// Raise the per-user monthly egress limit.
+pub async fn container_runtime_raise_egress_limit(
+    config: Arc<Config>,
+    bytes_per_month: u64,
+) -> anyhow::Result<()> {
+    let bundle = build_container_runtime_bundle(config).await?;
+    let caller = waf_owner(&bundle.identity).await?;
+    let quota = bundle
+        .service
+        .raise_egress_limit(&caller, caller.id(), bytes_per_month)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "egress_bytes_per_month": quota.egress_bytes_per_month,
+        }))?
+    );
+    Ok(())
+}
+
+/// Add a registry credential. The plaintext password is
+/// returned exactly once on stdout.
+pub async fn container_runtime_registry_credential_add(
+    config: Arc<Config>,
+    registry: String,
+    user: String,
+    password: String,
+) -> anyhow::Result<()> {
+    let bundle = build_container_runtime_bundle(config).await?;
+    let caller = waf_owner(&bundle.identity).await?;
+    let result = bundle
+        .service
+        .create_registry_credential(&caller, registry, user, password)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "id": result.credential.id.to_string(),
+            "registry": result.credential.registry,
+            "username": result.credential.username,
+            // Plaintext returned exactly once.
+            "plaintext_once": result.plaintext_once,
+        }))?
+    );
+    Ok(())
+}
+
+/// List the caller's registry credentials (redacted).
+pub async fn container_runtime_registry_credential_list(config: Arc<Config>) -> anyhow::Result<()> {
+    let bundle = build_container_runtime_bundle(config).await?;
+    let caller = waf_owner(&bundle.identity).await?;
+    let list = bundle
+        .service
+        .list_registry_credentials(&caller, caller.id())
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let view: Vec<_> = list
+        .iter()
+        .map(|c| {
+            serde_json::json!({
+                "id": c.id.to_string(),
+                "registry": c.registry,
+                "username": c.username,
+                "last_used_at": c.last_used_at.map(|t| t.to_rfc3339()),
+            })
+        })
+        .collect();
+    println!("{}", serde_json::to_string_pretty(&view)?);
+    Ok(())
+}
+
+/// Remove a registry credential by id.
+pub async fn container_runtime_registry_credential_remove(
+    config: Arc<Config>,
+    id: String,
+) -> anyhow::Result<()> {
+    let bundle = build_container_runtime_bundle(config).await?;
+    let caller = waf_owner(&bundle.identity).await?;
+    let credential_id = uuid::Uuid::parse_str(&id).context("invalid credential id")?;
+    let removed = bundle
+        .service
+        .delete_registry_credential(&caller, credential_id)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({ "removed": removed }))?
+    );
     Ok(())
 }

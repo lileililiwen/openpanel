@@ -7,6 +7,8 @@ pub mod backups;
 pub mod collaborators;
 /// Container registry routes (`/registry`).
 pub mod container_registry;
+/// Container runtime routes (`/container`).
+pub mod container_runtime;
 /// Cron scheduling routes (`/cron`).
 pub mod cron;
 /// Databases resource routes (`/databases`).

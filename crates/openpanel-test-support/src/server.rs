@@ -25,7 +25,8 @@ use openpanel_app::{
     MonitoringModule, MonitoringService, NotificationModule, NotificationService, PitrService,
     PluginService, SecurityModule, SecurityService, SiteStagingModule, SitesModule, SitesService,
     SoftwareCenterModule, SoftwareCenterService, SslModule, SslPaths, SslService, StagingService,
-    SystemServicesModule, WafModule, WafService,
+    SystemServicesModule,     WafModule, WafService,
+    ContainerRuntimeModule, ContainerRuntimeService,
     identity::two_factor::TwoFactorCrypto,
     security::MemoryFirewall,
     sites::{nginx::NginxPaths, repo::SqliteSiteRepository},
@@ -220,6 +221,7 @@ pub struct TestServer {
     software_center: Arc<SoftwareCenterService>,
     waf: Arc<WafService>,
     docker: Arc<DockerService>,
+    container_runtime: Arc<ContainerRuntimeService>,
     ftp: Arc<FtpService>,
     api_tokens: Arc<ApiTokenService>,
     notifications: Arc<NotificationService>,
@@ -377,6 +379,9 @@ impl TestServer {
         let docker_module =
             DockerModule::with_adapters(&ctx, docker_runtime.clone(), docker_runtime, master_key)
                 .await;
+        let container_runtime_module =
+            ContainerRuntimeModule::new(&ctx, audit.clone(), master_key, openpanel_domain::PlanQuotaCaps::default(), None)
+                .await;
         let ftp_module = FtpModule::new(&ctx).await.expect("ftp module");
 
         let databases_module = DatabasesModule::new(&ctx, master_key).await;
@@ -423,6 +428,13 @@ impl TestServer {
             .apply_module(docker_module.name(), &docker_module.migrations())
             .await
             .expect("docker migrations");
+        runner
+            .apply_module(
+                container_runtime_module.name(),
+                &container_runtime_module.migrations(),
+            )
+            .await
+            .expect("container-runtime migrations");
         runner
             .apply_module(ftp_module.name(), &ftp_module.migrations())
             .await
@@ -525,6 +537,8 @@ impl TestServer {
         let sites_svc = sites_module.service();
         let waf_svc = waf_module.service();
         let docker_svc = docker_module.service();
+        let container_runtime_svc = container_runtime_module.service();
+        docker_svc.attach_quota_gate(container_runtime_svc.clone());
         let ftp_svc = ftp_module.service();
         let databases_svc = databases_module.service();
         let files_svc = files_module.service();
@@ -648,6 +662,7 @@ impl TestServer {
             collaborators_svc.clone(),
             grant_resolver.clone(),
             registry_svc.clone(),
+            container_runtime_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -675,6 +690,7 @@ impl TestServer {
             staging_svc.clone(),
             collaborators_svc.clone(),
             registry_svc.clone(),
+            container_runtime_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -739,6 +755,7 @@ impl TestServer {
             software_center: software_center_svc,
             waf: waf_svc,
             docker: docker_svc,
+            container_runtime: container_runtime_svc,
             ftp: ftp_svc,
             api_tokens: api_token_svc,
             notifications: notification_svc,
@@ -837,6 +854,11 @@ impl TestServer {
     /// Docker service handle for staging allowlist and runtime observations.
     pub fn docker(&self) -> Arc<DockerService> {
         self.docker.clone()
+    }
+
+    /// Container runtime service handle.
+    pub fn container_runtime(&self) -> Arc<ContainerRuntimeService> {
+        self.container_runtime.clone()
     }
 
     /// FTP account service handle.
