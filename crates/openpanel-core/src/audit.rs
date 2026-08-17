@@ -44,6 +44,11 @@ pub enum AuditAction {
     Logout,
     /// A user account was created.
     UserCreated,
+    /// A user account was updated (parent_account_id or
+    /// hosting_plan_id round-tripped through the identity service).
+    /// The metadata field records the changed field and the new
+    /// value (or `None` for a clear).
+    UserUpdated,
     /// A user account was disabled.
     UserDisabled,
     /// A user account was re-enabled.
@@ -347,6 +352,7 @@ impl AuditAction {
             AuditAction::Login => "login",
             AuditAction::Logout => "logout",
             AuditAction::UserCreated => "user_created",
+            AuditAction::UserUpdated => "user_updated",
             AuditAction::UserDisabled => "user_disabled",
             AuditAction::UserEnabled => "user_enabled",
             AuditAction::UserDeleted => "user_deleted",
@@ -643,6 +649,7 @@ impl AuditService for SqliteAuditService {
                 "login" => AuditAction::Login,
                 "logout" => AuditAction::Logout,
                 "user_created" => AuditAction::UserCreated,
+                "user_updated" => AuditAction::UserUpdated,
                 "user_disabled" => AuditAction::UserDisabled,
                 "user_enabled" => AuditAction::UserEnabled,
                 "user_deleted" => AuditAction::UserDeleted,

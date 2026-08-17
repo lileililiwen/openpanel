@@ -16,6 +16,10 @@ pub const IDENTITY_V003: &str = include_str!("identity/V003__webauthn.sql");
 /// `webauthn_credentials` so the assertion ceremony can reconstruct
 /// the webauthn-rs `Passkey` without decoding raw COSE bytes).
 pub const IDENTITY_V004: &str = include_str!("identity/V004__webauthn_passkey_json.sql");
+/// SQL for the identity v005 migration (adds `parent_account_id` and
+/// `hosting_plan_id` columns to `users` plus indexes for the
+/// `add-account-hierarchy` and `add-hosting-plans` follow-on changes).
+pub const IDENTITY_V005: &str = include_str!("identity/V005__hierarchy_and_plan.sql");
 /// SQL for the sites v001 migration (`sites` table).
 pub const SITES_V001: &str = include_str!("sites/V001__init.sql");
 /// SQL for the databases v001 migration (`databases` table).

@@ -33,6 +33,11 @@ pub enum IdentityError {
     /// The session token is not valid.
     #[error("session token invalid")]
     InvalidToken,
+    /// The proposed parent-child relationship would create a cycle
+    /// (direct self-loop, or a transitive cycle detected by the
+    /// hierarchy bounded context).
+    #[error("account hierarchy cycle detected")]
+    ParentAccountCycle,
     /// A persistence layer failure occurred.
     #[error("identity persistence error: {0}")]
     Persistence(String),

@@ -60,6 +60,21 @@ mock! {
         async fn enable(&self, id: uuid::Uuid) -> Result<(), RepoError>;
         async fn update_last_login(&self, id: uuid::Uuid) -> Result<(), RepoError>;
         async fn update_password(&self, id: uuid::Uuid, hash: &str) -> Result<(), RepoError>;
+        async fn update_parent_account_id(
+            &self,
+            id: uuid::Uuid,
+            parent: Option<uuid::Uuid>,
+        ) -> Result<(), RepoError>;
+        async fn update_hosting_plan_id(
+            &self,
+            id: uuid::Uuid,
+            plan: Option<openpanel_domain::HostingPlanId>,
+        ) -> Result<(), RepoError>;
+        async fn find_children(&self, parent: uuid::Uuid) -> Result<Vec<openpanel_domain::User>, RepoError>;
+        async fn find_by_plan(
+            &self,
+            plan: openpanel_domain::HostingPlanId,
+        ) -> Result<Vec<openpanel_domain::User>, RepoError>;
         async fn delete(&self, id: uuid::Uuid) -> Result<(), RepoError>;
         async fn count(&self) -> Result<i64, RepoError>;
     }

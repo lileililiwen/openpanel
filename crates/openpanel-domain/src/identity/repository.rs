@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     RepoError,
+    hosting::HostingPlanId,
     identity::{
         factor::{
             Factor, TotpEnrollmentChallenge, TwoFactorChallenge, WebAuthnChallenge,
@@ -38,6 +39,28 @@ pub trait UserRepository: Send + Sync + 'static {
     async fn update_last_login(&self, id: Uuid) -> Result<(), RepoError>;
     /// Update a user's password hash.
     async fn update_password(&self, id: Uuid, hash: &str) -> Result<(), RepoError>;
+    /// Update a user's parent account reference.
+    async fn update_parent_account_id(
+        &self,
+        id: Uuid,
+        parent: Option<Uuid>,
+    ) -> Result<(), RepoError>;
+    /// Update a user's hosting plan reference.
+    async fn update_hosting_plan_id(
+        &self,
+        id: Uuid,
+        plan: Option<HostingPlanId>,
+    ) -> Result<(), RepoError>;
+    /// Find child users of a parent account. Placeholder until the
+    /// `add-account-hierarchy` change ships; returns an empty list.
+    async fn find_children(&self, _parent: Uuid) -> Result<Vec<User>, RepoError> {
+        Ok(Vec::new())
+    }
+    /// Find users attached to a hosting plan. Placeholder until the
+    /// `add-hosting-plans` change ships; returns an empty list.
+    async fn find_by_plan(&self, _plan: HostingPlanId) -> Result<Vec<User>, RepoError> {
+        Ok(Vec::new())
+    }
     /// Delete a user.
     async fn delete(&self, id: Uuid) -> Result<(), RepoError>;
     /// Count the number of users.

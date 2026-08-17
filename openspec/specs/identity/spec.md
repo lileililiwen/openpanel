@@ -9,9 +9,44 @@ The identity context SHALL model a `User` aggregate with fields `id`
 (UUID v4), `username` (unique, 3-32 chars, alphanumeric+`-_.`), `email`
 (unique, validated as RFC 5321), `password_hash` (argon2id, never
 returned to callers), `role` (one of `Owner`, `Admin`, `User`),
-`created_at`, `disabled_at` (nullable), `last_login_at` (nullable).
-Plaintext passwords MUST NOT appear in any log, error message, or API
-response.
+`parent_account_id` (nullable user reference for the reseller
+hierarchy change), `hosting_plan_id` (nullable `HostingPlanId` for
+the hosting-plan change), `created_at`, `disabled_at` (nullable),
+`last_login_at` (nullable). Plaintext passwords MUST NOT appear in
+any log, error message, or API response.
+
+#### Scenario: Backfilled users have NULL on both fields
+
+- **WHEN** the v005 migration runs on an existing DB
+- **THEN** every existing row has `parent_account_id IS NULL AND hosting_plan_id IS NULL`.
+
+### Requirement: Parent Account and Hosting Plan Fields
+
+The User aggregate SHALL record two optional identity references: `parent_account_id: Option<UserId>` (used by the reseller hierarchy change) and `hosting_plan_id: Option<HostingPlanId>` (used by the hosting-plan change). Both SHALL be nullable. Self-parenting SHALL be rejected by the user constructor with `IdentityError::ParentAccountCycle`. The repository trait SHALL expose placeholder methods `find_children(parent_id)` and `find_by_plan(plan_id)` that return empty until the corresponding follow-on changes ship.
+
+#### Scenario: Create a user with both fields
+
+- **WHEN** an Owner creates a user with `parent_account_id=u1, hosting_plan_id=p1`
+- **THEN** the user is persisted and both fields round-trip through SQLite.
+
+#### Scenario: Self-parenting rejection
+
+- **WHEN** an Owner creates a user with `parent_account_id=u_new.id`
+- **THEN** creation fails with `IdentityError::ParentAccountCycle` and no row is written.
+
+### Requirement: Repository Lookup Helpers (Placeholders)
+
+The `UserRepository` trait SHALL expose `find_children(parent_id)` and `find_by_plan(plan_id)`. Their behaviour is deliberately empty until the follow-on changes ship; they MUST be safe to call.
+
+#### Scenario: Helper called before follow-on changes land
+
+- **WHEN** a caller invokes either placeholder
+- **THEN** it returns an empty list and does not error.
+
+#### Scenario: Backed by indexed columns
+
+- **WHEN** the v005 migration is complete and helpers are re-implemented by the follow-on changes
+- **THEN** the indexes `idx_users_parent_account_id` and `idx_users_hosting_plan_id` are used by the queries.
 
 #### Scenario: Creating a user
 

@@ -98,6 +98,9 @@ impl IntoResponse for ApiError {
                 IdentityError::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
                 IdentityError::LastOwner => (StatusCode::CONFLICT, "last_owner"),
                 IdentityError::InvalidToken => (StatusCode::UNAUTHORIZED, "invalid_token"),
+                IdentityError::ParentAccountCycle => {
+                    (StatusCode::UNPROCESSABLE_ENTITY, "parent_account_cycle")
+                }
                 IdentityError::Persistence(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal"),
             },
             ApiError::Ssl(e) => match e {
@@ -133,7 +136,9 @@ impl IntoResponse for ApiError {
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             ApiError::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
             ApiError::PayloadTooLarge(_) => (StatusCode::PAYLOAD_TOO_LARGE, "payload_too_large"),
-            ApiError::ServiceUnavailable(_) => (StatusCode::SERVICE_UNAVAILABLE, "service_unavailable"),
+            ApiError::ServiceUnavailable(_) => {
+                (StatusCode::SERVICE_UNAVAILABLE, "service_unavailable")
+            }
             ApiError::Internal(_) => (StatusCode::INTERNAL_SERVER_ERROR, "internal"),
         };
         let body = Json(ErrorBody::new(code));

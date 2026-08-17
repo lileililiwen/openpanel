@@ -173,6 +173,13 @@ impl IdentityModule {
                     .to_string(),
                 sql: crate::migrations::IDENTITY_V004.to_string(),
             },
+            Migration {
+                module: MODULE_NAME,
+                version: "005".to_string(),
+                description: "users.parent_account_id and users.hosting_plan_id columns"
+                    .to_string(),
+                sql: crate::migrations::IDENTITY_V005.to_string(),
+            },
         ];
         Self {
             service,

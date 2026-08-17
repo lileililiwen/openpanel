@@ -1,5 +1,5 @@
 use chrono::{DateTime, Utc};
-use openpanel_domain::{Email, Role, User};
+use openpanel_domain::{Email, HostingPlanId, Role, User};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -111,6 +111,12 @@ pub struct UserDto {
     pub email: String,
     /// Role-based authorization level.
     pub role: Role,
+    /// Parent account id, if the user is part of a reseller hierarchy.
+    /// Backed by the `add-account-hierarchy` follow-on change.
+    pub parent_account_id: Option<Uuid>,
+    /// Hosting plan id, if the user is attached to a plan. Backed by
+    /// the `add-hosting-plans` follow-on change.
+    pub hosting_plan_id: Option<HostingPlanId>,
     /// Account creation timestamp (UTC).
     pub created_at: DateTime<Utc>,
     /// Set when the account was disabled, if applicable.
@@ -127,6 +133,8 @@ impl UserDto {
             username: user.username().as_str().to_string(),
             email: user.email().as_str().to_string(),
             role: user.role(),
+            parent_account_id: user.parent_account_id(),
+            hosting_plan_id: user.hosting_plan_id(),
             created_at: user.created_at(),
             disabled_at: user.disabled_at(),
             last_login_at: user.last_login_at(),
@@ -152,6 +160,16 @@ pub struct CreateUserRequest {
     pub password: String,
     /// Role to assign to the new user.
     pub role: Role,
+    /// Optional parent account id. Reseller hierarchy is built by the
+    /// `add-account-hierarchy` change; this field is consumed by the
+    /// service and rejected when it would form a self-loop.
+    #[serde(default)]
+    pub parent_account_id: Option<Uuid>,
+    /// Optional hosting plan id. Plan resolution is built by the
+    /// `add-hosting-plans` change; this field is persisted
+    /// opportunistically and validated by the follow-on services.
+    #[serde(default)]
+    pub hosting_plan_id: Option<HostingPlanId>,
 }
 
 /// Request body for `PATCH /identity/users/{id}` to change a user's role.

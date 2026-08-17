@@ -12,7 +12,17 @@
 /// Scoped personal API token credentials and lifecycle invariants.
 pub mod api_tokens;
 pub mod backups;
+/// Per-site collaborator bounded context: invite collaborators
+/// scoped to specific sites with limited permission sets.
+pub mod collaborators;
 pub mod common;
+/// Container image registry bounded context: per-user namespaces,
+/// retention, scan hook, OCI Distribution push/pull.
+pub mod container_registry;
+/// Container runtime bounded context: per-user quota, registry
+/// credentials, metrics, and monthly egress accounting. The docker
+/// service consumes the quota gate before every container create.
+pub mod container_runtime;
 /// Scheduled command and HTTP job domain model.
 pub mod cron;
 pub mod databases;
@@ -22,6 +32,10 @@ pub mod docker;
 pub mod files;
 /// Per-site FTP accounts, limits, and chroot path policy.
 pub mod ftp;
+/// Infrastructure-as-Code bounded context: SDK and Terraform
+/// provider contract descriptors, regenerated from the OpenAPI
+/// spec.
+pub mod iac;
 pub mod identity;
 pub mod logs;
 /// Hosted mail domains, addresses, quotas, aliases, and relay policy.
@@ -29,6 +43,12 @@ pub mod mail;
 pub mod monitoring;
 /// Notification channels, subscriptions, events, and durable delivery state.
 pub mod notifications;
+/// Plugin extension framework: signed manifests, capability gating,
+/// lifecycle, and supervisor-facing repository trait.
+pub mod plugin;
+/// Plugin marketplace: remote catalog discovery, publisher CA
+/// verification, and rating/metadata cache.
+pub mod plugin_marketplace;
 pub mod security;
 pub mod sites;
 /// Trusted software catalog, transaction plans, and job lifecycle invariants.
@@ -38,111 +58,113 @@ pub mod ssl;
 pub mod system_services;
 /// Per-site typed web application firewall rules.
 pub mod waf;
-/// Plugin extension framework: signed manifests, capability gating,
-/// lifecycle, and supervisor-facing repository trait.
-pub mod plugin;
-/// Plugin marketplace: remote catalog discovery, publisher CA
-/// verification, and rating/metadata cache.
-pub mod plugin_marketplace;
-/// Per-site collaborator bounded context: invite collaborators
-/// scoped to specific sites with limited permission sets.
-pub mod collaborators;
-/// Container image registry bounded context: per-user namespaces,
-/// retention, scan hook, OCI Distribution push/pull.
-pub mod container_registry;
-/// Container runtime bounded context: per-user quota, registry
-/// credentials, metrics, and monthly egress accounting. The docker
-/// service consumes the quota gate before every container create.
-pub mod container_runtime;
-/// Infrastructure-as-Code bounded context: SDK and Terraform
-/// provider contract descriptors, regenerated from the OpenAPI
-/// spec.
-pub mod iac;
 
-/// Database point-in-time recovery: continuous binlog streaming,
-/// point-in-time restore, and incremental file-backup deltas.
-pub mod db_pitr;
 /// AI Ops bounded context: conversational session, tool-call
 /// allowlist, proposed/approved/executed/denied actions.
 pub mod ai_ops;
-/// Compliance bounded context: CIS hardening, audit retention,
-/// GDPR export with secret redaction.
-pub mod compliance;
-/// Service manager bounded context: allow-listed systemctl
-/// surface with audited lifecycle actions.
-pub mod service_manager;
-/// OS update management bounded context: package updates,
-/// unattended-upgrades policy, reboot state.
-pub mod os_updates;
-/// Synthetic monitoring bounded context: periodic HTTP / TCP / SSL
-/// checks with a per-check throttle and typed alert decision.
-pub mod synthetic_monitoring;
-/// Log viewer bounded context: typed queries over a JSONL store
-/// with role-based authorization.
-pub mod log_viewer;
-/// Database privilege management bounded context: per-user grant
-/// scopes, remote access with an explicit wildcard opt-in, and
-/// short-lived single-use SSO tokens for the admin tool launcher.
-pub mod db_privileges;
-/// IPv6 + address-pool bounded context: typed pools, allocations
-/// to sites, and the vhost binder that attaches the address set
-/// to a vhost.
-pub mod ip_allocation;
-/// Reseller billing integration bounded context: usage meters,
-/// chargeback pricing, integration state, and webhook HMAC
-/// verification.
-pub mod billing;
-/// Load balancing and failover bounded context: pools of
-/// members with health probes and weighted rotation.
-pub mod load_balancing;
-/// WordPress toolkit bounded context: staging, clone, update
-/// (with rollback on failure), security scan, and cache layer.
-pub mod wordpress_toolkit;
-/// Wildcard SSL with DNS-01 challenge bounded context: cert
-/// request with `ChallengeKind::Dns01`, ACME endpoint mode, and
-/// a DNS lease lifecycle.
-pub mod wildcard_ssl;
 /// Non-PHP runtime bounded context: per-site runtime choice
 /// (Node / Python / Go / Ruby / .NET), pinned version, app port,
 /// supervisor unit, and the nginx reverse-proxy block that
 /// targets `127.0.0.1:APP_PORT`.
 pub mod app_runtimes;
-/// Kernel resource isolation bounded context: per-user cgroup
-/// limits and namespace configuration.
-pub mod kernel_isolation;
+/// Reseller billing integration bounded context: usage meters,
+/// chargeback pricing, integration state, and webhook HMAC
+/// verification.
+pub mod billing;
+/// Compliance bounded context: CIS hardening, audit retention,
+/// GDPR export with secret redaction.
+pub mod compliance;
+/// Database point-in-time recovery: continuous binlog streaming,
+/// point-in-time restore, and incremental file-backup deltas.
+pub mod db_pitr;
+/// Database privilege management bounded context: per-user grant
+/// scopes, remote access with an explicit wildcard opt-in, and
+/// short-lived single-use SSO tokens for the admin tool launcher.
+pub mod db_privileges;
 /// DNSSEC + secondary DNS bounded context: zone signing keys,
 /// secondary nameserver ACLs, glue records, and DS records.
 pub mod dnssec_secondary;
+/// Git deployment bounded context: a per-site git repo, deploy
+/// runs, and webhook HMAC verification.
+pub mod git_deployment;
+/// Hosting plans bounded context: plan definitions, quota caps, and
+/// the `HostingPlanId` reference used by the `User` aggregate. The
+/// full plan domain ships in the follow-on `add-hosting-plans` change.
+pub mod hosting;
+/// IPv6 + address-pool bounded context: typed pools, allocations
+/// to sites, and the vhost binder that attaches the address set
+/// to a vhost.
+pub mod ip_allocation;
+/// Kernel resource isolation bounded context: per-user cgroup
+/// limits and namespace configuration.
+pub mod kernel_isolation;
+/// Load balancing and failover bounded context: pools of
+/// members with health probes and weighted rotation.
+pub mod load_balancing;
+/// Log viewer bounded context: typed queries over a JSONL store
+/// with role-based authorization.
+pub mod log_viewer;
 /// Mail anti-spam and filtering bounded context: per-mailbox
 /// anti-spam policy, greylist, Sieve filter scripts, autoresponder
 /// windows, forwarders, catch-all, and mailing lists.
 pub mod mail_filtering;
-/// Git deployment bounded context: a per-site git repo, deploy
-/// runs, and webhook HMAC verification.
-pub mod git_deployment;
 /// Scheduled maintenance windows bounded context: a panel-wide
 /// schedule that blocks destructive actions, with a
 /// single-use override that lifts the lock for a bounded TTL.
 pub mod maintenance_windows;
+/// OS update management bounded context: package updates,
+/// unattended-upgrades policy, reboot state.
+pub mod os_updates;
+/// Service manager bounded context: allow-listed systemctl
+/// surface with audited lifecycle actions.
+pub mod service_manager;
 /// Per-site staging slots, sync policies, and atomic promote.
 pub mod site_staging;
+/// Synthetic monitoring bounded context: periodic HTTP / TCP / SSL
+/// checks with a per-check throttle and typed alert decision.
+pub mod synthetic_monitoring;
+/// Wildcard SSL with DNS-01 challenge bounded context: cert
+/// request with `ChallengeKind::Dns01`, ACME endpoint mode, and
+/// a DNS lease lifecycle.
+pub mod wildcard_ssl;
+/// WordPress toolkit bounded context: staging, clone, update
+/// (with rollback on failure), security scan, and cache layer.
+pub mod wordpress_toolkit;
 
 /// Internationalization: locale, catalog, locale negotiation, formatter.
 pub mod i18n;
 /// Observability export: Prometheus metrics, OTLP traces, JSONL logs.
 pub mod observability_export;
 
+pub use ai_ops::{
+    AiAction, AiActionId, AiActionStatus, AiMessage, AiOpsError, AiOpsRepository, AiSession,
+    AiSessionId, MessageRole, ToolCallAllowlist, ToolKind, ToolName, ToolResult, ToolSpec,
+};
 pub use api_tokens::{
     ApiToken, ApiTokenError, ApiTokenMetadata, ApiTokenRepository, Cidr, TokenCredential,
     TokenHash, TokenScope,
+};
+pub use app_runtimes::{
+    ALLOWED_RUNTIME_KINDS, RESERVED_PORTS, RuntimeError, RuntimeKind, RuntimeRepository,
+    RuntimeStatus, SiteRuntime, is_kind_allowed, is_port_allowed, is_version_allowed,
+    is_workdir_inside_chroot, render_nginx_proxy_block, render_supervisor_unit,
+};
+pub use billing::{
+    BillingError, BillingRepository, BillingStatus, Chargeback, ChargebackLine, Integration,
+    UsageMeter, UsageUnit, compute_chargeback, hmac_sha256_hex, verify_signature,
+};
+pub use collaborators::{
+    CollabStatus, Collaborator, CollaboratorError, CollaboratorId, CollaboratorRepository,
+    Permission, PermissionSet, SiteGrant, SiteGrantRepository,
 };
 pub use common::{
     Email, Password, PasswordError, Username, UsernameError,
     error::{DomainError, RepoError},
 };
-pub use collaborators::{
-    CollabStatus, Collaborator, CollaboratorError, CollaboratorId, CollaboratorRepository,
-    Permission, PermissionSet, SiteGrant, SiteGrantRepository,
+pub use compliance::{
+    AuditRetentionPolicy, ComplianceError, ComplianceRepository, GdprApiTokenRecord,
+    GdprDatabaseRecord, GdprExport, GdprExportPayload, GdprMailRecord, GdprSiteRecord,
+    HardeningRule, HardeningRun, REDACTED, RuleOutcome,
 };
 pub use container_registry::{
     ImageDigest, ImageNamespace, NamespaceId, RegistryConfig, RegistryError, RetentionPolicy,
@@ -154,10 +176,6 @@ pub use container_runtime::{
     RegistryCredentialId, check_concurrent, check_cpu, check_egress, check_memory, check_total,
     effective_quota, egress_threshold_crossed,
 };
-pub use iac::{
-    ApiContract, IacError, Language, Operation, OperationId, ProviderResource, ResourceEndpoint,
-    ResourceKind, SdkPackage, SdkSurface, TerraformProvider,
-};
 pub use databases::{
     database::Database, engine::DatabaseEngine, error::DatabaseError,
     repository::DatabaseRepository, status::DatabaseStatus,
@@ -168,86 +186,28 @@ pub use db_pitr::{
     LogSeq, LogTailer, PitrError, PitrRepository, PitrRestore, PitrRestoreStatus, ReplayOutcome,
     RestoreReplayWindow, RestoreTimestamp, StreamTargetId,
 };
-pub use ai_ops::{
-    AiAction, AiActionId, AiActionStatus, AiMessage, AiOpsError, AiOpsRepository, AiSession,
-    AiSessionId, MessageRole, ToolCallAllowlist, ToolKind, ToolName, ToolResult, ToolSpec,
-};
-pub use compliance::{
-    AuditRetentionPolicy, ComplianceError, ComplianceRepository, GdprApiTokenRecord,
-    GdprDatabaseRecord, GdprExport, GdprExportPayload, GdprMailRecord, GdprSiteRecord,
-    HardeningRule, HardeningRun, REDACTED, RuleOutcome,
-};
-pub use service_manager::{
-    DEFAULT_ALLOWLIST, ServiceAction, ServiceActionRecord, ServiceError, ServiceInfo,
-    ServiceManagerRepository, ServiceStatus, is_allowed,
-};
-pub use os_updates::{
-    OsUpdateError, OsUpdateRepository, PackageUpdate, RebootState, UpdateHistoryRecord,
-    UpdateKind, UpdatePolicy,
-};
-pub use synthetic_monitoring::{
-    CheckResult, CheckStatus, CheckType, SyntheticCheck, SyntheticError, SyntheticRepository,
-    classify,
-};
-pub use log_viewer::{
-    LogAuthorization, LogDownloadRecord, LogDownloadRepository, LogLine, LogPage, LogQuery,
-    LogRange, LogReader, LogSource, LogViewerError, RbacLogAuthorization,
-};
 pub use db_privileges::{
     AdminToolSession, DbGrant, DbPrivilegeError, DbPrivilegeRepository, GrantScope, Privilege,
     RemoteAccess,
 };
-pub use ip_allocation::{
-    IpAllocation, IpError, IpFamily, IpPool, IpRepository, IpStatus, PoolKind, SiteAddress,
-    validate_cidr,
-};
-pub use billing::{
-    BillingError, BillingRepository, BillingStatus, Chargeback, ChargebackLine, Integration,
-    UsageMeter, UsageUnit, compute_chargeback, hmac_sha256_hex, verify_signature,
-};
-pub use load_balancing::{
-    HealthCheck, HealthProbe, LbError, LbRepository, LbStatus, Member, Pool, PoolAlgorithm,
-    ProbeDecision, next_member,
-};
-pub use wordpress_toolkit::{
-    WpCacheMode, WpError, WpRepository, WpSecurityFinding, WpSecurityReport, WpSite, WpUpdateResult,
-    WpUpdateSet, compare_versions,
-};
-pub use wildcard_ssl::{
-    AcmeEndpointMode, ALLOWED_DNS_PROVIDERS, CHALLENGE_SERVER_BIND, CertRequest, ChallengeKind,
-    DnsLease, DnsProviderPort, RecordingDnsProvider, WildcardError, WildcardRepository,
-    is_provider_allowed,
-};
-pub use app_runtimes::{
-    ALLOWED_RUNTIME_KINDS, RESERVED_PORTS, RuntimeError, RuntimeKind, RuntimeRepository,
-    RuntimeStatus, SiteRuntime, is_kind_allowed, is_version_allowed, is_workdir_inside_chroot,
-    is_port_allowed, render_nginx_proxy_block, render_supervisor_unit,
-};
-pub use kernel_isolation::{
-    CgroupLimit, IsolationError, IsolationPolicy, IsolationRepository, ROOT_CGROUP,
-    UserNamespaceConfig, user_cgroup_path,
-};
 pub use dnssec_secondary::{
-    DsRecord, DnsSecError, DnsSecPolicy, DnsSecRepository, GlueRecord, KeyRole, KskRolloverState,
+    DnsSecError, DnsSecPolicy, DnsSecRepository, DsRecord, GlueRecord, KeyRole, KskRolloverState,
     SecondaryNs, SigningAlgorithm, ZoneSigningKey,
-};
-pub use mail_filtering::{
-    AntiSpamPolicy, AutoResponder, AutoResponderMode, CatchAll, Forwarder, GreylistEntry,
-    MailFilterError, MailFilterRepository, MailingList, SIEVE_MAX_BYTES, SieveScript,
-};
-pub use git_deployment::{
-    DeployError, DeployRepo, DeployRepository, DeployRun, DeployStatus, WebhookSecret,
-    commit_placeholder, verify_webhook,
-};
-pub use maintenance_windows::{
-    DestructiveActionClass, MaintenanceError, MaintenanceOverride, MaintenanceRepository,
-    MaintenanceWindow,
 };
 pub use files::{
     error::FileError,
     file_info::FileInfo,
     path::Path,
     repository::{FileRepository, MAX_READ_BYTES},
+};
+pub use git_deployment::{
+    DeployError, DeployRepo, DeployRepository, DeployRun, DeployStatus, WebhookSecret,
+    commit_placeholder, verify_webhook,
+};
+pub use hosting::{HostingPlanId, HostingPlanRepository};
+pub use iac::{
+    ApiContract, IacError, Language, Operation, OperationId, ProviderResource, ResourceEndpoint,
+    ResourceKind, SdkPackage, SdkSurface, TerraformProvider,
 };
 pub use identity::{
     error::IdentityError,
@@ -260,9 +220,37 @@ pub use identity::{
     session::{Session, SessionBuilder, SessionToken, SessionTokenError},
     user::User,
 };
+pub use ip_allocation::{
+    IpAllocation, IpError, IpFamily, IpPool, IpRepository, IpStatus, PoolKind, SiteAddress,
+    validate_cidr,
+};
+pub use kernel_isolation::{
+    CgroupLimit, IsolationError, IsolationPolicy, IsolationRepository, ROOT_CGROUP,
+    UserNamespaceConfig, user_cgroup_path,
+};
+pub use load_balancing::{
+    HealthCheck, HealthProbe, LbError, LbRepository, LbStatus, Member, Pool, PoolAlgorithm,
+    ProbeDecision, next_member,
+};
+pub use log_viewer::{
+    LogAuthorization, LogDownloadRecord, LogDownloadRepository, LogLine, LogPage, LogQuery,
+    LogRange, LogReader, LogSource, LogViewerError, RbacLogAuthorization,
+};
+pub use mail_filtering::{
+    AntiSpamPolicy, AutoResponder, AutoResponderMode, CatchAll, Forwarder, GreylistEntry,
+    MailFilterError, MailFilterRepository, MailingList, SIEVE_MAX_BYTES, SieveScript,
+};
+pub use maintenance_windows::{
+    DestructiveActionClass, MaintenanceError, MaintenanceOverride, MaintenanceRepository,
+    MaintenanceWindow,
+};
 pub use monitoring::{
     Alert, AlertRule, DiskReading, MetricKind, MetricSample, MonitoringError, NetworkReading,
     SnapshotRepository, SystemSnapshot, Unit,
+};
+pub use os_updates::{
+    OsUpdateError, OsUpdateRepository, PackageUpdate, RebootState, UpdateHistoryRecord, UpdateKind,
+    UpdatePolicy,
 };
 pub use plugin::{
     Capability, CapabilitySet, ManifestRuntime, PluginError, PluginId, PluginManifest,
@@ -272,6 +260,10 @@ pub use plugin_marketplace::{
     CatalogCache, CatalogSnapshot, MarketplaceCa, MarketplaceCatalog, MarketplacePlugin,
     PluginMarketplaceError, PluginRating, PublisherSignature, SignedCatalogEnvelope,
     verify_envelope,
+};
+pub use service_manager::{
+    DEFAULT_ALLOWLIST, ServiceAction, ServiceActionRecord, ServiceError, ServiceInfo,
+    ServiceManagerRepository, ServiceStatus, is_allowed,
 };
 pub use site_staging::{
     PromotionRepository, PromotionRun, PromotionStatus, SiteStagingError, SnapshotId, StagingSlot,
@@ -284,4 +276,17 @@ pub use ssl::{
     repository::CertificateRepository,
     source::{CertificateSource, CertificateStatus},
 };
+pub use synthetic_monitoring::{
+    CheckResult, CheckStatus, CheckType, SyntheticCheck, SyntheticError, SyntheticRepository,
+    classify,
+};
 pub use waf::{Rule, RuleSet, WafError, WafRepository};
+pub use wildcard_ssl::{
+    ALLOWED_DNS_PROVIDERS, AcmeEndpointMode, CHALLENGE_SERVER_BIND, CertRequest, ChallengeKind,
+    DnsLease, DnsProviderPort, RecordingDnsProvider, WildcardError, WildcardRepository,
+    is_provider_allowed,
+};
+pub use wordpress_toolkit::{
+    WpCacheMode, WpError, WpRepository, WpSecurityFinding, WpSecurityReport, WpSite,
+    WpUpdateResult, WpUpdateSet, compare_versions,
+};

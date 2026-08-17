@@ -299,7 +299,8 @@ mod tests {
         let m1 = member(a, LbStatus::Disabled, 5);
         let m2 = member(b, LbStatus::Healthy, 0);
         let m3 = member(c, LbStatus::Healthy, 10);
-        let next = next_member(&[m1, m2, m3], PoolAlgorithm::Weighted);
+        let members = [m1, m2, m3];
+        let next = next_member(&members, PoolAlgorithm::Weighted);
         assert_eq!(next.unwrap().id, c);
     }
 

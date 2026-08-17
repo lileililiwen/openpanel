@@ -449,6 +449,8 @@ mod tests {
             openpanel_domain::Email::new("admin@example.com").expect("e"),
             "h".into(),
             openpanel_domain::Role::Owner,
+            None,
+            None,
             Utc::now(),
             None,
             None,

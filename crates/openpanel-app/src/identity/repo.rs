@@ -3,7 +3,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use openpanel_domain::{
-    RepoError, SessionRepository, UserRepository,
+    HostingPlanId, RepoError, SessionRepository, UserRepository,
     identity::{
         role::Role,
         session::{Session, SessionToken},
@@ -32,8 +32,10 @@ impl UserRepository for SqliteUserRepository {
         sqlx::query(
             r#"
             INSERT INTO users
-                (id, username, email, password_hash, role, created_at, disabled_at, last_login_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                (id, username, email, password_hash, role,
+                 parent_account_id, hosting_plan_id,
+                 created_at, disabled_at, last_login_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(user.id().to_string())
@@ -41,6 +43,8 @@ impl UserRepository for SqliteUserRepository {
         .bind(user.email().as_str())
         .bind(user.password().hash_str())
         .bind(user.role().as_str())
+        .bind(user.parent_account_id().map(|p| p.to_string()))
+        .bind(user.hosting_plan_id().map(|p| p.as_uuid().to_string()))
         .bind(user.created_at().to_rfc3339())
         .bind(user.disabled_at().map(|d| d.to_rfc3339()))
         .bind(user.last_login_at().map(|d| d.to_rfc3339()))
@@ -52,7 +56,7 @@ impl UserRepository for SqliteUserRepository {
 
     async fn find_by_id(&self, id: Uuid) -> Result<Option<User>, RepoError> {
         let row: Option<UserRow> = sqlx::query_as::<_, UserRow>(
-            "SELECT id, username, email, password_hash, role, created_at, disabled_at, last_login_at FROM users WHERE id = ?",
+            "SELECT id, username, email, password_hash, role, parent_account_id, hosting_plan_id, created_at, disabled_at, last_login_at FROM users WHERE id = ?",
         )
         .bind(id.to_string())
         .fetch_optional(&self.pool)
@@ -63,7 +67,7 @@ impl UserRepository for SqliteUserRepository {
 
     async fn find_by_username(&self, username: &str) -> Result<Option<User>, RepoError> {
         let row: Option<UserRow> = sqlx::query_as::<_, UserRow>(
-            "SELECT id, username, email, password_hash, role, created_at, disabled_at, last_login_at FROM users WHERE username = ?",
+            "SELECT id, username, email, password_hash, role, parent_account_id, hosting_plan_id, created_at, disabled_at, last_login_at FROM users WHERE username = ?",
         )
         .bind(username)
         .fetch_optional(&self.pool)
@@ -74,7 +78,7 @@ impl UserRepository for SqliteUserRepository {
 
     async fn find_by_email(&self, email: &str) -> Result<Option<User>, RepoError> {
         let row: Option<UserRow> = sqlx::query_as::<_, UserRow>(
-            "SELECT id, username, email, password_hash, role, created_at, disabled_at, last_login_at FROM users WHERE email = ?",
+            "SELECT id, username, email, password_hash, role, parent_account_id, hosting_plan_id, created_at, disabled_at, last_login_at FROM users WHERE email = ?",
         )
         .bind(email)
         .fetch_optional(&self.pool)
@@ -85,7 +89,7 @@ impl UserRepository for SqliteUserRepository {
 
     async fn list(&self) -> Result<Vec<User>, RepoError> {
         let rows: Vec<UserRow> = sqlx::query_as::<_, UserRow>(
-            "SELECT id, username, email, password_hash, role, created_at, disabled_at, last_login_at FROM users ORDER BY created_at",
+            "SELECT id, username, email, password_hash, role, parent_account_id, hosting_plan_id, created_at, disabled_at, last_login_at FROM users ORDER BY created_at",
         )
         .fetch_all(&self.pool)
         .await
@@ -142,6 +146,34 @@ impl UserRepository for SqliteUserRepository {
         Ok(())
     }
 
+    async fn update_parent_account_id(
+        &self,
+        id: Uuid,
+        parent: Option<Uuid>,
+    ) -> Result<(), RepoError> {
+        sqlx::query("UPDATE users SET parent_account_id = ? WHERE id = ?")
+            .bind(parent.map(|p| p.to_string()))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| RepoError::new(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn update_hosting_plan_id(
+        &self,
+        id: Uuid,
+        plan: Option<HostingPlanId>,
+    ) -> Result<(), RepoError> {
+        sqlx::query("UPDATE users SET hosting_plan_id = ? WHERE id = ?")
+            .bind(plan.map(|p| p.as_uuid().to_string()))
+            .bind(id.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| RepoError::new(e.to_string()))?;
+        Ok(())
+    }
+
     async fn delete(&self, id: Uuid) -> Result<(), RepoError> {
         sqlx::query("DELETE FROM users WHERE id = ?")
             .bind(id.to_string())
@@ -167,6 +199,8 @@ struct UserRow {
     email: String,
     password_hash: String,
     role: String,
+    parent_account_id: Option<String>,
+    hosting_plan_id: Option<String>,
     created_at: String,
     disabled_at: Option<String>,
     last_login_at: Option<String>,
@@ -186,6 +220,23 @@ impl UserRow {
                 .map_err(|e: openpanel_domain::identity::role::RoleParseError| {
                     RepoError::new(e.to_string())
                 })?;
+        let parent_account_id = self
+            .parent_account_id
+            .as_deref()
+            .map(|value| {
+                Uuid::parse_str(value)
+                    .map_err(|e| RepoError::new(format!("bad parent_account_id `{value}`: {e}")))
+            })
+            .transpose()?;
+        let hosting_plan_id = self
+            .hosting_plan_id
+            .as_deref()
+            .map(|value| {
+                Uuid::parse_str(value)
+                    .map_err(|e| RepoError::new(format!("bad hosting_plan_id `{value}`: {e}")))
+            })
+            .transpose()?
+            .map(HostingPlanId);
         let created_at = parse_dt(&self.created_at)?;
         let disabled_at = self.disabled_at.as_deref().map(parse_dt).transpose()?;
         let last_login_at = self.last_login_at.as_deref().map(parse_dt).transpose()?;
@@ -195,6 +246,8 @@ impl UserRow {
             email,
             self.password_hash,
             role,
+            parent_account_id,
+            hosting_plan_id,
             created_at,
             disabled_at,
             last_login_at,

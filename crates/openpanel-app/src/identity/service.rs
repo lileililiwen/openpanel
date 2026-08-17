@@ -5,8 +5,8 @@ use std::sync::Arc;
 use chrono::Utc;
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::{
-    Email, IdentityError, Password, Session, SessionRepository, SessionToken, User, UserRepository,
-    Username, identity::role::Role,
+    Email, HostingPlanId, IdentityError, Password, Session, SessionRepository, SessionToken, User,
+    UserRepository, Username, identity::role::Role,
 };
 use uuid::Uuid;
 
@@ -174,6 +174,27 @@ impl IdentityService {
         role: Role,
         actor: &str,
     ) -> Result<User, IdentityError> {
+        self.create_user_with_parents(username, email, plaintext_password, role, None, None, actor)
+            .await
+    }
+
+    /// Create a new user with hierarchy and hosting-plan references.
+    ///
+    /// The two optional fields are validated at the domain layer
+    /// (self-parenting rejected) and persisted alongside the rest of
+    /// the user row. The follow-on changes
+    /// (`add-account-hierarchy`, `add-hosting-plans`) build on this
+    /// path to enforce their own preconditions.
+    pub async fn create_user_with_parents(
+        &self,
+        username: &str,
+        email: &str,
+        plaintext_password: &str,
+        role: Role,
+        parent_account_id: Option<Uuid>,
+        hosting_plan_id: Option<HostingPlanId>,
+        actor: &str,
+    ) -> Result<User, IdentityError> {
         if Password::hash(plaintext_password).is_err() {
             self.audit
                 .record(
@@ -211,7 +232,15 @@ impl IdentityService {
             return Err(IdentityError::EmailTaken);
         }
 
-        let user = User::new(Uuid::new_v4(), username, email, password, role);
+        let user = User::new_with_parents(
+            Uuid::new_v4(),
+            username,
+            email,
+            password,
+            role,
+            parent_account_id,
+            hosting_plan_id,
+        )?;
         if let Err(e) = self.users.insert(&user).await {
             return Err(IdentityError::Persistence(e.0));
         }
@@ -219,11 +248,102 @@ impl IdentityService {
         self.audit
             .record(
                 AuditEvent::new(actor, AuditAction::UserCreated, AuditOutcome::Success)
-                    .target(user.id().to_string()),
+                    .target(user.id().to_string())
+                    .metadata(serde_json::json!({
+                        "parent_account_id": parent_account_id.map(|id| id.to_string()),
+                        "hosting_plan_id": hosting_plan_id.map(|p| p.as_uuid().to_string()),
+                    })),
             )
             .await
             .ok();
         Ok(user)
+    }
+
+    /// Update a user's parent account reference. Used by the
+    /// `add-account-hierarchy` change to attach existing users to a
+    /// parent. Refuses self-parenting at the domain layer.
+    pub async fn update_parent_account_id(
+        &self,
+        user_id: Uuid,
+        parent: Option<Uuid>,
+        actor: &str,
+    ) -> Result<(), IdentityError> {
+        let mut user = self
+            .users
+            .find_by_id(user_id)
+            .await
+            .map_err(|e| IdentityError::Persistence(e.0))?
+            .ok_or(IdentityError::UserNotFound)?;
+        user.set_parent_account_id(parent)?;
+        self.users
+            .update_parent_account_id(user_id, parent)
+            .await
+            .map_err(|e| IdentityError::Persistence(e.0))?;
+        self.audit
+            .record(
+                AuditEvent::new(actor, AuditAction::UserUpdated, AuditOutcome::Success)
+                    .target(user_id.to_string())
+                    .metadata(serde_json::json!({
+                        "field": "parent_account_id",
+                        "value": parent.map(|id| id.to_string()),
+                    })),
+            )
+            .await
+            .ok();
+        Ok(())
+    }
+
+    /// Update a user's hosting plan reference. Used by the
+    /// `add-hosting-plans` change to attach existing users to a plan.
+    pub async fn update_hosting_plan_id(
+        &self,
+        user_id: Uuid,
+        plan: Option<HostingPlanId>,
+        actor: &str,
+    ) -> Result<(), IdentityError> {
+        let mut user = self
+            .users
+            .find_by_id(user_id)
+            .await
+            .map_err(|e| IdentityError::Persistence(e.0))?
+            .ok_or(IdentityError::UserNotFound)?;
+        user.set_hosting_plan_id(plan);
+        self.users
+            .update_hosting_plan_id(user_id, plan)
+            .await
+            .map_err(|e| IdentityError::Persistence(e.0))?;
+        self.audit
+            .record(
+                AuditEvent::new(actor, AuditAction::UserUpdated, AuditOutcome::Success)
+                    .target(user_id.to_string())
+                    .metadata(serde_json::json!({
+                        "field": "hosting_plan_id",
+                        "value": plan.map(|p| p.as_uuid().to_string()),
+                    })),
+            )
+            .await
+            .ok();
+        Ok(())
+    }
+
+    /// Return the children of a parent account. Delegates to the
+    /// repository; the placeholder repository returns an empty list
+    /// until the `add-account-hierarchy` change ships.
+    pub async fn find_children(&self, parent: Uuid) -> Result<Vec<User>, IdentityError> {
+        self.users
+            .find_children(parent)
+            .await
+            .map_err(|e| IdentityError::Persistence(e.0))
+    }
+
+    /// Return users attached to a hosting plan. Delegates to the
+    /// repository; the placeholder repository returns an empty list
+    /// until the `add-hosting-plans` change ships.
+    pub async fn find_by_plan(&self, plan: HostingPlanId) -> Result<Vec<User>, IdentityError> {
+        self.users
+            .find_by_plan(plan)
+            .await
+            .map_err(|e| IdentityError::Persistence(e.0))
     }
 
     /// Authenticate by username or email. The outcome is `Authenticated`

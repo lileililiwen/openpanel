@@ -344,7 +344,15 @@ async fn create_user(
     let actor = "owner"; // Could pull from request extensions
     let user = state
         .identity
-        .create_user(&req.username, &req.email, &req.password, req.role, actor)
+        .create_user_with_parents(
+            &req.username,
+            &req.email,
+            &req.password,
+            req.role,
+            req.parent_account_id,
+            req.hosting_plan_id,
+            actor,
+        )
         .await
         .map_err(map_identity_err)?;
     Ok(Json(UserDto::from_user(&user)))
