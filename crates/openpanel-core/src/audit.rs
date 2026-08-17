@@ -438,6 +438,18 @@ pub enum AuditAction {
     CdnPurgePartial,
     /// Decryption of a stored CDN credential blob failed (tamper or wrong key).
     CdnCredentialDecryptFailed,
+    /// A site clone completed.
+    SiteCloned,
+    /// A site was cloned from a stored template.
+    SiteClonedFromTemplate,
+    /// PII was anonymised during a clone.
+    ClonePiiAnonymised,
+    /// A clone explicitly kept PII (Owner opt-in).
+    CloneKeptPii,
+    /// A site was exported as a reusable template.
+    SiteTemplateExported,
+    /// A template signature failed to verify on retrieval.
+    TemplateSignatureFailed,
 }
 
 impl AuditAction {
@@ -639,6 +651,12 @@ impl AuditAction {
             AuditAction::CdnPurged => "cdn_purged",
             AuditAction::CdnPurgePartial => "cdn_purge_partial",
             AuditAction::CdnCredentialDecryptFailed => "cdn_credential_decrypt_failed",
+            AuditAction::SiteCloned => "site_cloned",
+            AuditAction::SiteClonedFromTemplate => "site_cloned_from_template",
+            AuditAction::ClonePiiAnonymised => "clone_pii_anonymised",
+            AuditAction::CloneKeptPii => "clone_kept_pii",
+            AuditAction::SiteTemplateExported => "site_template_exported",
+            AuditAction::TemplateSignatureFailed => "template_signature_failed",
         }
     }
 }
@@ -937,6 +955,12 @@ impl AuditService for SqliteAuditService {
                 "cdn_purged" => AuditAction::CdnPurged,
                 "cdn_purge_partial" => AuditAction::CdnPurgePartial,
                 "cdn_credential_decrypt_failed" => AuditAction::CdnCredentialDecryptFailed,
+                "site_cloned" => AuditAction::SiteCloned,
+                "site_cloned_from_template" => AuditAction::SiteClonedFromTemplate,
+                "clone_pii_anonymised" => AuditAction::ClonePiiAnonymised,
+                "clone_kept_pii" => AuditAction::CloneKeptPii,
+                "site_template_exported" => AuditAction::SiteTemplateExported,
+                "template_signature_failed" => AuditAction::TemplateSignatureFailed,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

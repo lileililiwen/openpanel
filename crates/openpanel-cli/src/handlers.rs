@@ -342,6 +342,16 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let site_cache_cdn_svc = site_cache_cdn_module.service();
     let _ = site_cache_cdn_svc;
 
+    // Site clone + template export module: persistence only.
+    let site_clone_template_module = openpanel_app::SiteCloneTemplateModule::new(&ctx).await;
+    runner
+        .apply_module(
+            site_clone_template_module.name(),
+            &site_clone_template_module.migrations(),
+        )
+        .await
+        .context("apply site-clone-template migrations")?;
+
     // Site-staging module: in-memory filesystem layer for the CLI
     // (no live nginx / rsync in offline mode).
     let staging_fs: Arc<dyn openpanel_app::StagingFilesystemLayer> =
@@ -389,6 +399,18 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         hosting_plans_svc.clone(),
         account_hierarchy_svc.clone(),
         site_cache_cdn_svc.clone(),
+        // Site clone + template export: real service constructed
+        // from the same sites module, sites repository, and audit
+        // service that the rest of the CLI uses.
+        Arc::new(openpanel_app::SiteCloneService::new(
+            site_clone_template_module.repo(),
+            sites_svc.clone(),
+            audit.clone(),
+            master_key,
+            None,
+            None,
+        )),
+        site_clone_template_module.repo(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -4775,5 +4797,141 @@ pub async fn cdn_purge(
             "redacted": summary.redacted,
         }))?
     );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// site-clone-template CLI handlers.
+// ---------------------------------------------------------------------------
+
+/// Build the `SiteCloneService` for CLI subcommands.
+async fn build_site_clone_template(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::SiteCloneService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
+    let master_key = load_master_key(&config)?;
+    let identity_module = IdentityModule::new(&ctx, master_key).await;
+    let sites_module = SitesModule::new(&ctx).await;
+    let sites_svc = sites_module.service();
+    let module = openpanel_app::SiteCloneTemplateModule::new(&ctx).await;
+    let runner = MigrationRunner::for_sqlite(pool.clone());
+    runner
+        .apply_module(module.name(), &module.migrations())
+        .await
+        .context("apply site-clone-template migrations")?;
+    let svc = Arc::new(openpanel_app::SiteCloneService::new(
+        module.repo(),
+        sites_svc,
+        audit,
+        master_key,
+        None,
+        None,
+    ));
+    Ok((svc, identity_module.service()))
+}
+
+/// `openpanel site clone run <site> --target-domain ... --target-owner ...`.
+pub async fn site_clone_run(
+    config: Arc<Config>,
+    site: String,
+    target_domain: String,
+    target_owner: String,
+    keep_pii: bool,
+) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_site_clone_template(config).await?;
+    let caller = identity_svc
+        .list_users()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("admin user not found"))?;
+    let source_id = uuid::Uuid::parse_str(&site).context("invalid source site id")?;
+    let target_owner_id =
+        uuid::Uuid::parse_str(&target_owner).context("invalid target owner id")?;
+    let policy = if keep_pii {
+        openpanel_domain::PiiPolicy::Keep
+    } else {
+        openpanel_domain::PiiPolicy::Standard
+    };
+    let plan = svc
+        .plan_live_clone(
+            caller.username().as_str(),
+            source_id,
+            target_domain,
+            target_owner_id,
+            policy,
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "plan_id": plan.id().to_string(),
+            "files": plan.files().len(),
+            "content_hash": plan.content_hash(),
+            "expires_at": plan.expires_at().to_rfc3339(),
+        }))?
+    );
+    Ok(())
+}
+
+/// `openpanel site template export <site> --name ...`.
+pub async fn site_template_export(
+    config: Arc<Config>,
+    site: String,
+    name: String,
+) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_site_clone_template(config).await?;
+    let caller = identity_svc
+        .list_users()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("admin user not found"))?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let (template, _artifact) = svc
+        .export_template(caller.username().as_str(), site_id, name)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "id": template.id().to_string(),
+            "name": template.name(),
+            "source_site_id": template.source_site_id().to_string(),
+            "signature_valid": template.signature_valid(),
+            "pii_policy": template.pii_policy().as_str(),
+        }))?
+    );
+    Ok(())
+}
+
+/// `openpanel site template list`.
+pub async fn site_template_list(config: Arc<Config>) -> anyhow::Result<()> {
+    let (svc, _identity_svc) = build_site_clone_template(config).await?;
+    let rows = svc
+        .list_templates()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let view: Vec<_> = rows
+        .iter()
+        .map(|t| {
+            serde_json::json!({
+                "id": t.id().to_string(),
+                "name": t.name(),
+                "source_site_id": t.source_site_id().to_string(),
+                "signature_valid": t.signature_valid(),
+                "pii_policy": t.pii_policy().as_str(),
+                "created_at": t.created_at().to_rfc3339(),
+            })
+        })
+        .collect();
+    println!("{}", serde_json::to_string_pretty(&view)?);
     Ok(())
 }

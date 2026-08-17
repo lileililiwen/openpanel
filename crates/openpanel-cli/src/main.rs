@@ -8,8 +8,9 @@ use openpanel_cli::{
     MonitoringCommand, NotificationChannelCommand, NotificationCommand,
     NotificationSubscriptionCommand, PitrCommand, PluginCommand, RecoveryCodeCommand,
     RegistryCommand, SecurityAllowlistCommand, SecurityCommand, SecurityRuleCommand,
-    ServicesCommand, SiteCacheCommand, SiteCommand, SoftwareCommand, SslCommand, StagingCommand,
-    TokenCommand, TwoFactorCommand, UserCommand, WafCommand, handlers,
+    ServicesCommand, SiteCacheCommand, SiteCloneCommand, SiteCommand, SiteTemplateCommand,
+    SoftwareCommand, SslCommand, StagingCommand, TokenCommand, TwoFactorCommand, UserCommand,
+    WafCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -109,6 +110,23 @@ async fn main() -> anyhow::Result<()> {
                 SiteCacheCommand::Purge { site, paths } => {
                     handlers::site_cache_purge(config, site, paths).await
                 }
+            },
+            SiteCommand::Clone { action } => match action {
+                SiteCloneCommand::Run {
+                    site,
+                    target_domain,
+                    target_owner,
+                    keep_pii,
+                } => {
+                    handlers::site_clone_run(config, site, target_domain, target_owner, keep_pii)
+                        .await
+                }
+            },
+            SiteCommand::Template { action } => match action {
+                SiteTemplateCommand::Export { site, name } => {
+                    handlers::site_template_export(config, site, name).await
+                }
+                SiteTemplateCommand::List => handlers::site_template_list(config).await,
             },
         },
         Command::Cdn { action } => match action {

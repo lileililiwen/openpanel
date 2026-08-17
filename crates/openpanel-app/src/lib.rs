@@ -120,6 +120,9 @@ pub mod service_manager;
 /// policies, CDN integrations, nginx snippet generation, and purge
 /// orchestration.
 pub mod site_cache_cdn;
+/// Site clone + template export bounded context: clone plans,
+/// clone runs, template export, and PII anonymisation tokens.
+pub mod site_clone_template;
 /// Per-site staging bounded context: staging slot creation, sync,
 /// and atomic promote.
 pub mod site_staging;
@@ -274,6 +277,11 @@ pub use site_cache_cdn::{
     GenericHttpAdapter, NginxApplyError, NginxCacheManager, PurgeSummary, SiteCacheCdnModule,
     SiteCacheService, SqliteSiteCacheCdnRepository, cache_directives, cache_path_directive,
     keys_zone_name, provider_config_for,
+};
+pub use site_clone_template::{
+    FileEnumerator, FsEnumerator, MODULE_NAME as SITE_CLONE_TEMPLATE_MODULE, SiteCloneService,
+    SiteCloneTemplateModule, SqliteSiteCloneTemplateRepository, TemplateArtifact, TemplateExporter,
+    default_deny_patterns,
 };
 /// Per-site staging bounded-context module.
 pub use site_staging::{

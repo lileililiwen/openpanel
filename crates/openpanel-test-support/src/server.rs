@@ -26,9 +26,9 @@ use openpanel_app::{
     InMemoryStagingFilesystem, LogService, LogsModule, MailModule, MailService, MarketplaceService,
     MigrationImportersModule, MonitoringModule, MonitoringService, NotificationModule,
     NotificationService, OffsiteBackupTargetsModule, PitrService, PluginService, SecurityModule,
-    SecurityService, SiteCacheCdnModule, SiteStagingModule, SitesModule, SitesService,
-    SoftwareCenterModule, SoftwareCenterService, SslModule, SslPaths, SslService, StagingService,
-    SystemServicesModule, WafModule, WafService,
+    SecurityService, SiteCacheCdnModule, SiteCloneService, SiteCloneTemplateModule,
+    SiteStagingModule, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
+    SslModule, SslPaths, SslService, StagingService, SystemServicesModule, WafModule, WafService,
     identity::two_factor::TwoFactorCrypto,
     security::MemoryFirewall,
     sites::{nginx::NginxPaths, repo::SqliteSiteRepository},
@@ -266,6 +266,7 @@ pub struct TestServer {
     migration_importers: Arc<openpanel_app::MigrationService>,
     offsite_backup_targets: Arc<openpanel_app::BackupUploadService>,
     site_cache_cdn: Arc<openpanel_app::SiteCacheService>,
+    site_clone_template: Arc<openpanel_app::SiteCloneService>,
 }
 
 impl TestServer {
@@ -488,6 +489,14 @@ impl TestServer {
             )
             .await
             .expect("site-cache-cdn migrations");
+        let site_clone_template_module = SiteCloneTemplateModule::new(&ctx).await;
+        runner
+            .apply_module(
+                site_clone_template_module.name(),
+                &site_clone_template_module.migrations(),
+            )
+            .await
+            .expect("site-clone-template migrations");
         runner
             .apply_module(ftp_module.name(), &ftp_module.migrations())
             .await
@@ -599,6 +608,15 @@ impl TestServer {
         let _ = offsite_backup_svc;
         let site_cache_cdn_svc = site_cache_cdn_module.service();
         let _ = site_cache_cdn_svc;
+        let site_clone_template_svc = Arc::new(SiteCloneService::new(
+            site_clone_template_module.repo(),
+            sites_svc.clone(),
+            audit.clone(),
+            master_key,
+            None,
+            None,
+        ));
+        let site_clone_template_repo = site_clone_template_module.repo();
         docker_svc.attach_quota_gate(container_runtime_svc.clone());
         let ftp_svc = ftp_module.service();
         let databases_svc = databases_module.service();
@@ -731,6 +749,11 @@ impl TestServer {
             hosting_plans_svc.clone(),
             account_hierarchy_svc.clone(),
             site_cache_cdn_svc.clone(),
+            // Site clone + template export: real service constructed
+            // from the same sites repository, audit, and master key
+            // that the rest of the test server uses.
+            site_clone_template_svc.clone(),
+            site_clone_template_repo.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -829,6 +852,7 @@ impl TestServer {
             migration_importers: migration_importers_svc,
             offsite_backup_targets: offsite_backup_svc,
             site_cache_cdn: site_cache_cdn_svc,
+            site_clone_template: site_clone_template_svc,
             ftp: ftp_svc,
             api_tokens: api_token_svc,
             notifications: notification_svc,
@@ -932,6 +956,11 @@ impl TestServer {
     /// The site cache and CDN service.
     pub fn site_cache_cdn(&self) -> Arc<openpanel_app::SiteCacheService> {
         self.site_cache_cdn.clone()
+    }
+
+    /// The site clone + template export service.
+    pub fn site_clone_template(&self) -> Arc<openpanel_app::SiteCloneService> {
+        self.site_clone_template.clone()
     }
 
     /// The per-site WAF service.

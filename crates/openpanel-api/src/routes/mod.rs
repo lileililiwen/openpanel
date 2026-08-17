@@ -43,6 +43,9 @@ pub mod security;
 /// Site cache policy and CDN integration routes
 /// (`/sites/{id}/cache`, `/cdn/integrations`, `/cdn/purge`).
 pub mod site_cache_cdn;
+/// Site clone + template export routes
+/// (`/sites/{id}/clone`, `/sites/{id}/export-template`, `/sites/templates`).
+pub mod site_clone_template;
 /// Per-site staging routes (`/sites/{id}/staging/...`).
 pub mod site_staging;
 /// Sites resource routes (`/sites`).

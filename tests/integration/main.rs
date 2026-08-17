@@ -40,6 +40,8 @@ mod quality;
 mod security;
 /// Site cache and CDN policy / integration / purge integration tests.
 mod site_cache_cdn;
+/// Site clone + template export integration tests.
+mod site_clone_template;
 /// Per-site staging HTTP integration tests.
 mod site_staging;
 mod sites;

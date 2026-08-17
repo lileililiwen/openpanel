@@ -58,6 +58,10 @@ pub mod security;
 /// `SiteCachePolicy`, `CdnIntegration` aggregate, the `CdnAdapter`
 /// contract, and purge / cache-level operations.
 pub mod site_cache_cdn;
+/// Site clone + template export bounded context: `SiteTemplate`,
+/// `TemplateArtifact`, `ClonePlan`, `CloneRun`, `PiiPolicy`, and
+/// `AnonymisationToken` records.
+pub mod site_clone_template;
 pub mod sites;
 /// Trusted software catalog, transaction plans, and job lifecycle invariants.
 pub mod software_center;
@@ -359,6 +363,10 @@ pub use sftp_jailed_shells::{
 pub use site_cache_cdn::{
     CacheLevel, CdnAdapter, CdnIntegration, CdnKind, CdnZone, HeaderSummary, PurgeReceipt,
     PurgeRequest, SiteCacheCdnError, SiteCacheCdnRepository, SiteCachePolicy,
+};
+pub use site_clone_template::{
+    AnonymisationToken, CloneFile, ClonePlan, CloneRun, CloneSource, DbAction, PiiPolicy,
+    SiteCloneTemplateError, SiteCloneTemplateRepository, SiteTemplate,
 };
 pub use site_staging::{
     PromotionRepository, PromotionRun, PromotionStatus, SiteStagingError, SnapshotId, StagingSlot,

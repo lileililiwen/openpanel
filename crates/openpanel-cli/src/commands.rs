@@ -1125,6 +1125,18 @@ pub enum SiteCommand {
         #[command(subcommand)]
         action: SiteCacheCommand,
     },
+    /// Per-site clone subcommands (live clone, template export, template clone).
+    Clone {
+        /// Clone subcommand.
+        #[command(subcommand)]
+        action: SiteCloneCommand,
+    },
+    /// Per-site template export subcommands.
+    Template {
+        /// Template subcommand.
+        #[command(subcommand)]
+        action: SiteTemplateCommand,
+    },
 }
 
 /// Subcommands for managing per-site collaborators.
@@ -1646,4 +1658,40 @@ pub enum CdnCommand {
         #[arg(long, value_delimiter = ',')]
         paths: Vec<String>,
     },
+}
+
+/// Per-site clone subcommands.
+#[derive(Debug, Subcommand)]
+pub enum SiteCloneCommand {
+    /// Clone a live site.
+    Run {
+        /// Source site id.
+        #[arg(long)]
+        site: String,
+        /// Target primary domain.
+        #[arg(long)]
+        target_domain: String,
+        /// Target owner user id.
+        #[arg(long)]
+        target_owner: String,
+        /// Keep PII verbatim (Owner only).
+        #[arg(long, default_value_t = false)]
+        keep_pii: bool,
+    },
+}
+
+/// Per-site template export subcommands.
+#[derive(Debug, Subcommand)]
+pub enum SiteTemplateCommand {
+    /// Export a live site as a reusable template.
+    Export {
+        /// Source site id.
+        #[arg(long)]
+        site: String,
+        /// Template display name.
+        #[arg(long)]
+        name: String,
+    },
+    /// List stored templates.
+    List,
 }
