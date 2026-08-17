@@ -34,4 +34,4 @@
 - [x] 4.3 Smoke-test: install a fixture plugin that surfaces
       under the menu; verify capability gating refuses
       out-of-scope calls.
-- [ ] 4.4 Archive with `openspec archive add-plugin-extension-framework`.
+- [x] 4.4 Archive with `openspec archive add-plugin-extension-framework`.

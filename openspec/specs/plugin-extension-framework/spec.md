@@ -1,62 +1,109 @@
+## Purpose
+
+Introduces a stable, capability-gated plugin protocol so
+third parties (and the panel's own internal modules) can ship
+bounded contexts without forking the codebase. Manifests are
+signed; capabilities are pre-declared and enforced at every
+syscall; JSON-RPC and Wasm runtimes are supported behind a
+single supervisor.
+
 # plugin-extension-framework Specification
 
-## Purpose
-TBD - created by archiving change 2026-08-14-refine-plugin-extension-framework-with-marketplace. Update Purpose after archive.
 ## Requirements
-### Requirement: Remote Catalog Discovery
 
-The system SHALL provide a curated remote plugin catalog with a
-local cache. On discovery the panel SHALL verify each entry's
-publisher signature against the configured marketplace CA; entries
-that fail verification SHALL be flagged and MUST NOT be offered for
-install.
+### Requirement: Signed Manifest
 
-#### Scenario: Catalog lists only CA-chained publishers
+Every plugin SHALL ship a `PluginManifest` describing
+`id`, `version`, `runtime` (`JsonRpc | Wasm`), entrypoint,
+declared capabilities, declared permissions, optional UI
+metadata, and an Ed25519 signature under a panel-installed
+publisher key. Unsigned or invalid signatures MUST be refused
+with `PluginError::InvalidManifestSignature`; the last
+known-good plugin registry is preserved on signature failure.
 
-- **WHEN** the panel fetches the marketplace catalog
-- **THEN** only entries whose publisher signature chains to the
-        marketplace CA are presented as installable; unverified
-        entries are flagged `unverified`.
+#### Scenario: Valid manifest installs
 
-#### Scenario: Tampered entry rejected
+- **WHEN** an Owner submits a manifest whose signature verifies
+- **THEN** a `PluginInstall` row is created with status `Installed` and the audit `PluginInstalled` is recorded.
 
-- **WHEN** a catalog entry's manifest is tampered after signing
-- **THEN** the entry fails signature verification and is excluded
-        from installable results.
+#### Scenario: Tampered manifest rejected
 
-### Requirement: Marketplace Install Reuses Framework Protocol
+- **WHEN** one byte of the manifest body is altered before signature verification
+- **THEN** the install is refused; audit `PluginManifestRejected` records the id and redacted reason; the registry is unchanged.
 
-`POST /marketplace/plugins/{id}/install` SHALL resolve the pinned
-`manifest_url`, verify the manifest signature chain to the
-marketplace CA, and then delegate to the existing
-`plugin-extension-framework` install flow with its capability
-gating unchanged.
+### Requirement: Capability Gating
 
-#### Scenario: Successful marketplace install
+A plugin SHALL only invoke methods covered by its declared
+capabilities. The supervisor MUST enforce this at every host
+syscall, including JSON-RPC, WASM, and any retry path.
+Capabilities are stable, versioned tokens; a plugin MUST NOT
+be able to escalate at runtime even if a host bug is exploited.
 
-- **WHEN** an Owner installs a CA-verified plugin from the marketplace
-- **THEN** the framework installs the plugin under capability gates
-        and audit `PluginInstalledFromMarketplace{publisher, id}`
-        records the publisher only.
+#### Scenario: In-scope call
 
-#### Scenario: Unverified publisher refused
+- **WHEN** a plugin with `system-services:read` invokes `service.list()`
+- **THEN** the host returns the typed payload.
 
-- **WHEN** an install is requested for a publisher that fails CA
-        verification
-- **THEN** the install is refused with
-        `PluginMarketplaceError::PublisherUnverified` and no plugin
-        is installed.
+#### Scenario: Out-of-scope refused
 
-### Requirement: Ratings and Metadata
+- **WHEN** the same plugin invokes `service.restart("fail2ban")`
+- **THEN** the host returns `CapabilityDenied{required=system-services:write}` and audit `PluginCapabilityDenied` records the required capability only.
 
-The system SHALL surface plugin ratings and metadata from the
-catalog (rating, summary, publisher, version) in the marketplace
-view; the panel SHALL NOT trust catalog-provided executable content
-beyond what the framework's capability model permits.
+### Requirement: Lifecycle and Process Isolation
 
-#### Scenario: Metadata displayed
+A plugin SHALL run as a child process (JSON-RPC) or a sandboxed
+WASM instance under a unique unix user. Plugins MUST start
+disabled and require explicit enablement. The supervisor MUST
+restart a crashed JSON-RPC plugin at most 3 times within a
+60-second window before marking it `Failed`.
 
-- **WHEN** an Owner opens a marketplace plugin detail
-- **THEN** rating, publisher, and summary are shown; no plugin code
-        runs from the metadata fetch alone.
+#### Scenario: Restart on crash
 
+- **WHEN** a JSON-RPC plugin crashes
+- **THEN** the supervisor restarts it and emits `PluginRestarted{attempt=N}`.
+
+#### Scenario: Crash budget
+
+- **WHEN** a plugin has crashed 3 times in 60s
+- **THEN** the plugin is marked `Failed` and the audit `PluginDisabledDueToCrashBudget` is recorded.
+
+#### Scenario: Disable keeps state
+
+- **WHEN** an Owner disables a plugin
+- **THEN** its data persists; subsequent invocations return `PluginDisabled`.
+
+### Requirement: UI Surface
+
+A plugin MAY expose UI metadata (`menu`, `label`, `icon`).
+The web shell SHALL render a menu entry whose handler is a
+typed JSON-RPC call to the plugin; web mutations enforce CSRF
+and re-validate capabilities per call.
+
+#### Scenario: Menu entry renders
+
+- **WHEN** a plugin declares `ui.menu=Security`
+- **THEN** the shell renders a sidebar entry; clicking it
+        opens a typed iframe or an HTMX-rendered page that
+        issues JSON-RPC calls.
+
+#### Scenario: Out-of-scope UI invocation refused
+
+- **WHEN** the UI attempts a capability the plugin does not have
+- **THEN** the JSON-RPC host denies and emits `PluginCapabilityDenied`.
+
+### Requirement: Audit and Observability
+
+Every plugin invocation SHALL be audit-logged with
+`plugin_id`, `method`, redacted arg-keys, latency, and
+outcome. Audit MUST NOT include request or response bodies
+that may carry secrets.
+
+#### Scenario: Invocation logged
+
+- **WHEN** a plugin invokes a method
+- **THEN** audit `PluginInvocation{plugin_id, method, arg_keys, latency_ms, outcome}` is recorded with no payload data.
+
+#### Scenario: Secret in arg refused
+
+- **WHEN** a plugin invokes with an arg key the panel marks sensitive (e.g. `password`)
+- **THEN** the invocation is refused pre-empt with `PluginSecretArgRejected`; no audit body is written.
