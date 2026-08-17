@@ -1047,6 +1047,11 @@ impl TestServer {
         self.waf.clone()
     }
 
+    /// The plugin extension framework service.
+    pub fn plugins(&self) -> Arc<PluginService> {
+        self.plugins.clone()
+    }
+
     /// Docker service handle for staging allowlist and runtime observations.
     pub fn docker(&self) -> Arc<DockerService> {
         self.docker.clone()

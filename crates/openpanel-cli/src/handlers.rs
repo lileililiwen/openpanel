@@ -4055,6 +4055,35 @@ pub async fn plugin_list(config: Arc<Config>) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub async fn plugin_install(config: Arc<Config>, manifest_path: String) -> anyhow::Result<()> {
+    let bundle = build_plugin_bundle(config.clone()).await?;
+    let raw = if manifest_path == "-" {
+        use std::io::Read;
+        let mut s = String::new();
+        std::io::stdin().read_to_string(&mut s)?;
+        s
+    } else {
+        std::fs::read_to_string(&manifest_path)
+            .with_context(|| format!("read manifest `{manifest_path}`"))?
+    };
+    let manifest: openpanel_domain::PluginManifest =
+        serde_json::from_str(&raw).with_context(|| "parse manifest JSON")?;
+    bundle
+        .plugins
+        .install_manifest(&manifest, "admin")
+        .await
+        .map_err(|e| anyhow::anyhow!(format!("{e}")))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "id": manifest.id.as_str(),
+            "version": manifest.version.as_str(),
+            "status": "installed",
+        }))?
+    );
+    Ok(())
+}
+
 pub async fn plugin_enable(config: Arc<Config>, id: String) -> anyhow::Result<()> {
     let bundle = build_plugin_bundle(config.clone()).await?;
     let plugin_id = openpanel_domain::PluginId::new(id)

@@ -36,6 +36,8 @@ pub mod logs;
 pub mod mail;
 pub mod monitoring;
 pub mod notifications;
+/// Plugin extension framework web page.
+pub mod plugin_extension;
 /// Plugin marketplace web page.
 pub mod plugin_marketplace;
 pub mod router;

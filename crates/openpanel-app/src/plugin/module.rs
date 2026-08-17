@@ -4,10 +4,7 @@ use std::sync::Arc;
 
 use openpanel_core::{AppContext, AuditService, Migration, Module};
 
-use crate::plugin::{
-    repo::SqlitePluginRegistry,
-    service::PluginService,
-};
+use crate::plugin::{repo::SqlitePluginRegistry, service::PluginService};
 
 /// Stable module identifier.
 pub const MODULE_NAME: &str = "plugin-extension-framework";

@@ -1,11 +1,10 @@
 //! Plugin install / lifecycle service.
 
+use std::sync::Arc;
+
 use chrono::Utc;
 use openpanel_core::audit::{AuditAction, AuditEvent, AuditOutcome, AuditService};
-use openpanel_domain::{
-    PluginError, PluginId, PluginManifest, PluginRegistry, PluginStatus,
-};
-use std::sync::Arc;
+use openpanel_domain::{PluginError, PluginId, PluginManifest, PluginRegistry, PluginStatus};
 
 /// Errors raised by the plugin lifecycle service.
 #[derive(Debug, thiserror::Error)]
@@ -44,9 +43,10 @@ impl PluginService {
         manifest: &PluginManifest,
         actor: &str,
     ) -> Result<(), PluginInstallError> {
-        manifest.capabilities.validate().map_err(|e| {
-            PluginError::InvalidManifest(format!("invalid capabilities: {e}"))
-        })?;
+        manifest
+            .capabilities
+            .validate()
+            .map_err(|e| PluginError::InvalidManifest(format!("invalid capabilities: {e}")))?;
         let now = Utc::now();
         let id = manifest.id.clone();
         // If a record already exists, refuse.
@@ -65,64 +65,45 @@ impl PluginService {
             last_error: None,
         };
         self.registry.insert(&record).await?;
-        let event = AuditEvent::new(
-            actor,
-            AuditAction::PluginInstalled,
-            AuditOutcome::Success,
-        )
-        .metadata(serde_json::json!({
-            "id": manifest.id.as_str(),
-            "version": manifest.version.as_str(),
-            "publisher": manifest.publisher.as_str(),
-        }));
+        let event = AuditEvent::new(actor, AuditAction::PluginInstalled, AuditOutcome::Success)
+            .metadata(serde_json::json!({
+                "id": manifest.id.as_str(),
+                "version": manifest.version.as_str(),
+                "publisher": manifest.publisher.as_str(),
+            }));
         self.audit.record(event).await.ok();
         Ok(())
     }
 
     /// Enable an installed plugin.
-    pub async fn enable(
-        &self,
-        id: &PluginId,
-        actor: &str,
-    ) -> Result<(), PluginInstallError> {
+    pub async fn enable(&self, id: &PluginId, actor: &str) -> Result<(), PluginInstallError> {
         let now = Utc::now();
         self.registry
             .update_status(id, PluginStatus::Enabled, None, now)
             .await?;
-        let event =
-            AuditEvent::new(actor, AuditAction::PluginEnabled, AuditOutcome::Success)
-                .metadata(serde_json::json!({"id": id.as_str()}));
+        let event = AuditEvent::new(actor, AuditAction::PluginEnabled, AuditOutcome::Success)
+            .metadata(serde_json::json!({"id": id.as_str()}));
         self.audit.record(event).await.ok();
         Ok(())
     }
 
     /// Disable an installed plugin.
-    pub async fn disable(
-        &self,
-        id: &PluginId,
-        actor: &str,
-    ) -> Result<(), PluginInstallError> {
+    pub async fn disable(&self, id: &PluginId, actor: &str) -> Result<(), PluginInstallError> {
         let now = Utc::now();
         self.registry
             .update_status(id, PluginStatus::Disabled, None, now)
             .await?;
-        let event =
-            AuditEvent::new(actor, AuditAction::PluginDisabled, AuditOutcome::Success)
-                .metadata(serde_json::json!({"id": id.as_str()}));
+        let event = AuditEvent::new(actor, AuditAction::PluginDisabled, AuditOutcome::Success)
+            .metadata(serde_json::json!({"id": id.as_str()}));
         self.audit.record(event).await.ok();
         Ok(())
     }
 
     /// Remove a plugin from the registry.
-    pub async fn uninstall(
-        &self,
-        id: &PluginId,
-        actor: &str,
-    ) -> Result<(), PluginInstallError> {
+    pub async fn uninstall(&self, id: &PluginId, actor: &str) -> Result<(), PluginInstallError> {
         self.registry.delete(id).await?;
-        let event =
-            AuditEvent::new(actor, AuditAction::PluginUninstalled, AuditOutcome::Success)
-                .metadata(serde_json::json!({"id": id.as_str()}));
+        let event = AuditEvent::new(actor, AuditAction::PluginUninstalled, AuditOutcome::Success)
+            .metadata(serde_json::json!({"id": id.as_str()}));
         self.audit.record(event).await.ok();
         Ok(())
     }

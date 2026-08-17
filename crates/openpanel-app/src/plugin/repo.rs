@@ -2,9 +2,9 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use openpanel_domain::common::error::RepoError;
 use openpanel_domain::{
     PluginError, PluginId, PluginRecord, PluginRegistry, PluginStatus, PluginVersion, PublisherKey,
+    common::error::RepoError,
 };
 use sqlx::{Pool, Sqlite};
 
@@ -124,12 +124,12 @@ struct PluginRow {
 
 fn row_to_record(row: PluginRow) -> Result<PluginRecord, RepoError> {
     let id = PluginId::new(row.id).map_err(|e: PluginError| RepoError::new(e.to_string()))?;
-    let version = PluginVersion::new(row.version)
-        .map_err(|e: PluginError| RepoError::new(e.to_string()))?;
-    let publisher = PublisherKey::new(row.publisher)
-        .map_err(|e: PluginError| RepoError::new(e.to_string()))?;
-    let status = parse_status(&row.status)
-        .map_err(|e: PluginError| RepoError::new(e.to_string()))?;
+    let version =
+        PluginVersion::new(row.version).map_err(|e: PluginError| RepoError::new(e.to_string()))?;
+    let publisher =
+        PublisherKey::new(row.publisher).map_err(|e: PluginError| RepoError::new(e.to_string()))?;
+    let status =
+        parse_status(&row.status).map_err(|e: PluginError| RepoError::new(e.to_string()))?;
     let installed_at: DateTime<Utc> = DateTime::parse_from_rfc3339(&row.installed_at)
         .map_err(|e| RepoError::new(format!("installed_at: {e}")))?
         .with_timezone(&Utc);

@@ -46,7 +46,10 @@ pub trait PluginRegistry: Send + Sync {
     async fn insert(&self, record: &PluginRecord) -> Result<(), crate::common::error::RepoError>;
 
     /// Look up a plugin by id.
-    async fn find(&self, id: &PluginId) -> Result<Option<PluginRecord>, crate::common::error::RepoError>;
+    async fn find(
+        &self,
+        id: &PluginId,
+    ) -> Result<Option<PluginRecord>, crate::common::error::RepoError>;
 
     /// Update the lifecycle status of a plugin.
     async fn update_status(

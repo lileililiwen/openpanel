@@ -1458,6 +1458,12 @@ pub enum PluginCommand {
     },
     /// List installed plugins.
     List,
+    /// Install a signed manifest (JSON file or inline string).
+    Install {
+        /// Path to a `PluginManifest` JSON file, or `-` for stdin.
+        #[arg(long)]
+        manifest: String,
+    },
     /// Enable an installed plugin.
     Enable {
         /// Plugin id to enable.

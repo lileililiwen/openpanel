@@ -6,9 +6,9 @@
 //! new host can introduce a new one without invalidating old
 //! manifests.
 
+use std::{collections::BTreeSet, fmt};
+
 use serde::{Deserialize, Serialize};
-use std::collections::BTreeSet;
-use std::fmt;
 
 /// Capability major version. The framework refuses manifests with
 /// a higher version than this.
@@ -41,9 +41,11 @@ impl Capability {
     pub fn is_valid_name(name: &str) -> bool {
         !name.is_empty()
             && name.len() <= 128
-            && name
-                .bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'.' | b'-' | b'_' | b':'))
+            && name.bytes().all(|b| {
+                b.is_ascii_lowercase()
+                    || b.is_ascii_digit()
+                    || matches!(b, b'.' | b'-' | b'_' | b':')
+            })
     }
 }
 

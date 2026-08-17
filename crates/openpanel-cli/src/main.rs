@@ -653,6 +653,7 @@ async fn main() -> anyhow::Result<()> {
                 MarketplaceCommand::Show { id } => handlers::marketplace_show(config, id).await,
             },
             PluginCommand::List => handlers::plugin_list(config).await,
+            PluginCommand::Install { manifest } => handlers::plugin_install(config, manifest).await,
             PluginCommand::Enable { id } => handlers::plugin_enable(config, id).await,
             PluginCommand::Disable { id } => handlers::plugin_disable(config, id).await,
             PluginCommand::Uninstall { id } => handlers::plugin_uninstall(config, id).await,

@@ -559,6 +559,7 @@ pub fn router(
         .route("/audit", get(crate::audit::audit_index))
         .route("/audit/events", get(crate::audit::audit_list))
         .route("/marketplace", get(crate::plugin_marketplace::page))
+        .route("/plugins", get(crate::plugin_extension::page))
         .route(
             "/marketplace/{plugin_id}",
             get(crate::plugin_marketplace::page),

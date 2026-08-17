@@ -29,6 +29,7 @@ use crate::{
         identity::router as identity_router, logs::router as logs_router,
         mail::router as mail_router, malware_scanner::router as malware_scanner_router,
         monitoring::router as monitoring_router, notifications::router as notifications_router,
+        plugin_extension::router as plugin_extension_router,
         plugin_marketplace::router as plugin_marketplace_router,
         security::router as security_router, site_cache_cdn::router as site_cache_cdn_router,
         site_clone_template::router as site_clone_template_router,
@@ -119,6 +120,7 @@ pub fn build_router(
             collaborators_router(collaborators, grant_resolver),
         )
         .nest("/marketplace", plugin_marketplace_router(marketplace))
+        .merge(plugin_extension_router(plugins))
         .nest("/registry", container_registry_router(registry))
         .nest("/container", container_runtime_router(container_runtime))
         .merge(hosting_plans_router(hosting_plans))

@@ -4,12 +4,10 @@
 mod tests {
     use std::sync::Arc;
 
-    use openpanel_core::audit::AuditEvent;
-    use openpanel_core::{AuditAction, AuditOutcome, AuditService};
-    use openpanel_domain::plugin::manifest::PluginUi;
+    use openpanel_core::{AuditAction, AuditOutcome, AuditService, audit::AuditEvent};
     use openpanel_domain::plugin::{
         Capability, CapabilitySet, ManifestRuntime, PluginId, PluginManifest, PluginVersion,
-        PublisherKey,
+        PublisherKey, manifest::PluginUi,
     };
     use openpanel_test_support::TestDb;
     use tokio::sync::Mutex;
@@ -27,6 +25,7 @@ mod tests {
             self.events.lock().await.push(event);
             Ok(())
         }
+
         async fn recent(&self, _limit: i64) -> Result<Vec<AuditEvent>, openpanel_core::CoreError> {
             Ok(self.events.lock().await.clone())
         }
@@ -57,7 +56,10 @@ mod tests {
             audit.clone(),
         );
         let manifest = sample_manifest();
-        service.install_manifest(&manifest, "admin").await.expect("install");
+        service
+            .install_manifest(&manifest, "admin")
+            .await
+            .expect("install");
         let record = service
             .find(&manifest.id)
             .await
@@ -77,8 +79,14 @@ mod tests {
             audit,
         );
         let manifest = sample_manifest();
-        service.install_manifest(&manifest, "admin").await.expect("install");
-        let err = service.install_manifest(&manifest, "admin").await.unwrap_err();
+        service
+            .install_manifest(&manifest, "admin")
+            .await
+            .expect("install");
+        let err = service
+            .install_manifest(&manifest, "admin")
+            .await
+            .unwrap_err();
         let _ = err;
     }
 
@@ -92,11 +100,17 @@ mod tests {
             audit,
         );
         let manifest = sample_manifest();
-        service.install_manifest(&manifest, "admin").await.expect("install");
+        service
+            .install_manifest(&manifest, "admin")
+            .await
+            .expect("install");
         service.enable(&manifest.id, "admin").await.expect("enable");
         let after_enable = service.find(&manifest.id).await.unwrap().unwrap();
         assert_eq!(after_enable.status, openpanel_domain::PluginStatus::Enabled);
-        service.disable(&manifest.id, "admin").await.expect("disable");
+        service
+            .disable(&manifest.id, "admin")
+            .await
+            .expect("disable");
         let after_disable = service.find(&manifest.id).await.unwrap().unwrap();
         assert_eq!(
             after_disable.status,
@@ -114,8 +128,14 @@ mod tests {
             audit,
         );
         let manifest = sample_manifest();
-        service.install_manifest(&manifest, "admin").await.expect("install");
-        service.uninstall(&manifest.id, "admin").await.expect("uninstall");
+        service
+            .install_manifest(&manifest, "admin")
+            .await
+            .expect("install");
+        service
+            .uninstall(&manifest.id, "admin")
+            .await
+            .expect("uninstall");
         let after = service.find(&manifest.id).await.unwrap();
         assert!(after.is_none());
     }

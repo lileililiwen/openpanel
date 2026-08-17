@@ -36,6 +36,8 @@ mod migration_importers;
 mod monitoring;
 /// Offsite backup targets credential / remote-config integration tests.
 mod offsite_backup_targets;
+/// Plugin extension framework integration tests.
+mod plugin_extension;
 /// Plugin marketplace HTTP integration tests.
 mod plugin_marketplace;
 mod quality;

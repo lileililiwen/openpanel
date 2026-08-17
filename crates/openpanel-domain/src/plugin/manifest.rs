@@ -5,8 +5,7 @@ use chrono::{DateTime, Utc};
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use serde::{Deserialize, Serialize};
 
-use super::capability::CapabilitySet;
-use super::error::PluginError;
+use super::{capability::CapabilitySet, error::PluginError};
 
 /// Plugin runtime. The framework ships two: `JsonRpc` (any language
 /// able to speak JSON-RPC, executed as a child process) and `Wasm`
@@ -193,8 +192,8 @@ impl PluginManifest {
         let bytes = base64::engine::general_purpose::STANDARD
             .decode(self.signature.as_bytes())
             .map_err(|_| PluginError::InvalidManifestSignature)?;
-        let signature = Signature::from_slice(&bytes)
-            .map_err(|_| PluginError::InvalidManifestSignature)?;
+        let signature =
+            Signature::from_slice(&bytes).map_err(|_| PluginError::InvalidManifestSignature)?;
         publisher_key
             .verify(signed.as_bytes(), &signature)
             .map_err(|_| PluginError::InvalidManifestSignature)
