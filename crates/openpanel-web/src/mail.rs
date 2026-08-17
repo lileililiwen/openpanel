@@ -22,6 +22,9 @@ pub async fn page(State(state): State<WebState>, WebUser(user, session): WebUser
     let readiness = state.mail.readiness().await.ok();
     let content = html! {
         h1 { "Mail hosting" }
+        nav class="links" {
+            a href="/webmail" { "Webmail" }
+        }
         @if let Some(readiness) = readiness {
             p { "ready=" (readiness.ready) }
         }

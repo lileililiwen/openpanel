@@ -386,6 +386,7 @@ pub fn detail_section(db: &Database, owner: &str, csrf: &str, can_manage: bool) 
             @if can_manage {
                 nav class="links" {
                     a href="/databases" { "Back to list" }
+                    a href=(format!("/databases/{}/pitr", db.id())) { "Point-in-time recovery" }
                 }
             }
         }

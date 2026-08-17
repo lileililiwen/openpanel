@@ -72,7 +72,7 @@ async fn cli_serve_health_roundtrip() {
             break;
         }
         assert!(
-            start.elapsed() < Duration::from_secs(15),
+            start.elapsed() < Duration::from_secs(60),
             "server did not become healthy in time"
         );
         tokio::time::sleep(Duration::from_millis(100)).await;

@@ -66,6 +66,12 @@ const HOSTING: &[NavItem] = &[
         capability: "ssl",
         role: RequiredRole::Authenticated,
     },
+    NavItem {
+        href: "/webmail",
+        label: "Webmail",
+        capability: "webmail",
+        role: RequiredRole::Authenticated,
+    },
 ];
 const OPERATIONS: &[NavItem] = &[
     NavItem {
@@ -148,6 +154,36 @@ const ADMINISTRATION: &[NavItem] = &[
         href: "/users",
         label: "Users",
         capability: "users",
+        role: RequiredRole::Owner,
+    },
+    NavItem {
+        href: "/registry",
+        label: "Container Registry",
+        capability: "container-registry",
+        role: RequiredRole::Owner,
+    },
+    NavItem {
+        href: "/plugins",
+        label: "Plugins",
+        capability: "plugins",
+        role: RequiredRole::Owner,
+    },
+    NavItem {
+        href: "/marketplace",
+        label: "Plugin Marketplace",
+        capability: "marketplace",
+        role: RequiredRole::Owner,
+    },
+    NavItem {
+        href: "/audit",
+        label: "Audit log",
+        capability: "audit",
+        role: RequiredRole::Owner,
+    },
+    NavItem {
+        href: "/admin/branding",
+        label: "Branding",
+        capability: "themeable-ui",
         role: RequiredRole::Owner,
     },
     NavItem {
