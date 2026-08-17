@@ -12,10 +12,6 @@
 /// Scoped personal API token credentials and lifecycle invariants.
 pub mod api_tokens;
 pub mod backups;
-/// Offsite backup targets bounded context: the `BackupTargetAdapter`
-/// contract, encrypted `BackupCredential` records, per-plan
-/// `RemoteTargetConfig`, and `KekRef` wrapper records.
-pub mod offsite_backup_targets;
 /// Per-site collaborator bounded context: invite collaborators
 /// scoped to specific sites with limited permission sets.
 pub mod collaborators;
@@ -47,6 +43,10 @@ pub mod mail;
 pub mod monitoring;
 /// Notification channels, subscriptions, events, and durable delivery state.
 pub mod notifications;
+/// Offsite backup targets bounded context: the `BackupTargetAdapter`
+/// contract, encrypted `BackupCredential` records, per-plan
+/// `RemoteTargetConfig`, and `KekRef` wrapper records.
+pub mod offsite_backup_targets;
 /// Plugin extension framework: signed manifests, capability gating,
 /// lifecycle, and supervisor-facing repository trait.
 pub mod plugin;
@@ -54,6 +54,10 @@ pub mod plugin;
 /// verification, and rating/metadata cache.
 pub mod plugin_marketplace;
 pub mod security;
+/// Site cache and CDN integration bounded context: the per-site
+/// `SiteCachePolicy`, `CdnIntegration` aggregate, the `CdnAdapter`
+/// contract, and purge / cache-level operations.
+pub mod site_cache_cdn;
 pub mod sites;
 /// Trusted software catalog, transaction plans, and job lifecycle invariants.
 pub mod software_center;
@@ -67,38 +71,15 @@ pub mod waf;
 /// relationships, tree traversal, cycle detection, and
 /// pooled quota caps shared by children.
 pub mod account_hierarchy;
-/// Quotas bounded context: per-user/per-site disk, bandwidth,
-/// inode, max-file-size, and CPU-share limits with soft/hard
-/// pairs and grace windows. Enforcement is owned by the
-/// application layer's typed ports.
-pub mod quotas;
+/// Admin IP allowlist bounded context: `AdminIpAllowlist`,
+/// `AllowlistMode`, `IpCidr`, and the per-role `AllowlistOverride`
+/// policy that the `IpAllowlistMiddleware` consumes.
+pub mod admin_ip_allowlist;
 /// Agent bounded context: per-host agent runtime, registration,
 /// `FleetToken` (mTLS client cert + scoped bearer fallback), and
 /// signed `RecipeManifest`. The agent refuses non-mTLS traffic and
 /// validates every recipe against its allowlist before executing.
 pub mod agent;
-/// Cluster data model bounded context: typed host roles, shared
-/// storage declarations, and replicated database metadata.
-pub mod cluster_data_model;
-/// Per-site PHP runtime bounded context: `PhpRuntimeRef`,
-/// `PhpFpmPoolSpec`, and the typed lifecycle for assigning /
-/// swapping runtimes per site.
-pub mod per_site_php_runtime;
-/// SFTP / jailed shells bounded context: per-site SSH/SFTP
-/// grants that map onto OpenSSH's `internal-sftp` + `ForceCommand`.
-pub mod sftp_jailed_shells;
-/// Bandwidth accounting bounded context: typed bridge between
-/// the `BandwidthObserver` collector and the SQLite-backed
-/// rolling-window store.
-pub mod bandwidth_accounting;
-/// Admin IP allowlist bounded context: `AdminIpAllowlist`,
-/// `AllowlistMode`, `IpCidr`, and the per-role `AllowlistOverride`
-/// policy that the `IpAllowlistMiddleware` consumes.
-pub mod admin_ip_allowlist;
-/// Migration importers bounded context: the `MigrationDriver`
-/// contract, `MigrationPlan` preview results, `ImportedResource`
-/// outcomes, and the redacted `TranslationLog`.
-pub mod migration_importers;
 /// AI Ops bounded context: conversational session, tool-call
 /// allowlist, proposed/approved/executed/denied actions.
 pub mod ai_ops;
@@ -107,10 +88,17 @@ pub mod ai_ops;
 /// supervisor unit, and the nginx reverse-proxy block that
 /// targets `127.0.0.1:APP_PORT`.
 pub mod app_runtimes;
+/// Bandwidth accounting bounded context: typed bridge between
+/// the `BandwidthObserver` collector and the SQLite-backed
+/// rolling-window store.
+pub mod bandwidth_accounting;
 /// Reseller billing integration bounded context: usage meters,
 /// chargeback pricing, integration state, and webhook HMAC
 /// verification.
 pub mod billing;
+/// Cluster data model bounded context: typed host roles, shared
+/// storage declarations, and replicated database metadata.
+pub mod cluster_data_model;
 /// Compliance bounded context: CIS hardening, audit retention,
 /// GDPR export with secret redaction.
 pub mod compliance;
@@ -155,12 +143,28 @@ pub mod mail_filtering;
 /// schedule that blocks destructive actions, with a
 /// single-use override that lifts the lock for a bounded TTL.
 pub mod maintenance_windows;
+/// Migration importers bounded context: the `MigrationDriver`
+/// contract, `MigrationPlan` preview results, `ImportedResource`
+/// outcomes, and the redacted `TranslationLog`.
+pub mod migration_importers;
 /// OS update management bounded context: package updates,
 /// unattended-upgrades policy, reboot state.
 pub mod os_updates;
+/// Per-site PHP runtime bounded context: `PhpRuntimeRef`,
+/// `PhpFpmPoolSpec`, and the typed lifecycle for assigning /
+/// swapping runtimes per site.
+pub mod per_site_php_runtime;
+/// Quotas bounded context: per-user/per-site disk, bandwidth,
+/// inode, max-file-size, and CPU-share limits with soft/hard
+/// pairs and grace windows. Enforcement is owned by the
+/// application layer's typed ports.
+pub mod quotas;
 /// Service manager bounded context: allow-listed systemctl
 /// surface with audited lifecycle actions.
 pub mod service_manager;
+/// SFTP / jailed shells bounded context: per-site SSH/SFTP
+/// grants that map onto OpenSSH's `internal-sftp` + `ForceCommand`.
+pub mod sftp_jailed_shells;
 /// Per-site staging slots, sync policies, and atomic promote.
 pub mod site_staging;
 /// Synthetic monitoring bounded context: periodic HTTP / TCP / SSL
@@ -183,6 +187,14 @@ pub use account_hierarchy::{
     AccountHierarchyError, AccountRelationship, HierarchyNode, HierarchyRepository,
     HierarchyStatus, PoolAxis, PoolClaim, QuotaPool, check_pool_claim, would_cycle,
 };
+pub use admin_ip_allowlist::{
+    AdminIpAllowlist, AdminIpAllowlistError, AllowlistMode, AllowlistOverride, IpCidr,
+};
+pub use agent::{
+    AgentError, AgentId, AgentRegistration, AgentRepository, AgentStatus, FleetToken,
+    FleetTokenScope, RecipeAction, RecipeManifest, RecipeManifest as _RecipeManifest,
+    is_manifest_signature_valid,
+};
 pub use ai_ops::{
     AiAction, AiActionId, AiActionStatus, AiMessage, AiOpsError, AiOpsRepository, AiSession,
     AiSessionId, MessageRole, ToolCallAllowlist, ToolKind, ToolName, ToolResult, ToolSpec,
@@ -196,9 +208,16 @@ pub use app_runtimes::{
     RuntimeStatus, SiteRuntime, is_kind_allowed, is_port_allowed, is_version_allowed,
     is_workdir_inside_chroot, render_nginx_proxy_block, render_supervisor_unit,
 };
+pub use bandwidth_accounting::{
+    BandwidthCounterRow, BandwidthReader, BandwidthRepository, BandwidthStorageObserver,
+};
 pub use billing::{
     BillingError, BillingRepository, BillingStatus, Chargeback, ChargebackLine, Integration,
     UsageMeter, UsageUnit, compute_chargeback, hmac_sha256_hex, verify_signature,
+};
+pub use cluster_data_model::{
+    ClusterError, ClusterNode, ClusterRepository, ClusterTopology, FailoverPolicy, NodeId,
+    NodeRole, ReplicatedDatabase, ReplicationMode, SharedStorage, SharedStorageKind, StorageId,
 };
 pub use collaborators::{
     CollabStatus, Collaborator, CollaboratorError, CollaboratorId, CollaboratorRepository,
@@ -296,13 +315,26 @@ pub use maintenance_windows::{
     DestructiveActionClass, MaintenanceError, MaintenanceOverride, MaintenanceRepository,
     MaintenanceWindow,
 };
+pub use migration_importers::{
+    DriverKind, ImportConflict, ImportedResource, ImportedResourceKind, MigrationDriver,
+    MigrationError, MigrationPlan, MigrationPlanId, MigrationRepository, MigrationRun,
+    MigrationRunId, MigrationRunStatus, MigrationSource, MigrationWarning, PlannedResource,
+    SharedMigrationDriver, TranslationLog, TranslationLogEntry, TranslationOutcome,
+};
 pub use monitoring::{
     Alert, AlertRule, DiskReading, MetricKind, MetricSample, MonitoringError, NetworkReading,
     SnapshotRepository, SystemSnapshot, Unit,
 };
+pub use offsite_backup_targets::{
+    BackupCredential, BackupTargetAdapter, CredentialKind, KekRef, OffsiteBackupError,
+    OffsiteBackupRepository, RemoteTargetConfig,
+};
 pub use os_updates::{
     OsUpdateError, OsUpdateRepository, PackageUpdate, RebootState, UpdateHistoryRecord, UpdateKind,
     UpdatePolicy,
+};
+pub use per_site_php_runtime::{
+    PhpFpmPoolSpec, PhpRuntimeError, PhpRuntimeRef, PhpRuntimeRepository, PhpRuntimeStatus,
 };
 pub use plugin::{
     Capability, CapabilitySet, ManifestRuntime, PluginError, PluginId, PluginManifest,
@@ -313,50 +345,25 @@ pub use plugin_marketplace::{
     PluginMarketplaceError, PluginRating, PublisherSignature, SignedCatalogEnvelope,
     verify_envelope,
 };
+pub use quotas::{
+    QuotaDimension, QuotaError, QuotaLimit, QuotaPolicy, QuotaRepository, QuotaSubject, QuotaUsage,
+};
 pub use service_manager::{
     DEFAULT_ALLOWLIST, ServiceAction, ServiceActionRecord, ServiceError, ServiceInfo,
     ServiceManagerRepository, ServiceStatus, is_allowed,
-};
-pub use site_staging::{
-    PromotionRepository, PromotionRun, PromotionStatus, SiteStagingError, SnapshotId, StagingSlot,
-    StagingSlotRepository, StagingSnapshotRepository, SyncMode, SyncPolicy,
-};
-pub use quotas::{
-    QuotaDimension, QuotaError, QuotaLimit, QuotaPolicy, QuotaRepository, QuotaSubject,
-    QuotaUsage,
-};
-pub use agent::{
-    AgentError, AgentId, AgentRegistration, AgentRepository, AgentStatus, FleetToken,
-    FleetTokenScope, RecipeAction, RecipeManifest, is_manifest_signature_valid,
-};
-pub use cluster_data_model::{
-    ClusterError, ClusterNode, ClusterRepository, ClusterTopology, FailoverPolicy, NodeId,
-    NodeRole, ReplicatedDatabase, ReplicationMode, SharedStorage, SharedStorageKind, StorageId,
-};
-pub use per_site_php_runtime::{
-    PhpFpmPoolSpec, PhpRuntimeError, PhpRuntimeRef, PhpRuntimeRepository, PhpRuntimeStatus,
 };
 pub use sftp_jailed_shells::{
     JailPublicKey, JailedShellStatus, SftpJailError, SftpJailGrant, SftpJailRepository,
     render_sshd_config,
 };
-pub use bandwidth_accounting::{
-    BandwidthCounterRow, BandwidthReader, BandwidthRepository, BandwidthStorageObserver,
+pub use site_cache_cdn::{
+    CacheLevel, CdnAdapter, CdnIntegration, CdnKind, CdnZone, HeaderSummary, PurgeReceipt,
+    PurgeRequest, SiteCacheCdnError, SiteCacheCdnRepository, SiteCachePolicy,
 };
-pub use admin_ip_allowlist::{
-    AdminIpAllowlist, AdminIpAllowlistError, AllowlistMode, AllowlistOverride, IpCidr,
+pub use site_staging::{
+    PromotionRepository, PromotionRun, PromotionStatus, SiteStagingError, SnapshotId, StagingSlot,
+    StagingSlotRepository, StagingSnapshotRepository, SyncMode, SyncPolicy,
 };
-pub use migration_importers::{
-    DriverKind, ImportConflict, ImportedResource, ImportedResourceKind, MigrationDriver,
-    MigrationError, MigrationPlan, MigrationPlanId, MigrationRepository, MigrationRun,
-    MigrationRunId, MigrationRunStatus, MigrationSource, MigrationWarning, PlannedResource,
-    SharedMigrationDriver, TranslationLog, TranslationLogEntry, TranslationOutcome,
-};
-pub use offsite_backup_targets::{
-    BackupCredential, BackupTargetAdapter, CredentialKind, KekRef, OffsiteBackupError,
-    OffsiteBackupRepository, RemoteTargetConfig,
-};
-pub use agent::RecipeManifest as _RecipeManifest;
 pub use sites::{error::SiteError, repository::SiteRepository, site::Site, status::SiteStatus};
 pub use ssl::{
     certificate::{Certificate, KeyType},

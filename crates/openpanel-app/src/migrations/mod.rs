@@ -133,3 +133,6 @@ pub const MIGRATION_IMPORTERS_V001: &str = include_str!("migration_importers/V00
 /// Offsite backup targets v001: `backup_credentials`,
 /// `backup_remote_targets`, and `backup_kek_wrappers` tables.
 pub const OFFSITE_BACKUP_TARGETS_V001: &str = include_str!("offsite_backup_targets/V001__init.sql");
+/// Site cache and CDN integration v001: `site_cache_policies`,
+/// `cdn_integrations`, and `cdn_purge_log` tables.
+pub const SITE_CACHE_CDN_V001: &str = include_str!("site_cache_cdn/V001__init.sql");

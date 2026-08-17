@@ -544,6 +544,11 @@ pub fn router(
         .route("/databases/{id}/reveal", post(databases::reveal))
         .route("/databases/{id}/pitr", get(crate::db_pitr::page))
         .route("/sites/{id}/staging", get(crate::site_staging::page))
+        .route("/sites/{id}/cache", get(crate::site_cache_cdn::page))
+        .route(
+            "/cdn/integrations/{id}/purge",
+            get(crate::site_cache_cdn::cdn_purge_page),
+        )
         .route("/sites/{id}/collaborators", get(crate::collaborators::page))
         .route("/registry", get(crate::container_registry::page))
         .route("/audit", get(crate::audit::audit_index))

@@ -41,6 +41,8 @@ pub mod plugin_marketplace;
 pub mod router;
 pub mod security;
 pub mod settings;
+/// Per-site page cache and CDN integration web pages.
+pub mod site_cache_cdn;
 /// Per-site staging web pages.
 pub mod site_staging;
 pub mod sites;

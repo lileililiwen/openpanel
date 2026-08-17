@@ -318,8 +318,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
 
     // Offsite backup targets module: encrypted credential
     // lifecycle, KEK management, and remote target attachment.
-    let offsite_backup_module =
-        openpanel_app::OffsiteBackupTargetsModule::new(&ctx).await;
+    let offsite_backup_module = openpanel_app::OffsiteBackupTargetsModule::new(&ctx).await;
     runner
         .apply_module(
             offsite_backup_module.name(),
@@ -329,6 +328,19 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .context("apply offsite-backup-targets migrations")?;
     let offsite_backup_svc = offsite_backup_module.service();
     let _ = offsite_backup_svc;
+
+    // Site cache and CDN module: per-site cache policy, CDN
+    // integrations, and purge orchestration.
+    let site_cache_cdn_module = openpanel_app::SiteCacheCdnModule::new(&ctx).await;
+    runner
+        .apply_module(
+            site_cache_cdn_module.name(),
+            &site_cache_cdn_module.migrations(),
+        )
+        .await
+        .context("apply site-cache-cdn migrations")?;
+    let site_cache_cdn_svc = site_cache_cdn_module.service();
+    let _ = site_cache_cdn_svc;
 
     // Site-staging module: in-memory filesystem layer for the CLI
     // (no live nginx / rsync in offline mode).
@@ -376,6 +388,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         container_runtime_svc.clone(),
         hosting_plans_svc.clone(),
         account_hierarchy_svc.clone(),
+        site_cache_cdn_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -4584,6 +4597,183 @@ pub async fn container_runtime_registry_credential_remove(
     println!(
         "{}",
         serde_json::to_string_pretty(&serde_json::json!({ "removed": removed }))?
+    );
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// site-cache-cdn CLI handlers (`openpanel site cache ...`, `openpanel cdn ...`).
+// ---------------------------------------------------------------------------
+
+/// Bootstrap the `SiteCacheService` for CLI subcommands.
+async fn build_site_cache_cdn(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::SiteCacheService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
+    let master_key = load_master_key(&config)?;
+    let identity_module = IdentityModule::new(&ctx, master_key).await;
+    let module = openpanel_app::SiteCacheCdnModule::new(&ctx).await;
+    // Apply migrations so the CLI works against an existing panel DB.
+    let runner = MigrationRunner::for_sqlite(pool.clone());
+    runner
+        .apply_module(module.name(), &module.migrations())
+        .await
+        .context("apply site-cache-cdn migrations")?;
+    Ok((module.service(), identity_module.service()))
+}
+
+async fn resolve_admin_caller(
+    identity: &openpanel_app::IdentityService,
+) -> anyhow::Result<openpanel_domain::User> {
+    identity
+        .list_users()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("admin user not found"))
+}
+
+/// `openpanel site cache show <site>`.
+pub async fn site_cache_show(config: Arc<Config>, site: String) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_site_cache_cdn(config).await?;
+    let _caller = resolve_admin_caller(&identity_svc).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let policy = svc
+        .cache_policy(site_id)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "site_id": policy.site_id().to_string(),
+            "ttl_seconds": policy.ttl_seconds(),
+            "static_assets_ttl_seconds": policy.static_assets_ttl_seconds(),
+            "bypass_paths": policy.bypass_paths(),
+            "keyed_cookies": policy.keyed_cookies(),
+            "stale_while_revalidate": policy.stale_while_revalidate(),
+            "revalidation_required": policy.revalidation_required(),
+        }))?
+    );
+    Ok(())
+}
+
+/// `openpanel site cache set <site> --ttl ... --bypass ... --cookies ... [--swr]`.
+#[allow(clippy::too_many_arguments)]
+pub async fn site_cache_set(
+    config: Arc<Config>,
+    site: String,
+    ttl: u32,
+    static_ttl: Option<u32>,
+    bypass: Vec<String>,
+    cookies: Vec<String>,
+    swr: bool,
+) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_site_cache_cdn(config).await?;
+    let caller = resolve_admin_caller(&identity_svc).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let mut policy = openpanel_domain::SiteCachePolicy::with_ttl(site_id, ttl)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    if let Some(s) = static_ttl {
+        policy = policy
+            .with_static_assets_ttl(s)
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    }
+    policy = policy
+        .with_bypass_paths(bypass)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    policy = policy
+        .with_keyed_cookies(cookies)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    policy = policy
+        .with_stale_while_revalidate(swr)
+        .with_revalidation_required(true);
+    svc.set_cache_policy(caller.username().as_str(), &policy)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "site_id": site_id.to_string(),
+            "ttl_seconds": policy.ttl_seconds(),
+            "bypass_paths": policy.bypass_paths(),
+        }))?
+    );
+    Ok(())
+}
+
+/// `openpanel site cache purge <site> --paths ...`.
+pub async fn site_cache_purge(
+    config: Arc<Config>,
+    site: String,
+    paths: Vec<String>,
+) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_site_cache_cdn(config).await?;
+    let caller = resolve_admin_caller(&identity_svc).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let receipt = svc
+        .purge_site_cache(caller.username().as_str(), site_id, paths)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "site_id": site_id.to_string(),
+            "purged": receipt.purged(),
+            "at": receipt.at().to_rfc3339(),
+        }))?
+    );
+    Ok(())
+}
+
+/// `openpanel cdn integrations`.
+pub async fn cdn_integrations_list(config: Arc<Config>) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_site_cache_cdn(config).await?;
+    let _caller = resolve_admin_caller(&identity_svc).await?;
+    let rows = svc
+        .list_integrations()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let view: Vec<_> = rows
+        .iter()
+        .map(|i| {
+            serde_json::json!({
+                "id": i.id().to_string(),
+                "name": i.name(),
+                "kind": i.kind().as_str(),
+                "enabled": i.enabled(),
+                "created_at": i.created_at().to_rfc3339(),
+            })
+        })
+        .collect();
+    println!("{}", serde_json::to_string_pretty(&view)?);
+    Ok(())
+}
+
+/// `openpanel cdn purge --integration <id> --paths ...`.
+pub async fn cdn_purge(
+    config: Arc<Config>,
+    integration: String,
+    paths: Vec<String>,
+) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_site_cache_cdn(config).await?;
+    let caller = resolve_admin_caller(&identity_svc).await?;
+    let integration_id = uuid::Uuid::parse_str(&integration).context("invalid integration id")?;
+    let summary = svc
+        .purge_via_integration(caller.username().as_str(), integration_id, paths)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "successful": summary.successful,
+            "failed": summary.failed,
+            "redacted": summary.redacted,
+        }))?
     );
     Ok(())
 }

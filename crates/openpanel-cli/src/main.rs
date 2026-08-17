@@ -2,12 +2,13 @@
 
 use clap::Parser;
 use openpanel_cli::{
-    BackupCommand, BackupPlanCommand, BackupRestoreCommand, Cli, CollaboratorCommand, Command,
-    ContainerRuntimeCommand, CronCommand, DatabaseCommand, DnsCommand, DockerCommand, FileCommand,
-    FtpCommand, IacCommand, LogsCommand, MailCommand, MarketplaceCommand, MonitoringCommand,
-    NotificationChannelCommand, NotificationCommand, NotificationSubscriptionCommand, PitrCommand,
-    PluginCommand, RecoveryCodeCommand, RegistryCommand, SecurityAllowlistCommand, SecurityCommand,
-    SecurityRuleCommand, ServicesCommand, SiteCommand, SoftwareCommand, SslCommand, StagingCommand,
+    BackupCommand, BackupPlanCommand, BackupRestoreCommand, CdnCommand, Cli, CollaboratorCommand,
+    Command, ContainerRuntimeCommand, CronCommand, DatabaseCommand, DnsCommand, DockerCommand,
+    FileCommand, FtpCommand, IacCommand, LogsCommand, MailCommand, MarketplaceCommand,
+    MonitoringCommand, NotificationChannelCommand, NotificationCommand,
+    NotificationSubscriptionCommand, PitrCommand, PluginCommand, RecoveryCodeCommand,
+    RegistryCommand, SecurityAllowlistCommand, SecurityCommand, SecurityRuleCommand,
+    ServicesCommand, SiteCacheCommand, SiteCommand, SoftwareCommand, SslCommand, StagingCommand,
     TokenCommand, TwoFactorCommand, UserCommand, WafCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
@@ -92,6 +93,29 @@ async fn main() -> anyhow::Result<()> {
                     handlers::collab_revoke(config, site, collaborator).await
                 }
             },
+            SiteCommand::Cache { action } => match action {
+                SiteCacheCommand::Show { site } => handlers::site_cache_show(config, site).await,
+                SiteCacheCommand::Set {
+                    site,
+                    ttl,
+                    static_ttl,
+                    bypass,
+                    cookies,
+                    swr,
+                } => {
+                    handlers::site_cache_set(config, site, ttl, static_ttl, bypass, cookies, swr)
+                        .await
+                }
+                SiteCacheCommand::Purge { site, paths } => {
+                    handlers::site_cache_purge(config, site, paths).await
+                }
+            },
+        },
+        Command::Cdn { action } => match action {
+            CdnCommand::Integrations => handlers::cdn_integrations_list(config).await,
+            CdnCommand::Purge { integration, paths } => {
+                handlers::cdn_purge(config, integration, paths).await
+            }
         },
         Command::Waf { action } => match action {
             WafCommand::Rules { site } => handlers::waf_rules(config, site).await,

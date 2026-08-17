@@ -31,13 +31,15 @@ mod logs;
 mod mail;
 /// Migration importers preview / run / rollback integration tests.
 mod migration_importers;
+mod monitoring;
 /// Offsite backup targets credential / remote-config integration tests.
 mod offsite_backup_targets;
-mod monitoring;
 /// Plugin marketplace HTTP integration tests.
 mod plugin_marketplace;
 mod quality;
 mod security;
+/// Site cache and CDN policy / integration / purge integration tests.
+mod site_cache_cdn;
 /// Per-site staging HTTP integration tests.
 mod site_staging;
 mod sites;

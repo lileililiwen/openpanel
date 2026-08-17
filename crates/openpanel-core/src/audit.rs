@@ -422,6 +422,22 @@ pub enum AuditAction {
     BackupRemoteTargetAttached,
     /// A remote target reachability probe completed.
     BackupRemoteTested,
+    /// A site's cache policy was updated.
+    SiteCachePolicyUpdated,
+    /// A site's cache policy was applied to nginx (snippet written, reload issued).
+    SiteCachePolicyApplied,
+    /// A site's cache policy was rolled back because `nginx -t` failed.
+    SiteCachePolicyRolledBack,
+    /// A CDN integration was created.
+    CdnIntegrationCreated,
+    /// A CDN integration was deleted.
+    CdnIntegrationDeleted,
+    /// A CDN purge completed.
+    CdnPurged,
+    /// A CDN purge partially failed; the adapter rejected one or more paths.
+    CdnPurgePartial,
+    /// Decryption of a stored CDN credential blob failed (tamper or wrong key).
+    CdnCredentialDecryptFailed,
 }
 
 impl AuditAction {
@@ -615,6 +631,14 @@ impl AuditAction {
             AuditAction::BackupCredentialInUseRejected => "backup_credential_in_use_rejected",
             AuditAction::BackupRemoteTargetAttached => "backup_remote_target_attached",
             AuditAction::BackupRemoteTested => "backup_remote_tested",
+            AuditAction::SiteCachePolicyUpdated => "site_cache_policy_updated",
+            AuditAction::SiteCachePolicyApplied => "site_cache_policy_applied",
+            AuditAction::SiteCachePolicyRolledBack => "site_cache_policy_rolled_back",
+            AuditAction::CdnIntegrationCreated => "cdn_integration_created",
+            AuditAction::CdnIntegrationDeleted => "cdn_integration_deleted",
+            AuditAction::CdnPurged => "cdn_purged",
+            AuditAction::CdnPurgePartial => "cdn_purge_partial",
+            AuditAction::CdnCredentialDecryptFailed => "cdn_credential_decrypt_failed",
         }
     }
 }
@@ -905,6 +929,14 @@ impl AuditService for SqliteAuditService {
                 "backup_credential_in_use_rejected" => AuditAction::BackupCredentialInUseRejected,
                 "backup_remote_target_attached" => AuditAction::BackupRemoteTargetAttached,
                 "backup_remote_tested" => AuditAction::BackupRemoteTested,
+                "site_cache_policy_updated" => AuditAction::SiteCachePolicyUpdated,
+                "site_cache_policy_applied" => AuditAction::SiteCachePolicyApplied,
+                "site_cache_policy_rolled_back" => AuditAction::SiteCachePolicyRolledBack,
+                "cdn_integration_created" => AuditAction::CdnIntegrationCreated,
+                "cdn_integration_deleted" => AuditAction::CdnIntegrationDeleted,
+                "cdn_purged" => AuditAction::CdnPurged,
+                "cdn_purge_partial" => AuditAction::CdnPurgePartial,
+                "cdn_credential_decrypt_failed" => AuditAction::CdnCredentialDecryptFailed,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

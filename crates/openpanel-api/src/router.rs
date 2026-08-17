@@ -8,9 +8,9 @@ use openpanel_app::{
     ContainerRuntimeService, CronService, DatabasesService, DnsService, DockerService,
     FilesService, FtpService, GrantResolver, HierarchyService, HostingPlansService,
     IdentityService, LogService, MailService, MarketplaceService, MonitoringService,
-    NotificationService, PitrService, PluginService, SecurityService, SitesService,
-    SoftwareCenterService, SslService, StagingService, WafService, identity::TwoFactorService,
-    security::LoginThrottleService, system_services::ServiceManager,
+    NotificationService, PitrService, PluginService, SecurityService, SiteCacheService,
+    SitesService, SoftwareCenterService, SslService, StagingService, WafService,
+    identity::TwoFactorService, security::LoginThrottleService, system_services::ServiceManager,
 };
 
 use crate::{
@@ -28,10 +28,10 @@ use crate::{
         mail::router as mail_router, monitoring::router as monitoring_router,
         notifications::router as notifications_router,
         plugin_marketplace::router as plugin_marketplace_router,
-        security::router as security_router, site_staging::router as site_staging_router,
-        sites::router as sites_router, software_center::router as software_center_router,
-        ssl::router as ssl_router, system_services::router as system_services_router,
-        waf::router as waf_router,
+        security::router as security_router, site_cache_cdn::router as site_cache_cdn_router,
+        site_staging::router as site_staging_router, sites::router as sites_router,
+        software_center::router as software_center_router, ssl::router as ssl_router,
+        system_services::router as system_services_router, waf::router as waf_router,
     },
 };
 
@@ -72,6 +72,7 @@ pub fn build_router(
     container_runtime: Arc<ContainerRuntimeService>,
     hosting_plans: Arc<HostingPlansService>,
     account_hierarchy: Arc<HierarchyService>,
+    site_cache_cdn: Arc<SiteCacheService>,
 ) -> Router {
     let auth_state = ApiAuthState {
         identity: identity.clone(),
@@ -112,6 +113,7 @@ pub fn build_router(
         .nest("/container", container_runtime_router(container_runtime))
         .merge(hosting_plans_router(hosting_plans))
         .merge(account_hierarchy_router(account_hierarchy))
+        .merge(site_cache_cdn_router(site_cache_cdn))
         .layer(from_fn_with_state(auth_state, api_auth_middleware));
 
     Router::new()

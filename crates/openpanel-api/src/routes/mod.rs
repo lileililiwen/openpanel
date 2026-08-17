@@ -40,6 +40,9 @@ pub mod notifications;
 pub mod plugin_marketplace;
 /// Host firewall and login-abuse routes (`/security`).
 pub mod security;
+/// Site cache policy and CDN integration routes
+/// (`/sites/{id}/cache`, `/cdn/integrations`, `/cdn/purge`).
+pub mod site_cache_cdn;
 /// Per-site staging routes (`/sites/{id}/staging/...`).
 pub mod site_staging;
 /// Sites resource routes (`/sites`).

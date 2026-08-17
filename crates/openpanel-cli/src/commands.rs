@@ -128,6 +128,12 @@ pub enum Command {
         #[command(subcommand)]
         action: WafCommand,
     },
+    /// Manage per-site page cache and CDN integrations.
+    Cdn {
+        /// CDN operation.
+        #[command(subcommand)]
+        action: CdnCommand,
+    },
     /// Manage allowlisted least-privilege containers.
     Docker {
         /// Container operation.
@@ -1113,6 +1119,12 @@ pub enum SiteCommand {
         #[command(subcommand)]
         action: CollaboratorCommand,
     },
+    /// Per-site page cache (nginx microcache) subcommands.
+    Cache {
+        /// Cache subcommand.
+        #[command(subcommand)]
+        action: SiteCacheCommand,
+    },
 }
 
 /// Subcommands for managing per-site collaborators.
@@ -1576,5 +1588,62 @@ pub enum IacCommand {
         /// (JSON).
         #[arg(long)]
         committed_provider: Option<String>,
+    },
+}
+
+/// Per-site cache (nginx microcache) subcommands.
+#[derive(Debug, Subcommand)]
+pub enum SiteCacheCommand {
+    /// Show the current cache policy for a site.
+    Show {
+        /// Site id.
+        #[arg(long)]
+        site: String,
+    },
+    /// Replace the cache policy for a site.
+    Set {
+        /// Site id.
+        #[arg(long)]
+        site: String,
+        /// Page-cache TTL in seconds.
+        #[arg(long)]
+        ttl: u32,
+        /// Static-asset TTL in seconds (default 7 days).
+        #[arg(long)]
+        static_ttl: Option<u32>,
+        /// Bypass path globs (comma-separated).
+        #[arg(long, value_delimiter = ',')]
+        bypass: Vec<String>,
+        /// Keyed-cookie names (comma-separated).
+        #[arg(long, value_delimiter = ',')]
+        cookies: Vec<String>,
+        /// Enable stale-while-revalidate.
+        #[arg(long, default_value_t = false)]
+        swr: bool,
+    },
+    /// Purge a list of paths from the site's local cache.
+    Purge {
+        /// Site id.
+        #[arg(long)]
+        site: String,
+        /// Paths to purge, comma-separated.
+        #[arg(long, value_delimiter = ',')]
+        paths: Vec<String>,
+    },
+}
+
+/// CDN integration management subcommands.
+#[derive(Debug, Subcommand)]
+pub enum CdnCommand {
+    /// List configured CDN integrations.
+    Integrations,
+    /// Purge a list of paths through a CDN integration.
+    Purge {
+        /// Integration id.
+        #[arg(long)]
+        integration: String,
+        /// Paths to purge, comma-separated.
+        #[arg(long, value_delimiter = ',')]
+        paths: Vec<String>,
     },
 }

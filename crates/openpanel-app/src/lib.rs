@@ -9,22 +9,9 @@
 /// Account hierarchy bounded context: parent-child relationships,
 /// tree traversal, cycle detection, and pooled quota caps.
 pub mod account_hierarchy;
-/// Quotas bounded context: per-user / per-site resource quotas
-/// with soft/hard limits and grace windows.
-pub mod quotas;
 /// Agent bounded context: per-host agent registry, fleet tokens,
 /// and signed recipe manifests.
 pub mod agent;
-/// Cluster data model bounded context: typed host roles, shared
-/// storage, and replicated database metadata.
-pub mod cluster_data_model;
-/// Migration importers bounded context: cPanel / Baota backup
-/// import pipelines with preview, atomic run, and rollback.
-pub mod migration_importers;
-/// Offsite backup targets bounded context: encrypted credential
-/// lifecycle, KEK management, remote target attachment, and the
-/// upload service driving `BackupTargetAdapter` implementations.
-pub mod offsite_backup_targets;
 /// AI Ops bounded context: conversational agent with tool-call
 /// allowlist and human-in-the-loop approval gate.
 pub mod ai_ops;
@@ -39,6 +26,9 @@ pub mod backups;
 /// chargeback pricing, integration state, and webhook HMAC
 /// verification.
 pub mod billing;
+/// Cluster data model bounded context: typed host roles, shared
+/// storage, and replicated database metadata.
+pub mod cluster_data_model;
 /// Per-site collaborator bounded context.
 pub mod collaborators;
 /// Compliance bounded context: CIS hardening, audit retention,
@@ -101,9 +91,16 @@ pub mod mail_filtering;
 /// schedule that blocks destructive actions, with a
 /// single-use override that lifts the lock for a bounded TTL.
 pub mod maintenance_windows;
+/// Migration importers bounded context: cPanel / Baota backup
+/// import pipelines with preview, atomic run, and rollback.
+pub mod migration_importers;
 pub mod migrations;
 pub mod monitoring;
 pub mod notifications;
+/// Offsite backup targets bounded context: encrypted credential
+/// lifecycle, KEK management, remote target attachment, and the
+/// upload service driving `BackupTargetAdapter` implementations.
+pub mod offsite_backup_targets;
 /// OS update management bounded context: package updates,
 /// unattended-upgrades policy, reboot state.
 pub mod os_updates;
@@ -112,10 +109,17 @@ pub mod plugin;
 /// Plugin marketplace bounded context.
 pub mod plugin_marketplace;
 pub mod prelude;
+/// Quotas bounded context: per-user / per-site resource quotas
+/// with soft/hard limits and grace windows.
+pub mod quotas;
 pub mod security;
 /// Service manager bounded context: allow-listed systemctl
 /// surface with audited lifecycle actions.
 pub mod service_manager;
+/// Site cache and CDN integration bounded context: per-site cache
+/// policies, CDN integrations, nginx snippet generation, and purge
+/// orchestration.
+pub mod site_cache_cdn;
 /// Per-site staging bounded context: staging slot creation, sync,
 /// and atomic promote.
 pub mod site_staging;
@@ -136,19 +140,7 @@ pub mod wildcard_ssl;
 pub mod wordpress_toolkit;
 
 pub use account_hierarchy::{AccountHierarchyModule, HierarchyService, SqliteHierarchyRepository};
-pub use quotas::{QuotaService, QuotasModule, SqliteQuotaRepository};
 pub use agent::{AgentModule, AgentService, SqliteAgentRepository};
-pub use cluster_data_model::{ClusterDataModelModule, ClusterService, SqliteClusterRepository};
-pub use migration_importers::{
-    JsonManifest, JsonManifestBundle, ManifestResource, ManifestTranslator,
-    MigrationImportersModule, MigrationService, RefuseAll, SqliteMigrationRepository,
-    TarWithJsonManifestDriver, sniff_tar_manifest,
-};
-pub use offsite_backup_targets::{
-    BackupUploadService, OffsiteBackupTargetsModule, SqliteOffsiteBackupRepository,
-    decrypt_payload, decrypt_payload as kek_decrypt, derive_kek, encrypt_payload,
-    encrypt_payload as kek_encrypt, master_key_fingerprint, unwrap_kek, wrap_kek,
-};
 pub use ai_ops::{
     ActionApproval, AiOpsModule, AskService, SqliteAiOpsRepository, ToolExecutor, default_allowlist,
 };
@@ -162,6 +154,7 @@ pub use billing::{
     BillingModule, BillingService, ChargebackEngine, SqliteBillingRepository, UsageExporter,
     WebhookRelay,
 };
+pub use cluster_data_model::{ClusterDataModelModule, ClusterService, SqliteClusterRepository};
 /// Per-site collaborator module.
 pub use collaborators::{
     CollaboratorService, CollaboratorsModule, GrantResolver, InviteCollaboratorError,
@@ -244,8 +237,18 @@ pub use mail_filtering::{
 pub use maintenance_windows::{
     MaintenanceEnforcer, MaintenanceWindowsModule, SqliteMaintenanceRepository,
 };
+pub use migration_importers::{
+    JsonManifest, JsonManifestBundle, ManifestResource, ManifestTranslator,
+    MigrationImportersModule, MigrationService, RefuseAll, SqliteMigrationRepository,
+    TarWithJsonManifestDriver, sniff_tar_manifest,
+};
 pub use monitoring::{MonitoringModule, service::MonitoringService};
 pub use notifications::{NotificationModule, NotificationService};
+pub use offsite_backup_targets::{
+    BackupUploadService, OffsiteBackupTargetsModule, SqliteOffsiteBackupRepository,
+    decrypt_payload, decrypt_payload as kek_decrypt, derive_kek, encrypt_payload,
+    encrypt_payload as kek_encrypt, master_key_fingerprint, unwrap_kek, wrap_kek,
+};
 /// Re-export the `BinlogSink` trait so composition code can name it.
 pub use openpanel_domain::BinlogSink;
 pub use os_updates::{
@@ -260,10 +263,17 @@ pub use plugin_marketplace::{
     InstallFromMarketplaceRequest, MarketplaceClient, MarketplaceService, MockMarketplaceClient,
     PluginMarketplaceModule, SqliteCatalogCache,
 };
+pub use quotas::{QuotaService, QuotasModule, SqliteQuotaRepository};
 pub use security::{SecurityModule, SecurityService};
 pub use service_manager::{
     RecordingSystemCtl, ServiceActor, ServiceLister, ServiceManagerModule,
     SqliteServiceManagerRepository,
+};
+pub use site_cache_cdn::{
+    ApplyOutcome, CdnAdapterRegistry, CdnProviderConfig, CloudFrontAdapter, CloudflareAdapter,
+    GenericHttpAdapter, NginxApplyError, NginxCacheManager, PurgeSummary, SiteCacheCdnModule,
+    SiteCacheService, SqliteSiteCacheCdnRepository, cache_directives, cache_path_directive,
+    keys_zone_name, provider_config_for,
 };
 /// Per-site staging bounded-context module.
 pub use site_staging::{
