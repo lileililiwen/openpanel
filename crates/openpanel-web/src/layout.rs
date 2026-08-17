@@ -175,12 +175,6 @@ const ADMINISTRATION: &[NavItem] = &[
         role: RequiredRole::Owner,
     },
     NavItem {
-        href: "/audit",
-        label: "Audit log",
-        capability: "audit",
-        role: RequiredRole::Owner,
-    },
-    NavItem {
         href: "/admin/branding",
         label: "Branding",
         capability: "themeable-ui",

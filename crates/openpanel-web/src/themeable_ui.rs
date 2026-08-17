@@ -13,11 +13,19 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use maud::{Markup, html};
+use openpanel_domain::Role;
 
-use crate::router::WebState;
+use crate::router::{WebState, WebUser};
 
 /// Branding editor page.
-pub async fn page(State(state): State<WebState>, headers: HeaderMap) -> Response {
+pub async fn page(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    headers: HeaderMap,
+) -> Response {
+    if user.role() != Role::Owner {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let host = headers
         .get(HOST)
         .and_then(|v| v.to_str().ok())
@@ -81,7 +89,11 @@ pub async fn page(State(state): State<WebState>, headers: HeaderMap) -> Response
             }
         }
     };
-    (StatusCode::OK, body).into_response()
+    let csrf = state.csrf.token_for(session.id());
+    state
+        .render_shell(&user, &csrf, "/admin/branding", body)
+        .await
+        .into_response()
 }
 
 fn override_view(o: Option<openpanel_domain::ThemeOverride>) -> Markup {

@@ -6,19 +6,28 @@
 
 use axum::{
     extract::State,
+    http::StatusCode,
     response::{IntoResponse, Response},
 };
 use maud::{Markup, html};
+use openpanel_domain::Role;
 
-use crate::router::WebState;
+use crate::router::{WebState, WebUser};
 
 const REGISTRY_UI_HEADER: &str = "registry-ui-pending";
 
 /// Render the registry index.
-pub async fn page(State(state): State<WebState>) -> Response {
+pub async fn page(State(state): State<WebState>, WebUser(user, session): WebUser) -> Response {
+    if user.role() != Role::Owner {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let cfg = state.registry.config();
     let namespaces = state.registry.list_namespaces().await.unwrap_or_default();
-    render(&cfg, &namespaces).into_response()
+    let csrf = state.csrf.token_for(session.id());
+    state
+        .render_shell(&user, &csrf, "/registry", render(&cfg, &namespaces))
+        .await
+        .into_response()
 }
 
 fn render(

@@ -11,18 +11,27 @@ use axum::{
 use maud::{Markup, html};
 use uuid::Uuid;
 
-use crate::router::WebState;
+use crate::router::{WebState, WebUser};
 
 const COLLAB_UI_HEADER: &str = "collaborators-ui-pending";
 
 /// Render the collaborators page for a given site.
-pub async fn page(State(state): State<WebState>, Path(site_id): Path<Uuid>) -> Response {
+pub async fn page(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Path(site_id): Path<Uuid>,
+) -> Response {
     let grants = state
         .collaborators
         .grants_for_site(site_id)
         .await
         .unwrap_or_default();
-    render(&site_id, &grants).into_response()
+    let csrf = state.csrf.token_for(session.id());
+    let path = format!("/sites/{site_id}/collaborators");
+    state
+        .render_shell(&user, &csrf, &path, render(&site_id, &grants))
+        .await
+        .into_response()
 }
 
 fn render(site_id: &Uuid, grants: &[openpanel_domain::SiteGrant]) -> Markup {

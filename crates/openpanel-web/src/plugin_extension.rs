@@ -8,11 +8,15 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use maud::{Markup, html};
+use openpanel_domain::Role;
 
-use crate::router::WebState;
+use crate::router::{WebState, WebUser};
 
 /// Plugins index page.
-pub async fn page(State(_state): State<WebState>) -> Response {
+pub async fn page(State(state): State<WebState>, WebUser(user, session): WebUser) -> Response {
+    if user.role() != Role::Owner {
+        return StatusCode::FORBIDDEN.into_response();
+    }
     let body: Markup = html! {
         section class="card" {
             h2 { "Plugins" }
@@ -38,5 +42,9 @@ pub async fn page(State(_state): State<WebState>) -> Response {
             }
         }
     };
-    (StatusCode::OK, body).into_response()
+    let csrf = state.csrf.token_for(session.id());
+    state
+        .render_shell(&user, &csrf, "/plugins", body)
+        .await
+        .into_response()
 }

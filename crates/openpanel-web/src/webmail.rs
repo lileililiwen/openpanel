@@ -12,7 +12,7 @@ use axum::{
 use maud::{Markup, html};
 use serde::Deserialize;
 
-use crate::router::WebState;
+use crate::router::{WebState, WebUser};
 
 /// Query params accepted on `/webmail` entry.
 #[derive(Debug, Deserialize)]
@@ -36,7 +36,11 @@ pub struct ComposeBody {
 
 /// GET /webmail — mint a session on first entry, then redirect to
 /// the folder list.
-pub async fn index(State(state): State<WebState>, Query(query): Query<WsQuery>) -> Response {
+pub async fn index(
+    State(state): State<WebState>,
+    WebUser(user, panel_session): WebUser,
+    Query(query): Query<WsQuery>,
+) -> Response {
     let ws = match query.ws {
         Some(ws) => ws,
         None => {
@@ -84,12 +88,17 @@ pub async fn index(State(state): State<WebState>, Query(query): Query<WsQuery>) 
             a class="button" href={ "/webmail/compose?ws=" (ws) } { "Compose" }
         }
     };
-    (StatusCode::OK, body).into_response()
+    let csrf = state.csrf.token_for(panel_session.id());
+    state
+        .render_shell(&user, &csrf, "/webmail", body)
+        .await
+        .into_response()
 }
 
 /// GET /webmail/folder/{name} — message list with cursor-style cap.
 pub async fn folder(
     State(state): State<WebState>,
+    WebUser(user, panel_session): WebUser,
     Query(query): Query<WsQuery>,
     Path(name): Path<String>,
 ) -> Response {
@@ -124,12 +133,17 @@ pub async fn folder(
             }
         }
     };
-    (StatusCode::OK, body).into_response()
+    let csrf = state.csrf.token_for(panel_session.id());
+    state
+        .render_shell(&user, &csrf, "/webmail", body)
+        .await
+        .into_response()
 }
 
 /// GET /webmail/message/{id} — redacted message view.
 pub async fn message(
     State(state): State<WebState>,
+    WebUser(user, panel_session): WebUser,
     Query(query): Query<WsQuery>,
     Path(uid): Path<u64>,
 ) -> Response {
@@ -153,12 +167,17 @@ pub async fn message(
             a class="button" href={ "/webmail/message/" (uid) "/forward?ws=" (ws) } { "Forward" }
         }
     };
-    (StatusCode::OK, body).into_response()
+    let csrf = state.csrf.token_for(panel_session.id());
+    state
+        .render_shell(&user, &csrf, "/webmail", body)
+        .await
+        .into_response()
 }
 
 /// GET /webmail/compose — compose form (POST to /webmail/compose).
 pub async fn compose_form(
-    State(_state): State<WebState>,
+    State(state): State<WebState>,
+    WebUser(user, panel_session): WebUser,
     Query(query): Query<WsQuery>,
 ) -> Response {
     let Some(ws) = query.ws else {
@@ -178,7 +197,11 @@ pub async fn compose_form(
             }
         }
     };
-    (StatusCode::OK, body).into_response()
+    let csrf = state.csrf.token_for(panel_session.id());
+    state
+        .render_shell(&user, &csrf, "/webmail", body)
+        .await
+        .into_response()
 }
 
 /// POST /webmail/compose — CSRF-protected compose submission.
@@ -222,7 +245,8 @@ pub async fn compose_send(
 
 /// GET /webmail/message/{id}/reply — reply form.
 pub async fn reply(
-    State(_state): State<WebState>,
+    State(state): State<WebState>,
+    WebUser(user, panel_session): WebUser,
     Query(query): Query<WsQuery>,
     Path(uid): Path<u64>,
 ) -> Response {
@@ -243,12 +267,17 @@ pub async fn reply(
             }
         }
     };
-    (StatusCode::OK, body).into_response()
+    let csrf = state.csrf.token_for(panel_session.id());
+    state
+        .render_shell(&user, &csrf, "/webmail", body)
+        .await
+        .into_response()
 }
 
 /// GET /webmail/message/{id}/forward — forward form.
 pub async fn forward(
-    State(_state): State<WebState>,
+    State(state): State<WebState>,
+    WebUser(user, panel_session): WebUser,
     Query(query): Query<WsQuery>,
     Path(uid): Path<u64>,
 ) -> Response {
@@ -269,11 +298,19 @@ pub async fn forward(
             }
         }
     };
-    (StatusCode::OK, body).into_response()
+    let csrf = state.csrf.token_for(panel_session.id());
+    state
+        .render_shell(&user, &csrf, "/webmail", body)
+        .await
+        .into_response()
 }
 
 /// GET /webmail/search — search form.
-pub async fn search(State(_state): State<WebState>, Query(query): Query<WsQuery>) -> Response {
+pub async fn search(
+    State(state): State<WebState>,
+    WebUser(user, panel_session): WebUser,
+    Query(query): Query<WsQuery>,
+) -> Response {
     let Some(ws) = query.ws else {
         return (StatusCode::UNAUTHORIZED, "missing webmail session").into_response();
     };
@@ -289,5 +326,9 @@ pub async fn search(State(_state): State<WebState>, Query(query): Query<WsQuery>
             }
         }
     };
-    (StatusCode::OK, body).into_response()
+    let csrf = state.csrf.token_for(panel_session.id());
+    state
+        .render_shell(&user, &csrf, "/webmail", body)
+        .await
+        .into_response()
 }

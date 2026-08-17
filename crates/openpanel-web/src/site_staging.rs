@@ -6,17 +6,20 @@
 
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
     response::{IntoResponse, Response},
 };
 use maud::{Markup, html};
 use uuid::Uuid;
 
-use crate::router::WebState;
+use crate::router::{WebState, WebUser};
 
 /// Page for a single site's staging status, recent promotions, and
 /// a snapshot/promote/destroy form set.
-pub async fn page(State(_state): State<WebState>, Path(site_id): Path<Uuid>) -> Response {
+pub async fn page(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Path(site_id): Path<Uuid>,
+) -> Response {
     let body: Markup = html! {
         section class="card" {
             h2 { "Site staging" }
@@ -34,5 +37,10 @@ pub async fn page(State(_state): State<WebState>, Path(site_id): Path<Uuid>) -> 
             }
         }
     };
-    (StatusCode::OK, body).into_response()
+    let csrf = state.csrf.token_for(session.id());
+    let path = format!("/sites/{site_id}/staging");
+    state
+        .render_shell(&user, &csrf, &path, body)
+        .await
+        .into_response()
 }

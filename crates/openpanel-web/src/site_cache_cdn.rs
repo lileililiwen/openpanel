@@ -7,13 +7,12 @@
 
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
     response::{IntoResponse, Response},
 };
 use maud::{Markup, html};
 use uuid::Uuid;
 
-use crate::router::WebState;
+use crate::router::{WebState, WebUser};
 
 /// Cache editor + purge dialog page for a single site.
 ///
@@ -21,7 +20,11 @@ use crate::router::WebState;
 /// directly to the JSON API route that performs the change. The
 /// page itself is read-only — it does not call the cache service
 /// from the request path.
-pub async fn page(State(state): State<WebState>, Path(site_id): Path<Uuid>) -> Response {
+pub async fn page(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Path(site_id): Path<Uuid>,
+) -> Response {
     // The page is best-effort read-only: render the form regardless
     // of the service result. If the policy load fails (no policy
     // stored yet), the form still renders with the defaults.
@@ -96,13 +99,19 @@ pub async fn page(State(state): State<WebState>, Path(site_id): Path<Uuid>) -> R
             }
         }
     };
-    (StatusCode::OK, body).into_response()
+    let csrf = state.csrf.token_for(session.id());
+    let path = format!("/sites/{site_id}/cache");
+    state
+        .render_shell(&user, &csrf, &path, body)
+        .await
+        .into_response()
 }
 
 /// CDN purge page (path-driven, so the user can bookmark a
 /// recurring purge against a fixed integration).
 pub async fn cdn_purge_page(
-    State(_state): State<WebState>,
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
     Path(integration_id): Path<Uuid>,
 ) -> Response {
     let body: Markup = html! {
@@ -120,5 +129,10 @@ pub async fn cdn_purge_page(
             }
         }
     };
-    (StatusCode::OK, body).into_response()
+    let csrf = state.csrf.token_for(session.id());
+    let path = format!("/cdn/purge/{integration_id}");
+    state
+        .render_shell(&user, &csrf, &path, body)
+        .await
+        .into_response()
 }

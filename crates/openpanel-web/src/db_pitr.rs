@@ -6,16 +6,19 @@
 
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
     response::{IntoResponse, Response},
 };
 use maud::{Markup, html};
 use uuid::Uuid;
 
-use crate::router::WebState;
+use crate::router::{WebState, WebUser};
 
 /// Page for a single database's PITR status and binlog range.
-pub async fn page(State(state): State<WebState>, Path(database_id): Path<Uuid>) -> Response {
+pub async fn page(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Path(database_id): Path<Uuid>,
+) -> Response {
     let range = state.pitr.inspect_range(database_id).await.ok();
     let body: Markup = html! {
         section class="card" {
@@ -41,5 +44,10 @@ pub async fn page(State(state): State<WebState>, Path(database_id): Path<Uuid>) 
             }
         }
     };
-    (StatusCode::OK, body).into_response()
+    let csrf = state.csrf.token_for(session.id());
+    let path = format!("/databases/{database_id}/pitr");
+    state
+        .render_shell(&user, &csrf, &path, body)
+        .await
+        .into_response()
 }

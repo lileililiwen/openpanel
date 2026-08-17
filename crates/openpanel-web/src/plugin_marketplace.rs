@@ -13,11 +13,13 @@
 
 use axum::{
     extract::{Path, State},
+    http::StatusCode,
     response::{IntoResponse, Response},
 };
 use maud::{Markup, html};
+use openpanel_domain::Role;
 
-use crate::router::WebState;
+use crate::router::{WebState, WebUser};
 
 const MARKETPLACE_ROLE_HEADER: &str = "marketplace-ui-pending";
 
@@ -25,13 +27,21 @@ const MARKETPLACE_ROLE_HEADER: &str = "marketplace-ui-pending";
 /// catalog index when `plugin_id` is `None`).
 pub async fn page(
     State(state): State<WebState>,
+    WebUser(user, session): WebUser,
     Path(plugin_id): Path<Option<String>>,
 ) -> Response {
-    let _ = state;
-    match plugin_id {
-        Some(id) => render_detail(&id).into_response(),
-        None => render_index().into_response(),
+    if user.role() != Role::Owner {
+        return StatusCode::FORBIDDEN.into_response();
     }
+    let content = match plugin_id {
+        Some(id) => render_detail(&id),
+        None => render_index(),
+    };
+    let csrf = state.csrf.token_for(session.id());
+    state
+        .render_shell(&user, &csrf, "/marketplace", content)
+        .await
+        .into_response()
 }
 
 fn render_index() -> Markup {
