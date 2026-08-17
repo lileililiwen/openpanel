@@ -2,7 +2,7 @@
 //!
 //! The service loads the bundled English catalog, accepts
 //! signed community translations at runtime, and resolves
-//! per-request locales via the [`LocaleNegotiator`].
+//! per-request locales via the `LocaleNegotiator`.
 
 use std::{
     collections::BTreeMap,
@@ -44,8 +44,11 @@ pub fn default_catalog() -> Catalog {
 /// A user-supplied translation (post-signature-verification).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TranslationEntry {
+    /// The message key being translated.
     pub key: MessageKey,
+    /// The translated message text.
     pub value: String,
+    /// Optional disambiguating context for the entry.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub context: Option<String>,
     /// Ed25519 signature over `key || 0x1F || value` (base64).
@@ -56,10 +59,12 @@ pub struct TranslationEntry {
 /// Repository trait for per-user locale preferences.
 #[async_trait]
 pub trait LocaleUserPrefsRepository: Send + Sync {
+    /// Load a user's preferred locale, if one has been set.
     async fn get_locale(
         &self,
         user_id: openpanel_domain::common::Username,
     ) -> anyhow::Result<Option<Locale>>;
+    /// Persist a user's preferred locale.
     async fn set_locale(
         &self,
         user_id: openpanel_domain::common::Username,
@@ -74,6 +79,7 @@ pub struct SqliteLocaleUserPrefsRepository {
 }
 
 impl SqliteLocaleUserPrefsRepository {
+    /// Build a SQLite-backed locale repository over the given pool.
     pub fn new(pool: SqlitePool) -> Self {
         Self { pool }
     }
@@ -114,6 +120,7 @@ pub struct InMemoryLocaleUserPrefsRepository {
 }
 
 impl InMemoryLocaleUserPrefsRepository {
+    /// Build an empty in-memory locale repository.
     pub fn new() -> Self {
         Self::default()
     }
@@ -125,6 +132,7 @@ impl LocaleUserPrefsRepository for InMemoryLocaleUserPrefsRepository {
         &self,
         user_id: openpanel_domain::common::Username,
     ) -> anyhow::Result<Option<Locale>> {
+        #[allow(clippy::expect_used)] // rwlock poisoning is an unrecoverable invariant violation
         Ok(self
             .inner
             .read()
@@ -138,6 +146,7 @@ impl LocaleUserPrefsRepository for InMemoryLocaleUserPrefsRepository {
         user_id: openpanel_domain::common::Username,
         locale: Locale,
     ) -> anyhow::Result<()> {
+        #[allow(clippy::expect_used)] // rwlock poisoning is an unrecoverable invariant violation
         self.inner
             .write()
             .expect("poisoned")
@@ -181,6 +190,7 @@ impl LocaleService {
 
     /// Resolve a simple translation key.
     pub fn resolve(&self, locale: &Locale, key: &str) -> Option<Message> {
+        #[allow(clippy::expect_used)] // rwlock poisoning is an unrecoverable invariant violation
         self.resolver
             .read()
             .expect("poisoned")
@@ -190,6 +200,7 @@ impl LocaleService {
 
     /// Resolve a plural translation.
     pub fn resolve_plural(&self, locale: &Locale, key: &str) -> Option<PluralForms> {
+        #[allow(clippy::expect_used)] // rwlock poisoning is an unrecoverable invariant violation
         self.resolver
             .read()
             .expect("poisoned")
@@ -233,6 +244,7 @@ impl LocaleService {
         if entry.value.is_empty() {
             return Err(I18nAppError::EmptyValue);
         }
+        #[allow(clippy::expect_used)] // rwlock poisoning is an unrecoverable invariant violation
         let mut resolver = self.resolver.write().expect("poisoned");
         // Find or create a catalog for the locale.
         let extras = &mut resolver.extras;
@@ -240,6 +252,7 @@ impl LocaleService {
             &mut extras[idx]
         } else {
             extras.push(Catalog::new(locale.clone()));
+            #[allow(clippy::expect_used)] // the catalog was just pushed, so the last slot exists
             extras.last_mut().expect("just pushed")
         };
         catalog.add_message(entry.key, entry.value);
@@ -277,10 +290,13 @@ impl LocaleService {
 /// Errors raised by the application service.
 #[derive(Debug, thiserror::Error)]
 pub enum I18nAppError {
+    /// The translation key is empty.
     #[error("translation key is empty")]
     EmptyKey,
+    /// The translation value is empty.
     #[error("translation value is empty")]
     EmptyValue,
+    /// The locale string could not be parsed.
     #[error("invalid locale: {0}")]
     InvalidLocale(String),
 }

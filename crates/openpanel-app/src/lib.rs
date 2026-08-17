@@ -144,6 +144,9 @@ pub mod waf;
 /// Web application installer bounded context: typed install
 /// plans, install runs, idempotency, and uninstall.
 pub mod web_application_installer;
+/// Webmail client bounded context: session tokens, bridge, and
+/// redaction.
+pub mod webmail_client;
 /// Wildcard SSL with DNS-01 challenge bounded context: cert
 /// request with `ChallengeKind::Dns01`, ACME endpoint mode, and
 /// a DNS lease lifecycle.
@@ -323,6 +326,9 @@ pub use waf::{WafModule, WafService};
 pub use web_application_installer::{
     ArtifactDownloader, InstallerFs, RealInstallerFs, ReqwestArtifactDownloader,
     SqliteWebApplicationInstallerRepository, WebApplicationInstallerService,
+};
+pub use webmail_client::{
+    InMemoryMailBridge, SqliteWebmailRepository, WebmailService, redact_html, sha256_hex,
 };
 pub use wildcard_ssl::{
     CertRenewalScheduler, Dns01ChallengeSolver, RecordingDnsProvider, SqliteWildcardRepository,

@@ -21,6 +21,5 @@ pub use cache::SqliteCatalogCache;
 pub use client::{HttpMarketplaceClient, MarketplaceClient, MockMarketplaceClient};
 pub use module::{MODULE_NAME, PluginMarketplaceModule};
 pub use service::{
-    DiscoverOutcome, InstallFromMarketplaceError, InstallFromMarketplaceRequest,
-    MarketplaceService,
+    DiscoverOutcome, InstallFromMarketplaceError, InstallFromMarketplaceRequest, MarketplaceService,
 };

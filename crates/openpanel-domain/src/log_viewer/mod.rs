@@ -227,15 +227,9 @@ impl LogAuthorization for RbacLogAuthorization {
 #[async_trait]
 pub trait LogDownloadRepository: Send + Sync + 'static {
     /// Persist a download event.
-    async fn save_download(
-        &self,
-        record: &LogDownloadRecord,
-    ) -> Result<(), RepoError>;
+    async fn save_download(&self, record: &LogDownloadRecord) -> Result<(), RepoError>;
     /// List recent download events.
-    async fn list_downloads(
-        &self,
-        limit: u32,
-    ) -> Result<Vec<LogDownloadRecord>, RepoError>;
+    async fn list_downloads(&self, limit: u32) -> Result<Vec<LogDownloadRecord>, RepoError>;
 }
 
 /// One log-download audit row.

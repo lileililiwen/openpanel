@@ -1,7 +1,8 @@
 //! Per-user image namespace.
 
-use serde::{Deserialize, Serialize};
 use std::fmt;
+
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Stable namespace identifier.
@@ -16,9 +17,9 @@ impl NamespaceId {
         let s = value.into();
         if s.is_empty()
             || s.len() > 64
-            || !s
-                .bytes()
-                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'-' | b'_' | b'.'))
+            || !s.bytes().all(|b| {
+                b.is_ascii_lowercase() || b.is_ascii_digit() || matches!(b, b'-' | b'_' | b'.')
+            })
         {
             return Err(super::error::RegistryError::NamespaceNotFound(s));
         }
@@ -103,8 +104,9 @@ impl ImageNamespace {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use chrono::Utc;
+
+    use super::*;
 
     #[test]
     fn namespace_id_validates() {
@@ -116,12 +118,8 @@ mod tests {
     #[test]
     fn namespace_quota_blocks_overflow() {
         let owner = Uuid::new_v4();
-        let mut ns = ImageNamespace::new(
-            NamespaceId::new("alpha").unwrap(),
-            owner,
-            100,
-            Utc::now(),
-        );
+        let mut ns =
+            ImageNamespace::new(NamespaceId::new("alpha").unwrap(), owner, 100, Utc::now());
         assert!(!ns.would_exceed(50));
         ns.account_push(50);
         assert!(ns.would_exceed(60));

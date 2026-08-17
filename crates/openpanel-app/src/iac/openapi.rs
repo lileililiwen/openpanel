@@ -10,9 +10,10 @@
 //!
 //! Anything outside this subset is silently ignored.
 
+use std::collections::BTreeMap;
+
 use openpanel_domain::iac::contract::{Operation, OperationId};
 use serde::Deserialize;
-use std::collections::BTreeMap;
 use uuid::Uuid;
 
 /// Reference to the canonical OpenAPI source. The artifact lives
@@ -37,12 +38,9 @@ impl ParsedOpenApi {
     pub fn parse_json(json: &str) -> Result<Self, openpanel_domain::iac::error::IacError> {
         let doc: OpenApiDoc = serde_json::from_str(json)
             .map_err(|e| openpanel_domain::iac::error::IacError::OpenApiParse(e.to_string()))?;
-        let version = doc
-            .info
-            .map(|i| i.version)
-            .ok_or_else(|| {
-                openpanel_domain::iac::error::IacError::OpenApiMissing("info.version".into())
-            })?;
+        let version = doc.info.map(|i| i.version).ok_or_else(|| {
+            openpanel_domain::iac::error::IacError::OpenApiMissing("info.version".into())
+        })?;
         let mut operations = BTreeMap::new();
         if let Some(paths) = doc.paths {
             for (path, item) in paths {
@@ -54,28 +52,31 @@ impl ParsedOpenApi {
                     ("delete", item.delete),
                 ];
                 for (method, op_obj) in methods.drain(..) {
-                    if let Some(op_obj) = op_obj {
-                        if let Some(op_id) = op_obj.operation_id.clone() {
-                            let family = op_obj
-                                .tags
-                                .first()
-                                .cloned()
-                                .unwrap_or_else(|| default_family(&path));
-                            operations.insert(
-                                (path.clone(), method.to_string()),
-                                Operation {
-                                    id: OperationId::new(op_id),
-                                    method: method.to_string(),
-                                    path: path.clone(),
-                                    family,
-                                },
-                            );
-                        }
+                    if let Some(op_obj) = op_obj
+                        && let Some(op_id) = op_obj.operation_id.clone()
+                    {
+                        let family = op_obj
+                            .tags
+                            .first()
+                            .cloned()
+                            .unwrap_or_else(|| default_family(&path));
+                        operations.insert(
+                            (path.clone(), method.to_string()),
+                            Operation {
+                                id: OperationId::new(op_id),
+                                method: method.to_string(),
+                                path: path.clone(),
+                                family,
+                            },
+                        );
                     }
                 }
             }
         }
-        Ok(Self { version, operations })
+        Ok(Self {
+            version,
+            operations,
+        })
     }
 
     /// Materialise an [`openpanel_domain::ApiContract`] from this
@@ -101,15 +102,25 @@ fn default_family(path: &str) -> String {
         .to_string()
 }
 
+/// The CRUD operation ids collected for one resource family.
+type FamilyCrudOps = BTreeMap<
+    String,
+    (
+        Option<OperationId>,
+        Option<OperationId>,
+        Option<OperationId>,
+    ),
+>;
+
 fn build_resource_endpoints(
     operations: &[Operation],
 ) -> Vec<openpanel_domain::iac::contract::ResourceEndpoint> {
-    use openpanel_domain::iac::provider::ResourceKind;
-    use openpanel_domain::iac::contract::ResourceEndpoint;
-    let mut by_family: BTreeMap<String, (Option<OperationId>, Option<OperationId>, Option<OperationId>)> =
-        BTreeMap::new();
+    use openpanel_domain::iac::{contract::ResourceEndpoint, provider::ResourceKind};
+    let mut by_family: FamilyCrudOps = BTreeMap::new();
     for op in operations {
-        let entry = by_family.entry(op.family.clone()).or_insert((None, None, None));
+        let entry = by_family
+            .entry(op.family.clone())
+            .or_insert((None, None, None));
         match op.method.as_str() {
             "post" => entry.0 = Some(op.id.clone()),
             "get" => entry.1 = Some(op.id.clone()),

@@ -91,40 +91,47 @@ impl DkimKeypair {
     pub fn domain(&self) -> &str {
         &self.domain
     }
+
     /// DNS selector.
     pub fn selector(&self) -> &str {
         &self.selector
     }
+
     /// Algorithm.
     pub fn algorithm(&self) -> DkimAlgorithm {
         self.algorithm
     }
+
     /// Private key blob (encrypted).
     pub fn private_key_blob(&self) -> &str {
         &self.private_key_blob
     }
+
     /// Public key (PEM or base64).
     pub fn public_key(&self) -> &str {
         &self.public_key
     }
+
     /// When the keypair was created.
     pub fn created_at(&self) -> DateTime<Utc> {
         self.created_at
     }
+
     /// Rotation grace until.
     pub fn rotation_grace_until(&self) -> Option<DateTime<Utc>> {
         self.rotation_grace_until
     }
+
     /// Begin a rotation grace window. The new keypair
     /// continues to sign for the configured window so DNS
     /// propagates before the old key is retired.
     pub fn begin_rotation(&mut self, grace_until: DateTime<Utc>) {
         self.rotation_grace_until = Some(grace_until);
     }
+
     /// Whether the rotation grace has elapsed at `now`.
     pub fn rotation_grace_elapsed_at(&self, now: DateTime<Utc>) -> bool {
-        self.rotation_grace_until
-            .is_some_and(|until| now >= until)
+        self.rotation_grace_until.is_some_and(|until| now >= until)
     }
 }
 
@@ -142,10 +149,12 @@ impl MailboxQuota {
         }
         Ok(Self(value))
     }
+
     /// Quota bytes.
     pub fn bytes(self) -> u64 {
         self.0
     }
+
     /// Whether accepting a delivery of `incoming` bytes would
     /// exceed the quota.
     pub fn permits(self, used: u64, incoming: u64) -> bool {
@@ -190,6 +199,7 @@ impl DomainSendingPolicy {
             dmarc: SendingRequirement::SoftFail,
         }
     }
+
     /// Restore from persistence.
     pub fn restore(
         domain: String,
@@ -213,26 +223,32 @@ impl DomainSendingPolicy {
     pub fn domain(&self) -> &str {
         &self.domain
     }
+
     /// Per-minute outbound limit.
     pub fn outbound_per_minute(&self) -> u32 {
         self.outbound_per_minute
     }
+
     /// Max recipients per message.
     pub fn max_recipients_per_message(&self) -> u32 {
         self.max_recipients_per_message
     }
+
     /// SPF requirement.
     pub fn spf(&self) -> SendingRequirement {
         self.spf
     }
+
     /// DKIM requirement.
     pub fn dkim(&self) -> SendingRequirement {
         self.dkim
     }
+
     /// DMARC requirement.
     pub fn dmarc(&self) -> SendingRequirement {
         self.dmarc
     }
+
     /// Whether an outbound message passes the policy.
     ///
     /// `passed_spf`, `passed_dkim`, and `passed_dmarc` come
@@ -292,15 +308,8 @@ mod tests {
 
     #[test]
     fn dkim_rejects_empty_inputs() {
-        let err = DkimKeypair::new(
-            "",
-            "s1",
-            DkimAlgorithm::Rsa2048,
-            "blob",
-            "pub",
-            Utc::now(),
-        )
-        .expect_err("must reject");
+        let err = DkimKeypair::new("", "s1", DkimAlgorithm::Rsa2048, "blob", "pub", Utc::now())
+            .expect_err("must reject");
         assert_eq!(err, MailError::Invalid);
     }
 
@@ -334,9 +343,7 @@ mod tests {
     #[test]
     fn sending_policy_rejects_required_dkim() {
         let policy = DomainSendingPolicy::default_for("example.com");
-        let err = policy
-            .accepts(true, false, true)
-            .expect_err("must reject");
+        let err = policy.accepts(true, false, true).expect_err("must reject");
         assert_eq!(err, MailErrorSendingPolicy::Required);
     }
 

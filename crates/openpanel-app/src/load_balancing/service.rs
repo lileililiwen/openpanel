@@ -5,8 +5,7 @@ use std::sync::Arc;
 use chrono::Utc;
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::{
-    HealthProbe, LbRepository, LbStatus, Member, Pool, PoolAlgorithm, ProbeDecision, Role, User,
-    next_member,
+    HealthProbe, LbRepository, LbStatus, Member, Pool, ProbeDecision, Role, User, next_member,
 };
 use uuid::Uuid;
 
@@ -31,6 +30,7 @@ impl RecordingHealthProbe {
 
     /// Configure the next probe outcome for `address`.
     pub fn set(&self, address: &str, ok: bool) {
+        #[allow(clippy::expect_used)]
         self.table
             .lock()
             .expect("table")
@@ -39,6 +39,7 @@ impl RecordingHealthProbe {
 
     /// Snapshot recorded calls.
     pub fn calls(&self) -> Vec<String> {
+        #[allow(clippy::expect_used)]
         self.calls.lock().expect("calls").clone()
     }
 }
@@ -52,7 +53,9 @@ impl Default for RecordingHealthProbe {
 #[async_trait::async_trait]
 impl HealthProbe for RecordingHealthProbe {
     async fn probe(&self, address: &str) -> bool {
+        #[allow(clippy::expect_used)]
         self.calls.lock().expect("calls").push(address.to_string());
+        #[allow(clippy::expect_used)]
         self.table
             .lock()
             .expect("table")
@@ -111,12 +114,7 @@ impl MemberRotator {
             .get_member(member_id)
             .await?
             .ok_or(openpanel_domain::LbError::MemberNotFound(member_id))?;
-        let decision = ProbeDecision::evaluate(
-            &member,
-            ok,
-            failure_threshold,
-            recovery_threshold,
-        );
+        let decision = ProbeDecision::evaluate(&member, ok, failure_threshold, recovery_threshold);
         member.status = decision.new_status;
         if !ok {
             member.failed_probe_count = member.failed_probe_count.saturating_add(1);
@@ -125,7 +123,8 @@ impl MemberRotator {
         }
         member.last_probe_at = Some(Utc::now());
         self.repo.save_member(&member).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -156,7 +155,11 @@ impl LbService {
     }
 
     /// Create a pool.
-    pub async fn create_pool(&self, caller: &User, pool: Pool) -> Result<Pool, openpanel_domain::LbError> {
+    pub async fn create_pool(
+        &self,
+        caller: &User,
+        pool: Pool,
+    ) -> Result<Pool, openpanel_domain::LbError> {
         require_admin(caller)?;
         self.repo.save_pool(&pool).await?;
         Ok(pool)
@@ -188,10 +191,7 @@ impl LbService {
     }
 
     /// Pick the next member.
-    pub async fn next(
-        &self,
-        pool_id: Uuid,
-    ) -> Result<RotationDecision, openpanel_domain::LbError> {
+    pub async fn next(&self, pool_id: Uuid) -> Result<RotationDecision, openpanel_domain::LbError> {
         self.rotator.next(pool_id).await
     }
 

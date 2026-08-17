@@ -18,7 +18,7 @@ use axum::{
     extract::{Multipart, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{delete, get, post, put},
+    routing::{get, post},
 };
 use openpanel_app::themeable_ui::ThemeableUiService;
 use openpanel_domain::{

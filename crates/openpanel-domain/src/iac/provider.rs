@@ -131,9 +131,6 @@ mod tests {
     #[test]
     fn resource_kind_endpoint_family_is_stable() {
         assert_eq!(ResourceKind::Site.endpoint_family(), "sites");
-        assert_eq!(
-            ResourceKind::DnsZone.endpoint_family(),
-            "dns/zones"
-        );
+        assert_eq!(ResourceKind::DnsZone.endpoint_family(), "dns/zones");
     }
 }

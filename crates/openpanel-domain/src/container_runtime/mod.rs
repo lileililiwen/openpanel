@@ -305,35 +305,35 @@ pub struct EffectiveQuota {
 pub fn effective_quota(user_quota: &ContainerQuota, plan: &PlanQuotaCaps) -> EffectiveQuota {
     let mut effective = user_quota.clone();
     let mut overrides = Vec::new();
-    if let Some(cap) = plan.max_concurrent {
-        if cap < effective.max_concurrent {
-            effective.max_concurrent = cap;
-            overrides.push(QuotaAxis::Concurrent);
-        }
+    if let Some(cap) = plan.max_concurrent
+        && cap < effective.max_concurrent
+    {
+        effective.max_concurrent = cap;
+        overrides.push(QuotaAxis::Concurrent);
     }
-    if let Some(cap) = plan.max_total {
-        if cap < effective.max_total {
-            effective.max_total = cap;
-            overrides.push(QuotaAxis::Total);
-        }
+    if let Some(cap) = plan.max_total
+        && cap < effective.max_total
+    {
+        effective.max_total = cap;
+        overrides.push(QuotaAxis::Total);
     }
-    if let Some(cap) = plan.cpu_pct_max {
-        if cap < effective.cpu_pct_max {
-            effective.cpu_pct_max = cap;
-            overrides.push(QuotaAxis::Cpu);
-        }
+    if let Some(cap) = plan.cpu_pct_max
+        && cap < effective.cpu_pct_max
+    {
+        effective.cpu_pct_max = cap;
+        overrides.push(QuotaAxis::Cpu);
     }
-    if let Some(cap) = plan.memory_bytes_max {
-        if cap < effective.memory_bytes_max {
-            effective.memory_bytes_max = cap;
-            overrides.push(QuotaAxis::Memory);
-        }
+    if let Some(cap) = plan.memory_bytes_max
+        && cap < effective.memory_bytes_max
+    {
+        effective.memory_bytes_max = cap;
+        overrides.push(QuotaAxis::Memory);
     }
-    if let Some(cap) = plan.egress_bytes_per_month {
-        if cap < effective.egress_bytes_per_month {
-            effective.egress_bytes_per_month = cap;
-            overrides.push(QuotaAxis::Egress);
-        }
+    if let Some(cap) = plan.egress_bytes_per_month
+        && cap < effective.egress_bytes_per_month
+    {
+        effective.egress_bytes_per_month = cap;
+        overrides.push(QuotaAxis::Egress);
     }
     EffectiveQuota {
         quota: effective,

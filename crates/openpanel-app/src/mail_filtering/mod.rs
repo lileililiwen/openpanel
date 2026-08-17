@@ -8,9 +8,8 @@ mod service;
 #[cfg(test)]
 mod tests;
 
-pub use module::{MailFilteringModule, MODULE_NAME};
+pub use module::{MODULE_NAME, MailFilteringModule};
 pub use repo::SqliteMailFilterRepository;
 pub use service::{
-    MailFilterService, MailingListService, SieveCompiler, SpamScorer, ScoreOutcome,
-    route_for_score,
+    MailFilterService, MailingListService, ScoreOutcome, SieveCompiler, SpamScorer, route_for_score,
 };

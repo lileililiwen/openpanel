@@ -81,6 +81,9 @@ pub mod waf;
 /// `InstallRun`, `InstalledWebApp`, `IdempotencyKey`, and
 /// `InstallArtifact` records.
 pub mod web_application_installer;
+/// Webmail client bounded context: short-lived session tokens and
+/// the `MailBridge` contract.
+pub mod webmail_client;
 
 /// Account hierarchy bounded context: parent-child user
 /// relationships, tree traversal, cycle detection, and
@@ -407,6 +410,10 @@ pub use web_application_installer::{
     CONFIRM_WINDOW_SECONDS, IDEMPOTENCY_TTL_SECONDS, IdempotencyKey, InstallArtifact, InstallDb,
     InstallOverlay, InstallPlan, InstallRun, InstalledWebApp, MAX_PLAN_VALIDITY_SECONDS,
     WebApplicationInstallerError, WebApplicationInstallerRepository,
+};
+pub use webmail_client::{
+    MailBridge, MessageBody, MessageHeader, SESSION_TOKEN_TTL_SECONDS, WebmailError,
+    WebmailRepository, WebmailSessionToken,
 };
 pub use wildcard_ssl::{
     ALLOWED_DNS_PROVIDERS, AcmeEndpointMode, CHALLENGE_SERVER_BIND, CertRequest, ChallengeKind,

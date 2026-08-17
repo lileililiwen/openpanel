@@ -5,8 +5,7 @@
 //! responsible for collecting metrics, accepting OTLP HTTP
 //! bodies, and serving `/metrics`.
 
-use std::collections::BTreeMap;
-use std::fmt;
+use std::{collections::BTreeMap, fmt};
 
 use serde::{Deserialize, Serialize};
 
@@ -28,22 +27,33 @@ impl std::error::Error for ObservabilityError {}
 pub enum MetricSample {
     /// A monotonically increasing counter.
     Counter {
+        /// The metric name.
         name: String,
+        /// Key/value label pairs attached to the sample.
         labels: BTreeMap<String, String>,
+        /// The counter value.
         value: u64,
     },
     /// An instantaneous value (e.g. quota usage).
     Gauge {
+        /// The metric name.
         name: String,
+        /// Key/value label pairs attached to the sample.
         labels: BTreeMap<String, String>,
+        /// The gauge value.
         value: f64,
     },
     /// A bucketed observation.
     Histogram {
+        /// The metric name.
         name: String,
+        /// Key/value label pairs attached to the sample.
         labels: BTreeMap<String, String>,
+        /// The histogram buckets.
         buckets: Vec<HistogramBucket>,
+        /// The sum of all observed values.
         sum: f64,
+        /// The number of observations.
         count: u64,
     },
 }
@@ -97,7 +107,9 @@ pub struct ObservabilityConfig {
 }
 
 fn default_buckets() -> Vec<f64> {
-    vec![0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+    vec![
+        0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0,
+    ]
 }
 
 impl Default for ObservabilityConfig {
@@ -121,7 +133,11 @@ pub fn render_prometheus(samples: &[MetricSample]) -> String {
     let mut out = String::new();
     for sample in samples {
         match sample {
-            MetricSample::Counter { name, labels, value } => {
+            MetricSample::Counter {
+                name,
+                labels,
+                value,
+            } => {
                 push_help_and_type(&mut out, name, "counter");
                 out.push_str(name);
                 if !labels.is_empty() {
@@ -143,7 +159,11 @@ pub fn render_prometheus(samples: &[MetricSample]) -> String {
                 out.push_str(&value.to_string());
                 out.push('\n');
             }
-            MetricSample::Gauge { name, labels, value } => {
+            MetricSample::Gauge {
+                name,
+                labels,
+                value,
+            } => {
                 push_help_and_type(&mut out, name, "gauge");
                 out.push_str(name);
                 if !labels.is_empty() {
@@ -165,7 +185,13 @@ pub fn render_prometheus(samples: &[MetricSample]) -> String {
                 out.push_str(&format_value(*value));
                 out.push('\n');
             }
-            MetricSample::Histogram { name, labels, buckets, sum, count } => {
+            MetricSample::Histogram {
+                name,
+                labels,
+                buckets,
+                sum,
+                count,
+            } => {
                 push_help_and_type(&mut out, name, "histogram");
                 for bucket in buckets {
                     out.push_str(name);
@@ -271,7 +297,11 @@ fn format_value(value: f64) -> String {
     if value.is_nan() {
         "NaN".to_string()
     } else if value.is_infinite() {
-        if value > 0.0 { "+Inf".to_string() } else { "-Inf".to_string() }
+        if value > 0.0 {
+            "+Inf".to_string()
+        } else {
+            "-Inf".to_string()
+        }
     } else {
         // Prometheus accepts Go's strconv format; emit a stable
         // representation with no trailing zeros when possible.
@@ -289,7 +319,11 @@ pub fn redact_otlp_value(value: &str) -> String {
         return value.to_string();
     }
     // Bearer token (header value)
-    if trimmed.len() >= 32 && trimmed.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.') {
+    if trimmed.len() >= 32
+        && trimmed
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_' || c == '.')
+    {
         return "<redacted>".to_string();
     }
     // PEM private key
@@ -309,13 +343,19 @@ pub fn redact_otlp_value(value: &str) -> String {
 /// One row of the JSONL log export.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LogExportRow {
+    /// The log timestamp.
     pub timestamp: String,
+    /// The log level (e.g. `info`, `warn`, `error`).
     pub level: String,
+    /// The log message body.
     pub message: String,
+    /// The actor that produced the log entry, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub actor: Option<String>,
+    /// The action that produced the log entry, if any.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub action: Option<String>,
+    /// Additional structured key/value fields.
     #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
     pub fields: BTreeMap<String, String>,
 }
@@ -422,7 +462,10 @@ mod tests {
             buckets: vec![
                 HistogramBucket { le: 0.01, count: 5 },
                 HistogramBucket { le: 0.1, count: 9 },
-                HistogramBucket { le: f64::INFINITY, count: 10 },
+                HistogramBucket {
+                    le: f64::INFINITY,
+                    count: 10,
+                },
             ],
             sum: 0.42,
             count: 10,
@@ -431,8 +474,12 @@ mod tests {
         assert!(out.contains("openpanel_http_request_duration_seconds_bucket{route=\"/api/v1/identity/login\",le=\"0.01\"} 5"));
         assert!(out.contains("openpanel_http_request_duration_seconds_bucket{route=\"/api/v1/identity/login\",le=\"0.1\"} 9"));
         assert!(out.contains("openpanel_http_request_duration_seconds_bucket{route=\"/api/v1/identity/login\",le=\"+Inf\"} 10"));
-        assert!(out.contains("openpanel_http_request_duration_seconds_sum{route=\"/api/v1/identity/login\"} 0.42"));
-        assert!(out.contains("openpanel_http_request_duration_seconds_count{route=\"/api/v1/identity/login\"} 10"));
+        assert!(out.contains(
+            "openpanel_http_request_duration_seconds_sum{route=\"/api/v1/identity/login\"} 0.42"
+        ));
+        assert!(out.contains(
+            "openpanel_http_request_duration_seconds_count{route=\"/api/v1/identity/login\"} 10"
+        ));
     }
 
     #[test]

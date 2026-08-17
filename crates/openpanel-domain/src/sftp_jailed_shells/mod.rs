@@ -27,7 +27,9 @@ impl JailPublicKey {
         let label = label.into();
         let key = key.into();
         if label.is_empty() {
-            return Err(SftpJailError::InvalidKey("label must be non-empty".to_string()));
+            return Err(SftpJailError::InvalidKey(
+                "label must be non-empty".to_string(),
+            ));
         }
         let trimmed = key.trim();
         if !(trimmed.starts_with("ssh-ed25519") || trimmed.starts_with("ssh-rsa")) {
@@ -46,6 +48,7 @@ impl JailPublicKey {
             fingerprint,
         })
     }
+
     /// Restore from persistence.
     pub fn restore(label: String, key: String, fingerprint: String) -> Self {
         Self {
@@ -54,14 +57,17 @@ impl JailPublicKey {
             fingerprint,
         }
     }
+
     /// Display label.
     pub fn label(&self) -> &str {
         &self.label
     }
+
     /// Encoded key body.
     pub fn key(&self) -> &str {
         &self.key
     }
+
     /// SHA-256 fingerprint placeholder.
     pub fn fingerprint(&self) -> &str {
         &self.fingerprint
@@ -109,6 +115,7 @@ impl SftpJailGrant {
     pub const SSHD_INCLUDE_DIR: &'static str = "/etc/ssh/openpanel.d";
 
     /// Build a new grant. The jail path must be canonical.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         site_id: Uuid,
         owner_user_id: Uuid,
@@ -121,10 +128,7 @@ impl SftpJailGrant {
     ) -> Result<Self, SftpJailError> {
         let canonical = canonicalize_path(&jail_path)?;
         let group_name = format!("openpanel-sftp-{}", short_id(site_id));
-        let forced_command = format!(
-            "internal-sftp -d {}",
-            site_root_rel.to_string_lossy()
-        );
+        let forced_command = format!("internal-sftp -d {}", site_root_rel.to_string_lossy());
         Ok(Self {
             site_id,
             owner_user_id,
@@ -141,6 +145,7 @@ impl SftpJailGrant {
     }
 
     /// Restore from persistence.
+    #[allow(clippy::too_many_arguments)]
     pub fn restore(
         site_id: Uuid,
         owner_user_id: Uuid,
@@ -173,42 +178,52 @@ impl SftpJailGrant {
     pub fn site_id(&self) -> Uuid {
         self.site_id
     }
+
     /// Owner user id.
     pub fn owner_user_id(&self) -> Uuid {
         self.owner_user_id
     }
+
     /// Unique group name.
     pub fn group_name(&self) -> &str {
         &self.group_name
     }
+
     /// Jail path.
     pub fn jail_path(&self) -> &Path {
         &self.jail_path
     }
+
     /// Forced command.
     pub fn forced_command(&self) -> &str {
         &self.forced_command
     }
+
     /// Keys.
     pub fn keys(&self) -> &[JailPublicKey] {
         &self.keys
     }
+
     /// Allow password fallback (always false for new keys).
     pub fn allow_password_fallback(&self) -> bool {
         self.allow_password_fallback
     }
+
     /// Allow port forwarding.
     pub fn allow_port_forwarding(&self) -> bool {
         self.allow_port_forwarding
     }
+
     /// Status.
     pub fn status(&self) -> JailedShellStatus {
         self.status
     }
+
     /// Created at.
     pub fn created_at(&self) -> DateTime<Utc> {
         self.created_at
     }
+
     /// Updated at.
     pub fn updated_at(&self) -> DateTime<Utc> {
         self.updated_at
@@ -221,6 +236,7 @@ impl SftpJailGrant {
         }
         self.updated_at = now;
     }
+
     /// Remove a key by label.
     pub fn remove_key(&mut self, label: &str, now: DateTime<Utc>) -> bool {
         let before = self.keys.len();
@@ -231,11 +247,13 @@ impl SftpJailGrant {
         }
         removed
     }
+
     /// Disable the grant.
     pub fn disable(&mut self, now: DateTime<Utc>) {
         self.status = JailedShellStatus::Disabled;
         self.updated_at = now;
     }
+
     /// Enable the grant.
     pub fn enable(&mut self, now: DateTime<Utc>) {
         self.status = JailedShellStatus::Active;
@@ -260,12 +278,24 @@ pub fn render_sshd_config(grant: &SftpJailGrant) -> String {
         "{}ForceCommand {}\n",
         indent, grant.forced_command
     ));
-    buf.push_str(&format!("{}AllowTcpForwarding {}\n", indent, if grant.allow_port_forwarding { "yes" } else { "no" }));
+    buf.push_str(&format!(
+        "{}AllowTcpForwarding {}\n",
+        indent,
+        if grant.allow_port_forwarding {
+            "yes"
+        } else {
+            "no"
+        }
+    ));
     buf.push_str(&format!("{}X11Forwarding no\n", indent));
     buf.push_str(&format!(
         "{}PasswordAuthentication {}\n",
         indent,
-        if grant.allow_password_fallback { "yes" } else { "no" }
+        if grant.allow_password_fallback {
+            "yes"
+        } else {
+            "no"
+        }
     ));
     buf.push_str(&format!("{}PermitTTY no\n", indent));
     for key in grant.keys() {
@@ -370,15 +400,13 @@ mod tests {
 
     #[test]
     fn key_rejects_empty_label() {
-        let err = JailPublicKey::new("", "ssh-ed25519 AAAAB3...")
-            .expect_err("must reject");
+        let err = JailPublicKey::new("", "ssh-ed25519 AAAAB3...").expect_err("must reject");
         assert!(matches!(err, SftpJailError::InvalidKey(_)));
     }
 
     #[test]
     fn key_accepts_ed25519() {
-        let key = JailPublicKey::new("laptop", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA")
-            .unwrap();
+        let key = JailPublicKey::new("laptop", "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA").unwrap();
         assert_eq!(key.label(), "laptop");
         assert!(key.fingerprint().starts_with("fp:"));
     }

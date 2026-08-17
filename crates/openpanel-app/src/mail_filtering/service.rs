@@ -39,9 +39,7 @@ impl SieveCompiler {
         let opens = script.script.matches('{').count();
         let closes = script.script.matches('}').count();
         if opens != closes {
-            return Err(MailFilterError::SieveCompile(
-                "unbalanced braces".into(),
-            ));
+            return Err(MailFilterError::SieveCompile("unbalanced braces".into()));
         }
         Ok(())
     }
@@ -65,12 +63,7 @@ impl SpamScorer {
     }
 
     /// Score a message; returns `Ok(0..=100)` or an error.
-    pub fn score(
-        &self,
-        body_len: usize,
-        has_attachment: bool,
-        subject_uppercase_ratio: f32,
-    ) -> u8 {
+    pub fn score(&self, body_len: usize, has_attachment: bool, subject_uppercase_ratio: f32) -> u8 {
         // Deterministic toy score: every feature adds a small
         // amount. The score never exceeds 100.
         let mut score = 0.0_f32;
@@ -126,7 +119,11 @@ impl MailFilterService {
         audit: Arc<dyn AuditService>,
         compiler: SieveCompiler,
     ) -> Self {
-        Self { repo, audit, compiler }
+        Self {
+            repo,
+            audit,
+            compiler,
+        }
     }
 
     /// Apply a per-mailbox anti-spam policy.
@@ -138,7 +135,8 @@ impl MailFilterService {
         require_admin(caller)?;
         policy.validate()?;
         self.repo.save_policy(&policy).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -167,7 +165,8 @@ impl MailFilterService {
         let mut compiled = script;
         compiled.mark_compiled(Utc::now());
         self.repo.save_sieve(&compiled).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),

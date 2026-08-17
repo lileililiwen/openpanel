@@ -142,6 +142,8 @@ pub const THEMEABLE_UI_V001: &str = include_str!("themeable_ui/V001__init.sql");
 /// `scan_runs`, `scan_findings`, `quarantine_records`, and
 /// `integrity_baselines` tables.
 pub const MALWARE_SCANNER_V001: &str = include_str!("malware_scanner/V001__init.sql");
+/// Webmail client v001: `webmail_session_tokens` table.
+pub const WEBMAIL_CLIENT_V001: &str = include_str!("webmail_client/V001__init.sql");
 /// Web application installer v001: `web_app_installs`,
 /// `web_app_runs`, `web_app_idempotency`, and `web_app_plans`.
 pub const WEB_APPLICATION_INSTALLER_V001: &str =

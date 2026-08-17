@@ -43,7 +43,12 @@ pub trait HttpProbe: Send + Sync + 'static {
 pub trait TcpProbe: Send + Sync + 'static {
     /// Open a TCP connection to `host:port` and return the
     /// latency in milliseconds.
-    async fn connect(&self, host: &str, port: u16, timeout_secs: u32) -> Result<u32, SyntheticError>;
+    async fn connect(
+        &self,
+        host: &str,
+        port: u16,
+        timeout_secs: u32,
+    ) -> Result<u32, SyntheticError>;
 }
 
 /// Port that inspects a TLS certificate.
@@ -80,31 +85,40 @@ impl RecordingProbe {
 
     /// Set the next HTTP response: `(status, latency_ms)`.
     pub fn set_http_response(&self, status: u16, latency_ms: u32) {
-        *self.http.lock().expect("http") = Some((status, latency_ms));
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
+        let mut guard = self.http.lock().expect("http");
+        *guard = Some((status, latency_ms));
     }
 
     /// Set the next TCP latency in milliseconds.
     pub fn set_tcp_latency(&self, latency_ms: u32) {
-        *self.tcp.lock().expect("tcp") = Some(latency_ms);
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
+        let mut guard = self.tcp.lock().expect("tcp");
+        *guard = Some(latency_ms);
     }
 
     /// Set the next SSL days-remaining value.
     pub fn set_ssl_days_remaining(&self, days: u32) {
-        *self.ssl.lock().expect("ssl") = Some(days);
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
+        let mut guard = self.ssl.lock().expect("ssl");
+        *guard = Some(days);
     }
 
     /// Snapshot the recorded HTTP calls.
     pub fn http_calls(&self) -> Vec<String> {
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
         self.http_calls.lock().expect("http").clone()
     }
 
     /// Snapshot the recorded TCP calls.
     pub fn tcp_calls(&self) -> Vec<(String, u16)> {
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
         self.tcp_calls.lock().expect("tcp").clone()
     }
 
     /// Snapshot the recorded SSL calls.
     pub fn ssl_calls(&self) -> Vec<String> {
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
         self.ssl_calls.lock().expect("ssl").clone()
     }
 }
@@ -118,7 +132,9 @@ impl Default for RecordingProbe {
 #[async_trait::async_trait]
 impl HttpProbe for RecordingProbe {
     async fn get(&self, url: &str, _timeout: u32) -> Result<(u16, u32), SyntheticError> {
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
         self.http_calls.lock().expect("http").push(url.to_string());
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
         self.http
             .lock()
             .expect("http")
@@ -129,10 +145,12 @@ impl HttpProbe for RecordingProbe {
 #[async_trait::async_trait]
 impl TcpProbe for RecordingProbe {
     async fn connect(&self, host: &str, port: u16, _timeout: u32) -> Result<u32, SyntheticError> {
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
         self.tcp_calls
             .lock()
             .expect("tcp")
             .push((host.to_string(), port));
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
         self.tcp
             .lock()
             .expect("tcp")
@@ -143,7 +161,9 @@ impl TcpProbe for RecordingProbe {
 #[async_trait::async_trait]
 impl SslExpiryInspector for RecordingProbe {
     async fn days_remaining(&self, host: &str, _timeout: u32) -> Result<u32, SyntheticError> {
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
         self.ssl_calls.lock().expect("ssl").push(host.to_string());
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
         self.ssl
             .lock()
             .expect("ssl")
@@ -291,7 +311,11 @@ impl ProbeScheduler {
     /// Enqueue a forced run for `check_id`. Returns
     /// `SyntheticError::Throttled` when the throttle window has
     /// not yet elapsed.
-    pub async fn force_run(&self, caller: &User, check_id: Uuid) -> Result<CheckResult, SyntheticError> {
+    pub async fn force_run(
+        &self,
+        caller: &User,
+        check_id: Uuid,
+    ) -> Result<CheckResult, SyntheticError> {
         require_admin(caller)?;
         let check = self
             .repo

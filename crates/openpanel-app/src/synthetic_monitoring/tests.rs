@@ -4,9 +4,7 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use openpanel_core::NoopAuditService;
-use openpanel_domain::{
-    CheckStatus, CheckType, Role, SyntheticCheck, SyntheticRepository,
-};
+use openpanel_domain::{CheckStatus, CheckType, Role, SyntheticCheck, SyntheticRepository};
 use openpanel_test_support::TestDb;
 use uuid::Uuid;
 
@@ -181,7 +179,10 @@ async fn scheduler_throttles_forced_runs() {
     let mut check = make_check(CheckType::Http, "https://example.com");
     check.throttle_secs = 60;
     repo.save_check(&check).await.expect("save");
-    let first = scheduler.force_run(&admin_user(), check.id).await.expect("first");
+    let first = scheduler
+        .force_run(&admin_user(), check.id)
+        .await
+        .expect("first");
     assert_eq!(first.status, CheckStatus::Ok);
     let second = scheduler.force_run(&admin_user(), check.id).await;
     assert!(matches!(
@@ -215,7 +216,10 @@ async fn non_admin_cannot_force_run() {
         Role::User,
     );
     let res = scheduler.force_run(&user, check.id).await;
-    assert!(matches!(res, Err(openpanel_domain::SyntheticError::Forbidden)));
+    assert!(matches!(
+        res,
+        Err(openpanel_domain::SyntheticError::Forbidden)
+    ));
 }
 
 #[tokio::test]
@@ -244,6 +248,10 @@ async fn touch_updates_last_run_at() {
     repo.save_check(&check).await.expect("save");
     let now = Utc::now();
     repo.touch_check(check.id, now).await.expect("touch");
-    let loaded = repo.get_check(check.id).await.expect("get").expect("present");
+    let loaded = repo
+        .get_check(check.id)
+        .await
+        .expect("get")
+        .expect("present");
     assert_eq!(loaded.last_run_at, Some(now));
 }

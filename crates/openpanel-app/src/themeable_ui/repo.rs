@@ -41,7 +41,7 @@ fn decode_palette(json: &str) -> Result<Palette, ThemeableUiError> {
     let fg = HexColor::parse(&pj.color_fg)?;
     let bg = HexColor::parse(&pj.color_bg)?;
     let accent = HexColor::parse(&pj.color_accent)?;
-    Palette::with_min_contrast(fg, bg, accent, pj.contrast_min).map_err(ThemeableUiError::from)
+    Palette::with_min_contrast(fg, bg, accent, pj.contrast_min)
 }
 
 fn decode_typography(json: &str) -> Result<Typography, ThemeableUiError> {
@@ -52,7 +52,7 @@ fn decode_typography(json: &str) -> Result<Typography, ThemeableUiError> {
     }
     let tj: Tj = serde_json::from_str(json)
         .map_err(|e| ThemeableUiError::Persistence(format!("typography json: {e}")))?;
-    Typography::new(tj.font_family, tj.base_size_px).map_err(ThemeableUiError::from)
+    Typography::new(tj.font_family, tj.base_size_px)
 }
 
 fn encode_palette(p: &Palette) -> String {
@@ -125,8 +125,7 @@ impl ThemeableUiRepository for SqliteThemeableUiRepository {
             None => None,
         };
         let mut override_ =
-            ThemeOverride::new(owner_id, brand_name, palette, typography, panel_domain)
-                .map_err(ThemeableUiError::from)?;
+            ThemeOverride::new(owner_id, brand_name, palette, typography, panel_domain)?;
         if let Some(p) = logo_path {
             override_.set_logo_path(p);
         }

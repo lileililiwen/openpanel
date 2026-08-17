@@ -30,7 +30,9 @@ pub enum ResourceKind {
 /// the presence of the per-kind fields.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RestoreScope {
+    /// The kind of resource to restore.
     pub kind: ResourceKind,
+    /// Kind-specific selector fields (a JSON object).
     pub selector: serde_json::Value,
 }
 
@@ -82,6 +84,7 @@ pub enum BackupTargetKind {
 /// The remote-target policy record attached to a plan.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BackupTargetPolicy {
+    /// The storage target kind.
     pub kind: BackupTargetKind,
     /// Optional S3 bucket name (validated by the application
     /// layer when `kind == OffsiteS3`).
@@ -99,6 +102,7 @@ impl BackupTargetPolicy {
             rsync_url: None,
         }
     }
+
     /// Build an off-site S3 target policy.
     pub fn s3(bucket: impl Into<String>) -> Result<Self, BackupRefineError> {
         let bucket = bucket.into();
@@ -113,6 +117,7 @@ impl BackupTargetPolicy {
             rsync_url: None,
         })
     }
+
     /// Build an off-site rsync target policy.
     pub fn rsync(url: impl Into<String>) -> Result<Self, BackupRefineError> {
         let url = url.into();
@@ -127,6 +132,7 @@ impl BackupTargetPolicy {
             rsync_url: Some(url),
         })
     }
+
     /// The display label used by the web UI.
     pub fn label(&self) -> &'static str {
         match self.kind {
@@ -168,7 +174,9 @@ fn selector_type(v: &serde_json::Value) -> &'static str {
 /// resource scope.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct RestoreRequest {
+    /// The id of the run this restore belongs to.
     pub run_id: Uuid,
+    /// The typed resource scope to restore.
     pub scope: RestoreScope,
 }
 
@@ -185,11 +193,8 @@ mod tests {
 
     #[test]
     fn restore_scope_accepts_object_selector() {
-        let scope = RestoreScope::new(
-            ResourceKind::Site,
-            serde_json::json!({"site_id": "abc"}),
-        )
-        .unwrap();
+        let scope =
+            RestoreScope::new(ResourceKind::Site, serde_json::json!({"site_id": "abc"})).unwrap();
         assert_eq!(scope.require_str("site_id").unwrap(), "abc");
     }
 
@@ -215,7 +220,13 @@ mod tests {
     #[test]
     fn target_label_matches_kind() {
         assert_eq!(BackupTargetPolicy::local().label(), "local");
-        assert_eq!(BackupTargetPolicy::s3("bucket").unwrap().label(), "offsite-s3");
-        assert_eq!(BackupTargetPolicy::rsync("rsync://x").unwrap().label(), "offsite-rsync");
+        assert_eq!(
+            BackupTargetPolicy::s3("bucket").unwrap().label(),
+            "offsite-s3"
+        );
+        assert_eq!(
+            BackupTargetPolicy::rsync("rsync://x").unwrap().label(),
+            "offsite-rsync"
+        );
     }
 }

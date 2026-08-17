@@ -7,6 +7,6 @@ mod service;
 #[cfg(test)]
 mod tests;
 
-pub use module::{MaintenanceWindowsModule, MODULE_NAME};
+pub use module::{MODULE_NAME, MaintenanceWindowsModule};
 pub use repo::SqliteMaintenanceRepository;
 pub use service::MaintenanceEnforcer;

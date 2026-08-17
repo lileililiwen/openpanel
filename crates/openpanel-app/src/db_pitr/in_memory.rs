@@ -1,4 +1,4 @@
-//! In-memory [`BinlogSink`] and [`LogTailer`] implementations for
+//! In-memory `BinlogSink` and `LogTailer` implementations for
 //! tests and offline development.
 
 use std::{collections::HashMap, sync::Arc};
@@ -9,7 +9,7 @@ use openpanel_domain::{BinlogRange, BinlogSegment, BinlogSink, LogSeq, LogTailer
 use tokio::sync::Mutex;
 use uuid::Uuid;
 
-/// In-memory [`BinlogSink`] implementation. Segments live in a
+/// In-memory `BinlogSink` implementation. Segments live in a
 /// `HashMap` keyed by `(database_id, from-hex)`. The available range
 /// is derived from the inserted segments.
 #[derive(Default, Clone)]
@@ -86,7 +86,7 @@ impl BinlogSink for InMemoryBinlogSink {
     }
 }
 
-/// In-memory [`LogTailer`] that returns a pre-loaded queue of
+/// In-memory `LogTailer` that returns a pre-loaded queue of
 /// segments per database. The `Default` impl produces an empty
 /// tailer; tests use [`InMemoryLogTailer::new`] and
 /// [`InMemoryLogTailer::enqueue`] to seed the queue.

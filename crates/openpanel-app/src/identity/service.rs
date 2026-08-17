@@ -185,6 +185,7 @@ impl IdentityService {
     /// the user row. The follow-on changes
     /// (`add-account-hierarchy`, `add-hosting-plans`) build on this
     /// path to enforce their own preconditions.
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_user_with_parents(
         &self,
         username: &str,

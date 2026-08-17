@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use openpanel_domain::{
-    IpAllocation, IpError, IpFamily, IpPool, IpRepository, IpStatus, PoolKind, RepoError,
+    IpAllocation, IpFamily, IpPool, IpRepository, IpStatus, PoolKind, RepoError,
 };
 use sqlx::{Row, SqlitePool};
 use uuid::Uuid;

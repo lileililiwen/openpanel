@@ -130,6 +130,8 @@ pub struct WebState {
     pub container_runtime: Arc<ContainerRuntimeService>,
     /// Themeable UI / white-label service.
     pub themeable_ui: Arc<openpanel_app::ThemeableUiService>,
+    /// Webmail client service.
+    pub webmail: Arc<openpanel_app::WebmailService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -254,6 +256,7 @@ pub fn router(
     registry: Arc<ContainerRegistryService>,
     container_runtime: Arc<ContainerRuntimeService>,
     themeable_ui: Arc<openpanel_app::ThemeableUiService>,
+    webmail: Arc<openpanel_app::WebmailService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -287,6 +290,7 @@ pub fn router(
         registry,
         container_runtime,
         themeable_ui,
+        webmail,
         csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
@@ -560,6 +564,19 @@ pub fn router(
         .route("/audit/events", get(crate::audit::audit_list))
         .route("/marketplace", get(crate::plugin_marketplace::page))
         .route("/plugins", get(crate::plugin_extension::page))
+        .route("/webmail", get(crate::webmail::index))
+        .route("/webmail/folder/{name}", get(crate::webmail::folder))
+        .route("/webmail/message/{id}", get(crate::webmail::message))
+        .route(
+            "/webmail/compose",
+            get(crate::webmail::compose_form).post(crate::webmail::compose_send),
+        )
+        .route("/webmail/message/{id}/reply", get(crate::webmail::reply))
+        .route(
+            "/webmail/message/{id}/forward",
+            get(crate::webmail::forward),
+        )
+        .route("/webmail/search", get(crate::webmail::search))
         .route(
             "/marketplace/{plugin_id}",
             get(crate::plugin_marketplace::page),

@@ -16,7 +16,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::IntoResponse,
-    routing::{delete, get, post},
+    routing::{get, post},
 };
 use openpanel_app::{PluginService, plugin::service::PluginInstallError};
 use openpanel_domain::{PluginError, PluginId, PluginManifest, PluginRecord, PluginStatus};

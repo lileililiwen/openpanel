@@ -5,12 +5,9 @@ mod tests {
     use std::sync::Arc;
 
     use chrono::Utc;
-    use openpanel_core::audit::AuditEvent;
-    use openpanel_core::AuditService;
-    use openpanel_domain::container_registry::image::ScanStatus;
-    use openpanel_domain::container_registry::retention::RetentionPolicy;
+    use openpanel_core::{AuditService, audit::AuditEvent};
     use openpanel_domain::container_registry::{
-        ImageDigest, ImageNamespace, NamespaceId, RegistryConfig,
+        ImageDigest, NamespaceId, RegistryConfig, image::ScanStatus, retention::RetentionPolicy,
     };
     use openpanel_test_support::TestDb;
     use tokio::sync::Mutex;
@@ -37,19 +34,22 @@ mod tests {
             self.events.lock().await.push(event);
             Ok(())
         }
+
         async fn recent(&self, _limit: i64) -> Result<Vec<AuditEvent>, openpanel_core::CoreError> {
             Ok(self.events.lock().await.clone())
         }
     }
 
     fn sample_digest(hex: u8) -> String {
-        let body: String = std::iter::repeat(hex).take(64).map(|b| {
-            if b < 10 {
-                (b'0' + b) as char
-            } else {
-                (b'a' + (b - 10)) as char
-            }
-        }).collect();
+        let body: String = std::iter::repeat_n(hex, 64)
+            .map(|b| {
+                if b < 10 {
+                    (b'0' + b) as char
+                } else {
+                    (b'a' + (b - 10)) as char
+                }
+            })
+            .collect();
         format!("sha256:{body}")
     }
 
@@ -109,15 +109,16 @@ mod tests {
         let result = service.push(owner, req, "owner").await.expect("push");
         assert_eq!(result.image.size_bytes, 64 + 2);
         // Storage has both manifest and blob.
-        let manifest_path = format!(
-            "alpha/manifests/{}",
-            result.image.digest.as_str()
-        );
+        let manifest_path = format!("alpha/manifests/{}", result.image.digest.as_str());
         let blob_path = format!("alpha/blobs/{}", sample_digest(2));
         assert!(storage.read(&manifest_path).await.unwrap().is_some());
         assert!(storage.read(&blob_path).await.unwrap().is_some());
         let recorded = audit.events.lock().await.clone();
-        assert!(recorded.iter().any(|e| matches!(e.action, openpanel_core::AuditAction::RegistryImagePushed)));
+        assert!(
+            recorded
+                .iter()
+                .any(|e| matches!(e.action, openpanel_core::AuditAction::RegistryImagePushed))
+        );
     }
 
     #[tokio::test]
@@ -155,10 +156,7 @@ mod tests {
             manifest_bytes: b"{}".to_vec(),
             blobs: vec![],
         };
-        let err = service
-            .push(owner_b, req, "attacker")
-            .await
-            .unwrap_err();
+        let err = service.push(owner_b, req, "attacker").await.unwrap_err();
         let _ = err;
     }
 

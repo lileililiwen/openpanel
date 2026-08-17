@@ -3,8 +3,10 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use super::error::PluginMarketplaceError;
-use super::publisher::{MarketplaceCa, PublisherSignature};
+use super::{
+    error::PluginMarketplaceError,
+    publisher::{MarketplaceCa, PublisherSignature},
+};
 
 /// Catalog entry visible in the marketplace. The `manifest_url` is
 /// pinned by the catalog; the panel MUST refuse to install a
@@ -179,6 +181,7 @@ struct MarketplaceCatalogPayload {
 mod tests {
     use super::*;
 
+    #[allow(dead_code)] // helper for tests that build entries ad hoc
     fn sample_entry() -> MarketplacePlugin {
         MarketplacePlugin {
             id: "com.example.demo".into(),

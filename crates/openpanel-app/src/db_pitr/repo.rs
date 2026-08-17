@@ -55,6 +55,8 @@ fn parse_ts(s: &str) -> Result<DateTime<Utc>, PitrError> {
         .map_err(|e| PitrError::Invalid(format!("invalid timestamp `{s}`: {e}")))
 }
 
+#[allow(dead_code)]
+// Kept for future rows with a nullable timestamp column.
 fn parse_optional_ts(s: Option<String>) -> Result<Option<DateTime<Utc>>, PitrError> {
     match s {
         Some(value) => parse_ts(&value).map(Some),
@@ -375,7 +377,7 @@ impl RestoreRow {
     }
 }
 
-/// SQLite-backed implementation of [`IncrementalRepository`].
+/// SQLite-backed implementation of `IncrementalRepository`.
 #[derive(Clone)]
 pub struct SqliteIncrementalRepository {
     pool: Pool<Sqlite>,

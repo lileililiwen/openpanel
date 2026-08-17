@@ -5,7 +5,7 @@ use std::sync::Arc;
 use axum::{
     Json, Router,
     extract::{Path, State},
-    routing::{delete, get, post},
+    routing::{get, post},
 };
 use openpanel_app::HostingPlansService;
 use openpanel_domain::{
@@ -24,6 +24,8 @@ struct HostingPlansRouteState {
     plans: Arc<HostingPlansService>,
 }
 
+/// Build the hosting-plans routes; the caller wires the service
+/// into the composition root.
 pub fn router(plans: Arc<HostingPlansService>) -> Router {
     Router::new()
         .route("/hosting-plans", get(list).post(create))
@@ -37,14 +39,22 @@ pub fn router(plans: Arc<HostingPlansService>) -> Router {
         .with_state(HostingPlansRouteState { plans })
 }
 
+/// A hosting plan as returned to clients.
 #[derive(Debug, Serialize)]
 pub struct HostingPlanView {
+    /// The plan id.
     pub id: PlanId,
+    /// Display name of the plan.
     pub name: String,
+    /// Free-form plan description.
     pub description: String,
+    /// Whether the plan is active.
     pub status: PlanStatus,
+    /// Resource quota caps imposed by the plan.
     pub quota_caps: PlanQuotas,
+    /// App kinds the plan permits.
     pub allowed_apps: Vec<Uuid>,
+    /// PHP runtime versions the plan permits.
     pub allowed_php_runtimes: Vec<String>,
 }
 
@@ -66,28 +76,41 @@ impl HostingPlanView {
     }
 }
 
+/// Body for creating a hosting plan.
 #[derive(Debug, Deserialize)]
 pub struct CreatePlanRequest {
+    /// Display name of the plan.
     pub name: String,
+    /// Free-form plan description.
     pub description: String,
+    /// Resource quota caps imposed by the plan.
     pub quota_caps: PlanQuotas,
 }
 
+/// Body for updating a hosting plan; absent fields are unchanged.
 #[derive(Debug, Deserialize)]
 pub struct UpdatePlanRequest {
+    /// New plan description.
     pub description: Option<String>,
+    /// New quota caps.
     pub quota_caps: Option<PlanQuotas>,
+    /// Feature toggles to apply.
     pub features: Option<std::collections::BTreeMap<PlanFeature, PlanFeatureState>>,
+    /// New plan status.
     pub status: Option<PlanStatus>,
 }
 
+/// Body for cloning a hosting plan.
 #[derive(Debug, Deserialize)]
 pub struct ClonePlanRequest {
+    /// Name for the cloned plan.
     pub name: String,
 }
 
+/// Body for assigning a plan to a user.
 #[derive(Debug, Deserialize)]
 pub struct AssignPlanRequest {
+    /// The user to assign the plan to.
     pub user_id: Uuid,
 }
 

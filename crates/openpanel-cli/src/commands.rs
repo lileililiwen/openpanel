@@ -1188,6 +1188,7 @@ pub enum CollaboratorCommand {
         collaborator: String,
     },
 }
+/// Subcommands for managing MySQL databases.
 #[derive(Debug, Subcommand)]
 pub enum DatabaseCommand {
     /// Provision a new MySQL database + DB user.

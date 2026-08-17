@@ -19,10 +19,7 @@ pub struct WildcardSslModule {
 
 impl WildcardSslModule {
     /// Compose the bounded context.
-    pub async fn new(
-        ctx: &AppContext,
-        dns: Arc<dyn super::service::DnsProviderPort>,
-    ) -> Self {
+    pub async fn new(ctx: &AppContext, dns: Arc<dyn super::service::DnsProviderPort>) -> Self {
         let pool = ctx.db.pool().await;
         let repo = Arc::new(SqliteWildcardRepository::new(pool));
         let solver = Arc::new(Dns01ChallengeSolver::new(

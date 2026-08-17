@@ -123,6 +123,7 @@ pub fn provider_config_for(
 /// zone setting endpoint.
 pub struct CloudflareAdapter {
     api_token: String,
+    #[allow(dead_code)] // asserted by tests; retained for zone diagnostics
     zone_id: String,
     base_url: String,
     client: reqwest::Client,
@@ -191,6 +192,7 @@ impl CloudflareAdapter {
     }
 }
 
+#[allow(dead_code)] // reserved for structured zone-list parsing
 #[derive(serde::Deserialize)]
 struct CfZone {
     id: String,
@@ -302,6 +304,7 @@ impl CdnAdapter for CloudflareAdapter {
 /// The request is still dispatched and upstream errors are surfaced
 /// through `SiteCacheCdnError::Adapter` rather than swallowed.
 pub struct CloudFrontAdapter {
+    #[allow(dead_code)] // retained for the upcoming SigV4 request signing
     region: String,
     distribution_id: String,
     access_key: String,
@@ -348,7 +351,7 @@ impl CdnAdapter for CloudFrontAdapter {
         )])
     }
 
-    async fn purge(&self, zone: &CdnZone, paths: &[String]) -> Result<PurgeReceipt, Self::Error> {
+    async fn purge(&self, _zone: &CdnZone, paths: &[String]) -> Result<PurgeReceipt, Self::Error> {
         if self.access_key.is_empty() || self.secret_key.is_empty() {
             return Err(SiteCacheCdnError::Adapter(
                 "cloudfront credentials not configured".to_string(),
@@ -424,48 +427,6 @@ impl CdnAdapter for CloudFrontAdapter {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn provider_config_roundtrips_through_json() {
-        let cfg = provider_config_for(
-            CdnKind::Cloudflare,
-            Some("tok".into()),
-            Some("zone1".into()),
-            None,
-            None,
-            None,
-        );
-        let json = cfg.to_json().expect("encode");
-        let back = CdnProviderConfig::from_json(&json).expect("decode");
-        assert_eq!(back.api_token.as_deref(), Some("tok"));
-        assert_eq!(back.zone_id.as_deref(), Some("zone1"));
-    }
-
-    #[test]
-    fn cloudflare_adapter_records_zone_id() {
-        let adapter = CloudflareAdapter::new("tok", "z1");
-        let zone = CdnZone::new("z1", "example.com");
-        // No live network; we assert the adapter is constructible and
-        // the zone carries the configured id.
-        assert_eq!(adapter.zone_id, zone.id());
-    }
-
-    #[test]
-    fn cloudfront_rejects_without_credentials() {
-        let adapter = CloudFrontAdapter::new("us-east-1", "DIST1", "", "");
-        let rt = tokio::runtime::Runtime::new().expect("rt");
-        rt.block_on(async {
-            let res = adapter
-                .purge(&CdnZone::new("DIST1", "d"), &["/a".to_string()])
-                .await;
-            assert!(matches!(res, Err(SiteCacheCdnError::Adapter(_))));
-        });
-    }
-}
-
 /// Reference `CdnAdapter` over a configurable webhook: purge posts
 /// a typed JSON payload. Used by tests and by the `generic_http`
 /// integration kind.
@@ -508,5 +469,47 @@ impl CdnAdapter for GenericHttpAdapter {
 
     async fn get_headers(&self, _zone: &CdnZone) -> Result<HeaderSummary, Self::Error> {
         Ok(HeaderSummary::new(None, None, None))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn provider_config_roundtrips_through_json() {
+        let cfg = provider_config_for(
+            CdnKind::Cloudflare,
+            Some("tok".into()),
+            Some("zone1".into()),
+            None,
+            None,
+            None,
+        );
+        let json = cfg.to_json().expect("encode");
+        let back = CdnProviderConfig::from_json(&json).expect("decode");
+        assert_eq!(back.api_token.as_deref(), Some("tok"));
+        assert_eq!(back.zone_id.as_deref(), Some("zone1"));
+    }
+
+    #[test]
+    fn cloudflare_adapter_records_zone_id() {
+        let adapter = CloudflareAdapter::new("tok", "z1");
+        let zone = CdnZone::new("z1", "example.com");
+        // No live network; we assert the adapter is constructible and
+        // the zone carries the configured id.
+        assert_eq!(adapter.zone_id, zone.id());
+    }
+
+    #[test]
+    fn cloudfront_rejects_without_credentials() {
+        let adapter = CloudFrontAdapter::new("us-east-1", "DIST1", "", "");
+        let rt = tokio::runtime::Runtime::new().expect("rt");
+        rt.block_on(async {
+            let res = adapter
+                .purge(&CdnZone::new("DIST1", "d"), &["/a".to_string()])
+                .await;
+            assert!(matches!(res, Err(SiteCacheCdnError::Adapter(_))));
+        });
     }
 }

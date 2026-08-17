@@ -1,8 +1,10 @@
 //! Cluster data model bounded context: typed host roles, shared
 //! storage declarations, and replicated database metadata.
 
-use std::collections::{BTreeMap, BTreeSet};
-use std::path::{Path, PathBuf};
+use std::{
+    collections::{BTreeMap, BTreeSet},
+    path::{Path, PathBuf},
+};
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -22,6 +24,7 @@ impl NodeId {
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
+
     /// Underlying UUID.
     pub fn as_uuid(&self) -> Uuid {
         self.0
@@ -50,6 +53,7 @@ impl StorageId {
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
+
     /// Underlying UUID.
     pub fn as_uuid(&self) -> Uuid {
         self.0
@@ -116,6 +120,7 @@ impl ClusterNode {
             last_seen_at: now,
         }
     }
+
     /// Restore from persistence.
     pub fn restore(
         id: NodeId,
@@ -141,46 +146,57 @@ impl ClusterNode {
     pub fn id(&self) -> NodeId {
         self.id
     }
+
     /// Host fingerprint.
     pub fn host_fingerprint(&self) -> &str {
         &self.host_fingerprint
     }
+
     /// Role.
     pub fn role(&self) -> &NodeRole {
         &self.role
     }
+
     /// Region.
     pub fn region(&self) -> &str {
         &self.region
     }
+
     /// Rack.
     pub fn rack(&self) -> &str {
         &self.rack
     }
+
     /// Labels.
     pub fn labels(&self) -> &BTreeMap<String, String> {
         &self.labels
     }
+
     /// Last seen.
     pub fn last_seen_at(&self) -> DateTime<Utc> {
         self.last_seen_at
     }
+
     /// Set the role.
     pub fn set_role(&mut self, role: NodeRole) {
         self.role = role;
     }
+
     /// Touch last_seen_at.
     pub fn touch(&mut self, now: DateTime<Utc>) {
         self.last_seen_at = now;
     }
+
     /// Whether the node is a primary.
     pub fn is_primary(&self) -> bool {
         matches!(self.role, NodeRole::Primary)
     }
+
     /// Whether the node is a replica.
     pub fn is_replica(&self) -> bool {
         matches!(self.role, NodeRole::Replica { .. })
     }
+
     /// The primary node id, if the node is a replica.
     pub fn primary_for(&self) -> Option<NodeId> {
         match self.role {
@@ -201,14 +217,17 @@ impl ClusterTopology {
     pub fn new(nodes: Vec<ClusterNode>) -> Self {
         Self { nodes }
     }
+
     /// Nodes.
     pub fn nodes(&self) -> &[ClusterNode] {
         &self.nodes
     }
+
     /// Find a node by id.
     pub fn find(&self, id: NodeId) -> Option<&ClusterNode> {
         self.nodes.iter().find(|n| n.id() == id)
     }
+
     /// Detect a cycle in the replica graph. The graph is a set
     /// of edges `replica -> primary`. A cycle exists if any
     /// primary is reachable from itself via the replica edges.
@@ -289,6 +308,7 @@ impl ReplicatedDatabase {
             failover_policy,
         })
     }
+
     /// Restore from persistence.
     pub fn restore(
         database_id: Uuid,
@@ -310,26 +330,32 @@ impl ReplicatedDatabase {
     pub fn database_id(&self) -> Uuid {
         self.database_id
     }
+
     /// Primary node id.
     pub fn primary_node_id(&self) -> NodeId {
         self.primary_node_id
     }
+
     /// Replica node ids.
     pub fn replicas(&self) -> &[NodeId] {
         &self.replicas
     }
+
     /// Replication mode.
     pub fn replication_mode(&self) -> ReplicationMode {
         self.replication_mode
     }
+
     /// Failover policy.
     pub fn failover_policy(&self) -> FailoverPolicy {
         self.failover_policy
     }
+
     /// Whether `node_id` is a replica for this database.
     pub fn is_replica(&self, node_id: NodeId) -> bool {
         self.replicas.contains(&node_id)
     }
+
     /// Whether a write to `node_id` is allowed. The primary is
     /// the only valid write target.
     pub fn allows_write(&self, node_id: NodeId) -> bool {
@@ -387,6 +413,7 @@ impl SharedStorage {
             backups_attached: Vec::new(),
         })
     }
+
     /// Restore from persistence.
     pub fn restore(
         id: StorageId,
@@ -408,28 +435,34 @@ impl SharedStorage {
     pub fn id(&self) -> StorageId {
         self.id
     }
+
     /// Kind.
     pub fn kind(&self) -> SharedStorageKind {
         self.kind
     }
+
     /// Mount path.
     pub fn mount_path(&self) -> &Path {
         &self.mount_path
     }
+
     /// Site ids attached.
     pub fn sites_attached(&self) -> &[Uuid] {
         &self.sites_attached
     }
+
     /// Backup plan ids attached.
     pub fn backups_attached(&self) -> &[Uuid] {
         &self.backups_attached
     }
+
     /// Attach a site.
     pub fn attach_site(&mut self, site_id: Uuid) {
         if !self.sites_attached.contains(&site_id) {
             self.sites_attached.push(site_id);
         }
     }
+
     /// Attach a backup plan.
     pub fn attach_backup(&mut self, plan_id: Uuid) {
         if !self.backups_attached.contains(&plan_id) {
@@ -460,7 +493,10 @@ pub trait ClusterRepository: Send + Sync + 'static {
     /// Insert a replicated database config.
     async fn insert_replicated(&self, db: &ReplicatedDatabase) -> Result<(), ClusterError>;
     /// Find a replicated database config by id.
-    async fn find_replicated(&self, database_id: Uuid) -> Result<Option<ReplicatedDatabase>, ClusterError>;
+    async fn find_replicated(
+        &self,
+        database_id: Uuid,
+    ) -> Result<Option<ReplicatedDatabase>, ClusterError>;
     /// List all replicated database configs.
     async fn list_replicated(&self) -> Result<Vec<ReplicatedDatabase>, ClusterError>;
     /// Default impl to satisfy the placeholder pattern.
@@ -506,21 +542,16 @@ mod tests {
     use super::*;
 
     fn primary_node(id: NodeId) -> ClusterNode {
-        ClusterNode::new(
-            id,
-            "fp",
-            NodeRole::Primary,
-            "us-east",
-            "rack-1",
-            Utc::now(),
-        )
+        ClusterNode::new(id, "fp", NodeRole::Primary, "us-east", "rack-1", Utc::now())
     }
 
     fn replica_node(id: NodeId, primary: NodeId) -> ClusterNode {
         ClusterNode::new(
             id,
             "fp",
-            NodeRole::Replica { primary_node_id: primary },
+            NodeRole::Replica {
+                primary_node_id: primary,
+            },
             "us-east",
             "rack-2",
             Utc::now(),
@@ -533,12 +564,16 @@ mod tests {
         let mut node = ClusterNode::new(
             id,
             "fp",
-            NodeRole::Replica { primary_node_id: id },
+            NodeRole::Replica {
+                primary_node_id: id,
+            },
             "us-east",
             "rack-1",
             Utc::now(),
         );
-        node.set_role(NodeRole::Replica { primary_node_id: id });
+        node.set_role(NodeRole::Replica {
+            primary_node_id: id,
+        });
         let topo = ClusterTopology::new(vec![node]);
         assert!(topo.has_cycle());
     }
@@ -606,12 +641,8 @@ mod tests {
     #[test]
     fn shared_storage_requires_panel_root() {
         let id = StorageId::new();
-        let err = SharedStorage::new(
-            id,
-            SharedStorageKind::Nfs,
-            PathBuf::from("/etc/passwd"),
-        )
-        .expect_err("must reject");
+        let err = SharedStorage::new(id, SharedStorageKind::Nfs, PathBuf::from("/etc/passwd"))
+            .expect_err("must reject");
         assert_eq!(err, ClusterError::MountOutsidePanelRoot);
     }
 
@@ -624,6 +655,9 @@ mod tests {
             PathBuf::from("/srv/openpanel/storage/abc"),
         )
         .unwrap();
-        assert_eq!(storage.mount_path(), Path::new("/srv/openpanel/storage/abc"));
+        assert_eq!(
+            storage.mount_path(),
+            Path::new("/srv/openpanel/storage/abc")
+        );
     }
 }

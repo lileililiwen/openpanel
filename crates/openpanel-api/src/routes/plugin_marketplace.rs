@@ -22,7 +22,6 @@ use axum::{
     Json, Router,
     extract::{Path, State},
     http::StatusCode,
-    response::IntoResponse,
     routing::get,
 };
 use ed25519_dalek::VerifyingKey;
@@ -111,9 +110,10 @@ async fn install(
         body.publisher_key_b64.as_bytes(),
     )
     .map_err(|_| ApiError::BadRequest("publisher key not valid base64".into()))?;
-    let key_arr: [u8; 32] = key_bytes.as_slice().try_into().map_err(|_| {
-        ApiError::BadRequest("publisher key must be 32 bytes".into())
-    })?;
+    let key_arr: [u8; 32] = key_bytes
+        .as_slice()
+        .try_into()
+        .map_err(|_| ApiError::BadRequest("publisher key must be 32 bytes".into()))?;
     let verifying_key = VerifyingKey::from_bytes(&key_arr)
         .map_err(|_| ApiError::BadRequest("publisher key not a valid ed25519 point".into()))?;
     let manifest = openpanel_domain::PluginManifest {
@@ -125,9 +125,7 @@ async fn install(
             "json-rpc" => openpanel_domain::ManifestRuntime::JsonRpc,
             "wasm" => openpanel_domain::ManifestRuntime::Wasm,
             other => {
-                return Err(ApiError::BadRequest(format!(
-                    "unknown runtime: {other}"
-                )));
+                return Err(ApiError::BadRequest(format!("unknown runtime: {other}")));
             }
         },
         entrypoint: body.manifest.entrypoint.clone(),
@@ -169,9 +167,9 @@ fn map_install_error(e: InstallFromMarketplaceError) -> ApiError {
         InstallFromMarketplaceError::Marketplace(PluginMarketplaceError::ManifestTampered) => {
             ApiError::BadRequest("manifest tampered".into())
         }
-        InstallFromMarketplaceError::Marketplace(PluginMarketplaceError::ManifestUrlMismatch(id)) => {
-            ApiError::BadRequest(format!("manifest url mismatch for {id}"))
-        }
+        InstallFromMarketplaceError::Marketplace(PluginMarketplaceError::ManifestUrlMismatch(
+            id,
+        )) => ApiError::BadRequest(format!("manifest url mismatch for {id}")),
         InstallFromMarketplaceError::Marketplace(PluginMarketplaceError::InvalidCatalog(msg)) => {
             ApiError::BadRequest(msg)
         }
@@ -222,7 +220,9 @@ impl From<&MarketplacePlugin> for PluginDetailView {
             name: p.name.clone(),
             publisher: p.publisher.clone(),
             manifest_url: p.manifest_url.clone(),
-            rating: PluginRating::new(p.rating).map(|r| r.as_f32()).unwrap_or(0.0),
+            rating: PluginRating::new(p.rating)
+                .map(|r| r.as_f32())
+                .unwrap_or(0.0),
             summary: p.summary.clone(),
         }
     }

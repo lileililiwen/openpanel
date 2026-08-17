@@ -119,7 +119,7 @@ mod tests {
         let site_id = uuid::Uuid::new_v4();
         let d = cache_path_directive(site_id, 512);
         assert!(d.contains(&site_id.to_string()));
-        assert!(d.contains(&format!("max_size=512m")));
+        assert!(d.contains(&"max_size=512m".to_string()));
         assert!(d.contains("levels=1:2"));
     }
 

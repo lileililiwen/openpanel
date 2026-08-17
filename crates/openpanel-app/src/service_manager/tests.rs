@@ -7,9 +7,7 @@ use openpanel_domain::{Role, ServiceAction, ServiceManagerRepository, ServiceSta
 use openpanel_test_support::TestDb;
 use uuid::Uuid;
 
-use crate::service_manager::{
-    RecordingSystemCtl, ServiceActor, ServiceLister, SystemCtl,
-};
+use crate::service_manager::{RecordingSystemCtl, ServiceActor, ServiceLister, SystemCtl};
 
 fn admin_user() -> openpanel_domain::User {
     use openpanel_domain::{Email, Password, Username};
@@ -35,7 +33,7 @@ fn non_admin_user() -> openpanel_domain::User {
 
 #[tokio::test]
 async fn list_returns_allowlisted_services_with_status() {
-    let db = TestDb::new().await;
+    let _db = TestDb::new().await;
     let systemctl = Arc::new(RecordingSystemCtl::new());
     systemctl.set_active("nginx", ServiceStatus::Active);
     systemctl.set_enabled("nginx", true);
@@ -53,7 +51,9 @@ async fn action_runs_through_executor_and_audits() {
     let systemctl = Arc::new(RecordingSystemCtl::new());
     systemctl.set_active("nginx", ServiceStatus::Inactive);
     let actor = ServiceActor::new(
-        Arc::new(crate::service_manager::SqliteServiceManagerRepository::new(db.pool())),
+        Arc::new(crate::service_manager::SqliteServiceManagerRepository::new(
+            db.pool(),
+        )),
         Arc::new(NoopAuditService),
         systemctl.clone(),
     );
@@ -73,7 +73,9 @@ async fn action_rejects_unknown_unit() {
     let db = TestDb::new().await;
     let systemctl = Arc::new(RecordingSystemCtl::new());
     let actor = ServiceActor::new(
-        Arc::new(crate::service_manager::SqliteServiceManagerRepository::new(db.pool())),
+        Arc::new(crate::service_manager::SqliteServiceManagerRepository::new(
+            db.pool(),
+        )),
         Arc::new(NoopAuditService),
         systemctl.clone(),
     );
@@ -91,13 +93,18 @@ async fn non_admin_cannot_act() {
     let db = TestDb::new().await;
     let systemctl = Arc::new(RecordingSystemCtl::new());
     let actor = ServiceActor::new(
-        Arc::new(crate::service_manager::SqliteServiceManagerRepository::new(db.pool())),
+        Arc::new(crate::service_manager::SqliteServiceManagerRepository::new(
+            db.pool(),
+        )),
         Arc::new(NoopAuditService),
         systemctl,
     );
     let caller = non_admin_user();
     let res = actor.act(&caller, "nginx", ServiceAction::Start).await;
-    assert!(matches!(res, Err(openpanel_domain::ServiceError::Forbidden)));
+    assert!(matches!(
+        res,
+        Err(openpanel_domain::ServiceError::Forbidden)
+    ));
 }
 
 #[tokio::test]
@@ -134,8 +141,14 @@ async fn history_is_persisted() {
     ));
     let actor = ServiceActor::new(repo.clone(), Arc::new(NoopAuditService), systemctl);
     let caller = admin_user();
-    actor.act(&caller, "nginx", ServiceAction::Start).await.expect("start");
-    actor.act(&caller, "redis", ServiceAction::Stop).await.expect("stop");
+    actor
+        .act(&caller, "nginx", ServiceAction::Start)
+        .await
+        .expect("start");
+    actor
+        .act(&caller, "redis", ServiceAction::Stop)
+        .await
+        .expect("stop");
     let history = repo.list_actions(10).await.expect("history");
     assert_eq!(history.len(), 2);
     let nginx = repo.list_actions_for("nginx", 10).await.expect("nginx");
@@ -148,13 +161,21 @@ async fn enable_disable_toggle_unit_boot_state() {
     let db = TestDb::new().await;
     let systemctl = Arc::new(RecordingSystemCtl::new());
     let actor = ServiceActor::new(
-        Arc::new(crate::service_manager::SqliteServiceManagerRepository::new(db.pool())),
+        Arc::new(crate::service_manager::SqliteServiceManagerRepository::new(
+            db.pool(),
+        )),
         Arc::new(NoopAuditService),
         systemctl.clone(),
     );
     let caller = admin_user();
-    actor.act(&caller, "nginx", ServiceAction::Enable).await.expect("enable");
+    actor
+        .act(&caller, "nginx", ServiceAction::Enable)
+        .await
+        .expect("enable");
     assert!(systemctl.is_enabled("nginx").await.expect("enabled"));
-    actor.act(&caller, "nginx", ServiceAction::Disable).await.expect("disable");
+    actor
+        .act(&caller, "nginx", ServiceAction::Disable)
+        .await
+        .expect("disable");
     assert!(!systemctl.is_enabled("nginx").await.expect("disabled"));
 }

@@ -138,8 +138,8 @@ fn decode_lease(row: sqlx::sqlite::SqliteRow) -> Result<DnsLease, RepoError> {
     let created_at: String = row.try_get("created_at").map_err(map_sqlx)?;
     let revoked_at: Option<String> = row.try_get("revoked_at").map_err(map_sqlx)?;
     let id = Uuid::parse_str(&id).map_err(|e| RepoError::new(e.to_string()))?;
-    let cert_request_id = Uuid::parse_str(&cert_request_id)
-        .map_err(|e| RepoError::new(e.to_string()))?;
+    let cert_request_id =
+        Uuid::parse_str(&cert_request_id).map_err(|e| RepoError::new(e.to_string()))?;
     let created_at = parse_ts(&created_at)?;
     let revoked_at = revoked_at.as_deref().map(parse_ts).transpose()?;
     Ok(DnsLease {

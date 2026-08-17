@@ -42,7 +42,12 @@ impl AgentService {
         owner_id: Uuid,
         actor: &str,
     ) -> Result<AgentRegistration, AgentError> {
-        if self.repo.find_agent_by_cert(cert_fingerprint).await?.is_some() {
+        if self
+            .repo
+            .find_agent_by_cert(cert_fingerprint)
+            .await?
+            .is_some()
+        {
             return Err(AgentError::InvalidManifest(
                 "agent with that cert fingerprint already registered".to_string(),
             ));
@@ -71,10 +76,7 @@ impl AgentService {
     }
 
     /// Mark an agent online with a fresh heartbeat.
-    pub async fn heartbeat(
-        &self,
-        agent_id: AgentId,
-    ) -> Result<(), AgentError> {
+    pub async fn heartbeat(&self, agent_id: AgentId) -> Result<(), AgentError> {
         let mut agent = self
             .repo
             .find_agent(agent_id)
@@ -168,11 +170,7 @@ impl AgentService {
     }
 
     /// Revoke a token.
-    pub async fn revoke_token(
-        &self,
-        token_id: Uuid,
-        actor: &str,
-    ) -> Result<(), AgentError> {
+    pub async fn revoke_token(&self, token_id: Uuid, actor: &str) -> Result<(), AgentError> {
         let mut token = self
             .repo
             .find_token(token_id)
@@ -192,10 +190,7 @@ impl AgentService {
 
     /// Resolve a token by hash, returning `None` for missing or
     /// expired tokens.
-    pub async fn resolve_token(
-        &self,
-        token_hash: &str,
-    ) -> Result<Option<FleetToken>, AgentError> {
+    pub async fn resolve_token(&self, token_hash: &str) -> Result<Option<FleetToken>, AgentError> {
         let token = self.repo.find_token_by_hash(token_hash).await?;
         Ok(token.filter(|t| t.is_usable_at(Utc::now())))
     }
@@ -215,9 +210,13 @@ impl AgentService {
         self.repo.insert_manifest(&manifest).await?;
         self.audit
             .record(
-                AuditEvent::new(actor, AuditAction::RecipeManifestStored, AuditOutcome::Success)
-                    .target(manifest.id().to_string())
-                    .metadata(serde_json::json!({"name": manifest.name()})),
+                AuditEvent::new(
+                    actor,
+                    AuditAction::RecipeManifestStored,
+                    AuditOutcome::Success,
+                )
+                .target(manifest.id().to_string())
+                .metadata(serde_json::json!({"name": manifest.name()})),
             )
             .await
             .ok();
@@ -245,11 +244,13 @@ impl AgentService {
         if !agent.is_usable() {
             return Err(AgentError::Revoked);
         }
-        let manifest = self
-            .repo
-            .find_manifest(manifest_id)
-            .await?
-            .ok_or(AgentError::InvalidManifest("manifest not found".to_string()))?;
+        let manifest =
+            self.repo
+                .find_manifest(manifest_id)
+                .await?
+                .ok_or(AgentError::InvalidManifest(
+                    "manifest not found".to_string(),
+                ))?;
         if manifest.is_expired_at(Utc::now()) {
             return Err(AgentError::ManifestExpired);
         }

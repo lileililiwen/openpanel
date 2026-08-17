@@ -4,9 +4,7 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use openpanel_core::NoopAuditService;
-use openpanel_domain::{
-    LbError, LbRepository, LbStatus, Member, Pool, PoolAlgorithm, Role,
-};
+use openpanel_domain::{LbError, LbStatus, Member, Pool, PoolAlgorithm, Role};
 use openpanel_test_support::TestDb;
 use uuid::Uuid;
 
@@ -80,7 +78,10 @@ async fn next_member_skips_disabled_and_failing() {
     let rotator = MemberRotator::new(repo.clone(), Arc::new(NoopAuditService));
     let service = LbService::new(repo.clone(), rotator);
     let pool = make_pool();
-    service.create_pool(&admin_user(), pool.clone()).await.expect("create");
+    service
+        .create_pool(&admin_user(), pool.clone())
+        .await
+        .expect("create");
     let failing = service
         .add_member(
             &admin_user(),
@@ -108,7 +109,10 @@ async fn apply_probe_demotes_then_recovers() {
     let rotator = MemberRotator::new(repo.clone(), Arc::new(NoopAuditService));
     let service = LbService::new(repo.clone(), rotator);
     let pool = make_pool();
-    service.create_pool(&admin_user(), pool.clone()).await.expect("create");
+    service
+        .create_pool(&admin_user(), pool.clone())
+        .await
+        .expect("create");
     let m = service
         .add_member(
             &admin_user(),
@@ -141,7 +145,10 @@ async fn member_validation_rejects_invalid_weight() {
     let rotator = MemberRotator::new(repo.clone(), Arc::new(NoopAuditService));
     let service = LbService::new(repo.clone(), rotator);
     let pool = make_pool();
-    service.create_pool(&admin_user(), pool.clone()).await.expect("create");
+    service
+        .create_pool(&admin_user(), pool.clone())
+        .await
+        .expect("create");
     let mut m = make_member(pool.id, "10.0.0.1:80", 200, LbStatus::Healthy);
     let res = service.add_member(&admin_user(), m.clone()).await;
     assert!(matches!(res, Err(LbError::InvalidWeight(_))));
@@ -158,7 +165,10 @@ async fn next_member_returns_none_for_empty_pool() {
     let rotator = MemberRotator::new(repo.clone(), Arc::new(NoopAuditService));
     let service = LbService::new(repo.clone(), rotator);
     let pool = make_pool();
-    service.create_pool(&admin_user(), pool.clone()).await.expect("create");
+    service
+        .create_pool(&admin_user(), pool.clone())
+        .await
+        .expect("create");
     let decision = service.next(pool.id).await.expect("next");
     assert!(decision.member.is_none());
 }
@@ -171,7 +181,10 @@ async fn apply_probe_records_audit_metadata() {
     let rotator = MemberRotator::new(repo.clone(), audit.clone());
     let service = LbService::new(repo.clone(), rotator);
     let pool = make_pool();
-    service.create_pool(&admin_user(), pool.clone()).await.expect("create");
+    service
+        .create_pool(&admin_user(), pool.clone())
+        .await
+        .expect("create");
     let m = service
         .add_member(
             &admin_user(),
@@ -183,7 +196,7 @@ async fn apply_probe_records_audit_metadata() {
         .apply_probe(&admin_user(), m.id, true, 3, 1)
         .await
         .expect("probe");
-    assert_eq!(decision.ok, true);
+    assert!(decision.ok);
 }
 
 #[tokio::test]

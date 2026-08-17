@@ -19,10 +19,7 @@ pub struct KernelIsolationModule {
 
 impl KernelIsolationModule {
     /// Compose the bounded context with the default cgroup writer.
-    pub async fn new(
-        ctx: &AppContext,
-        writer: Arc<dyn super::service::CgroupWriter>,
-    ) -> Self {
+    pub async fn new(ctx: &AppContext, writer: Arc<dyn super::service::CgroupWriter>) -> Self {
         let pool = ctx.db.pool().await;
         let repo = Arc::new(SqliteIsolationRepository::new(pool));
         let enforcer = Arc::new(CgroupEnforcer::new(writer, ctx.audit.clone()));

@@ -139,7 +139,11 @@ impl ClusterRepository for SqliteClusterRepository {
     }
 
     async fn insert_replicated(&self, db: &ReplicatedDatabase) -> Result<(), ClusterError> {
-        let replicas: Vec<String> = db.replicas().iter().map(|n| n.as_uuid().to_string()).collect();
+        let replicas: Vec<String> = db
+            .replicas()
+            .iter()
+            .map(|n| n.as_uuid().to_string())
+            .collect();
         let replicas_json = serde_json::to_string(&replicas)
             .map_err(|e| ClusterError::Persistence(e.to_string()))?;
         sqlx::query("INSERT INTO replicated_databases (database_id, primary_node_id, replicas_json, replication_mode, failover_policy) VALUES (?, ?, ?, ?, ?)")
@@ -175,7 +179,9 @@ impl ClusterRepository for SqliteClusterRepository {
         .fetch_all(&self.pool)
         .await
         .map_err(|e| ClusterError::Persistence(e.to_string()))?;
-        rows.into_iter().map(ReplicatedRow::into_replicated).collect()
+        rows.into_iter()
+            .map(ReplicatedRow::into_replicated)
+            .collect()
     }
 }
 

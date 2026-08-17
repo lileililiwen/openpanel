@@ -199,6 +199,7 @@ impl SiteCacheService {
     /// Create a CDN integration with the per-provider fields. The
     /// config is JSON-encoded then stored opaquely. Rejects kinds
     /// for which the binary has no compiled adapter.
+    #[allow(clippy::too_many_arguments)]
     pub async fn create_integration_for_provider(
         &self,
         actor: &str,
@@ -366,10 +367,8 @@ impl SiteCacheService {
         if cache_root.exists() {
             for path in request.paths() {
                 let target = cache_root.join(path.trim_start_matches('/'));
-                if target.exists() {
-                    if std::fs::remove_file(&target).is_ok() {
-                        removed.push(path.clone());
-                    }
+                if target.exists() && std::fs::remove_file(&target).is_ok() {
+                    removed.push(path.clone());
                 }
             }
         }
@@ -524,7 +523,7 @@ where
     let mut failed = 0usize;
     let mut redacted = Vec::new();
     for path in paths {
-        match adapter.purge(zone, &[path.clone()]).await {
+        match adapter.purge(zone, std::slice::from_ref(path)).await {
             Ok(_) => successful.push(path.clone()),
             Err(e) => {
                 failed += 1;

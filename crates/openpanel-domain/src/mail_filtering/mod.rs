@@ -6,7 +6,7 @@
 //! script is size-capped to keep the compile step bounded.
 
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -167,6 +167,7 @@ pub struct AutoResponder {
     pub mode: AutoResponderMode,
     /// Window the autoresponder is active.
     pub window_start: DateTime<Utc>,
+    /// End of the autoresponder window.
     pub window_end: DateTime<Utc>,
 }
 
@@ -240,15 +241,10 @@ pub trait MailFilterRepository: Send + Sync + 'static {
     async fn get_sieve(&self, mailbox_id: Uuid) -> Result<Option<SieveScript>, RepoError>;
 
     /// Persist an autoresponder.
-    async fn save_autoresponder(
-        &self,
-        autoresponder: &AutoResponder,
-    ) -> Result<(), RepoError>;
+    async fn save_autoresponder(&self, autoresponder: &AutoResponder) -> Result<(), RepoError>;
     /// Load the autoresponder for a mailbox.
-    async fn get_autoresponder(
-        &self,
-        mailbox_id: Uuid,
-    ) -> Result<Option<AutoResponder>, RepoError>;
+    async fn get_autoresponder(&self, mailbox_id: Uuid)
+    -> Result<Option<AutoResponder>, RepoError>;
 
     /// Persist a forwarder.
     async fn save_forwarder(&self, forwarder: &Forwarder) -> Result<(), RepoError>;
@@ -268,6 +264,8 @@ pub trait MailFilterRepository: Send + Sync + 'static {
 
 #[cfg(test)]
 mod tests {
+    use chrono::Duration;
+
     use super::*;
 
     #[test]

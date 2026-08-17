@@ -1,9 +1,7 @@
 //! SQLite adapter for the WordPress toolkit bounded context.
 
 use chrono::{DateTime, Utc};
-use openpanel_domain::{
-    RepoError, WpCacheMode, WpRepository, WpSite, WpUpdateResult, WpUpdateSet,
-};
+use openpanel_domain::{RepoError, WpCacheMode, WpRepository, WpSite, WpUpdateResult, WpUpdateSet};
 use sqlx::{Row, SqlitePool};
 use uuid::Uuid;
 
@@ -55,8 +53,8 @@ impl WpRepository for SqliteWpRepository {
     }
 
     async fn save_update_run(&self, result: &WpUpdateResult) -> Result<(), RepoError> {
-        let updates_json = serde_json::to_string(&result.updates)
-            .map_err(|e| RepoError::new(e.to_string()))?;
+        let updates_json =
+            serde_json::to_string(&result.updates).map_err(|e| RepoError::new(e.to_string()))?;
         let completed_at = result.completed_at.map(|t| t.to_rfc3339());
         sqlx::query(
             "INSERT OR REPLACE INTO wp_update_runs \

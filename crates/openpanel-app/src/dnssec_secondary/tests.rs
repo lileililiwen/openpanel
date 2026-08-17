@@ -5,8 +5,8 @@ use std::sync::Arc;
 use chrono::Utc;
 use openpanel_core::NoopAuditService;
 use openpanel_domain::{
-    DsRecord, DnsSecError, DnsSecPolicy, DnsSecRepository, GlueRecord, KeyRole, Role,
-    SecondaryNs, SigningAlgorithm,
+    DnsSecError, DnsSecPolicy, DnsSecRepository, DsRecord, GlueRecord, KeyRole, Role, SecondaryNs,
+    SigningAlgorithm,
 };
 use openpanel_test_support::TestDb;
 use uuid::Uuid;
@@ -49,7 +49,11 @@ async fn enable_dnssec_persists_policy() {
         .await
         .expect("enable");
     assert!(policy.enabled);
-    let loaded = repo.get_policy(zone_id).await.expect("get").expect("present");
+    let loaded = repo
+        .get_policy(zone_id)
+        .await
+        .expect("get")
+        .expect("present");
     assert!(loaded.enabled);
 }
 
@@ -81,7 +85,10 @@ async fn add_key_persists_public_metadata_only() {
         rollover_in_progress: false,
         created_at: Utc::now(),
     };
-    service.add_key(&admin_user(), key.clone()).await.expect("add");
+    service
+        .add_key(&admin_user(), key.clone())
+        .await
+        .expect("add");
     let listed = service.list_keys(zone_id).await.expect("list");
     assert_eq!(listed.len(), 1);
     assert_eq!(listed[0].key_tag, 12345);
@@ -92,11 +99,7 @@ async fn publish_ds_persists_and_calls_registrar() {
     let db = TestDb::new().await;
     let repo = Arc::new(SqliteDnsSecRepository::new(db.pool()));
     let registrar = Arc::new(RecordingRegistrar::new());
-    let service = DnsSecService::new(
-        repo.clone(),
-        Arc::new(NoopAuditService),
-        registrar.clone(),
-    );
+    let service = DnsSecService::new(repo.clone(), Arc::new(NoopAuditService), registrar.clone());
     let zone_id = Uuid::new_v4();
     let ds = DsRecord {
         zone_id,
@@ -190,7 +193,11 @@ async fn policy_round_trip_through_repo() {
         enabled_at: Some(Utc::now()),
     };
     repo.save_policy(&policy).await.expect("save");
-    let loaded = repo.get_policy(zone_id).await.expect("get").expect("present");
+    let loaded = repo
+        .get_policy(zone_id)
+        .await
+        .expect("get")
+        .expect("present");
     assert!(loaded.enabled);
     assert_eq!(loaded.algorithm, SigningAlgorithm::Ed25519);
 }

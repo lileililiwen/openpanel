@@ -43,13 +43,13 @@ pub async fn page(State(state): State<WebState>, headers: HeaderMap) -> Response
             form method="post" action="/api/v1/admin/branding" class="form form-grid" {
                 label { "Brand name" input type="text" name="brand_name" required; }
                 label { "Foreground (hex)"
-                    input type="text" name="color_fg" placeholder="#000000" required;
+                    input type="text" name="color_fg" placeholder="#RRGGBB" required;
                 }
                 label { "Background (hex)"
-                    input type="text" name="color_bg" placeholder="#ffffff" required;
+                    input type="text" name="color_bg" placeholder="#RRGGBB" required;
                 }
                 label { "Accent (hex)"
-                    input type="text" name="color_accent" placeholder="#0066cc" required;
+                    input type="text" name="color_accent" placeholder="#RRGGBB" required;
                 }
                 label { "Contrast minimum"
                     input type="number" name="contrast_min" min="1" max="21" step="0.1" value="4.5";

@@ -5,12 +5,9 @@ use std::sync::Arc;
 
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::{
-    CgroupLimit, IsolationError, IsolationPolicy, IsolationRepository, Role, User,
-    UserNamespaceConfig, user_cgroup_path,
+    CgroupLimit, IsolationError, IsolationPolicy, Role, User, UserNamespaceConfig, user_cgroup_path,
 };
 use uuid::Uuid;
-
-use crate::kernel_isolation::SqliteIsolationRepository;
 
 /// Port that writes to the cgroup filesystem. Production wiring
 /// points this at `/sys/fs/cgroup/openpanel`; tests use
@@ -35,8 +32,10 @@ impl RecordingCgroupWriter {
             calls: std::sync::Mutex::new(Vec::new()),
         }
     }
+
     /// Snapshot the recorded calls.
     pub fn calls(&self) -> Vec<(String, String, u64)> {
+        #[allow(clippy::expect_used)]
         self.calls.lock().expect("calls").clone()
     }
 }
@@ -49,6 +48,7 @@ impl Default for RecordingCgroupWriter {
 
 impl CgroupWriter for RecordingCgroupWriter {
     fn write(&self, path: &str, key: &str, value: u64) -> Result<String, IsolationError> {
+        #[allow(clippy::expect_used)]
         self.calls
             .lock()
             .expect("calls")
@@ -57,6 +57,7 @@ impl CgroupWriter for RecordingCgroupWriter {
     }
 
     fn read(&self, path: &str, key: &str) -> Result<u64, IsolationError> {
+        #[allow(clippy::expect_used)]
         Ok(self
             .calls
             .lock()
@@ -83,11 +84,7 @@ impl CgroupEnforcer {
     }
 
     /// Apply `limit` to its user's cgroup slice.
-    pub async fn apply(
-        &self,
-        caller: &User,
-        limit: &CgroupLimit,
-    ) -> Result<(), IsolationError> {
+    pub async fn apply(&self, caller: &User, limit: &CgroupLimit) -> Result<(), IsolationError> {
         require_admin(caller)?;
         limit.validate()?;
         let path = user_cgroup_path(limit.user_id);
@@ -104,7 +101,8 @@ impl CgroupEnforcer {
         }
         if failed {
             // Log + audit; isolation is NOT disabled.
-            self.audit
+            let _ = self
+                .audit
                 .record(
                     AuditEvent::new(
                         caller.username().as_str(),
@@ -117,7 +115,8 @@ impl CgroupEnforcer {
                 .await;
             return Err(IsolationError::CgroupWrite(path));
         }
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),

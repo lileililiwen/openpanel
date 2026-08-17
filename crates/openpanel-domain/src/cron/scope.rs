@@ -5,9 +5,10 @@
 //! the scheduler consumes. The pre-existing `cron` module holds
 //! the job aggregate, schedule, and persistence port.
 
-use crate::identity::role::Role;
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
+
+use crate::identity::role::Role;
 
 /// Scope of a cron job.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -27,8 +28,11 @@ pub enum JobScope {
 /// Per-user quota dimensions.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CronQuota {
+    /// Maximum concurrently running jobs.
     pub max_concurrent: u32,
+    /// Maximum jobs due per minute.
     pub max_due_per_minute: u32,
+    /// Maximum total jobs (active + queued).
     pub max_total: u32,
 }
 
@@ -41,6 +45,7 @@ impl CronQuota {
             max_total: 100,
         }
     }
+
     /// Compute the effective quota as the per-axis max of the
     /// global default and the per-user override.
     pub fn effective(global: &GlobalDefault, user: &CronQuota) -> CronQuota {
@@ -55,8 +60,11 @@ impl CronQuota {
 /// Global default quota, used when no plan override is present.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GlobalDefault {
+    /// Default maximum concurrently running jobs.
     pub max_concurrent: u32,
+    /// Default maximum jobs due per minute.
     pub max_due_per_minute: u32,
+    /// Default maximum total jobs.
     pub max_total: u32,
 }
 
@@ -88,7 +96,12 @@ pub mod cron_global_default {
 pub enum CronScopeError {
     /// The principal may not create a job in the requested scope.
     #[error("role {role:?} may not create a {scope:?} job")]
-    RoleNotAllowed { role: Role, scope: JobScope },
+    RoleNotAllowed {
+        /// The role that attempted the creation.
+        role: Role,
+        /// The scope the job was requested in.
+        scope: JobScope,
+    },
     /// Total quota exceeded.
     #[error("total quota exceeded")]
     QuotaExceededTotal,

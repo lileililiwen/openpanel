@@ -25,7 +25,7 @@ impl PluginModule {
         Self {
             service,
             migrations: vec![Migration {
-                module: MODULE_NAME.into(),
+                module: MODULE_NAME,
                 version: "001".into(),
                 description: "plugin registry initial schema".into(),
                 sql: crate::migrations::PLUGIN_V001.into(),

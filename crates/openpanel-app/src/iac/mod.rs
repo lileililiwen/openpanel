@@ -1,5 +1,5 @@
 //! Infrastructure-as-Code bounded context: parses an OpenAPI
-//! document into an [`ApiContract`], exposes the codegen scaffold
+//! document into an `ApiContract`, exposes the codegen scaffold
 //! for the SDK and Terraform provider, and runs the drift check
 //! against committed artifacts.
 

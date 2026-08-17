@@ -223,23 +223,15 @@ pub fn validate_cidr(cidr: &str, family: IpFamily) -> Result<(), IpError> {
         IpFamily::V4 => {
             // 0..=32 prefix; address has 4 octets separated by `.`
             prefix <= 32
-                && addr
-                    .split('.')
-                    .filter(|p| !p.is_empty())
-                    .count()
-                    == 4
-                && addr
-                    .split('.')
-                    .all(|p| p.parse::<u8>().is_ok())
+                && addr.split('.').filter(|p| !p.is_empty()).count() == 4
+                && addr.split('.').all(|p| p.parse::<u8>().is_ok())
         }
         IpFamily::V6 => {
             // 0..=128 prefix; address contains at least one `:` and
             // has only hex / `:` characters.
             prefix <= 128
                 && addr.contains(':')
-                && addr
-                    .chars()
-                    .all(|c| c.is_ascii_hexdigit() || c == ':')
+                && addr.chars().all(|c| c.is_ascii_hexdigit() || c == ':')
         }
     };
     if !ok {

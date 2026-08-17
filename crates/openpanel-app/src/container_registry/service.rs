@@ -4,18 +4,24 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use openpanel_core::audit::{AuditAction, AuditEvent, AuditOutcome, AuditService};
-use openpanel_domain::common::error::RepoError;
-use openpanel_domain::container_registry::image::{ImageDigest, ScanStatus, StoredImage};
-use openpanel_domain::container_registry::namespace::{ImageNamespace, NamespaceId};
-use openpanel_domain::container_registry::retention::RetentionPolicy;
-use openpanel_domain::container_registry::scan::ScanResult;
-use openpanel_domain::container_registry::RegistryConfig;
-use openpanel_domain::RegistryError;
+use openpanel_domain::{
+    RegistryError,
+    common::error::RepoError,
+    container_registry::{
+        RegistryConfig,
+        image::{ImageDigest, ScanStatus, StoredImage},
+        namespace::{ImageNamespace, NamespaceId},
+        retention::RetentionPolicy,
+        scan::ScanResult,
+    },
+};
 use uuid::Uuid;
 
-use super::repo::{ImageRepository, NamespaceRepository, ScanResultRepository};
-use super::scan::ScanHook;
-use super::storage::StorageLayer;
+use super::{
+    repo::{ImageRepository, NamespaceRepository, ScanResultRepository},
+    scan::ScanHook,
+    storage::StorageLayer,
+};
 
 /// A single image blob uploaded during a push.
 #[derive(Debug, Clone)]
@@ -115,12 +121,18 @@ impl ContainerRegistryService {
 
     /// Replace the registry configuration.
     pub fn set_config(&self, config: RegistryConfig) {
-        *self.config.write().unwrap() = config;
+        #[allow(clippy::unwrap_used)]
+        // The lock is only poisoned if a previous holder panicked; this service has no panic paths.
+        let mut guard = self.config.write().unwrap();
+        *guard = config;
     }
 
     /// Snapshot the current registry configuration.
     pub fn config(&self) -> RegistryConfig {
-        self.config.read().unwrap().clone()
+        #[allow(clippy::unwrap_used)]
+        // The lock is only poisoned if a previous holder panicked; this service has no panic paths.
+        let cfg = self.config.read().unwrap().clone();
+        cfg
     }
 
     /// Create a new namespace.
@@ -166,10 +178,7 @@ impl ContainerRegistryService {
     }
 
     /// Latest scan result for an image (if any).
-    pub async fn latest_scan(
-        &self,
-        digest: &ImageDigest,
-    ) -> Result<Option<ScanResult>, PushError> {
+    pub async fn latest_scan(&self, digest: &ImageDigest) -> Result<Option<ScanResult>, PushError> {
         Ok(self.scans.latest_for(digest).await?)
     }
 
@@ -221,7 +230,9 @@ impl ContainerRegistryService {
             ns.namespace_id.as_str(),
             request.manifest_digest.as_str()
         );
-        self.storage.write(&manifest_path, &request.manifest_bytes).await?;
+        self.storage
+            .write(&manifest_path, &request.manifest_bytes)
+            .await?;
         // Persist the image record.
         let mut image = StoredImage::new_pushed(
             request.manifest_digest.clone(),
@@ -267,7 +278,8 @@ impl ContainerRegistryService {
             }
         }
         // Apply retention.
-        self.apply_retention(&image.namespace, &cfg.retention, actor).await?;
+        self.apply_retention(&image.namespace, &cfg.retention, actor)
+            .await?;
         let event = AuditEvent::new(
             actor,
             AuditAction::RegistryImagePushed,
@@ -293,13 +305,9 @@ impl ContainerRegistryService {
         policy: &RetentionPolicy,
         actor: &str,
     ) -> Result<u32, PushError> {
-        let ns = self
-            .namespaces
-            .find(namespace)
-            .await?
-            .ok_or_else(|| {
-                PushError::Domain(RegistryError::NamespaceNotFound(namespace.to_string()))
-            })?;
+        let ns = self.namespaces.find(namespace).await?.ok_or_else(|| {
+            PushError::Domain(RegistryError::NamespaceNotFound(namespace.to_string()))
+        })?;
         let images = self.images.list_for_namespace(namespace).await?;
         let entries = images
             .iter()
@@ -307,14 +315,9 @@ impl ContainerRegistryService {
         let verdict = policy.apply(entries, Utc::now());
         let mut pruned = 0u32;
         for digest_str in &verdict.to_delete {
-            let digest = ImageDigest::new(digest_str.clone())
-                .map_err(|e| PushError::Domain(e))?;
+            let digest = ImageDigest::new(digest_str.clone()).map_err(PushError::Domain)?;
             if let Some(image) = self.images.find(namespace, &digest).await? {
-                let path = format!(
-                    "{}/manifests/{}",
-                    namespace.as_str(),
-                    digest.as_str()
-                );
+                let path = format!("{}/manifests/{}", namespace.as_str(), digest.as_str());
                 self.storage.delete(&path).await.ok();
                 self.images.delete(namespace, &digest).await?;
                 let mut updated = ns.clone();

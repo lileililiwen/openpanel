@@ -2,7 +2,7 @@
 
 use chrono::{DateTime, Utc};
 use openpanel_domain::{
-    DsRecord, DnsSecPolicy, DnsSecRepository, GlueRecord, KeyRole, RepoError, SecondaryNs,
+    DnsSecPolicy, DnsSecRepository, DsRecord, GlueRecord, KeyRole, RepoError, SecondaryNs,
     SigningAlgorithm, ZoneSigningKey,
 };
 use sqlx::{Row, SqlitePool};
@@ -128,13 +128,12 @@ impl DnsSecRepository for SqliteDnsSecRepository {
     }
 
     async fn list_glue(&self, zone_id: Uuid) -> Result<Vec<GlueRecord>, RepoError> {
-        let rows = sqlx::query(
-            "SELECT id, zone_id, name, a, aaaa FROM glue_records WHERE zone_id = ?",
-        )
-        .bind(zone_id.to_string())
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| RepoError::new(e.to_string()))?;
+        let rows =
+            sqlx::query("SELECT id, zone_id, name, a, aaaa FROM glue_records WHERE zone_id = ?")
+                .bind(zone_id.to_string())
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| RepoError::new(e.to_string()))?;
         rows.into_iter().map(decode_glue).collect()
     }
 

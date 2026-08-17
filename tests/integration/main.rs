@@ -63,3 +63,5 @@ mod web_ui;
 mod web_ui_audit;
 /// Web-UI styling + responsive layout integration tests.
 mod web_ui_styling;
+/// Webmail client integration tests.
+mod webmail_client;

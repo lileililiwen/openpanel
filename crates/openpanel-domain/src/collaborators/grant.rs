@@ -1,12 +1,13 @@
 //! `Collaborator` and `SiteGrant` aggregates.
 
-use chrono::{DateTime, Utc};
-use crate::common::Email;
-use serde::{Deserialize, Serialize};
 use std::fmt;
+
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use super::permission::PermissionSet;
+use crate::common::Email;
 
 /// Stable collaborator identifier (UUID v4).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]

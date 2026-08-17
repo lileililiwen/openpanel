@@ -282,6 +282,7 @@ impl BackupUploadService {
 
 /// TTL for the derived KEK in the panel: this is the in-memory
 /// key lifecycle, not the off-host re-derivation window.
+#[allow(dead_code)] // reserved for the in-memory KEK TTL expiry task
 pub const KEK_MEMORY_TTL: Duration = Duration::hours(24);
 
 #[cfg(test)]

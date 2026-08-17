@@ -21,16 +21,16 @@ use openpanel_app::{
     BackupsModule, CollaboratorService, ContainerRuntimeModule, ContainerRuntimeService,
     CronModule, CronService, DatabasesModule, DatabasesService, DbPitrModule, DnsModule,
     DnsService, DockerAdapter, DockerModule, DockerService, ExecResult, FilesModule, FilesService,
-    FtpModule, FtpService, GrantResolver, HierarchyService, HostingPlansModule,
-    HostingPlansService, IdentityModule, IdentityService, InMemoryBinlogSink,
-    InMemoryStagingFilesystem, LogService, LogsModule, MailModule, MailService,
-    MalwareScannerService, MarketplaceService, MigrationImportersModule, MonitoringModule,
-    MonitoringService, NotificationModule, NotificationService, OffsiteBackupTargetsModule,
-    PitrService, PluginService, RealInstallerFs, RealScannerFs, ReqwestArtifactDownloader,
-    SecurityModule, SecurityService, SiteCacheCdnModule, SiteCloneService, SiteCloneTemplateModule,
-    SiteStagingModule, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
-    SslModule, SslPaths, SslService, StagingService, SystemServicesModule, ThemeableUiService,
-    WafModule, WafService, WebApplicationInstallerService,
+    FtpModule, FtpService, GrantResolver, HostingPlansModule, HostingPlansService, IdentityModule,
+    IdentityService, InMemoryMailBridge, InMemoryStagingFilesystem, LogService, LogsModule,
+    MailModule, MailService, MalwareScannerService, MarketplaceService, MigrationImportersModule,
+    MonitoringModule, MonitoringService, NotificationModule, NotificationService,
+    OffsiteBackupTargetsModule, PitrService, PluginService, RealInstallerFs, RealScannerFs,
+    ReqwestArtifactDownloader, SecurityModule, SecurityService, SiteCacheCdnModule,
+    SiteCloneService, SiteCloneTemplateModule, SiteStagingModule, SitesModule, SitesService,
+    SoftwareCenterModule, SoftwareCenterService, SslModule, SslPaths, SslService, StagingService,
+    SystemServicesModule, ThemeableUiService, WafModule, WafService,
+    WebApplicationInstallerService, WebmailService,
     identity::two_factor::TwoFactorCrypto,
     security::MemoryFirewall,
     sites::{nginx::NginxPaths, repo::SqliteSiteRepository},
@@ -255,15 +255,21 @@ pub struct TestServer {
     /// Plugin extension framework service.
     plugins: Arc<PluginService>,
     /// Plugin marketplace service.
+    #[allow(dead_code)] // reserved for future test-server accessors
     marketplace: Arc<MarketplaceService>,
     /// Collaborator service.
+    #[allow(dead_code)] // reserved for future test-server accessors
     collaborators: Arc<CollaboratorService>,
     /// Grant resolver.
+    #[allow(dead_code)] // reserved for future test-server accessors
     grant_resolver: Arc<GrantResolver>,
     /// Container registry service.
+    #[allow(dead_code)] // reserved for future test-server accessors
     registry: Arc<openpanel_app::ContainerRegistryService>,
     /// Hosting plans service.
+    #[allow(dead_code)] // reserved for future test-server accessors
     hosting_plans: Arc<HostingPlansService>,
+    #[allow(dead_code)] // reserved for future test-server accessors
     account_hierarchy: Arc<openpanel_app::HierarchyService>,
     migration_importers: Arc<openpanel_app::MigrationService>,
     offsite_backup_targets: Arc<openpanel_app::BackupUploadService>,
@@ -272,6 +278,7 @@ pub struct TestServer {
     themeable_ui: Arc<openpanel_app::ThemeableUiService>,
     web_application_installer: Arc<openpanel_app::WebApplicationInstallerService>,
     malware_scanner: Arc<openpanel_app::MalwareScannerService>,
+    webmail: Arc<openpanel_app::WebmailService>,
 }
 
 impl TestServer {
@@ -666,6 +673,19 @@ impl TestServer {
             Arc::new(RealScannerFs),
             Some(sandbox.path().join("quarantine")),
         ));
+        // Apply the webmail migration and build the service.
+        sqlx::query(openpanel_app::migrations::WEBMAIL_CLIENT_V001)
+            .execute(&pool)
+            .await
+            .expect("webmail migrations");
+        let webmail_svc = Arc::new(WebmailService::new(
+            Arc::new(openpanel_app::webmail_client::SqliteWebmailRepository::new(
+                pool.clone(),
+            )),
+            Arc::new(InMemoryMailBridge::default()),
+            audit.clone(),
+            master_key,
+        ));
         let site_clone_template_repo = site_clone_template_module.repo();
         docker_svc.attach_quota_gate(container_runtime_svc.clone());
         let ftp_svc = ftp_module.service();
@@ -843,6 +863,7 @@ impl TestServer {
             registry_svc.clone(),
             container_runtime_svc.clone(),
             themeable_ui_svc.clone(),
+            webmail_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -917,6 +938,7 @@ impl TestServer {
             themeable_ui: themeable_ui_svc,
             web_application_installer: web_application_installer_svc,
             malware_scanner: malware_scanner_svc,
+            webmail: webmail_svc,
             ftp: ftp_svc,
             api_tokens: api_token_svc,
             notifications: notification_svc,
@@ -1040,6 +1062,11 @@ impl TestServer {
     /// The malware scanner service.
     pub fn malware_scanner(&self) -> Arc<openpanel_app::MalwareScannerService> {
         self.malware_scanner.clone()
+    }
+
+    /// The webmail client service.
+    pub fn webmail(&self) -> Arc<openpanel_app::WebmailService> {
+        self.webmail.clone()
     }
 
     /// The per-site WAF service.

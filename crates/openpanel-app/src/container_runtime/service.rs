@@ -120,21 +120,31 @@ impl ContainerRuntimeService {
     /// when rotating the panel master key).
     pub fn rotate_master_key(&self, master_key_b64: &str) -> Result<(), ContainerRuntimeError> {
         let key = crypto::decode_master_key(master_key_b64)?;
-        *self.master_key.write().expect("invariant: rwlock poisoned") = key;
+        #[allow(clippy::expect_used)]
+        // The lock is only poisoned if a previous holder panicked; this service has no panic paths.
+        let mut guard = self.master_key.write().expect("invariant: rwlock poisoned");
+        *guard = key;
         Ok(())
     }
 
     /// Replace the plan-imposed caps (e.g. when a user upgrades their plan).
     pub fn set_plan_caps(&self, caps: PlanQuotaCaps) {
-        *self.plan_caps.write().expect("invariant: rwlock poisoned") = caps;
+        #[allow(clippy::expect_used)]
+        // The lock is only poisoned if a previous holder panicked; this service has no panic paths.
+        let mut guard = self.plan_caps.write().expect("invariant: rwlock poisoned");
+        *guard = caps;
     }
 
     /// Snapshot the plan-imposed caps.
     pub fn plan_caps(&self) -> PlanQuotaCaps {
-        self.plan_caps
+        #[allow(clippy::expect_used)]
+        // The lock is only poisoned if a previous holder panicked; this service has no panic paths.
+        let caps = self
+            .plan_caps
             .read()
             .expect("invariant: rwlock poisoned")
-            .clone()
+            .clone();
+        caps
     }
 
     /// Read the per-user quota. If absent in storage, defaults are
@@ -259,10 +269,11 @@ impl ContainerRuntimeService {
         let samples = self.repo.list_metrics(container_id, limit).await?;
         // Authorise: any sample's user_id must match caller or
         // caller is Owner/Admin.
-        if let Some(first) = samples.first() {
-            if first.user_id != caller.id() && !matches!(caller.role(), Role::Owner | Role::Admin) {
-                return Err(ContainerRuntimeError::Forbidden);
-            }
+        if let Some(first) = samples.first()
+            && first.user_id != caller.id()
+            && !matches!(caller.role(), Role::Owner | Role::Admin)
+        {
+            return Err(ContainerRuntimeError::Forbidden);
         }
         Ok(samples)
     }
@@ -302,7 +313,7 @@ impl ContainerRuntimeService {
                         AuditAction::BandwidthThresholdCrossed,
                         AuditOutcome::Success,
                     )
-                    .target(&user_id.to_string())
+                    .target(user_id.to_string())
                     .metadata(serde_json::json!({
                         "container_id": container_id.map(|u| u.to_string()),
                         "month": month,
@@ -341,7 +352,7 @@ impl ContainerRuntimeService {
                     AuditAction::ContainerEgressLimitRaised,
                     AuditOutcome::Success,
                 )
-                .target(&user_id.to_string())
+                .target(user_id.to_string())
                 .metadata(serde_json::json!({
                     "egress_bytes_per_month": quota.egress_bytes_per_month,
                 })),
@@ -363,6 +374,8 @@ impl ContainerRuntimeService {
         password: String,
     ) -> Result<CreateCredentialResult, ContainerRuntimeError> {
         validate_password(&password)?;
+        #[allow(clippy::expect_used)]
+        // The lock is only poisoned if a previous holder panicked; this service has no panic paths.
         let key = *self.master_key.read().expect("invariant: rwlock poisoned");
         let ciphertext = crypto::encrypt_secret(&key, &password)?;
         let id = Uuid::new_v4();
@@ -437,6 +450,8 @@ impl ContainerRuntimeService {
                 .ok_or(PullError::AuthFailed)?;
             self.enforce_quota_read(caller, cred.user_id)
                 .map_err(|_| PullError::AuthFailed)?;
+            #[allow(clippy::expect_used)]
+            // The lock is only poisoned if a previous holder panicked; this service has no panic paths.
             let key = *self.master_key.read().expect("invariant: rwlock poisoned");
             let plain = crypto::decrypt_secret(&key, &cred.encrypted_secret)
                 .map_err(|_| PullError::AuthFailed)?;
@@ -463,7 +478,7 @@ impl ContainerRuntimeService {
                     AuditAction::ContainerImagePulled,
                     AuditOutcome::Success,
                 )
-                .target(&container_id.to_string())
+                .target(container_id.to_string())
                 .metadata(serde_json::json!({
                     "owner_id": caller.id().to_string(),
                     "container_id": container_id.to_string(),
@@ -509,7 +524,7 @@ impl ContainerRuntimeService {
                     AuditAction::ContainerStartQuotaBlocked,
                     AuditOutcome::Denied,
                 )
-                .target(&user_id.to_string())
+                .target(user_id.to_string())
                 .metadata(serde_json::json!({ "axis": axis })),
             )
             .await;

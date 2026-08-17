@@ -4,9 +4,7 @@ use std::sync::Arc;
 
 use openpanel_core::{AppContext, Migration, Module};
 
-use super::{
-    ReverseProxyLayer, RuntimeService, SqliteRuntimeRepository, SupervisorUnitBuilder,
-};
+use super::{ReverseProxyLayer, RuntimeService, SqliteRuntimeRepository, SupervisorUnitBuilder};
 
 /// Stable app-runtimes module name.
 pub const MODULE_NAME: &str = "app_runtimes";

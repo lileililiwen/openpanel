@@ -2,13 +2,11 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::{
-    PromotionRepository, PromotionRun, PromotionStatus, Role, Site, SiteRepository,
-    SiteStagingError, SnapshotId, StagingSlot, StagingSlotRepository, StagingSnapshotRepository,
-    SyncPolicy, User,
+    PromotionRepository, PromotionRun, Role, Site, SiteRepository, SiteStagingError, SnapshotId,
+    StagingSlot, StagingSlotRepository, StagingSnapshotRepository, SyncPolicy, User,
 };
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -446,10 +444,9 @@ impl Drop for LockGuard<'_> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc as StdArc;
-
     use chrono::Utc;
     use openpanel_core::AuditService;
+    use openpanel_domain::PromotionStatus;
     use openpanel_test_support::{
         db::TestDb,
         mocks::{MockAudit, MockSiteRepo},

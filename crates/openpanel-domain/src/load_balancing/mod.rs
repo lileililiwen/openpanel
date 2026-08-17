@@ -254,7 +254,7 @@ impl ProbeDecision {
 
 /// Pick the next eligible member from `members` using round-robin
 /// or weighted selection.
-pub fn next_member<'a>(members: &'a [Member], algorithm: PoolAlgorithm) -> Option<&'a Member> {
+pub fn next_member(members: &[Member], algorithm: PoolAlgorithm) -> Option<&Member> {
     let eligible: Vec<&Member> = members
         .iter()
         .filter(|m| m.status.is_eligible() && m.weight > 0)
@@ -269,7 +269,7 @@ pub fn next_member<'a>(members: &'a [Member], algorithm: PoolAlgorithm) -> Optio
             // ties are broken by lowest id for determinism.
             eligible
                 .into_iter()
-                .max_by_key(|m| (m.weight, std::cmp::Reverse(u128::from(m.id.as_u128()))))
+                .max_by_key(|m| (m.weight, std::cmp::Reverse(m.id.as_u128())))
         }
         PoolAlgorithm::StickyIp => eligible.first().copied(),
     }

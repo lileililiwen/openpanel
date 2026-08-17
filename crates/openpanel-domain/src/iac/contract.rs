@@ -6,8 +6,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::provider::{ResourceKind, TerraformProvider};
-use super::sdk::{Language, SdkPackage, SdkSurface};
+use super::{
+    provider::ResourceKind,
+    sdk::{Language, SdkPackage, SdkSurface},
+};
 
 /// Stable OpenAPI operation id (e.g. `sites.list`).
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -50,10 +52,7 @@ impl Operation {
     /// Returns `true` if the operation is a write (`post`, `put`,
     /// `patch`, `delete`).
     pub fn is_write(&self) -> bool {
-        matches!(
-            self.method.as_str(),
-            "post" | "put" | "patch" | "delete"
-        )
+        matches!(self.method.as_str(), "post" | "put" | "patch" | "delete")
     }
 }
 
@@ -89,11 +88,7 @@ impl ApiContract {
     /// backing endpoint.
     pub fn every_resource_backed(&self) -> bool {
         use std::collections::BTreeSet;
-        let op_ids: BTreeSet<&str> = self
-            .operations
-            .iter()
-            .map(|o| o.id.as_str())
-            .collect();
+        let op_ids: BTreeSet<&str> = self.operations.iter().map(|o| o.id.as_str()).collect();
         self.resource_endpoints.iter().all(|re| {
             op_ids.contains(re.create_op.as_str())
                 && op_ids.contains(re.read_op.as_str())
@@ -104,7 +99,7 @@ impl ApiContract {
     /// Returns the SDK surface for a given operation, picking the
     /// camelCase method name.
     pub fn surface_for(&self, op: &Operation) -> SdkSurface {
-        let method_name = camel_case(&op.id.as_str());
+        let method_name = camel_case(op.id.as_str());
         let resource = op.family.clone();
         SdkSurface {
             resource,

@@ -191,13 +191,11 @@ pub fn is_version_allowed(version: &str) -> bool {
 /// Default port allow-list. We require 1024..=65535 and reject
 /// well-known privileged ports.
 pub fn is_port_allowed(port: u16) -> bool {
-    port >= 1024 && port <= 65535 && !RESERVED_PORTS.contains(&port)
+    port >= 1024 && !RESERVED_PORTS.contains(&port)
 }
 
 /// Reserved ports the runtime may not bind to.
-pub const RESERVED_PORTS: &[u16] = &[
-    22, 25, 80, 443, 3306, 5432, 6379, 27017, 9080,
-];
+pub const RESERVED_PORTS: &[u16] = &[22, 25, 80, 443, 3306, 5432, 6379, 27017, 9080];
 
 /// Reject paths that escape the chroot (`..`, absolute paths,
 /// or paths with embedded null).
@@ -310,28 +308,40 @@ mod tests {
     fn validate_rejects_absolute_workdir() {
         let mut runtime = ok_runtime();
         runtime.workdir = "/etc/passwd".into();
-        assert!(matches!(runtime.validate(), Err(RuntimeError::OutsideChroot(_))));
+        assert!(matches!(
+            runtime.validate(),
+            Err(RuntimeError::OutsideChroot(_))
+        ));
     }
 
     #[test]
     fn validate_rejects_parent_traversal() {
         let mut runtime = ok_runtime();
         runtime.workdir = "../etc".into();
-        assert!(matches!(runtime.validate(), Err(RuntimeError::OutsideChroot(_))));
+        assert!(matches!(
+            runtime.validate(),
+            Err(RuntimeError::OutsideChroot(_))
+        ));
     }
 
     #[test]
     fn validate_rejects_privileged_port() {
         let mut runtime = ok_runtime();
         runtime.app_port = 80;
-        assert!(matches!(runtime.validate(), Err(RuntimeError::PortNotAllowed(_))));
+        assert!(matches!(
+            runtime.validate(),
+            Err(RuntimeError::PortNotAllowed(_))
+        ));
     }
 
     #[test]
     fn validate_rejects_bad_version() {
         let mut runtime = ok_runtime();
         runtime.version = "not-a-version".into();
-        assert!(matches!(runtime.validate(), Err(RuntimeError::VersionNotAllowed(_))));
+        assert!(matches!(
+            runtime.validate(),
+            Err(RuntimeError::VersionNotAllowed(_))
+        ));
     }
 
     #[test]

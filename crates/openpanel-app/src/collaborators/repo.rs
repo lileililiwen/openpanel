@@ -2,10 +2,9 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use openpanel_domain::common::error::RepoError;
 use openpanel_domain::{
     CollabStatus, Collaborator, CollaboratorId, CollaboratorRepository, Email, PermissionSet,
-    SiteGrant, SiteGrantRepository,
+    SiteGrant, SiteGrantRepository, common::error::RepoError,
 };
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
@@ -15,7 +14,9 @@ fn parse_status(s: &str) -> Result<CollabStatus, RepoError> {
         "invited" => Ok(CollabStatus::Invited),
         "active" => Ok(CollabStatus::Active),
         "revoked" => Ok(CollabStatus::Revoked),
-        other => Err(RepoError::new(format!("unknown collaborator status `{other}`"))),
+        other => Err(RepoError::new(format!(
+            "unknown collaborator status `{other}`"
+        ))),
     }
 }
 
@@ -85,11 +86,7 @@ impl CollaboratorRepository for SqliteCollaboratorRepository {
         row.map(row_to_collaborator).transpose()
     }
 
-    async fn update_status(
-        &self,
-        id: &CollaboratorId,
-        c: &Collaborator,
-    ) -> Result<(), RepoError> {
+    async fn update_status(&self, id: &CollaboratorId, c: &Collaborator) -> Result<(), RepoError> {
         let res = sqlx::query(
             "UPDATE collaborators
              SET status = ?, accepted_at = ?, revoked_at = ?
@@ -136,8 +133,8 @@ struct CollaboratorRow {
 fn row_to_collaborator(row: CollaboratorRow) -> Result<Collaborator, RepoError> {
     let collaborator_id = Uuid::parse_str(&row.collaborator_id)
         .map_err(|e| RepoError::new(format!("collaborator_id: {e}")))?;
-    let account_id = Uuid::parse_str(&row.account_id)
-        .map_err(|e| RepoError::new(format!("account_id: {e}")))?;
+    let account_id =
+        Uuid::parse_str(&row.account_id).map_err(|e| RepoError::new(format!("account_id: {e}")))?;
     let email = parse_email(&row.email)?;
     let status = parse_status(&row.status)?;
     let invited_at = parse_dt(&row.invited_at)?;
@@ -291,8 +288,8 @@ struct SiteGrantRow {
 fn row_to_grant(row: SiteGrantRow) -> Result<SiteGrant, RepoError> {
     let collaborator_id = Uuid::parse_str(&row.collaborator_id)
         .map_err(|e| RepoError::new(format!("collaborator_id: {e}")))?;
-    let site_id = Uuid::parse_str(&row.site_id)
-        .map_err(|e| RepoError::new(format!("site_id: {e}")))?;
+    let site_id =
+        Uuid::parse_str(&row.site_id).map_err(|e| RepoError::new(format!("site_id: {e}")))?;
     let granted_at = parse_dt(&row.granted_at)?;
     Ok(SiteGrant {
         collaborator_id: CollaboratorId::new(collaborator_id),

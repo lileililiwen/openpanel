@@ -56,8 +56,8 @@ impl BillingRepository for SqliteBillingRepository {
     }
 
     async fn save_chargeback(&self, chargeback: &Chargeback) -> Result<(), RepoError> {
-        let lines_json = serde_json::to_string(&chargeback.lines)
-            .map_err(|e| RepoError::new(e.to_string()))?;
+        let lines_json =
+            serde_json::to_string(&chargeback.lines).map_err(|e| RepoError::new(e.to_string()))?;
         sqlx::query(
             "INSERT OR REPLACE INTO chargebacks \
              (id, owner_id, period_start, period_end, amount_minor, currency, lines_json, finalised) \

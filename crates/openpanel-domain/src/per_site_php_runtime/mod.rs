@@ -96,22 +96,27 @@ impl PhpRuntimeRef {
     pub fn package_id(&self) -> &str {
         &self.package_id
     }
+
     /// SemVer-ish version string.
     pub fn version(&self) -> &str {
         &self.version
     }
+
     /// Socket path.
     pub fn socket_path(&self) -> &PathBuf {
         &self.socket_path
     }
+
     /// Owner user id.
     pub fn owner(&self) -> Uuid {
         self.owner
     }
+
     /// Current status.
     pub fn status(&self) -> PhpRuntimeStatus {
         self.status
     }
+
     /// Set the status (e.g. after a health check).
     pub fn set_status(&mut self, status: PhpRuntimeStatus) {
         self.status = status;
@@ -133,11 +138,7 @@ impl PhpFpmPoolSpec {
     /// Build a new pool spec. The pool name is derived from the
     /// site id; the config path must be under
     /// `/etc/php/<ver>/fpm/pool.d/`.
-    pub fn new(
-        site_id: Uuid,
-        runtime: PhpRuntimeRef,
-        written_at: DateTime<Utc>,
-    ) -> Self {
+    pub fn new(site_id: Uuid, runtime: PhpRuntimeRef, written_at: DateTime<Utc>) -> Self {
         let pool_name = format!("openpanel-{}", short_id(site_id));
         let config_path = std::path::PathBuf::from(format!(
             "/etc/php/{}/fpm/pool.d/{}.conf",
@@ -180,26 +181,32 @@ impl PhpFpmPoolSpec {
     pub fn site_id(&self) -> Uuid {
         self.site_id
     }
+
     /// Runtime reference.
     pub fn runtime(&self) -> &PhpRuntimeRef {
         &self.runtime
     }
+
     /// Pool name.
     pub fn pool_name(&self) -> &str {
         &self.pool_name
     }
+
     /// Config path.
     pub fn config_path(&self) -> &PathBuf {
         &self.config_path
     }
+
     /// When the pool config was written.
     pub fn written_at(&self) -> DateTime<Utc> {
         self.written_at
     }
+
     /// Last observed pool status.
     pub fn last_pool_status(&self) -> PhpRuntimeStatus {
         self.last_pool_status
     }
+
     /// Set the last observed pool status.
     pub fn set_last_pool_status(&mut self, status: PhpRuntimeStatus) {
         self.last_pool_status = status;

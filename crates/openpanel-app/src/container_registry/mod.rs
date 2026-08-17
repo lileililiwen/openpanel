@@ -5,13 +5,11 @@ pub mod module;
 pub mod repo;
 pub mod scan;
 pub mod service;
-pub mod storage;
 #[cfg(test)]
 mod service_tests;
+pub mod storage;
 
 pub use module::{ContainerRegistryModule, MODULE_NAME};
 pub use repo::{SqliteImageRepository, SqliteNamespaceRepository, SqliteScanResultRepository};
 pub use scan::{NoopScanHook, ScanHook, ScanHookError};
-pub use service::{
-    ContainerRegistryService, ImageBlob, PushRequest, PushResult, PushError,
-};
+pub use service::{ContainerRegistryService, ImageBlob, PushError, PushRequest, PushResult};

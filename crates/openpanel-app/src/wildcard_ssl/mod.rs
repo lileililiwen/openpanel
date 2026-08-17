@@ -8,8 +8,6 @@ mod service;
 mod tests;
 
 pub use module::{MODULE_NAME, WildcardSslModule};
-pub use repo::SqliteWildcardRepository;
-pub use service::{
-    CertRenewalScheduler, Dns01ChallengeSolver, DnsProviderPort, WildcardIssuer,
-};
 pub use openpanel_domain::RecordingDnsProvider;
+pub use repo::SqliteWildcardRepository;
+pub use service::{CertRenewalScheduler, Dns01ChallengeSolver, DnsProviderPort, WildcardIssuer};

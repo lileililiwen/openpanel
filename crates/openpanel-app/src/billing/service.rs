@@ -79,7 +79,8 @@ impl ChargebackEngine {
             currency,
         );
         self.repo.save_chargeback(&chargeback).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -138,7 +139,8 @@ impl WebhookRelay {
             .ok_or(BillingError::NotFound(integration_id.to_string()))?;
         if integration.status != BillingStatus::Enabled {
             let reason = format!("integration {} is disabled", integration.name);
-            self.audit
+            let _ = self
+                .audit
                 .record(
                     AuditEvent::new(
                         caller.username().as_str(),
@@ -155,7 +157,8 @@ impl WebhookRelay {
             });
         }
         verify_signature(&integration.webhook_secret, body, presented_signature)?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -187,11 +190,7 @@ pub struct BillingService {
 
 impl BillingService {
     /// Construct the façade.
-    pub fn new(
-        exporter: UsageExporter,
-        engine: ChargebackEngine,
-        relay: WebhookRelay,
-    ) -> Self {
+    pub fn new(exporter: UsageExporter, engine: ChargebackEngine, relay: WebhookRelay) -> Self {
         Self {
             exporter,
             engine,
@@ -216,7 +215,9 @@ impl BillingService {
         prices: &[(UsageUnit, u64)],
         currency: &str,
     ) -> Result<Chargeback, BillingError> {
-        self.engine.compute(caller, owner_id, prices, currency).await
+        self.engine
+            .compute(caller, owner_id, prices, currency)
+            .await
     }
 
     /// Forward to the relay.

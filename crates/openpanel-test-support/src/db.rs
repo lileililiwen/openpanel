@@ -104,10 +104,12 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("os_updates migration");
-        sqlx::query(include_str!("migrations/synthetic_monitoring/V001__init.sql"))
-            .execute(&self.pool)
-            .await
-            .expect("synthetic_monitoring migration");
+        sqlx::query(include_str!(
+            "migrations/synthetic_monitoring/V001__init.sql"
+        ))
+        .execute(&self.pool)
+        .await
+        .expect("synthetic_monitoring migration");
         sqlx::query(include_str!("migrations/log_viewer/V001__init.sql"))
             .execute(&self.pool)
             .await
@@ -156,10 +158,12 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("git_deployment migration");
-        sqlx::query(include_str!("migrations/maintenance_windows/V001__init.sql"))
-            .execute(&self.pool)
-            .await
-            .expect("maintenance_windows migration");
+        sqlx::query(include_str!(
+            "migrations/maintenance_windows/V001__init.sql"
+        ))
+        .execute(&self.pool)
+        .await
+        .expect("maintenance_windows migration");
         sqlx::query(include_str!("migrations/container_runtime/V001__init.sql"))
             .execute(&self.pool)
             .await

@@ -138,10 +138,7 @@ impl QuotaRepository for SqliteQuotaRepository {
         Ok(())
     }
 
-    async fn latest_usage(
-        &self,
-        subject_id: Uuid,
-    ) -> Result<Option<QuotaUsage>, QuotaError> {
+    async fn latest_usage(&self, subject_id: Uuid) -> Result<Option<QuotaUsage>, QuotaError> {
         let row: Option<UsageRow> = sqlx::query_as::<_, UsageRow>(
             "SELECT subject_id, sampled_at, disk_used_bytes, disk_inodes_used, bandwidth_used_bytes, over_soft_json, over_hard_json FROM quota_usages WHERE subject_id = ? ORDER BY sampled_at DESC LIMIT 1",
         )
@@ -274,8 +271,14 @@ impl UsageRow {
             disk_used_bytes: self.disk_used_bytes as u64,
             disk_inodes_used: self.disk_inodes_used as u64,
             bandwidth_used_bytes_this_month: self.bandwidth_used_bytes as u64,
-            over_soft: over_soft.into_iter().map(|s| parse_dimension(&s)).collect::<Result<_, _>>()?,
-            over_hard: over_hard.into_iter().map(|s| parse_dimension(&s)).collect::<Result<_, _>>()?,
+            over_soft: over_soft
+                .into_iter()
+                .map(|s| parse_dimension(&s))
+                .collect::<Result<_, _>>()?,
+            over_hard: over_hard
+                .into_iter()
+                .map(|s| parse_dimension(&s))
+                .collect::<Result<_, _>>()?,
         })
     }
 }

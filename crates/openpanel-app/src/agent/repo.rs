@@ -4,8 +4,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use openpanel_domain::{
     AgentError, AgentId, AgentRegistration, AgentRepository, AgentStatus, FleetToken,
-    FleetTokenScope, RecipeManifest,
-    agent::RecipeAction,
+    FleetTokenScope, RecipeManifest, agent::RecipeAction,
 };
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
@@ -67,14 +66,16 @@ impl AgentRepository for SqliteAgentRepository {
     }
 
     async fn update_agent(&self, agent: &AgentRegistration) -> Result<(), AgentError> {
-        sqlx::query("UPDATE agents SET status = ?, last_heartbeat_at = ?, hostname = ? WHERE id = ?")
-            .bind(agent_status_str(agent.status()))
-            .bind(agent.last_heartbeat_at().map(|d| d.to_rfc3339()))
-            .bind(agent.hostname())
-            .bind(agent.id().as_uuid().to_string())
-            .execute(&self.pool)
-            .await
-            .map_err(|e| AgentError::Persistence(e.to_string()))?;
+        sqlx::query(
+            "UPDATE agents SET status = ?, last_heartbeat_at = ?, hostname = ? WHERE id = ?",
+        )
+        .bind(agent_status_str(agent.status()))
+        .bind(agent.last_heartbeat_at().map(|d| d.to_rfc3339()))
+        .bind(agent.hostname())
+        .bind(agent.id().as_uuid().to_string())
+        .execute(&self.pool)
+        .await
+        .map_err(|e| AgentError::Persistence(e.to_string()))?;
         Ok(())
     }
 
@@ -124,10 +125,7 @@ impl AgentRepository for SqliteAgentRepository {
         Ok(())
     }
 
-    async fn find_token_by_hash(
-        &self,
-        token_hash: &str,
-    ) -> Result<Option<FleetToken>, AgentError> {
+    async fn find_token_by_hash(&self, token_hash: &str) -> Result<Option<FleetToken>, AgentError> {
         let row: Option<TokenRow> = sqlx::query_as::<_, TokenRow>(
             "SELECT id, agent_id, scope, token_hash, issued_at, expires_at, revoked FROM fleet_tokens WHERE token_hash = ?",
         )
@@ -233,7 +231,11 @@ impl AgentRow {
             .map_err(|e| AgentError::Persistence(format!("bad owner_id: {e}")))?;
         let status = parse_agent_status(&self.status)?;
         let registered_at = parse_dt(&self.registered_at)?;
-        let last_heartbeat_at = self.last_heartbeat_at.as_deref().map(parse_dt).transpose()?;
+        let last_heartbeat_at = self
+            .last_heartbeat_at
+            .as_deref()
+            .map(parse_dt)
+            .transpose()?;
         Ok(AgentRegistration::restore(
             AgentId(id),
             self.host_fingerprint,

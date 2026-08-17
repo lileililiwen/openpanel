@@ -4,7 +4,6 @@
 
 use std::sync::Arc;
 
-use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::{
@@ -76,10 +75,7 @@ impl ClusterService {
     }
 
     /// Build a service backed by the SQLite adapter.
-    pub fn with_sqlite(
-        pool: Pool<Sqlite>,
-        audit: Arc<dyn AuditService>,
-    ) -> Self {
+    pub fn with_sqlite(pool: Pool<Sqlite>, audit: Arc<dyn AuditService>) -> Self {
         Self::new(Arc::new(SqliteClusterRepository::new(pool)), audit)
     }
 
@@ -103,12 +99,16 @@ impl ClusterService {
         self.repo.insert_node(&node).await?;
         self.audit
             .record(
-                AuditEvent::new(actor, AuditAction::ClusterNodeDeclared, AuditOutcome::Success)
-                    .target(node.id().as_uuid().to_string())
-                    .metadata(serde_json::json!({
-                        "role": role_to_str(node.role()),
-                        "region": node.region(),
-                    })),
+                AuditEvent::new(
+                    actor,
+                    AuditAction::ClusterNodeDeclared,
+                    AuditOutcome::Success,
+                )
+                .target(node.id().as_uuid().to_string())
+                .metadata(serde_json::json!({
+                    "role": role_to_str(node.role()),
+                    "region": node.region(),
+                })),
             )
             .await
             .ok();
@@ -140,9 +140,13 @@ impl ClusterService {
         }
         self.audit
             .record(
-                AuditEvent::new(actor, AuditAction::ClusterNodeRoleChanged, AuditOutcome::Success)
-                    .target(id.as_uuid().to_string())
-                    .metadata(serde_json::json!({"role": role_for_audit})),
+                AuditEvent::new(
+                    actor,
+                    AuditAction::ClusterNodeRoleChanged,
+                    AuditOutcome::Success,
+                )
+                .target(id.as_uuid().to_string())
+                .metadata(serde_json::json!({"role": role_for_audit})),
             )
             .await
             .ok();
@@ -166,11 +170,15 @@ impl ClusterService {
         self.repo.insert_storage(&storage).await?;
         self.audit
             .record(
-                AuditEvent::new(actor, AuditAction::ClusterStorageDeclared, AuditOutcome::Success)
-                    .target(storage.id().as_uuid().to_string())
-                    .metadata(serde_json::json!({
-                        "kind": storage.kind(),
-                    })),
+                AuditEvent::new(
+                    actor,
+                    AuditAction::ClusterStorageDeclared,
+                    AuditOutcome::Success,
+                )
+                .target(storage.id().as_uuid().to_string())
+                .metadata(serde_json::json!({
+                    "kind": storage.kind(),
+                })),
             )
             .await
             .ok();
@@ -233,6 +241,8 @@ pub fn role_to_json(role: &NodeRole) -> Result<String, ClusterError> {
 }
 
 /// Default for [`Default`]: re-export the role tag.
+#[allow(dead_code)]
+// Kept for callers that want the role tag as `&'static str` without JSON.
 pub fn role_tag(role: &NodeRole) -> &'static str {
     role_to_str(role)
 }

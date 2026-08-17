@@ -2,14 +2,9 @@
 
 use std::sync::Arc;
 
-use openpanel_core::{AppContext, AuditService, Migration, Module};
+use openpanel_core::{AppContext, Migration, Module};
 
-use super::{
-    CheckRunner, ProbeScheduler, SqliteSyntheticRepository,
-};
-use openpanel_domain::SyntheticRepository;
-
-pub use super::service::RecordingProbe;
+use super::{CheckRunner, ProbeScheduler, SqliteSyntheticRepository};
 
 /// Stable synthetic monitoring module name.
 pub const MODULE_NAME: &str = "synthetic_monitoring";
@@ -78,11 +73,3 @@ impl Module for SyntheticMonitoringModule {
         self.migrations.clone()
     }
 }
-
-/// `SqliteSyntheticRepository` implements the `SyntheticRepository`
-/// trait from the domain crate; expose the alias so the
-/// `Arc<dyn SyntheticRepository>` casts work in tests.
-pub use openpanel_domain::SyntheticRepository as _SyntheticRepository;
-/// Re-export the audit service alias for callers that need to
-/// construct the module by hand in tests.
-pub use openpanel_core::AuditService as _AuditService;

@@ -16,7 +16,7 @@ use crate::router::WebState;
 
 /// Page for a single site's staging status, recent promotions, and
 /// a snapshot/promote/destroy form set.
-pub async fn page(State(state): State<WebState>, Path(site_id): Path<Uuid>) -> Response {
+pub async fn page(State(_state): State<WebState>, Path(site_id): Path<Uuid>) -> Response {
     let body: Markup = html! {
         section class="card" {
             h2 { "Site staging" }

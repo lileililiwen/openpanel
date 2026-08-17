@@ -86,7 +86,7 @@ async fn engine_persists_chargeback() {
         )
         .await
         .expect("compute");
-    assert_eq!(cb.amount_minor, 100 * 5 + 50 * 1);
+    assert_eq!(cb.amount_minor, 100 * 5 + 50);
     let stored = repo.list_chargebacks(owner).await.expect("list");
     assert_eq!(stored.len(), 1);
     assert_eq!(stored[0].amount_minor, cb.amount_minor);
@@ -155,9 +155,7 @@ async fn non_admin_cannot_use_billing() {
         Role::User,
     );
     let _ = exporter.export(&user, Uuid::new_v4()).await;
-    let _ = engine
-        .compute(&user, Uuid::new_v4(), &[], "USD")
-        .await;
+    let _ = engine.compute(&user, Uuid::new_v4(), &[], "USD").await;
     let _ = relay.verify(&user, Uuid::new_v4(), b"", Some("")).await;
 }
 
@@ -202,12 +200,7 @@ async fn billing_service_facade_routes_to_subservices() {
     let exported = service.export(&admin_user(), owner).await.expect("export");
     assert_eq!(exported.len(), 1);
     let cb: Chargeback = service
-        .compute(
-            &admin_user(),
-            owner,
-            &[(UsageUnit::Gigabytes, 4u64)],
-            "USD",
-        )
+        .compute(&admin_user(), owner, &[(UsageUnit::Gigabytes, 4u64)], "USD")
         .await
         .expect("compute");
     assert_eq!(cb.amount_minor, 28);

@@ -13,8 +13,8 @@ pub use recipe::{
     CatalogSort, Category, EntryKind, Homepage, License, Provenance, RecipeError, Tag, VersionSpec,
 };
 pub use refine::{
-    CatalogEntry, ComponentKind, SoftwareCenterRefineError, TargetSiteType,
-    WebApplicationManifest, check_install_kind,
+    CatalogEntry, ComponentKind, SoftwareCenterRefineError, TargetSiteType, WebApplicationManifest,
+    check_install_kind,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};

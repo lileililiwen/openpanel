@@ -3,10 +3,9 @@
 
 use std::sync::Arc;
 
-use chrono::Utc;
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::{
-    Role, RuntimeError, RuntimeKind, RuntimeRepository, RuntimeStatus, SiteRuntime, User,
+    Role, RuntimeError, RuntimeRepository, RuntimeStatus, SiteRuntime, User,
     render_nginx_proxy_block, render_supervisor_unit,
 };
 use uuid::Uuid;
@@ -101,7 +100,8 @@ impl RuntimeService {
         require_admin(caller)?;
         runtime.validate()?;
         self.repo.save_runtime(&runtime).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -148,7 +148,8 @@ impl RuntimeService {
             RuntimeStatus::Stopped => AuditOutcome::Success,
             RuntimeStatus::Failed => AuditOutcome::Failure,
         };
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -163,12 +164,7 @@ impl RuntimeService {
     }
 
     /// Render the supervisor unit for a runtime.
-    pub fn render_unit(
-        &self,
-        runtime: &SiteRuntime,
-        site_user: &str,
-        home: &str,
-    ) -> String {
+    pub fn render_unit(&self, runtime: &SiteRuntime, site_user: &str, home: &str) -> String {
         self.unit.build(runtime, site_user, home)
     }
 

@@ -4,7 +4,7 @@
 //! calls when it wants to capture a block-level delta of a database
 //! data directory. The actual block-level capture is the engine
 //! adapter's job (out of scope for this change); this layer just
-//! records the metadata in the [`IncrementalRepository`] so the
+//! records the metadata in the `IncrementalRepository` so the
 //! schedule and audit trail line up.
 
 use std::sync::Arc;
@@ -28,6 +28,7 @@ impl IncrementalFileLayer {
     /// Record a new incremental capture. Returns the persisted
     /// aggregate. The block-level capture itself is the engine
     /// adapter's job; this layer only persists the metadata.
+    #[allow(clippy::too_many_arguments)]
     pub async fn record(
         &self,
         id: Uuid,

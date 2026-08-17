@@ -2,8 +2,9 @@
 
 use async_trait::async_trait;
 use chrono::Utc;
-use openpanel_domain::common::error::RepoError;
-use openpanel_domain::{CatalogCache, CatalogSnapshot, MarketplaceCatalog};
+use openpanel_domain::{
+    CatalogCache, CatalogSnapshot, MarketplaceCatalog, common::error::RepoError,
+};
 use sqlx::{Pool, Sqlite};
 
 /// SQLite-backed `CatalogCache` adapter. Caches verified catalogs by
@@ -35,9 +36,7 @@ impl CatalogCache for SqliteCatalogCache {
             return Ok(None);
         };
         let cached_at = row.cached_at;
-        let catalog = row
-            .into_catalog()
-            .map_err(RepoError::new)?;
+        let catalog = row.into_catalog().map_err(RepoError::new)?;
         Ok(Some(CatalogSnapshot { catalog, cached_at }))
     }
 
@@ -87,9 +86,7 @@ impl CatalogCache for SqliteCatalogCache {
             return Ok(None);
         };
         let cached_at = row.cached_at;
-        let catalog = row
-            .into_catalog()
-            .map_err(RepoError::new)?;
+        let catalog = row.into_catalog().map_err(RepoError::new)?;
         Ok(Some(CatalogSnapshot { catalog, cached_at }))
     }
 }

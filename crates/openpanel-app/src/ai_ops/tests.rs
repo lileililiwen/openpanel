@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use openpanel_core::NoopAuditService;
 use openpanel_domain::{
-    AiActionId, AiActionStatus, AiOpsError, AiOpsRepository, MessageRole, Role, ToolCallAllowlist,
-    ToolKind, ToolName, ToolSpec,
+    AiActionId, AiActionStatus, AiOpsError, AiOpsRepository, Role, ToolCallAllowlist, ToolKind,
+    ToolName, ToolSpec,
 };
 use openpanel_test_support::TestDb;
 use uuid::Uuid;
@@ -29,6 +29,7 @@ impl RecordingExecutor {
         self.calls.lock().expect("calls").clone()
     }
 
+    #[allow(dead_code)] // helper reserved for failure-injection tests
     fn fail_next(&self, name: &str) {
         *self.fail.lock().expect("fail") = Some(name.to_string());
     }
@@ -43,10 +44,10 @@ impl ToolExecutor for RecordingExecutor {
         tool: &ToolName,
         params: serde_json::Value,
     ) -> Result<openpanel_domain::ToolResult, ToolExecutorError> {
-        if let Some(name) = self.fail.lock().expect("fail").as_ref() {
-            if name == tool.as_str() {
-                return Err(ToolExecutorError::Execution("forced failure".into()));
-            }
+        if let Some(name) = self.fail.lock().expect("fail").as_ref()
+            && name == tool.as_str()
+        {
+            return Err(ToolExecutorError::Execution("forced failure".into()));
         }
         self.calls
             .lock()
@@ -144,16 +145,19 @@ async fn ask_proposes_write_action_without_executing() {
         .await
         .expect("ask");
     assert_eq!(outcome.proposed_actions.len(), 1);
-    assert_eq!(outcome.proposed_actions[0].tool.as_str(), "system.reload_nginx");
+    assert_eq!(
+        outcome.proposed_actions[0].tool.as_str(),
+        "system.reload_nginx"
+    );
     assert_eq!(outcome.proposed_actions[0].status, AiActionStatus::Proposed);
     // The write tool MUST NOT have been executed by the executor.
     let calls = executor.last();
-    assert!(calls.is_empty(), "write tool must not be executed pre-approval");
+    assert!(
+        calls.is_empty(),
+        "write tool must not be executed pre-approval"
+    );
     // The action is persisted.
-    let actions = repo
-        .list_pending_actions(50)
-        .await
-        .expect("list pending");
+    let actions = repo.list_pending_actions(50).await.expect("list pending");
     assert_eq!(actions.len(), 1);
     assert_eq!(actions[0].tool.as_str(), "system.reload_nginx");
 }
@@ -179,16 +183,10 @@ async fn approve_executes_write_and_records_audit() {
     );
     let user = owner_user().await;
 
-    let outcome = ask
-        .ask(&user, None, "Reload nginx")
-        .await
-        .expect("ask");
+    let outcome = ask.ask(&user, None, "Reload nginx").await.expect("ask");
     let action_id = outcome.proposed_actions[0].id;
 
-    let approved = approval
-        .approve(&user, action_id)
-        .await
-        .expect("approve");
+    let approved = approval.approve(&user, action_id).await.expect("approve");
     assert_eq!(approved.status, AiActionStatus::Executed);
     assert_eq!(approved.tool.as_str(), "system.reload_nginx");
     let calls = executor.last();
@@ -217,10 +215,7 @@ async fn deny_marks_action_without_executing() {
     );
     let user = owner_user().await;
 
-    let outcome = ask
-        .ask(&user, None, "Reload nginx")
-        .await
-        .expect("ask");
+    let outcome = ask.ask(&user, None, "Reload nginx").await.expect("ask");
     let action_id = outcome.proposed_actions[0].id;
     let denied = approval.deny(&user, action_id).await.expect("deny");
     assert_eq!(denied.status, AiActionStatus::Denied);
@@ -249,10 +244,7 @@ async fn approving_already_executed_action_is_rejected() {
     );
     let user = owner_user().await;
 
-    let outcome = ask
-        .ask(&user, None, "Reload nginx")
-        .await
-        .expect("ask");
+    let outcome = ask.ask(&user, None, "Reload nginx").await.expect("ask");
     let action_id = outcome.proposed_actions[0].id;
     approval.approve(&user, action_id).await.expect("first");
     let second = approval.approve(&user, action_id).await;
@@ -340,9 +332,11 @@ async fn tool_name_validation_rejects_unsafe_names() {
 #[tokio::test]
 async fn allowlist_lookup_is_case_sensitive() {
     let allowlist = allowlist_with_read_tool();
-    assert!(allowlist
-        .lookup(&ToolName::new("panel.health").expect("static"))
-        .is_some());
+    assert!(
+        allowlist
+            .lookup(&ToolName::new("panel.health").expect("static"))
+            .is_some()
+    );
     let upper = ToolName::new("PANEL.HEALTH");
     // Uppercase first letter is invalid; lookup is therefore None.
     assert!(upper.is_none());
@@ -365,10 +359,7 @@ async fn message_round_trip_through_repo() {
         created_at: chrono::Utc::now(),
     };
     repo.save_message(&message).await.expect("save message");
-    let messages = repo
-        .list_messages(session.id)
-        .await
-        .expect("list messages");
+    let messages = repo.list_messages(session.id).await.expect("list messages");
     assert_eq!(messages.len(), 1);
     assert_eq!(messages[0].content, "hi");
     assert_eq!(messages[0].role, MessageRole::User);

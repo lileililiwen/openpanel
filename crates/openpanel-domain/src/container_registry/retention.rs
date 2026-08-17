@@ -67,8 +67,7 @@ impl RetentionPolicy {
         entries.sort_by_key(|(_, t)| std::cmp::Reverse(*t));
         let mut to_delete = Vec::new();
         if let Some(max_age) = self.max_age_days {
-            let max_age =
-                chrono::Duration::days(max_age as i64);
+            let max_age = chrono::Duration::days(max_age as i64);
             for (digest, ts) in &entries {
                 if now - *ts > max_age {
                     to_delete.push(digest.clone());
@@ -90,8 +89,9 @@ impl RetentionPolicy {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use chrono::Duration;
+
+    use super::*;
 
     fn entry(label: &str, age_days: i64) -> (String, DateTime<Utc>) {
         let now = Utc::now();

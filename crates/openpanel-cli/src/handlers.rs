@@ -351,6 +351,15 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         None,
     ));
 
+    // Webmail client: real service over the same pool + audit.
+    let webmail_repo = openpanel_app::webmail_client::SqliteWebmailRepository::new(pool.clone());
+    let webmail_svc = Arc::new(openpanel_app::WebmailService::new(
+        Arc::new(webmail_repo),
+        Arc::new(openpanel_app::InMemoryMailBridge::default()),
+        audit.clone(),
+        master_key,
+    ));
+
     // Site clone + template export module: persistence only.
     let site_clone_template_module = openpanel_app::SiteCloneTemplateModule::new(&ctx).await;
     runner
@@ -474,6 +483,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         registry_svc,
         container_runtime_svc,
         themeable_ui_svc.clone(),
+        webmail_svc.clone(),
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
@@ -3991,6 +4001,7 @@ pub async fn monitoring_history(
 
 // ---- Plugin marketplace handlers ----
 
+/// Discover and cache the plugin marketplace catalog, printing its metadata.
 pub async fn marketplace_discover(config: Arc<Config>) -> anyhow::Result<()> {
     let bundle = build_plugin_bundle(config.clone()).await?;
     let service = &bundle.marketplace;
@@ -4010,6 +4021,7 @@ pub async fn marketplace_discover(config: Arc<Config>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Print the cached plugin marketplace catalog, if one exists.
 pub async fn marketplace_cached(config: Arc<Config>) -> anyhow::Result<()> {
     let bundle = build_plugin_bundle(config.clone()).await?;
     let snapshot = bundle
@@ -4030,6 +4042,7 @@ pub async fn marketplace_cached(config: Arc<Config>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Show one plugin entry from the cached marketplace catalog.
 pub async fn marketplace_show(config: Arc<Config>, id: String) -> anyhow::Result<()> {
     let bundle = build_plugin_bundle(config.clone()).await?;
     let snapshot = bundle
@@ -4048,6 +4061,7 @@ pub async fn marketplace_show(config: Arc<Config>, id: String) -> anyhow::Result
 
 // ---- Plugin lifecycle handlers ----
 
+/// List installed plugins.
 pub async fn plugin_list(config: Arc<Config>) -> anyhow::Result<()> {
     let bundle = build_plugin_bundle(config.clone()).await?;
     let records = bundle.plugins.list().await.context("plugin list")?;
@@ -4055,6 +4069,7 @@ pub async fn plugin_list(config: Arc<Config>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Install a plugin from a manifest file (or stdin when the path is `-`).
 pub async fn plugin_install(config: Arc<Config>, manifest_path: String) -> anyhow::Result<()> {
     let bundle = build_plugin_bundle(config.clone()).await?;
     let raw = if manifest_path == "-" {
@@ -4084,6 +4099,7 @@ pub async fn plugin_install(config: Arc<Config>, manifest_path: String) -> anyho
     Ok(())
 }
 
+/// Enable a plugin by id.
 pub async fn plugin_enable(config: Arc<Config>, id: String) -> anyhow::Result<()> {
     let bundle = build_plugin_bundle(config.clone()).await?;
     let plugin_id = openpanel_domain::PluginId::new(id)
@@ -4097,6 +4113,7 @@ pub async fn plugin_enable(config: Arc<Config>, id: String) -> anyhow::Result<()
     Ok(())
 }
 
+/// Disable a plugin by id.
 pub async fn plugin_disable(config: Arc<Config>, id: String) -> anyhow::Result<()> {
     let bundle = build_plugin_bundle(config.clone()).await?;
     let plugin_id = openpanel_domain::PluginId::new(id)
@@ -4110,6 +4127,7 @@ pub async fn plugin_disable(config: Arc<Config>, id: String) -> anyhow::Result<(
     Ok(())
 }
 
+/// Uninstall a plugin by id.
 pub async fn plugin_uninstall(config: Arc<Config>, id: String) -> anyhow::Result<()> {
     let bundle = build_plugin_bundle(config.clone()).await?;
     let plugin_id = openpanel_domain::PluginId::new(id)
@@ -4142,12 +4160,15 @@ pub async fn build_plugin_bundle(config: Arc<Config>) -> anyhow::Result<PluginBu
 
 /// Bundle of plugin services the CLI handlers reuse.
 pub struct PluginBundle {
+    /// Plugin lifecycle service.
     pub plugins: Arc<openpanel_app::PluginService>,
+    /// Plugin marketplace service.
     pub marketplace: Arc<openpanel_app::MarketplaceService>,
 }
 
 // ---- Per-site collaborator handlers ----
 
+/// Invite a collaborator to a site with the given scopes.
 pub async fn collab_invite(
     config: Arc<Config>,
     site_id: String,
@@ -4186,6 +4207,7 @@ pub async fn collab_invite(
     Ok(())
 }
 
+/// List collaborators granted on a site.
 pub async fn collab_list(config: Arc<Config>, site_id: String) -> anyhow::Result<()> {
     let bundle = build_collaborator_bundle(config.clone()).await?;
     let site_uuid = uuid::Uuid::parse_str(&site_id).context("invalid site id")?;
@@ -4198,6 +4220,7 @@ pub async fn collab_list(config: Arc<Config>, site_id: String) -> anyhow::Result
     Ok(())
 }
 
+/// Revoke a collaborator from a site.
 pub async fn collab_revoke(
     config: Arc<Config>,
     site_id: String,
@@ -4222,10 +4245,14 @@ pub async fn collab_revoke(
 
 /// Bundle of collaborator services the CLI handlers reuse.
 pub struct CollaboratorBundle {
+    /// Collaborator service.
     pub service: Arc<openpanel_app::CollaboratorService>,
+    /// Grant resolver used to check site permissions.
     pub resolver: Arc<openpanel_app::GrantResolver>,
 }
 
+/// Build the small bundle of collaborator services the CLI needs without
+/// spinning up the full router.
 pub async fn build_collaborator_bundle(config: Arc<Config>) -> anyhow::Result<CollaboratorBundle> {
     let (pool, audit, db) = bootstrap_persistence(&config).await?;
     let _ = pool;
@@ -4239,6 +4266,7 @@ pub async fn build_collaborator_bundle(config: Arc<Config>) -> anyhow::Result<Co
 
 // ---- Container registry handlers ----
 
+/// Print the container registry configuration.
 pub async fn registry_config(config: Arc<Config>) -> anyhow::Result<()> {
     let bundle = build_registry_bundle(config.clone()).await?;
     println!(
@@ -4252,6 +4280,7 @@ pub async fn registry_config(config: Arc<Config>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// List container registry namespaces.
 pub async fn registry_namespaces(config: Arc<Config>) -> anyhow::Result<()> {
     let bundle = build_registry_bundle(config.clone()).await?;
     let list = bundle.service.list_namespaces().await?;
@@ -4259,6 +4288,7 @@ pub async fn registry_namespaces(config: Arc<Config>) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Create a container registry namespace for an owner with a byte quota.
 pub async fn registry_create_namespace(
     config: Arc<Config>,
     namespace: String,
@@ -4284,6 +4314,7 @@ pub async fn registry_create_namespace(
     Ok(())
 }
 
+/// List images in a container registry namespace.
 pub async fn registry_images(config: Arc<Config>, namespace: String) -> anyhow::Result<()> {
     let bundle = build_registry_bundle(config.clone()).await?;
     let ns_id = openpanel_domain::NamespaceId::new(&namespace)
@@ -4295,9 +4326,12 @@ pub async fn registry_images(config: Arc<Config>, namespace: String) -> anyhow::
 
 /// Bundle of registry services the CLI handlers reuse.
 pub struct RegistryBundle {
+    /// Container registry service.
     pub service: Arc<openpanel_app::ContainerRegistryService>,
 }
 
+/// Build the small bundle of container registry services the CLI needs
+/// without spinning up the full router.
 pub async fn build_registry_bundle(config: Arc<Config>) -> anyhow::Result<RegistryBundle> {
     let (pool, audit, db) = bootstrap_persistence(&config).await?;
     let _ = pool;
@@ -4353,6 +4387,7 @@ const IAC_SAMPLE: &str = r#"{
     }
 }"#;
 
+/// Generate IaC contract surfaces and scaffolds from an OpenAPI document.
 pub async fn iac_generate(_config: Arc<Config>, openapi: Option<String>) -> anyhow::Result<()> {
     let json = match openapi {
         Some(path) => tokio::fs::read_to_string(&path)
@@ -4391,6 +4426,7 @@ pub async fn iac_generate(_config: Arc<Config>, openapi: Option<String>) -> anyh
     Ok(())
 }
 
+/// Check the generated IaC contract against committed artifacts for drift.
 pub async fn iac_drift_check(
     _config: Arc<Config>,
     openapi: Option<String>,

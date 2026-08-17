@@ -11,6 +11,5 @@ mod tests;
 pub use module::{AppRuntimesModule, MODULE_NAME};
 pub use repo::SqliteRuntimeRepository;
 pub use service::{
-    ReverseProxyLayer, RuntimeService, SupervisorUnitBuilder, render_proxy_block,
-    render_unit,
+    ReverseProxyLayer, RuntimeService, SupervisorUnitBuilder, render_proxy_block, render_unit,
 };

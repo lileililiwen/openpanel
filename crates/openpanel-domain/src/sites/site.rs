@@ -2,8 +2,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::sites::{error::SiteError, status::SiteStatus};
-use crate::per_site_php_runtime::PhpRuntimeRef;
+use crate::{
+    per_site_php_runtime::PhpRuntimeRef,
+    sites::{error::SiteError, status::SiteStatus},
+};
 
 const DOMAIN_RE: &str =
     r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$";
@@ -217,26 +219,32 @@ impl Site {
     pub fn id(&self) -> Uuid {
         self.id
     }
+
     /// The PHP runtime reference (None if no PHP runtime is assigned).
     pub fn php_runtime(&self) -> Option<&PhpRuntimeRef> {
         self.php_runtime.as_ref()
     }
+
     /// The clone template id (None if this site is not a clone).
     pub fn clone_template_id(&self) -> Option<Uuid> {
         self.clone_template_id
     }
+
     /// The instance origin id (None if this site was not cloned).
     pub fn instance_origin_id(&self) -> Option<Uuid> {
         self.instance_origin_id
     }
+
     /// Set the PHP runtime reference.
     pub fn set_php_runtime(&mut self, runtime: Option<PhpRuntimeRef>) {
         self.php_runtime = runtime;
     }
+
     /// Set the clone template id.
     pub fn set_clone_template_id(&mut self, id: Option<Uuid>) {
         self.clone_template_id = id;
     }
+
     /// Set the instance origin id.
     pub fn set_instance_origin_id(&mut self, id: Option<Uuid>) {
         self.instance_origin_id = id;

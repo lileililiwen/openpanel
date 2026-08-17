@@ -4,9 +4,7 @@ use std::sync::Arc;
 
 use openpanel_core::{AppContext, Migration, Module};
 
-use super::{
-    AdminToolSso, PrivilegeService, RemoteAccessController, SqliteDbPrivilegeRepository,
-};
+use super::{AdminToolSso, PrivilegeService, RemoteAccessController, SqliteDbPrivilegeRepository};
 
 /// Stable DB privilege module name.
 pub const MODULE_NAME: &str = "db_privileges";
@@ -25,14 +23,8 @@ impl DbPrivilegeModule {
     pub async fn new(ctx: &AppContext) -> Self {
         let pool = ctx.db.pool().await;
         let repo = Arc::new(SqliteDbPrivilegeRepository::new(pool));
-        let privilege = Arc::new(PrivilegeService::new(
-            repo.clone(),
-            ctx.audit.clone(),
-        ));
-        let remote = Arc::new(RemoteAccessController::new(
-            repo.clone(),
-            ctx.audit.clone(),
-        ));
+        let privilege = Arc::new(PrivilegeService::new(repo.clone(), ctx.audit.clone()));
+        let remote = Arc::new(RemoteAccessController::new(repo.clone(), ctx.audit.clone()));
         let sso = Arc::new(AdminToolSso::new(repo.clone(), ctx.audit.clone()));
         Self {
             repo,

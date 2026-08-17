@@ -55,8 +55,15 @@ async fn set_policy_persists_and_audits() {
         greylist_enabled: true,
         updated_at: Utc::now(),
     };
-    service.set_policy(&caller, policy.clone()).await.expect("set");
-    let loaded = repo.get_policy(mailbox_id).await.expect("get").expect("present");
+    service
+        .set_policy(&caller, policy.clone())
+        .await
+        .expect("set");
+    let loaded = repo
+        .get_policy(mailbox_id)
+        .await
+        .expect("get")
+        .expect("present");
     assert_eq!(loaded.spam_threshold, 70);
 }
 
@@ -64,11 +71,7 @@ async fn set_policy_persists_and_audits() {
 async fn set_policy_rejects_invalid_threshold() {
     let db = TestDb::new().await;
     let repo = Arc::new(SqliteMailFilterRepository::new(db.pool()));
-    let service = MailFilterService::new(
-        repo,
-        Arc::new(NoopAuditService),
-        SieveCompiler::new(),
-    );
+    let service = MailFilterService::new(repo, Arc::new(NoopAuditService), SieveCompiler::new());
     let caller = admin_user();
     let policy = AntiSpamPolicy {
         mailbox_id: Uuid::new_v4(),
@@ -98,7 +101,11 @@ async fn set_sieve_compiles_and_persists() {
     .expect("sieve");
     let saved = service.set_sieve(&caller, script).await.expect("set");
     assert!(saved.last_compiled_at.is_some());
-    let loaded = repo.get_sieve(mailbox_id).await.expect("get").expect("present");
+    let loaded = repo
+        .get_sieve(mailbox_id)
+        .await
+        .expect("get")
+        .expect("present");
     assert_eq!(loaded.script, saved.script);
 }
 
@@ -157,9 +164,7 @@ async fn forwarder_rejects_self_loop() {
         destination: "user@example.com".into(),
         keep_local: true,
     };
-    let res = service
-        .add_forwarder(&caller, f, "user@example.com")
-        .await;
+    let res = service.add_forwarder(&caller, f, "user@example.com").await;
     assert!(matches!(res, Err(MailFilterError::ForwarderLoop)));
 }
 
@@ -197,7 +202,11 @@ async fn mailing_list_service_persists_and_loads() {
         created_at: Utc::now(),
     };
     service.upsert(&caller, list.clone()).await.expect("upsert");
-    let loaded = service.get("team@example.com").await.expect("get").expect("present");
+    let loaded = service
+        .get("team@example.com")
+        .await
+        .expect("get")
+        .expect("present");
     assert_eq!(loaded.members.len(), 2);
 }
 

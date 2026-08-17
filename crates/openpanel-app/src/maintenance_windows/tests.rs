@@ -4,9 +4,7 @@ use std::sync::Arc;
 
 use chrono::{Duration, Utc};
 use openpanel_core::NoopAuditService;
-use openpanel_domain::{
-    DestructiveActionClass, MaintenanceRepository, MaintenanceWindow, Role,
-};
+use openpanel_domain::{DestructiveActionClass, MaintenanceRepository, MaintenanceWindow, Role};
 use openpanel_test_support::TestDb;
 use uuid::Uuid;
 
@@ -54,7 +52,10 @@ async fn schedule_persists_window() {
     let enforcer = MaintenanceEnforcer::new(repo.clone(), Arc::new(NoopAuditService));
     let caller = admin_user();
     let w = window(-60, 300, DestructiveActionClass::PackageInstall);
-    enforcer.schedule(&caller, w.clone()).await.expect("schedule");
+    enforcer
+        .schedule(&caller, w.clone())
+        .await
+        .expect("schedule");
     let list = repo.list_windows().await.expect("list");
     assert_eq!(list.len(), 1);
 }
@@ -66,10 +67,16 @@ async fn schedule_rejects_overlapping_window() {
     let enforcer = MaintenanceEnforcer::new(repo, Arc::new(NoopAuditService));
     let caller = admin_user();
     let first = window(60, 600, DestructiveActionClass::PackageInstall);
-    enforcer.schedule(&caller, first.clone()).await.expect("first");
+    enforcer
+        .schedule(&caller, first.clone())
+        .await
+        .expect("first");
     let second = window(120, 300, DestructiveActionClass::PackageInstall);
     let res = enforcer.schedule(&caller, second).await;
-    assert!(matches!(res, Err(openpanel_domain::MaintenanceError::WindowOverlap)));
+    assert!(matches!(
+        res,
+        Err(openpanel_domain::MaintenanceError::WindowOverlap)
+    ));
 }
 
 #[tokio::test]
@@ -79,7 +86,10 @@ async fn gate_blocks_destructive_action_during_window() {
     let enforcer = MaintenanceEnforcer::new(repo, Arc::new(NoopAuditService));
     let caller = admin_user();
     enforcer
-        .schedule(&caller, window(-60, 300, DestructiveActionClass::PackageInstall))
+        .schedule(
+            &caller,
+            window(-60, 300, DestructiveActionClass::PackageInstall),
+        )
         .await
         .expect("schedule");
     let res = enforcer
@@ -98,7 +108,10 @@ async fn gate_allows_destructive_action_outside_window() {
     let enforcer = MaintenanceEnforcer::new(repo, Arc::new(NoopAuditService));
     let caller = admin_user();
     enforcer
-        .schedule(&caller, window(60, 600, DestructiveActionClass::PackageInstall))
+        .schedule(
+            &caller,
+            window(60, 600, DestructiveActionClass::PackageInstall),
+        )
         .await
         .expect("schedule");
     let res = enforcer
@@ -114,20 +127,33 @@ async fn gate_accepts_valid_override_and_consumes_it_once() {
     let enforcer = MaintenanceEnforcer::new(repo, Arc::new(NoopAuditService));
     let caller = admin_user();
     enforcer
-        .schedule(&caller, window(-60, 300, DestructiveActionClass::PackageInstall))
+        .schedule(
+            &caller,
+            window(-60, 300, DestructiveActionClass::PackageInstall),
+        )
         .await
         .expect("schedule");
     let override_ = enforcer
         .issue_override(&caller, DestructiveActionClass::PackageInstall, "fix", 60)
         .await
         .expect("issue");
-    assert!(enforcer
-        .gate(&caller, DestructiveActionClass::PackageInstall, Some(override_.id))
-        .await
-        .is_ok());
+    assert!(
+        enforcer
+            .gate(
+                &caller,
+                DestructiveActionClass::PackageInstall,
+                Some(override_.id)
+            )
+            .await
+            .is_ok()
+    );
     // Second call must be rejected: override is consumed.
     let res = enforcer
-        .gate(&caller, DestructiveActionClass::PackageInstall, Some(override_.id))
+        .gate(
+            &caller,
+            DestructiveActionClass::PackageInstall,
+            Some(override_.id),
+        )
         .await;
     assert!(matches!(
         res,
@@ -143,7 +169,10 @@ async fn gate_rejects_wrong_class_override() {
     let enforcer = MaintenanceEnforcer::new(repo, Arc::new(NoopAuditService));
     let caller = admin_user();
     enforcer
-        .schedule(&caller, window(-60, 300, DestructiveActionClass::PackageInstall))
+        .schedule(
+            &caller,
+            window(-60, 300, DestructiveActionClass::PackageInstall),
+        )
         .await
         .expect("schedule");
     let override_ = enforcer
@@ -151,7 +180,11 @@ async fn gate_rejects_wrong_class_override() {
         .await
         .expect("issue");
     let res = enforcer
-        .gate(&caller, DestructiveActionClass::PackageInstall, Some(override_.id))
+        .gate(
+            &caller,
+            DestructiveActionClass::PackageInstall,
+            Some(override_.id),
+        )
         .await;
     assert!(matches!(
         res,
@@ -166,7 +199,10 @@ async fn non_admin_cannot_schedule() {
     let enforcer = MaintenanceEnforcer::new(repo, Arc::new(NoopAuditService));
     let user = non_admin_user();
     let res = enforcer
-        .schedule(&user, window(-60, 300, DestructiveActionClass::PackageInstall))
+        .schedule(
+            &user,
+            window(-60, 300, DestructiveActionClass::PackageInstall),
+        )
         .await;
     assert!(matches!(
         res,
@@ -181,7 +217,10 @@ async fn cancel_removes_window() {
     let enforcer = MaintenanceEnforcer::new(repo.clone(), Arc::new(NoopAuditService));
     let caller = admin_user();
     let w = window(-60, 300, DestructiveActionClass::PackageInstall);
-    enforcer.schedule(&caller, w.clone()).await.expect("schedule");
+    enforcer
+        .schedule(&caller, w.clone())
+        .await
+        .expect("schedule");
     enforcer.cancel(&caller, w.id).await.expect("cancel");
     let list = repo.list_windows().await.expect("list");
     assert!(list.is_empty());

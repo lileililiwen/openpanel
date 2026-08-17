@@ -5,8 +5,8 @@ use std::sync::Arc;
 use chrono::Utc;
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::{
-    IpAllocation, IpError, IpFamily, IpPool, IpRepository, IpStatus, PoolKind, Role,
-    SiteAddress, User, validate_cidr,
+    IpAllocation, IpError, IpFamily, IpPool, IpRepository, IpStatus, PoolKind, Role, SiteAddress,
+    User, validate_cidr,
 };
 use uuid::Uuid;
 
@@ -30,7 +30,8 @@ impl Allocator {
         require_admin(caller)?;
         pool.validate()?;
         self.repo.save_pool(&pool).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -73,19 +74,21 @@ impl Allocator {
         let existing = self.repo.list_allocations_for_pool(pool_id).await?;
         let candidates = candidate_addresses(&pool, 64);
         for address in candidates {
-            if existing.iter().any(|a| a.address == address && a.status != IpStatus::Released) {
+            if existing
+                .iter()
+                .any(|a| a.address == address && a.status != IpStatus::Released)
+            {
                 continue;
             }
-            if pool.kind == PoolKind::Dedicated {
-                if let Some(existing_alloc) =
-                    self.repo.get_allocation_by_address(pool_id, &address).await?
-                {
-                    if existing_alloc.status != IpStatus::Released
-                        && existing_alloc.site_id != site_id
-                    {
-                        continue;
-                    }
-                }
+            if pool.kind == PoolKind::Dedicated
+                && let Some(existing_alloc) = self
+                    .repo
+                    .get_allocation_by_address(pool_id, &address)
+                    .await?
+                && existing_alloc.status != IpStatus::Released
+                && existing_alloc.site_id != site_id
+            {
+                continue;
             }
             let allocation = IpAllocation {
                 id: Uuid::new_v4(),
@@ -97,7 +100,8 @@ impl Allocator {
                 bound_at: None,
             };
             self.repo.save_allocation(&allocation).await?;
-            self.audit
+            let _ = self
+                .audit
                 .record(
                     AuditEvent::new(
                         caller.username().as_str(),
@@ -133,10 +137,14 @@ impl Allocator {
         if !address_in_cidr(address, &pool.cidr) {
             return Err(IpError::OutsidePool(address.to_string()));
         }
-        if let Some(existing) = self.repo.get_allocation_by_address(pool_id, address).await? {
-            if existing.status != IpStatus::Released && existing.site_id != site_id {
-                return Err(IpError::AddressInUse(address.to_string()));
-            }
+        if let Some(existing) = self
+            .repo
+            .get_allocation_by_address(pool_id, address)
+            .await?
+            && existing.status != IpStatus::Released
+            && existing.site_id != site_id
+        {
+            return Err(IpError::AddressInUse(address.to_string()));
         }
         let allocation = IpAllocation {
             id: Uuid::new_v4(),
@@ -152,11 +160,7 @@ impl Allocator {
     }
 
     /// Deallocate an address and release it back to the pool.
-    pub async fn deallocate(
-        &self,
-        caller: &User,
-        allocation_id: Uuid,
-    ) -> Result<(), IpError> {
+    pub async fn deallocate(&self, caller: &User, _allocation_id: Uuid) -> Result<(), IpError> {
         require_admin(caller)?;
         // The repository does not expose a per-id fetch; the
         // deallocation walks the pool set and updates the row in
@@ -171,10 +175,7 @@ impl Allocator {
     }
 
     /// List the allocations for one site.
-    pub async fn list_for_site(
-        &self,
-        site_id: Uuid,
-    ) -> Result<Vec<IpAllocation>, IpError> {
+    pub async fn list_for_site(&self, site_id: Uuid) -> Result<Vec<IpAllocation>, IpError> {
         Ok(self.repo.list_allocations_for_site(site_id).await?)
     }
 }
@@ -194,16 +195,15 @@ impl VhostBinder {
 
     /// Rebuild the address set for `site_id` and return the
     /// `SiteAddress` view.
-    pub async fn rebind(
-        &self,
-        caller: &User,
-        site_id: Uuid,
-    ) -> Result<SiteAddress, IpError> {
+    pub async fn rebind(&self, caller: &User, site_id: Uuid) -> Result<SiteAddress, IpError> {
         require_admin(caller)?;
         let allocations = self.repo.list_allocations_for_site(site_id).await?;
         let mut v4 = Vec::new();
         let mut v6 = Vec::new();
-        for allocation in allocations.iter().filter(|a| a.status != IpStatus::Released) {
+        for allocation in allocations
+            .iter()
+            .filter(|a| a.status != IpStatus::Released)
+        {
             // Determine family from the address shape.
             if allocation.address.contains(':') {
                 v6.push(allocation.address.clone());
@@ -217,7 +217,8 @@ impl VhostBinder {
             v6,
             last_rebound_at: Utc::now(),
         };
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -251,7 +252,8 @@ impl VhostBinder {
             .ok_or(IpError::NotFound(address.to_string()))?;
         allocation.status = IpStatus::Released;
         self.repo.save_allocation(&allocation).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -331,8 +333,8 @@ fn address_in_cidr(address: &str, cidr: &str) -> bool {
     };
     let _ = validate_cidr(cidr, IpFamily::V4);
     if address.contains(':') {
-        address.starts_with(&cidr_addr.split(':').next().unwrap_or(""))
+        address.starts_with(cidr_addr.split(':').next().unwrap_or(""))
     } else {
-        address.starts_with(&cidr_addr.split('.').next().unwrap_or(""))
+        address.starts_with(cidr_addr.split('.').next().unwrap_or(""))
     }
 }

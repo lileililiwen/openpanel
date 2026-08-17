@@ -62,7 +62,12 @@ pub struct HardeningRule {
 
 impl HardeningRule {
     /// Build a successful rule with a pre/post image.
-    pub fn applied(id: impl Into<String>, title: impl Into<String>, pre: serde_json::Value, post: serde_json::Value) -> Self {
+    pub fn applied(
+        id: impl Into<String>,
+        title: impl Into<String>,
+        pre: serde_json::Value,
+        post: serde_json::Value,
+    ) -> Self {
         Self {
             id: id.into(),
             title: title.into(),
@@ -73,7 +78,11 @@ impl HardeningRule {
     }
 
     /// Mark the rule as skipped.
-    pub fn skipped(id: impl Into<String>, title: impl Into<String>, reason: impl Into<String>) -> Self {
+    pub fn skipped(
+        id: impl Into<String>,
+        title: impl Into<String>,
+        reason: impl Into<String>,
+    ) -> Self {
         Self {
             id: id.into(),
             title: title.into(),
@@ -84,7 +93,11 @@ impl HardeningRule {
     }
 
     /// Mark the rule as failed.
-    pub fn failed(id: impl Into<String>, title: impl Into<String>, error: impl Into<String>) -> Self {
+    pub fn failed(
+        id: impl Into<String>,
+        title: impl Into<String>,
+        error: impl Into<String>,
+    ) -> Self {
         Self {
             id: id.into(),
             title: title.into(),

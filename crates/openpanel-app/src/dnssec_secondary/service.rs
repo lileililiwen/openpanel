@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use chrono::Utc;
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::{
-    DsRecord, DnsSecError, DnsSecPolicy, DnsSecRepository, GlueRecord, KskRolloverState, Role,
+    DnsSecError, DnsSecPolicy, DnsSecRepository, DsRecord, GlueRecord, KskRolloverState, Role,
     SecondaryNs, SigningAlgorithm, User, ZoneSigningKey,
 };
 use uuid::Uuid;
@@ -35,8 +35,10 @@ impl RecordingRegistrar {
             publishes: std::sync::Mutex::new(Vec::new()),
         }
     }
+
     /// Snapshot publishes.
     pub fn publishes(&self) -> Vec<(Uuid, DsRecord)> {
+        #[allow(clippy::expect_used)] // mutex is never poisoned
         self.publishes.lock().expect("publishes").clone()
     }
 }
@@ -50,6 +52,7 @@ impl Default for RecordingRegistrar {
 #[async_trait::async_trait]
 impl Registrar for RecordingRegistrar {
     async fn publish_ds(&self, zone_id: Uuid, ds: &DsRecord) -> Result<(), DnsSecError> {
+        #[allow(clippy::expect_used)] // mutex is never poisoned
         self.publishes
             .lock()
             .expect("publishes")
@@ -94,7 +97,8 @@ impl DnsSecService {
             enabled_at: Some(Utc::now()),
         };
         self.repo.save_policy(&policy).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -111,11 +115,7 @@ impl DnsSecService {
     }
 
     /// Disable DNSSEC for a zone.
-    pub async fn disable(
-        &self,
-        caller: &User,
-        zone_id: Uuid,
-    ) -> Result<DnsSecPolicy, DnsSecError> {
+    pub async fn disable(&self, caller: &User, zone_id: Uuid) -> Result<DnsSecPolicy, DnsSecError> {
         require_admin(caller)?;
         let policy = self
             .repo
@@ -125,7 +125,8 @@ impl DnsSecService {
         let mut updated = policy;
         updated.enabled = false;
         self.repo.save_policy(&updated).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -150,10 +151,7 @@ impl DnsSecService {
     }
 
     /// List keys for a zone.
-    pub async fn list_keys(
-        &self,
-        zone_id: Uuid,
-    ) -> Result<Vec<ZoneSigningKey>, DnsSecError> {
+    pub async fn list_keys(&self, zone_id: Uuid) -> Result<Vec<ZoneSigningKey>, DnsSecError> {
         Ok(self.repo.list_keys(zone_id).await?)
     }
 
@@ -168,7 +166,8 @@ impl DnsSecService {
         ds.validate()?;
         self.repo.save_ds(&ds).await?;
         self.registrar.publish_ds(zone_id, &ds).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -198,10 +197,7 @@ impl DnsSecService {
     }
 
     /// List secondaries for a zone.
-    pub async fn list_secondaries(
-        &self,
-        zone_id: Uuid,
-    ) -> Result<Vec<SecondaryNs>, DnsSecError> {
+    pub async fn list_secondaries(&self, zone_id: Uuid) -> Result<Vec<SecondaryNs>, DnsSecError> {
         Ok(self.repo.list_secondaries(zone_id).await?)
     }
 
@@ -262,10 +258,8 @@ impl AxfrSender {
         secondaries: &'a [SecondaryNs],
         requester: &str,
     ) -> Result<Vec<&'a SecondaryNs>, DnsSecError> {
-        let allowed: Vec<&SecondaryNs> = secondaries
-            .iter()
-            .filter(|s| s.allows(requester))
-            .collect();
+        let allowed: Vec<&SecondaryNs> =
+            secondaries.iter().filter(|s| s.allows(requester)).collect();
         if allowed.is_empty() {
             return Err(DnsSecError::SecondaryRejected(requester.to_string()));
         }

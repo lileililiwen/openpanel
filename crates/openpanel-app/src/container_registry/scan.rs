@@ -1,9 +1,9 @@
 //! Scan hook abstraction and a default no-op implementation.
 
-use async_trait::async_trait;
-use openpanel_domain::container_registry::image::ImageDigest;
-use openpanel_domain::container_registry::scan::ScanResult;
 use std::sync::Arc;
+
+use async_trait::async_trait;
+use openpanel_domain::container_registry::{image::ImageDigest, scan::ScanResult};
 
 /// Errors raised by a scan hook.
 #[derive(Debug, thiserror::Error)]
@@ -39,8 +39,11 @@ impl ScanHook for NoopScanHook {
     }
 }
 
+/// Scan callback used by [`FnScanHook`].
+pub type ScanFn = Arc<dyn Fn(&ImageDigest) -> Result<ScanResult, ScanHookError> + Send + Sync>;
+
 /// Wrap an arbitrary closure as a scan hook. Useful in tests.
-pub struct FnScanHook(pub Arc<dyn Fn(&ImageDigest) -> Result<ScanResult, ScanHookError> + Send + Sync>);
+pub struct FnScanHook(pub ScanFn);
 
 #[async_trait]
 impl ScanHook for FnScanHook {

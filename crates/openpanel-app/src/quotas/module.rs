@@ -5,8 +5,10 @@ use std::sync::Arc;
 use openpanel_core::{AppContext, Migration, Module};
 use openpanel_domain::UserRepository;
 
-use crate::identity::repo::SqliteUserRepository;
-use crate::quotas::{QuotaService, SqliteQuotaRepository};
+use crate::{
+    identity::repo::SqliteUserRepository,
+    quotas::{QuotaService, SqliteQuotaRepository},
+};
 
 /// Stable module name.
 pub const MODULE_NAME: &str = "quotas";

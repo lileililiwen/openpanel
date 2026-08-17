@@ -10,6 +10,4 @@ mod tests;
 
 pub use module::{BillingModule, MODULE_NAME};
 pub use repo::SqliteBillingRepository;
-pub use service::{
-    BillingService, ChargebackEngine, RelayOutcome, UsageExporter, WebhookRelay,
-};
+pub use service::{BillingService, ChargebackEngine, RelayOutcome, UsageExporter, WebhookRelay};

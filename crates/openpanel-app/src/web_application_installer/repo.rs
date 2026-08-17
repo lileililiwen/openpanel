@@ -202,10 +202,8 @@ impl WebApplicationInstallerRepository for SqliteWebApplicationInstallerReposito
             install_path,
             parse_ts(&started_at),
         );
-        if let Ok(url) = row.try_get::<Option<String>, _>("post_install_url") {
-            if let Some(u) = url {
-                run.set_post_install_url(u);
-            }
+        if let Ok(Some(u)) = row.try_get::<Option<String>, _>("post_install_url") {
+            run.set_post_install_url(u);
         }
         Ok(Some(run))
     }

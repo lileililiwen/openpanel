@@ -1,9 +1,7 @@
 //! SQLite adapter for the service manager bounded context.
 
 use chrono::{DateTime, Utc};
-use openpanel_domain::{
-    RepoError, ServiceAction, ServiceActionRecord, ServiceManagerRepository,
-};
+use openpanel_domain::{RepoError, ServiceAction, ServiceActionRecord, ServiceManagerRepository};
 use sqlx::{Row, SqlitePool};
 use uuid::Uuid;
 

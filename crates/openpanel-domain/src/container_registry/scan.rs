@@ -53,11 +53,15 @@ mod tests {
     #[test]
     fn scan_result_has_findings() {
         let digest = ImageDigest::new(format!("sha256:{}", "b".repeat(64))).unwrap();
-        let r = ScanResult::new(digest, Utc::now(), vec![ScanFinding {
-            id: "CVE-2099-99999".into(),
-            severity: "high".into(),
-            summary: "demo".into(),
-        }]);
+        let r = ScanResult::new(
+            digest,
+            Utc::now(),
+            vec![ScanFinding {
+                id: "CVE-2099-99999".into(),
+                severity: "high".into(),
+                summary: "demo".into(),
+            }],
+        );
         assert!(r.has_findings());
     }
 }

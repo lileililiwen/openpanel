@@ -215,7 +215,7 @@ impl AskService {
                 .await?
                 .ok_or(AiOpsError::SessionNotFound(id.as_uuid()))?,
             None => {
-                let mut s = AiSession::new(caller.id(), truncate_title(prompt));
+                let s = AiSession::new(caller.id(), truncate_title(prompt));
                 self.repo.save_session(&s).await?;
                 s
             }
@@ -229,14 +229,17 @@ impl AskService {
             created_at: Utc::now(),
         };
         self.repo.save_message(&user_message).await?;
-        self.audit
-            .record(AuditEvent::new(
-                caller.username().as_str(),
-                AuditAction::AiAsked,
-                AuditOutcome::Success,
+        let _ = self
+            .audit
+            .record(
+                AuditEvent::new(
+                    caller.username().as_str(),
+                    AuditAction::AiAsked,
+                    AuditOutcome::Success,
+                )
+                .target(session.id.to_string())
+                .metadata(serde_json::json!({ "prompt_chars": prompt.len() })),
             )
-            .target(session.id.to_string())
-            .metadata(serde_json::json!({ "prompt_chars": prompt.len() })))
             .await;
 
         // Resolve tools from the prompt using a deterministic,
@@ -261,16 +264,21 @@ impl AskService {
                         .await
                     {
                         Ok(result) => {
-                            self.audit
-                                .record(AuditEvent::new(
-                                    caller.username().as_str(),
-                                    AuditAction::AiToolCalled,
-                                    AuditOutcome::Success,
+                            let _ = self
+                                .audit
+                                .record(
+                                    AuditEvent::new(
+                                        caller.username().as_str(),
+                                        AuditAction::AiToolCalled,
+                                        AuditOutcome::Success,
+                                    )
+                                    .target(session.id.to_string())
+                                    .metadata(
+                                        serde_json::json!({
+                                            "tool": name.as_str(),
+                                        }),
+                                    ),
                                 )
-                                .target(session.id.to_string())
-                                .metadata(serde_json::json!({
-                                    "tool": name.as_str(),
-                                })))
                                 .await;
                             tool_results.push(result);
                         }
@@ -317,7 +325,10 @@ impl AskService {
         caller: &User,
         limit: u32,
     ) -> Result<Vec<AiSession>, AiOpsError> {
-        self.repo.list_sessions(caller.id(), limit).await.map_err(Into::into)
+        self.repo
+            .list_sessions(caller.id(), limit)
+            .await
+            .map_err(Into::into)
     }
 }
 
@@ -373,7 +384,10 @@ pub(crate) enum PlanStep {
     /// Read-only tool call.
     Read { tool: String },
     /// Write tool call that becomes a `Proposed` action.
-    Write { tool: String, params: serde_json::Value },
+    Write {
+        tool: String,
+        params: serde_json::Value,
+    },
 }
 
 /// Deterministic, bounded prompt router. The router never infers
@@ -473,7 +487,7 @@ impl ActionApproval {
             "tool": action.tool.as_str(),
             "session_id": action.session_id.to_string(),
         }));
-        self.audit.record(event).await;
+        let _ = self.audit.record(event).await;
         action.execute(Uuid::new_v4());
         self.repo.update_action(&action).await?;
         Ok(action)
@@ -481,11 +495,7 @@ impl ActionApproval {
 
     /// Deny a proposed action. Refuses if the action is not
     /// `Proposed`.
-    pub async fn deny(
-        &self,
-        caller: &User,
-        action_id: AiActionId,
-    ) -> Result<AiAction, AiOpsError> {
+    pub async fn deny(&self, caller: &User, action_id: AiActionId) -> Result<AiAction, AiOpsError> {
         if !matches!(caller.role(), Role::Owner | Role::Admin) {
             return Err(AiOpsError::Forbidden);
         }
@@ -498,7 +508,8 @@ impl ActionApproval {
             return Err(AiOpsError::ActionNotPending(action_id.as_uuid()));
         }
         action.deny();
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -517,6 +528,9 @@ impl ActionApproval {
     }
 }
 
+// Kept for call sites that still map repo errors explicitly; the
+// service currently relies on `Into`/`map_err(Into::into)` instead.
+#[allow(dead_code)]
 fn map_repo(error: RepoError) -> AiOpsError {
     AiOpsError::Persistence(error.0)
 }

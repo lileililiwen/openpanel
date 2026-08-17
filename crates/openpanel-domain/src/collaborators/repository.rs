@@ -1,11 +1,13 @@
 //! `CollaboratorRepository` and `SiteGrantRepository` traits.
 
 use async_trait::async_trait;
-use crate::common::error::RepoError;
 use uuid::Uuid;
 
-use super::grant::{Collaborator, CollaboratorId, SiteGrant};
-use super::permission::PermissionSet;
+use super::{
+    grant::{Collaborator, CollaboratorId, SiteGrant},
+    permission::PermissionSet,
+};
+use crate::common::error::RepoError;
 
 /// Repository for collaborator accounts.
 #[async_trait]

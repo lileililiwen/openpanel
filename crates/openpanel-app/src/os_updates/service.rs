@@ -109,16 +109,21 @@ impl RecordingPackageManager {
 
     /// Set the simulated upgrade output.
     pub fn set_simulate_output(&self, output: impl Into<String>) {
-        *self.simulate.lock().expect("simulate") = output.into();
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
+        let mut guard = self.simulate.lock().expect("simulate");
+        *guard = output.into();
     }
 
     /// Mark whether the kernel was updated.
     pub fn set_kernel_updated(&self, value: bool) {
-        *self.kernel_updated.lock().expect("kernel") = value;
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
+        let mut guard = self.kernel_updated.lock().expect("kernel");
+        *guard = value;
     }
 
     /// Snapshot apply calls.
     pub fn apply_calls(&self) -> Vec<UpdateKind> {
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
         self.apply_calls.lock().expect("apply").clone()
     }
 }
@@ -132,14 +137,17 @@ impl Default for RecordingPackageManager {
 #[async_trait::async_trait]
 impl PackageManager for RecordingPackageManager {
     async fn simulate_upgrade(&self) -> Result<CommandOutput, OsUpdateError> {
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
+        let stdout = self.simulate.lock().expect("simulate").clone();
         Ok(CommandOutput {
             code: 0,
-            stdout: self.simulate.lock().expect("simulate").clone(),
+            stdout,
             stderr: String::new(),
         })
     }
 
     async fn apply_upgrade(&self, kind: UpdateKind) -> Result<CommandOutput, OsUpdateError> {
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
         self.apply_calls.lock().expect("apply").push(kind);
         Ok(CommandOutput {
             code: 0,
@@ -149,7 +157,9 @@ impl PackageManager for RecordingPackageManager {
     }
 
     async fn kernel_updated(&self) -> Result<bool, OsUpdateError> {
-        Ok(*self.kernel_updated.lock().expect("kernel"))
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
+        let updated = *self.kernel_updated.lock().expect("kernel");
+        Ok(updated)
     }
 }
 
@@ -229,7 +239,8 @@ impl OsUpdateApplier {
         } else {
             AuditOutcome::Failure
         };
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),

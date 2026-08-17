@@ -2,17 +2,16 @@
 
 use std::{collections::HashMap, fmt};
 
-use serde::{Deserialize, Serialize};
-use thiserror::Error;
-
 // Re-export the DKIM / SPF / DMARC / mailbox-quota refinement types
 // from the `refine-mail-with-dkim-spf-dmarc-defaults` change so
 // callers can import them from the `mail` module without crossing
 // module boundaries.
 pub use dkim::{
-    DkimAlgorithm, DkimKeypair, DomainSendingPolicy, MailboxQuota, MailDkimError,
-    MailErrorSendingPolicy, SendingRequirement,
+    DkimAlgorithm, DkimKeypair, DomainSendingPolicy, MailDkimError, MailErrorSendingPolicy,
+    MailboxQuota, SendingRequirement,
 };
+use serde::{Deserialize, Serialize};
+use thiserror::Error;
 
 mod dkim;
 

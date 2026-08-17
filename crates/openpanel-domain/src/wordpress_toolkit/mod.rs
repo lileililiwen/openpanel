@@ -176,15 +176,24 @@ pub struct WpSecurityReport {
 }
 
 /// Compare two semver-ish version strings. Returns `Ordering`.
+/// Pre-release suffixes (e.g. `6.4.0-rc1`) sort *before* the
+/// matching release (`6.4.0`); the comparator follows semver §11.
 pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
     use std::cmp::Ordering;
-    let parse = |v: &str| -> Vec<u32> {
-        v.split('.')
-            .filter_map(|p| p.split('-').next().and_then(|s| s.parse::<u32>().ok()))
-            .collect()
+    let split = |v: &str| -> (Vec<u32>, Option<String>) {
+        let mut parts: Vec<&str> = v.split('.').collect();
+        let mut pre: Option<String> = None;
+        if let Some(last) = parts.last_mut()
+            && let Some((head, tail)) = last.split_once('-')
+        {
+            *last = head;
+            pre = Some(tail.to_string());
+        }
+        let nums = parts.iter().filter_map(|p| p.parse::<u32>().ok()).collect();
+        (nums, pre)
     };
-    let av = parse(a);
-    let bv = parse(b);
+    let (av, ap) = split(a);
+    let (bv, bp) = split(b);
     let n = av.len().max(bv.len());
     for i in 0..n {
         let x = av.get(i).copied().unwrap_or(0);
@@ -194,7 +203,12 @@ pub fn compare_versions(a: &str, b: &str) -> std::cmp::Ordering {
             non_eq => return non_eq,
         }
     }
-    Ordering::Equal
+    match (ap.is_some(), bp.is_some()) {
+        (false, false) => Ordering::Equal,
+        (true, false) => Ordering::Less,
+        (false, true) => Ordering::Greater,
+        (true, true) => ap.cmp(&bp),
+    }
 }
 
 /// Persistence port for the WordPress toolkit.

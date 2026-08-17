@@ -2,7 +2,8 @@
 
 use chrono::{DateTime, Utc};
 use openpanel_domain::{
-    AuditRetentionPolicy, ComplianceRepository, GdprExport, GdprExportPayload, HardeningRun, RepoError,
+    AuditRetentionPolicy, ComplianceRepository, GdprExport, GdprExportPayload, HardeningRun,
+    RepoError,
 };
 use sqlx::{Row, SqlitePool};
 use uuid::Uuid;
@@ -23,8 +24,8 @@ impl SqliteComplianceRepository {
 #[async_trait::async_trait]
 impl ComplianceRepository for SqliteComplianceRepository {
     async fn save_hardening_run(&self, run: &HardeningRun) -> Result<(), RepoError> {
-        let rules_json = serde_json::to_string(&run.rules)
-            .map_err(|e| RepoError::new(e.to_string()))?;
+        let rules_json =
+            serde_json::to_string(&run.rules).map_err(|e| RepoError::new(e.to_string()))?;
         let completed_at = run.completed_at.map(|t| t.to_rfc3339());
         sqlx::query(
             "INSERT OR REPLACE INTO hardening_runs \
@@ -95,8 +96,8 @@ impl ComplianceRepository for SqliteComplianceRepository {
     }
 
     async fn save_gdpr_export(&self, export: &GdprExport) -> Result<(), RepoError> {
-        let payload = serde_json::to_string(&export.payload)
-            .map_err(|e| RepoError::new(e.to_string()))?;
+        let payload =
+            serde_json::to_string(&export.payload).map_err(|e| RepoError::new(e.to_string()))?;
         sqlx::query(
             "INSERT OR REPLACE INTO gdpr_exports (id, user_id, payload_json, generated_at) \
              VALUES (?, ?, ?, ?)",
@@ -144,8 +145,7 @@ fn decode_hardening_run(row: sqlx::sqlite::SqliteRow) -> Result<HardeningRun, Re
     let rules_json: String = row.try_get("rules_json").map_err(map_sqlx)?;
     let has_failures: i64 = row.try_get("has_failures").map_err(map_sqlx)?;
     let id = Uuid::parse_str(&id).map_err(|e| RepoError::new(e.to_string()))?;
-    let initiated_by =
-        Uuid::parse_str(&initiated_by).map_err(|e| RepoError::new(e.to_string()))?;
+    let initiated_by = Uuid::parse_str(&initiated_by).map_err(|e| RepoError::new(e.to_string()))?;
     let started_at = parse_ts(&started_at)?;
     let completed_at = completed_at.as_deref().map(parse_ts).transpose()?;
     let rules: Vec<openpanel_domain::HardeningRule> = serde_json::from_str(&rules_json)
@@ -161,7 +161,9 @@ fn decode_hardening_run(row: sqlx::sqlite::SqliteRow) -> Result<HardeningRun, Re
     })
 }
 
-fn decode_retention_policy(row: sqlx::sqlite::SqliteRow) -> Result<AuditRetentionPolicy, RepoError> {
+fn decode_retention_policy(
+    row: sqlx::sqlite::SqliteRow,
+) -> Result<AuditRetentionPolicy, RepoError> {
     let ttl_days: i64 = row.try_get("ttl_days").map_err(map_sqlx)?;
     let export_before_purge: i64 = row.try_get("export_before_purge").map_err(map_sqlx)?;
     let updated_at: String = row.try_get("updated_at").map_err(map_sqlx)?;

@@ -2,10 +2,14 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use openpanel_domain::common::error::RepoError;
-use openpanel_domain::container_registry::image::{ImageDigest, ScanStatus, StoredImage};
-use openpanel_domain::container_registry::namespace::{ImageNamespace, NamespaceId};
-use openpanel_domain::container_registry::scan::{ScanFinding, ScanResult};
+use openpanel_domain::{
+    common::error::RepoError,
+    container_registry::{
+        image::{ImageDigest, ScanStatus, StoredImage},
+        namespace::{ImageNamespace, NamespaceId},
+        scan::{ScanFinding, ScanResult},
+    },
+};
 use sqlx::{Pool, Sqlite};
 use uuid::Uuid;
 
@@ -49,11 +53,16 @@ impl SqliteNamespaceRepository {
     }
 }
 
+/// Port for persisting image namespaces.
 #[async_trait]
 pub trait NamespaceRepository: Send + Sync {
+    /// Insert or replace a namespace row.
     async fn insert(&self, ns: &ImageNamespace) -> Result<(), RepoError>;
+    /// Look up a namespace by id.
     async fn find(&self, id: &NamespaceId) -> Result<Option<ImageNamespace>, RepoError>;
+    /// Update the used-bytes counter for a namespace.
     async fn update_used(&self, id: &NamespaceId, used: u64) -> Result<(), RepoError>;
+    /// List all namespaces, oldest first.
     async fn list(&self) -> Result<Vec<ImageNamespace>, RepoError>;
 }
 
@@ -96,9 +105,7 @@ impl NamespaceRepository for SqliteNamespaceRepository {
             .await
             .map_err(|e| RepoError::new(e.to_string()))?;
         if res.rows_affected() == 0 {
-            return Err(RepoError::new(format!(
-                "namespace {id} not found"
-            )));
+            return Err(RepoError::new(format!("namespace {id} not found")));
         }
         Ok(())
     }
@@ -125,8 +132,7 @@ struct NamespaceRow {
 }
 
 fn row_to_namespace(row: NamespaceRow) -> Result<ImageNamespace, RepoError> {
-    let owner = Uuid::parse_str(&row.owner)
-        .map_err(|e| RepoError::new(format!("owner: {e}")))?;
+    let owner = Uuid::parse_str(&row.owner).map_err(|e| RepoError::new(format!("owner: {e}")))?;
     Ok(ImageNamespace {
         namespace_id: NamespaceId::new(row.namespace_id)
             .map_err(|e| RepoError::new(e.to_string()))?,
@@ -152,19 +158,25 @@ impl SqliteImageRepository {
     }
 }
 
+/// Port for persisting stored images.
 #[async_trait]
 pub trait ImageRepository: Send + Sync {
+    /// Insert or replace a stored-image row.
     async fn insert(&self, image: &StoredImage) -> Result<(), RepoError>;
+    /// Look up an image in a namespace by digest.
     async fn find(
         &self,
         namespace: &NamespaceId,
         digest: &ImageDigest,
     ) -> Result<Option<StoredImage>, RepoError>;
+    /// Delete a stored-image row.
     async fn delete(&self, namespace: &NamespaceId, digest: &ImageDigest) -> Result<(), RepoError>;
+    /// List images in a namespace, oldest first.
     async fn list_for_namespace(
         &self,
         namespace: &NamespaceId,
     ) -> Result<Vec<StoredImage>, RepoError>;
+    /// Update the scan status of an image.
     async fn update_status(
         &self,
         namespace: &NamespaceId,
@@ -210,11 +222,7 @@ impl ImageRepository for SqliteImageRepository {
         row.map(row_to_image).transpose()
     }
 
-    async fn delete(
-        &self,
-        namespace: &NamespaceId,
-        digest: &ImageDigest,
-    ) -> Result<(), RepoError> {
+    async fn delete(&self, namespace: &NamespaceId, digest: &ImageDigest) -> Result<(), RepoError> {
         sqlx::query("DELETE FROM stored_images WHERE namespace = ? AND digest = ?")
             .bind(namespace.as_str())
             .bind(digest.as_str())
@@ -278,8 +286,7 @@ struct ImageRow {
 fn row_to_image(row: ImageRow) -> Result<StoredImage, RepoError> {
     Ok(StoredImage {
         digest: ImageDigest::new(row.digest).map_err(|e| RepoError::new(e.to_string()))?,
-        namespace: NamespaceId::new(row.namespace)
-            .map_err(|e| RepoError::new(e.to_string()))?,
+        namespace: NamespaceId::new(row.namespace).map_err(|e| RepoError::new(e.to_string()))?,
         size_bytes: row.size_bytes as u64,
         pushed_at: parse_dt(&row.pushed_at)?,
         reference: row.reference,
@@ -302,13 +309,13 @@ impl SqliteScanResultRepository {
     }
 }
 
+/// Port for persisting scan results.
 #[async_trait]
 pub trait ScanResultRepository: Send + Sync {
+    /// Insert a scan result row.
     async fn insert(&self, result: &ScanResult) -> Result<(), RepoError>;
-    async fn latest_for(
-        &self,
-        digest: &ImageDigest,
-    ) -> Result<Option<ScanResult>, RepoError>;
+    /// Latest scan result for an image digest (if any).
+    async fn latest_for(&self, digest: &ImageDigest) -> Result<Option<ScanResult>, RepoError>;
 }
 
 #[async_trait]
@@ -328,10 +335,7 @@ impl ScanResultRepository for SqliteScanResultRepository {
         Ok(())
     }
 
-    async fn latest_for(
-        &self,
-        digest: &ImageDigest,
-    ) -> Result<Option<ScanResult>, RepoError> {
+    async fn latest_for(&self, digest: &ImageDigest) -> Result<Option<ScanResult>, RepoError> {
         let row: Option<ScanResultRow> = sqlx::query_as(
             "SELECT digest, scanned_at, findings_json
              FROM scan_results WHERE digest = ?
@@ -353,8 +357,8 @@ struct ScanResultRow {
 }
 
 fn row_to_scan_result(row: ScanResultRow) -> Result<ScanResult, RepoError> {
-    let findings: Vec<ScanFinding> = serde_json::from_str(&row.findings_json)
-        .map_err(|e| RepoError::new(e.to_string()))?;
+    let findings: Vec<ScanFinding> =
+        serde_json::from_str(&row.findings_json).map_err(|e| RepoError::new(e.to_string()))?;
     Ok(ScanResult {
         digest: ImageDigest::new(row.digest).map_err(|e| RepoError::new(e.to_string()))?,
         scanned_at: parse_dt(&row.scanned_at)?,

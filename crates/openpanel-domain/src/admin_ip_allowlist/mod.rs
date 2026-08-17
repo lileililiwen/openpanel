@@ -2,8 +2,10 @@
 //! `AllowlistMode`, `IpCidr`, and the `AllowlistOverride` per-role
 //! bypass policy that the `IpAllowlistMiddleware` consumes.
 
-use std::collections::BTreeMap;
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::{
+    collections::BTreeMap,
+    net::{IpAddr, Ipv4Addr, Ipv6Addr},
+};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -28,15 +30,20 @@ pub enum AllowlistMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AllowlistOverride {
+    /// Apply the panel-wide allowlist mode.
     Inherit,
+    /// Skip the allowlist middleware for this role.
     Bypass,
 }
 
 /// A typed CIDR. IPv4 and IPv6 are supported.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IpCidr {
+    /// The network address.
     pub address: IpAddr,
+    /// Prefix length in bits (0..=32 for IPv4, 0..=128 for IPv6).
     pub prefix_len: u8,
+    /// Optional human-readable label.
     pub label: Option<String>,
 }
 
@@ -65,6 +72,7 @@ impl IpCidr {
             label,
         })
     }
+
     /// Whether `ip` falls within this CIDR.
     pub fn matches(&self, ip: IpAddr) -> bool {
         match (self.address, ip) {
@@ -137,9 +145,13 @@ fn ipv6_to_u128(addr: Ipv6Addr) -> (u128, u128) {
 /// The admin IP allowlist aggregate.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AdminIpAllowlist {
+    /// Panel-wide allowlist mode.
     pub mode: AllowlistMode,
+    /// Allowed CIDR entries.
     pub entries: Vec<IpCidr>,
+    /// Per-role override policy.
     pub role_overrides: BTreeMap<Role, AllowlistOverride>,
+    /// When the allowlist was last updated.
     pub updated_at: DateTime<Utc>,
 }
 
@@ -189,8 +201,11 @@ pub enum AdminIpAllowlistError {
     /// The prefix length is out of range for the address family.
     #[error("invalid prefix length {prefix_len} for {address} (max {max})")]
     InvalidPrefixLen {
+        /// The offending address.
         address: IpAddr,
+        /// The out-of-range prefix length.
         prefix_len: u8,
+        /// The maximum legal prefix length for the address family.
         max: u8,
     },
 }
@@ -201,13 +216,12 @@ mod tests {
 
     #[test]
     fn cidr_rejects_invalid_prefix_len() {
-        let err = IpCidr::new(
-            "10.0.0.0".parse::<IpAddr>().unwrap(),
-            33,
-            None,
-        )
-        .expect_err("must reject");
-        assert!(matches!(err, AdminIpAllowlistError::InvalidPrefixLen { .. }));
+        let err =
+            IpCidr::new("10.0.0.0".parse::<IpAddr>().unwrap(), 33, None).expect_err("must reject");
+        assert!(matches!(
+            err,
+            AdminIpAllowlistError::InvalidPrefixLen { .. }
+        ));
     }
 
     #[test]
@@ -272,12 +286,14 @@ mod tests {
 
     #[test]
     fn find_match_returns_label() {
-        let entries = vec![IpCidr::new(
-            "10.0.0.0".parse::<IpAddr>().unwrap(),
-            8,
-            Some("office".to_string()),
-        )
-        .unwrap()];
+        let entries = vec![
+            IpCidr::new(
+                "10.0.0.0".parse::<IpAddr>().unwrap(),
+                8,
+                Some("office".to_string()),
+            )
+            .unwrap(),
+        ];
         let allowlist = AdminIpAllowlist::new(
             AllowlistMode::AllowlistStrict,
             entries,

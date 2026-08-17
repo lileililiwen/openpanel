@@ -91,10 +91,7 @@ impl MailFilterRepository for SqliteMailFilterRepository {
         row.map(decode_sieve).transpose()
     }
 
-    async fn save_autoresponder(
-        &self,
-        autoresponder: &AutoResponder,
-    ) -> Result<(), RepoError> {
+    async fn save_autoresponder(&self, autoresponder: &AutoResponder) -> Result<(), RepoError> {
         sqlx::query(
             "INSERT OR REPLACE INTO autoresponders \
              (mailbox_id, enabled, body, mode, window_start, window_end) \
@@ -162,20 +159,18 @@ impl MailFilterRepository for SqliteMailFilterRepository {
     }
 
     async fn save_catch_all(&self, catch_all: &CatchAll) -> Result<(), RepoError> {
-        sqlx::query(
-            "INSERT OR REPLACE INTO catch_all (domain, destination_mailbox) VALUES (?, ?)",
-        )
-        .bind(&catch_all.domain)
-        .bind(catch_all.destination_mailbox.to_string())
-        .execute(&self.pool)
-        .await
-        .map_err(|e| RepoError::new(e.to_string()))?;
+        sqlx::query("INSERT OR REPLACE INTO catch_all (domain, destination_mailbox) VALUES (?, ?)")
+            .bind(&catch_all.domain)
+            .bind(catch_all.destination_mailbox.to_string())
+            .execute(&self.pool)
+            .await
+            .map_err(|e| RepoError::new(e.to_string()))?;
         Ok(())
     }
 
     async fn save_mailing_list(&self, list: &MailingList) -> Result<(), RepoError> {
-        let members = serde_json::to_string(&list.members)
-            .map_err(|e| RepoError::new(e.to_string()))?;
+        let members =
+            serde_json::to_string(&list.members).map_err(|e| RepoError::new(e.to_string()))?;
         sqlx::query(
             "INSERT OR REPLACE INTO mailing_lists (address, members_json, created_at) \
              VALUES (?, ?, ?)",

@@ -4,8 +4,9 @@
 //! set is intentionally closed (no `Other` variant) so callers can
 //! never grant a scope outside the allowlist.
 
-use serde::{Deserialize, Serialize};
 use std::fmt;
+
+use serde::{Deserialize, Serialize};
 
 /// A typed permission scope. Adding a new variant is a breaking
 /// change for the `FromStr`/`as_str` contract; open variants MUST
@@ -66,15 +67,6 @@ impl PermissionSet {
         Self(1 << p.bit())
     }
 
-    /// Construct from an iterator.
-    pub fn from_iter<I: IntoIterator<Item = Permission>>(iter: I) -> Self {
-        let mut out = Self::EMPTY;
-        for p in iter {
-            out.insert(p);
-        }
-        out
-    }
-
     /// Insert a permission.
     pub fn insert(&mut self, p: Permission) {
         self.0 |= 1 << p.bit();
@@ -122,6 +114,17 @@ impl PermissionSet {
                 Some(permission_from_bit(idx))
             }
         })
+    }
+}
+
+impl FromIterator<Permission> for PermissionSet {
+    /// Build a set from an iterator of permissions.
+    fn from_iter<I: IntoIterator<Item = Permission>>(iter: I) -> Self {
+        let mut out = Self::EMPTY;
+        for p in iter {
+            out.insert(p);
+        }
+        out
     }
 }
 

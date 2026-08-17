@@ -12,10 +12,7 @@ use aes_gcm::{
     Aes256Gcm, Key, Nonce,
     aead::{Aead, KeyInit},
 };
-use argon2::{
-    Argon2,
-    password_hash::{SaltString, rand_core::OsRng},
-};
+use argon2::{Argon2, password_hash::SaltString};
 use base64::{Engine, engine::general_purpose::STANDARD as B64};
 use openpanel_domain::OffsiteBackupError;
 use rand::RngCore;
@@ -180,6 +177,7 @@ pub fn master_key_fingerprint(master_key: &[u8; KEK_LEN]) -> String {
 }
 
 /// Decode a base64 master key from config into raw bytes.
+#[allow(dead_code)] // config bootstrap path; exercised by the tests below
 pub fn decode_master_key(s: &str) -> Result<[u8; KEK_LEN], OffsiteBackupError> {
     if s.is_empty() {
         return Err(OffsiteBackupError::InvalidKek("master key missing".into()));

@@ -264,7 +264,7 @@ impl RelationshipRow {
         let created_by = Uuid::parse_str(&self.created_by)
             .map_err(|e| AccountHierarchyError::Persistence(format!("bad created_by: {e}")))?;
         let created_at = parse_dt(&self.created_at)?;
-        let status = parse_relationship_status(&self.status)?;
+        let _status = parse_relationship_status(&self.status)?;
         Ok(AccountRelationship::new(
             parent_id, child_id, created_by, created_at,
         ))

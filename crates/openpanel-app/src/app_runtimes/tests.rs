@@ -49,11 +49,12 @@ async fn set_runtime_persists_and_audits() {
     );
     let caller = admin_user();
     let runtime = make_runtime();
-    service
-        .set(&caller, runtime.clone())
+    service.set(&caller, runtime.clone()).await.expect("set");
+    let loaded = repo
+        .get_runtime(runtime.site_id)
         .await
-        .expect("set");
-    let loaded = repo.get_runtime(runtime.site_id).await.expect("get").expect("present");
+        .expect("get")
+        .expect("present");
     assert_eq!(loaded.kind, RuntimeKind::Node);
     assert_eq!(loaded.version, "20.10.0");
 }

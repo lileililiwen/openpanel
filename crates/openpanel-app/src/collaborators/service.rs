@@ -4,10 +4,9 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use openpanel_core::audit::{AuditAction, AuditEvent, AuditOutcome, AuditService};
-use openpanel_domain::common::error::RepoError;
 use openpanel_domain::{
     Collaborator, CollaboratorError, CollaboratorId, CollaboratorRepository, Email, Permission,
-    PermissionSet, SiteGrant, SiteGrantRepository,
+    PermissionSet, SiteGrant, SiteGrantRepository, common::error::RepoError,
 };
 use uuid::Uuid;
 
@@ -132,12 +131,8 @@ impl CollaboratorService {
         }
         let now = Utc::now();
         let collaborator_id = CollaboratorId::generate();
-        let collaborator = Collaborator::new_invited(
-            collaborator_id.clone(),
-            account_id,
-            email,
-            now,
-        );
+        let collaborator =
+            Collaborator::new_invited(collaborator_id.clone(), account_id, email, now);
         self.collaborators.insert(&collaborator).await?;
         let grant = SiteGrant::new(
             collaborator_id.clone(),
@@ -146,11 +141,7 @@ impl CollaboratorService {
             now,
         );
         self.grants.insert(&grant).await?;
-        let scopes: Vec<&'static str> = request
-            .permissions
-            .iter()
-            .map(|p| p.as_str())
-            .collect();
+        let scopes: Vec<&'static str> = request.permissions.iter().map(|p| p.as_str()).collect();
         let event = AuditEvent::new(
             actor,
             AuditAction::CollaboratorInvited,
@@ -223,7 +214,9 @@ impl CollaboratorService {
                 .len();
             if remaining == 0 {
                 c.revoke(now);
-                self.collaborators.update_status(collaborator_id, &c).await?;
+                self.collaborators
+                    .update_status(collaborator_id, &c)
+                    .await?;
             }
         }
         let event = AuditEvent::new(

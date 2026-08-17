@@ -60,7 +60,7 @@ impl HostingPlanRepository for MemoryHostingPlanRepository {
     async fn list(&self) -> Result<Vec<HostingPlan>, HostingPlansError> {
         let state = self.inner.lock().expect("memory poisoned");
         let mut plans: Vec<_> = state.plans.values().cloned().collect();
-        plans.sort_by(|a, b| a.created_at().cmp(&b.created_at()));
+        plans.sort_by_key(|p| p.created_at());
         Ok(plans)
     }
 

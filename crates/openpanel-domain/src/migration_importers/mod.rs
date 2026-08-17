@@ -8,8 +8,6 @@
 //! Baota / tar manifest drivers live in the application layer where
 //! tar and gzip access is available.
 
-use std::collections::BTreeMap;
-
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -642,6 +640,8 @@ impl<T: Send + Sync> MigrationSource for T {}
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+
     use super::*;
 
     fn sample_plan() -> MigrationPlan {

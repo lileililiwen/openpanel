@@ -60,7 +60,13 @@ async fn applier_records_history_and_audits() {
         .await
         .expect("apply");
     assert!(record.success);
-    assert_eq!(record.reboot, RebootState { required: true, kernel_updated: true });
+    assert_eq!(
+        record.reboot,
+        RebootState {
+            required: true,
+            kernel_updated: true
+        }
+    );
     let calls = pm.apply_calls();
     assert_eq!(calls, vec![UpdateKind::Security]);
     let history = repo.list_history(10).await.expect("history");
@@ -76,7 +82,10 @@ async fn non_admin_cannot_apply() {
     let applier = OsUpdateApplier::new(repo, Arc::new(NoopAuditService), pm);
     let caller = non_admin_user();
     let res = applier.apply(&caller, UpdateKind::Security).await;
-    assert!(matches!(res, Err(openpanel_domain::OsUpdateError::Forbidden)));
+    assert!(matches!(
+        res,
+        Err(openpanel_domain::OsUpdateError::Forbidden)
+    ));
 }
 
 #[tokio::test]
@@ -138,29 +147,43 @@ async fn apply_records_failure_when_package_manager_errors() {
     struct FailingPm;
     #[async_trait::async_trait]
     impl crate::os_updates::PackageManager for FailingPm {
-        async fn simulate_upgrade(&self) -> Result<crate::os_updates::CommandOutput, openpanel_domain::OsUpdateError> {
+        async fn simulate_upgrade(
+            &self,
+        ) -> Result<crate::os_updates::CommandOutput, openpanel_domain::OsUpdateError> {
             Ok(crate::os_updates::CommandOutput {
                 code: 0,
                 stdout: String::new(),
                 stderr: String::new(),
             })
         }
-        async fn apply_upgrade(&self, _: UpdateKind) -> Result<crate::os_updates::CommandOutput, openpanel_domain::OsUpdateError> {
+
+        async fn apply_upgrade(
+            &self,
+            _: UpdateKind,
+        ) -> Result<crate::os_updates::CommandOutput, openpanel_domain::OsUpdateError> {
             Ok(crate::os_updates::CommandOutput {
                 code: 1,
                 stdout: String::new(),
                 stderr: "apt failed".into(),
             })
         }
+
         async fn kernel_updated(&self) -> Result<bool, openpanel_domain::OsUpdateError> {
             Ok(false)
         }
     }
     let db = TestDb::new().await;
     let repo = Arc::new(SqliteOsUpdateRepository::new(db.pool()));
-    let applier = OsUpdateApplier::new(repo.clone(), Arc::new(NoopAuditService), Arc::new(FailingPm));
+    let applier = OsUpdateApplier::new(
+        repo.clone(),
+        Arc::new(NoopAuditService),
+        Arc::new(FailingPm),
+    );
     let caller = admin_user();
-    let record = applier.apply(&caller, UpdateKind::Other).await.expect("apply");
+    let record = applier
+        .apply(&caller, UpdateKind::Other)
+        .await
+        .expect("apply");
     assert!(!record.success);
     assert_eq!(record.message, "apt failed");
     let history = repo.list_history(10).await.expect("history");

@@ -218,5 +218,5 @@ pub const DEFAULT_ALLOWLIST: &[&str] = &[
 
 /// Return `true` when `name` is in the default allow-list.
 pub fn is_allowed(name: &str) -> bool {
-    DEFAULT_ALLOWLIST.iter().any(|unit| *unit == name)
+    DEFAULT_ALLOWLIST.contains(&name)
 }

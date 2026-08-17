@@ -24,7 +24,10 @@ impl WordPressToolkitModule {
         let scanner = WpScanner::new(repo.clone(), ctx.audit.clone());
         let updater = WpUpdater::new(
             repo.clone(),
-            Arc::new(super::FakeWpFilesystem::new("/var/www/wp", vec!["wp-config.php".to_string()])),
+            Arc::new(super::FakeWpFilesystem::new(
+                "/var/www/wp",
+                vec!["wp-config.php".to_string()],
+            )),
             ctx.audit.clone(),
         );
         let cache = WpCacheLayer::new(repo.clone(), ctx.audit.clone());

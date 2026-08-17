@@ -190,8 +190,10 @@ impl Integration {
 /// Compute the HMAC-SHA256 hex of `body` under `secret`. Pure
 /// function used by the relay to verify the caller's signature.
 pub fn hmac_sha256_hex(secret: &str, body: &[u8]) -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+    use std::{
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+    };
     // We use the standard library's SipHasher here to avoid pulling
     // an extra crypto crate. The output is a deterministic 16-hex
     // digest that is enough to verify equality in the integration
@@ -204,7 +206,11 @@ pub fn hmac_sha256_hex(secret: &str, body: &[u8]) -> String {
 
 /// Verify a webhook signature. Returns `Ok(())` when the
 /// signature matches, `BillingError::InvalidSignature` otherwise.
-pub fn verify_signature(secret: &str, body: &[u8], presented: Option<&str>) -> Result<(), BillingError> {
+pub fn verify_signature(
+    secret: &str,
+    body: &[u8],
+    presented: Option<&str>,
+) -> Result<(), BillingError> {
     let presented = presented.ok_or(BillingError::InvalidSignature)?;
     let expected = hmac_sha256_hex(secret, body);
     if expected.eq_ignore_ascii_case(presented) {
@@ -262,18 +268,12 @@ pub trait BillingRepository: Send + Sync + 'static {
     /// Persist a usage meter.
     async fn save_meter(&self, meter: &UsageMeter) -> Result<(), RepoError>;
     /// List usage meters for one owner.
-    async fn list_meters(
-        &self,
-        owner_id: Uuid,
-    ) -> Result<Vec<UsageMeter>, RepoError>;
+    async fn list_meters(&self, owner_id: Uuid) -> Result<Vec<UsageMeter>, RepoError>;
 
     /// Persist a chargeback.
     async fn save_chargeback(&self, chargeback: &Chargeback) -> Result<(), RepoError>;
     /// List chargebacks for one owner.
-    async fn list_chargebacks(
-        &self,
-        owner_id: Uuid,
-    ) -> Result<Vec<Chargeback>, RepoError>;
+    async fn list_chargebacks(&self, owner_id: Uuid) -> Result<Vec<Chargeback>, RepoError>;
 
     /// Persist an integration.
     async fn save_integration(&self, integration: &Integration) -> Result<(), RepoError>;
@@ -319,7 +319,11 @@ mod tests {
         ));
     }
 
-    fn verify_secret_safe(secret: &str, body: &[u8], sig: Option<&str>) -> Result<(), BillingError> {
+    fn verify_secret_safe(
+        secret: &str,
+        body: &[u8],
+        sig: Option<&str>,
+    ) -> Result<(), BillingError> {
         verify_signature(secret, body, sig)
     }
 
@@ -353,7 +357,7 @@ mod tests {
         ];
         let prices = vec![(UsageUnit::Gigabytes, 5u64), (UsageUnit::Requests, 1u64)];
         let cb = compute_chargeback(owner, start, end, &meters, &prices, "USD");
-        assert_eq!(cb.amount_minor, 100 * 5 + 1000 * 1);
+        assert_eq!(cb.amount_minor, 100 * 5 + 1000);
         assert_eq!(cb.lines.len(), 2);
     }
 }

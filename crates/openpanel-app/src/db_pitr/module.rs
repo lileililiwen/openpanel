@@ -53,7 +53,7 @@ impl DbPitrModule {
         Self {
             service,
             migrations: vec![Migration {
-                module: MODULE_NAME.into(),
+                module: MODULE_NAME,
                 version: "001".into(),
                 description: "db-pitr initial schema".into(),
                 sql: crate::migrations::DB_PITR_V001.into(),

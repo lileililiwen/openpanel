@@ -97,8 +97,8 @@ impl AiOpsRepository for SqliteAiOpsRepository {
     }
 
     async fn save_action(&self, action: &AiAction) -> Result<(), RepoError> {
-        let params = serde_json::to_string(&action.params)
-            .map_err(|e| RepoError::new(e.to_string()))?;
+        let params =
+            serde_json::to_string(&action.params).map_err(|e| RepoError::new(e.to_string()))?;
         sqlx::query(
             "INSERT OR REPLACE INTO ai_actions (id, session_id, tool_name, kind, params_json, \
              status, approved_by, audit_id, created_at, updated_at) \
@@ -133,8 +133,8 @@ impl AiOpsRepository for SqliteAiOpsRepository {
     }
 
     async fn update_action(&self, action: &AiAction) -> Result<(), RepoError> {
-        let params = serde_json::to_string(&action.params)
-            .map_err(|e| RepoError::new(e.to_string()))?;
+        let params =
+            serde_json::to_string(&action.params).map_err(|e| RepoError::new(e.to_string()))?;
         sqlx::query(
             "UPDATE ai_actions SET status = ?, approved_by = ?, audit_id = ?, updated_at = ?, \
              params_json = ? WHERE id = ?",
@@ -184,8 +184,8 @@ fn decode_session(row: sqlx::sqlite::SqliteRow) -> Result<AiSession, RepoError> 
     let title: String = row.try_get("title").map_err(map_sqlx)?;
     let created_at: String = row.try_get("created_at").map_err(map_sqlx)?;
     let updated_at: String = row.try_get("updated_at").map_err(map_sqlx)?;
-    let id = Uuid::parse_str(&id_str)
-        .map_err(|e| RepoError::new(format!("invalid session id: {e}")))?;
+    let id =
+        Uuid::parse_str(&id_str).map_err(|e| RepoError::new(format!("invalid session id: {e}")))?;
     let owner = Uuid::parse_str(&owner_str)
         .map_err(|e| RepoError::new(format!("invalid owner id: {e}")))?;
     Ok(AiSession {
@@ -204,8 +204,8 @@ fn decode_message(row: sqlx::sqlite::SqliteRow) -> Result<AiMessage, RepoError> 
     let content: String = row.try_get("content").map_err(map_sqlx)?;
     let tool_json: String = row.try_get("tool_results_json").map_err(map_sqlx)?;
     let created_at: String = row.try_get("created_at").map_err(map_sqlx)?;
-    let id = Uuid::parse_str(&id_str)
-        .map_err(|e| RepoError::new(format!("invalid message id: {e}")))?;
+    let id =
+        Uuid::parse_str(&id_str).map_err(|e| RepoError::new(format!("invalid message id: {e}")))?;
     let session = Uuid::parse_str(&session_str)
         .map_err(|e| RepoError::new(format!("invalid session id: {e}")))?;
     let tool_results: Vec<ToolResult> = serde_json::from_str(&tool_json)
@@ -214,11 +214,7 @@ fn decode_message(row: sqlx::sqlite::SqliteRow) -> Result<AiMessage, RepoError> 
         "user" => MessageRole::User,
         "assistant" => MessageRole::Assistant,
         "system" => MessageRole::System,
-        other => {
-            return Err(RepoError::new(format!(
-                "unknown message role: {other}"
-            )))
-        }
+        other => return Err(RepoError::new(format!("unknown message role: {other}"))),
     };
     Ok(AiMessage {
         id,
@@ -243,8 +239,7 @@ fn decode_action(row: sqlx::sqlite::SqliteRow) -> Result<AiAction, RepoError> {
     let updated_at: String = row.try_get("updated_at").map_err(map_sqlx)?;
 
     let id = AiActionId(
-        Uuid::parse_str(&id_str)
-            .map_err(|e| RepoError::new(format!("invalid action id: {e}")))?,
+        Uuid::parse_str(&id_str).map_err(|e| RepoError::new(format!("invalid action id: {e}")))?,
     );
     let session = Uuid::parse_str(&session_str)
         .map_err(|e| RepoError::new(format!("invalid session id: {e}")))?;
@@ -253,11 +248,7 @@ fn decode_action(row: sqlx::sqlite::SqliteRow) -> Result<AiAction, RepoError> {
     let kind = match kind.as_str() {
         "read" => ToolKind::Read,
         "write" => ToolKind::Write,
-        other => {
-            return Err(RepoError::new(format!(
-                "unknown action kind: {other}"
-            )))
-        }
+        other => return Err(RepoError::new(format!("unknown action kind: {other}"))),
     };
     let params: serde_json::Value = serde_json::from_str(&params_json)
         .map_err(|e| RepoError::new(format!("invalid action params: {e}")))?;
@@ -265,11 +256,7 @@ fn decode_action(row: sqlx::sqlite::SqliteRow) -> Result<AiAction, RepoError> {
         "proposed" => AiActionStatus::Proposed,
         "executed" => AiActionStatus::Executed,
         "denied" => AiActionStatus::Denied,
-        other => {
-            return Err(RepoError::new(format!(
-                "unknown action status: {other}"
-            )))
-        }
+        other => return Err(RepoError::new(format!("unknown action status: {other}"))),
     };
     let approved_by = approved_by
         .map(|s| Uuid::parse_str(&s))

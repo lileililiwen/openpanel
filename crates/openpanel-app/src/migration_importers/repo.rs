@@ -88,6 +88,7 @@ fn outcome_str(outcome: openpanel_domain::TranslationOutcome) -> &'static str {
     }
 }
 
+#[allow(dead_code)] // decode counterpart of `outcome_str`; unreachable until log-entry reads exist
 fn outcome_from_str(s: &str) -> openpanel_domain::TranslationOutcome {
     match s {
         "imported" => openpanel_domain::TranslationOutcome::Imported,
@@ -140,6 +141,7 @@ impl ImportedResourceRow {
     }
 }
 
+#[allow(dead_code)] // row mapping reserved for translation_log_entries reads
 #[derive(sqlx::FromRow)]
 struct LogEntryRow {
     run_id: String,
@@ -150,6 +152,7 @@ struct LogEntryRow {
 }
 
 impl LogEntryRow {
+    #[allow(dead_code)] // not yet called; the service writes log entries but never reads them
     fn into_entry(self) -> TranslationLogEntry {
         TranslationLogEntry {
             run_id: MigrationRunId(Uuid::parse_str(&self.run_id).unwrap_or_default()),

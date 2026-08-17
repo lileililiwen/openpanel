@@ -2,9 +2,7 @@
 //! download audit rows.
 
 use chrono::{DateTime, Utc};
-use openpanel_domain::{
-    LogDownloadRecord, LogDownloadRepository, LogSource, RepoError,
-};
+use openpanel_domain::{LogDownloadRecord, LogDownloadRepository, LogSource, RepoError};
 use sqlx::{Row, SqlitePool};
 use uuid::Uuid;
 

@@ -32,10 +32,10 @@ pub fn ta(key: &str) -> String {
 /// keyed by the active locale. Tests patch this with a table via
 /// [`install_override`] so they can assert on rendered text.
 pub fn t_lookup(key: &str) -> String {
-    if let Some(table) = current() {
-        if let Some(value) = table.get(key) {
-            return value.clone();
-        }
+    if let Some(table) = current()
+        && let Some(value) = table.get(key)
+    {
+        return value.clone();
     }
     key.to_string()
 }

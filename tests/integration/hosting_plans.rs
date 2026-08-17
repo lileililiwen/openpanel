@@ -1,7 +1,6 @@
 //! Hosting plans HTTP integration tests.
 
 use serde_json::json;
-use uuid::Uuid;
 
 use crate::common::*;
 

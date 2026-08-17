@@ -4,9 +4,7 @@ use std::sync::Arc;
 
 use openpanel_core::{AppContext, Migration, Module};
 
-use super::{
-    DnsSecService, RecordingRegistrar, Registrar, SqliteDnsSecRepository,
-};
+use super::{DnsSecService, RecordingRegistrar, Registrar, SqliteDnsSecRepository};
 
 /// Stable DNSSEC + secondary DNS module name.
 pub const MODULE_NAME: &str = "dnssec_secondary";
@@ -35,7 +33,8 @@ impl DnsSecSecondaryModule {
             migrations: vec![Migration {
                 module: MODULE_NAME,
                 version: "001".to_owned(),
-                description: "DNSSEC + secondary DNS: policies, keys, secondaries, glue, DS".to_owned(),
+                description: "DNSSEC + secondary DNS: policies, keys, secondaries, glue, DS"
+                    .to_owned(),
                 sql: crate::migrations::DNSSEC_SECONDARY_V001.to_owned(),
             }],
         }

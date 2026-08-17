@@ -20,6 +20,8 @@ struct HierarchyRouteState {
     service: Arc<HierarchyService>,
 }
 
+/// Build the account-hierarchy routes; the caller wires the
+/// service into the composition root.
 pub fn router(service: Arc<HierarchyService>) -> Router {
     Router::new()
         .route(
@@ -34,11 +36,16 @@ pub fn router(service: Arc<HierarchyService>) -> Router {
         .with_state(HierarchyRouteState { service })
 }
 
+/// A child account row in the children list.
 #[derive(Debug, Serialize)]
 pub struct ChildView {
+    /// The child account id.
     pub id: Uuid,
+    /// The child's login username.
     pub username: String,
+    /// The child's contact email.
     pub email: String,
+    /// The child's role in the hierarchy.
     pub role: Role,
 }
 
@@ -53,10 +60,14 @@ impl ChildView {
     }
 }
 
+/// A node in the hierarchy tree.
 #[derive(Debug, Serialize)]
 pub struct TreeNode {
+    /// The account id at this node.
     pub id: Uuid,
+    /// Depth below the queried root.
     pub depth: u32,
+    /// Child nodes one level below this one.
     pub children: Vec<TreeNode>,
 }
 
@@ -70,39 +81,59 @@ impl TreeNode {
     }
 }
 
+/// Body for creating a child account.
 #[derive(Debug, Deserialize)]
 pub struct CreateChildBody {
+    /// Login username for the child.
     pub username: String,
+    /// Contact email for the child.
     pub email: String,
+    /// Initial password for the child.
     pub password: String,
+    /// Role granted to the child.
     pub role: Role,
+    /// Optional hosting plan to assign on creation.
     #[serde(default)]
     pub initial_plan_id: Option<openpanel_domain::HostingPlanId>,
 }
 
+/// Body for setting an account's quota pool.
 #[derive(Debug, Deserialize)]
 pub struct SetPoolBody {
+    /// The pool axis being configured.
     pub axis: PoolAxis,
+    /// Total bytes allocated to the pool.
     pub total_bytes: u64,
 }
 
+/// Body for claiming pool capacity for a child.
 #[derive(Debug, Deserialize)]
 pub struct ClaimBody {
+    /// The child account claiming capacity.
     pub child_id: Uuid,
+    /// The axis the claim applies to.
     pub axis: PoolAxis,
+    /// Bytes claimed from the pool.
     pub share_bytes: u64,
 }
 
+/// Body for releasing a pool claim.
 #[derive(Debug, Deserialize)]
 pub struct ReleaseBody {
+    /// The child account releasing capacity.
     pub child_id: Uuid,
+    /// The axis the release applies to.
     pub axis: PoolAxis,
 }
 
+/// A pool usage snapshot.
 #[derive(Debug, Serialize)]
 pub struct PoolUsageView {
+    /// The pool axis.
     pub axis: PoolAxis,
+    /// Total bytes in the pool.
     pub total_bytes: u64,
+    /// Bytes currently claimed/used.
     pub used_bytes: u64,
 }
 
@@ -212,7 +243,7 @@ async fn release(
     Path(id): Path<Uuid>,
     Json(req): Json<ReleaseBody>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let _ = state
+    state
         .service
         .release_claim(id, req.child_id, req.axis, "owner")
         .await

@@ -5,10 +5,11 @@ mod tests {
     use std::sync::Arc;
 
     use chrono::Utc;
-    use openpanel_core::audit::AuditEvent;
-    use openpanel_core::AuditService;
-    use openpanel_domain::collaborators::permission::{Permission, PermissionSet};
-    use openpanel_domain::{CollabStatus, CollaboratorId, Email, SiteGrantRepository};
+    use openpanel_core::{AuditService, audit::AuditEvent};
+    use openpanel_domain::{
+        CollabStatus, Email, SiteGrantRepository,
+        collaborators::permission::{Permission, PermissionSet},
+    };
     use openpanel_test_support::TestDb;
     use tokio::sync::Mutex;
     use uuid::Uuid;
@@ -29,6 +30,7 @@ mod tests {
             self.events.lock().await.push(event);
             Ok(())
         }
+
         async fn recent(&self, _limit: i64) -> Result<Vec<AuditEvent>, openpanel_core::CoreError> {
             Ok(self.events.lock().await.clone())
         }
@@ -67,11 +69,14 @@ mod tests {
         assert_eq!(c.email.as_str(), "dev@example.com");
         assert_eq!(c.status, CollabStatus::Invited);
 
-        let set = resolver.resolve(&c.collaborator_id, site).await.expect("resolve");
+        let set = resolver
+            .resolve(&c.collaborator_id, site)
+            .await
+            .expect("resolve");
         assert!(set.contains(Permission::File));
         assert!(set.contains(Permission::Database));
         assert!(!set.contains(Permission::Mail));
-        assert!(audit.events.lock().await.len() >= 1);
+        assert!(!audit.events.lock().await.is_empty());
     }
 
     #[tokio::test]
@@ -114,7 +119,10 @@ mod tests {
             )
             .await
             .expect("update");
-        let set = resolver.resolve(&c.collaborator_id, site).await.expect("resolve");
+        let set = resolver
+            .resolve(&c.collaborator_id, site)
+            .await
+            .expect("resolve");
         assert!(set.contains(Permission::Cron));
         assert!(set.contains(Permission::Mail));
         assert!(!set.contains(Permission::File));
@@ -162,7 +170,10 @@ mod tests {
             site_id: site_b,
             permissions: PermissionSet::from_iter([Permission::Cron]),
         };
-        let c = service.invite(account, req_a, "owner").await.expect("invite a");
+        let c = service
+            .invite(account, req_a, "owner")
+            .await
+            .expect("invite a");
         // Re-invite for site_b requires a NEW collaborator per
         // invite spec; we model that by inserting the second grant
         // directly. (A single email can have at most one
@@ -188,19 +199,12 @@ mod tests {
         let grants = Arc::new(grants_repo);
         let collaborators = Arc::new(SqliteCollaboratorRepository::new(db.pool()));
         let audit = Arc::new(RecordingAudit::default());
-        let local_svc = Arc::new(CollaboratorService::new(
-            collaborators,
-            grants,
-            audit,
-        ));
+        let local_svc = Arc::new(CollaboratorService::new(collaborators, grants, audit));
         local_svc
             .revoke(&c.collaborator_id, site_a, "owner")
             .await
             .expect("revoke a");
-        let remaining = local_svc
-            .grants_for_site(site_b)
-            .await
-            .expect("list b");
+        let remaining = local_svc.grants_for_site(site_b).await.expect("list b");
         assert_eq!(remaining.len(), 1);
         assert_eq!(remaining[0].site_id, site_b);
         let _ = Email::new("user@example.com").unwrap();

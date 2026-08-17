@@ -3,12 +3,12 @@
 use std::sync::Arc;
 
 use openpanel_core::{AppContext, AuditService, Migration, Module};
+use openpanel_domain::ToolCallAllowlist;
 
 use super::{
     ActionApproval, AskService, DefaultToolExecutor, SqliteAiOpsRepository, ToolExecutor,
     ToolServices,
 };
-use openpanel_domain::ToolCallAllowlist;
 
 /// Stable AI Ops module name.
 pub const MODULE_NAME: &str = "ai_ops";
@@ -19,13 +19,20 @@ pub const MODULE_NAME: &str = "ai_ops";
 pub fn default_allowlist() -> ToolCallAllowlist {
     use openpanel_domain::ToolKind;
     let mut allowlist = ToolCallAllowlist::new();
+    // Tool names are compile-time literals; parsing cannot fail.
+    #[allow(clippy::expect_used)]
+    let health_name = openpanel_domain::ToolName::new("panel.health").expect("static tool name");
     allowlist.register(openpanel_domain::ToolSpec {
-        name: openpanel_domain::ToolName::new("panel.health").expect("static tool name"),
+        name: health_name,
         kind: ToolKind::Read,
         description: "Return the panel version and a health probe.".into(),
     });
+    // Tool names are compile-time literals; parsing cannot fail.
+    #[allow(clippy::expect_used)]
+    let list_sites_name =
+        openpanel_domain::ToolName::new("panel.list_sites").expect("static tool name");
     allowlist.register(openpanel_domain::ToolSpec {
-        name: openpanel_domain::ToolName::new("panel.list_sites").expect("static tool name"),
+        name: list_sites_name,
         kind: ToolKind::Read,
         description: "Return the number of provisioned sites.".into(),
     });
@@ -48,7 +55,8 @@ impl AiOpsModule {
         let pool = ctx.db.pool().await;
         let repo = Arc::new(SqliteAiOpsRepository::new(pool));
         let allowlist = Arc::new(default_allowlist());
-        let executor: Arc<dyn ToolExecutor> = Arc::new(DefaultToolExecutor::new(ToolServices::default()));
+        let executor: Arc<dyn ToolExecutor> =
+            Arc::new(DefaultToolExecutor::new(ToolServices::default()));
         let ask = Arc::new(AskService::new(
             repo.clone(),
             allowlist.clone(),

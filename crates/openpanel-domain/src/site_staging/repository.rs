@@ -47,8 +47,11 @@ pub trait SnapshotRepository: Send + Sync + 'static {
 /// Minimal snapshot projection returned by `SnapshotRepository::list_by_site`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SnapshotRow {
+    /// The site the snapshot belongs to.
     pub site_id: Uuid,
+    /// The snapshot identifier.
     pub snapshot: SnapshotId,
+    /// When the snapshot was taken.
     pub taken_at: chrono::DateTime<chrono::Utc>,
 }
 

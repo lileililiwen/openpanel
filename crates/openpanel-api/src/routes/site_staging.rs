@@ -98,7 +98,9 @@ async fn delete_slot(
 
 #[derive(Debug, Deserialize)]
 struct SyncBody {
+    // Accepted for forward compatibility; not yet read by `sync`.
     #[serde(default)]
+    #[allow(dead_code)]
     mode: Option<SyncMode>,
 }
 

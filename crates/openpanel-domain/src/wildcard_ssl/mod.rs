@@ -204,11 +204,7 @@ pub trait WildcardRepository: Send + Sync + 'static {
 #[async_trait::async_trait]
 pub trait DnsProviderPort: Send + Sync + 'static {
     /// Publish a TXT record; returns the published value.
-    async fn publish_txt(
-        &self,
-        fqdn: String,
-        value: String,
-    ) -> Result<String, WildcardError>;
+    async fn publish_txt(&self, fqdn: String, value: String) -> Result<String, WildcardError>;
     /// Revoke a TXT record.
     async fn revoke_txt(&self, fqdn: String) -> Result<(), WildcardError>;
 }
@@ -228,12 +224,16 @@ impl RecordingDnsProvider {
             revokes: std::sync::Mutex::new(Vec::new()),
         }
     }
+
     /// Snapshot publishes.
     pub fn publishes(&self) -> Vec<(String, String)> {
+        #[allow(clippy::expect_used)]
         self.publishes.lock().expect("publishes").clone()
     }
+
     /// Snapshot revokes.
     pub fn revokes(&self) -> Vec<String> {
+        #[allow(clippy::expect_used)]
         self.revokes.lock().expect("revokes").clone()
     }
 }
@@ -246,11 +246,8 @@ impl Default for RecordingDnsProvider {
 
 #[async_trait::async_trait]
 impl DnsProviderPort for RecordingDnsProvider {
-    async fn publish_txt(
-        &self,
-        fqdn: String,
-        value: String,
-    ) -> Result<String, WildcardError> {
+    async fn publish_txt(&self, fqdn: String, value: String) -> Result<String, WildcardError> {
+        #[allow(clippy::expect_used)]
         self.publishes
             .lock()
             .expect("publishes")
@@ -259,6 +256,7 @@ impl DnsProviderPort for RecordingDnsProvider {
     }
 
     async fn revoke_txt(&self, fqdn: String) -> Result<(), WildcardError> {
+        #[allow(clippy::expect_used)]
         self.revokes.lock().expect("revokes").push(fqdn);
         Ok(())
     }
@@ -273,7 +271,7 @@ pub const CHALLENGE_SERVER_BIND: &str = "127.0.0.1:9080";
 
 /// Whether a provider name is in the default allow-list.
 pub fn is_provider_allowed(name: &str) -> bool {
-    ALLOWED_DNS_PROVIDERS.iter().any(|p| *p == name)
+    ALLOWED_DNS_PROVIDERS.contains(&name)
 }
 
 #[cfg(test)]

@@ -22,7 +22,7 @@ use axum::{
     routing::{get, post},
 };
 use openpanel_app::site_clone_template::{SiteCloneService, SqliteSiteCloneTemplateRepository};
-use openpanel_domain::{CloneSource, PiiPolicy, SiteTemplate};
+use openpanel_domain::{PiiPolicy, SiteTemplate};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -47,6 +47,8 @@ pub fn router(
 #[derive(Clone)]
 struct CloneState {
     service: Arc<SiteCloneService>,
+    // Reserved for follow-on handlers that need direct repo access.
+    #[allow(dead_code)]
     repo: Arc<SqliteSiteCloneTemplateRepository>,
 }
 

@@ -275,11 +275,7 @@ pub struct AiAction {
 
 impl AiAction {
     /// Construct a `Proposed` write action.
-    pub fn proposed(
-        session_id: AiSessionId,
-        tool: ToolName,
-        params: serde_json::Value,
-    ) -> Self {
+    pub fn proposed(session_id: AiSessionId, tool: ToolName, params: serde_json::Value) -> Self {
         let now = Utc::now();
         Self {
             id: AiActionId::new(),

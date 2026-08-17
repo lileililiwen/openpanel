@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::{
-    Role, ServiceAction, ServiceActionRecord, ServiceError, ServiceInfo, ServiceManagerRepository,
-    ServiceStatus, User, DEFAULT_ALLOWLIST, is_allowed,
+    DEFAULT_ALLOWLIST, Role, ServiceAction, ServiceActionRecord, ServiceError, ServiceInfo,
+    ServiceManagerRepository, ServiceStatus, User, is_allowed,
 };
 use uuid::Uuid;
 
@@ -23,11 +23,7 @@ pub trait SystemCtl: Send + Sync + 'static {
     /// Query whether the unit is enabled at boot.
     async fn is_enabled(&self, name: &str) -> Result<bool, ServiceError>;
     /// Run a lifecycle action.
-    async fn run(
-        &self,
-        name: &str,
-        action: ServiceAction,
-    ) -> Result<CommandOutput, ServiceError>;
+    async fn run(&self, name: &str, action: ServiceAction) -> Result<CommandOutput, ServiceError>;
     /// Fetch the last N journal lines for the unit.
     async fn recent_logs(&self, name: &str, limit: u32) -> Result<Vec<String>, ServiceError>;
 }
@@ -84,11 +80,7 @@ impl SystemCtl for RealSystemCtl {
         Ok(output.stdout.trim() == "enabled")
     }
 
-    async fn run(
-        &self,
-        name: &str,
-        action: ServiceAction,
-    ) -> Result<CommandOutput, ServiceError> {
+    async fn run(&self, name: &str, action: ServiceAction) -> Result<CommandOutput, ServiceError> {
         run(&self.bin, &[action.systemctl_verb(), name]).await
     }
 
@@ -105,11 +97,7 @@ impl SystemCtl for RealSystemCtl {
             ],
         )
         .await?;
-        Ok(output
-            .stdout
-            .lines()
-            .map(|line| line.to_string())
-            .collect())
+        Ok(output.stdout.lines().map(|line| line.to_string()).collect())
     }
 }
 
@@ -145,16 +133,25 @@ impl RecordingSystemCtl {
 
     /// Set the unit's `Active` state.
     pub fn set_active(&self, name: &str, status: ServiceStatus) {
-        self.states.lock().expect("states").insert(name.to_string(), status);
+        #[allow(clippy::expect_used)] // test recorder; mutex is never poisoned
+        self.states
+            .lock()
+            .expect("states")
+            .insert(name.to_string(), status);
     }
 
     /// Set the unit's `enabled` flag.
     pub fn set_enabled(&self, name: &str, enabled: bool) {
-        self.enabled.lock().expect("enabled").insert(name.to_string(), enabled);
+        #[allow(clippy::expect_used)] // test recorder; mutex is never poisoned
+        self.enabled
+            .lock()
+            .expect("enabled")
+            .insert(name.to_string(), enabled);
     }
 
     /// Snapshot the calls that have been recorded.
     pub fn calls(&self) -> Vec<(String, ServiceAction)> {
+        #[allow(clippy::expect_used)] // test recorder; mutex is never poisoned
         self.calls.lock().expect("calls").clone()
     }
 }
@@ -168,6 +165,7 @@ impl Default for RecordingSystemCtl {
 #[async_trait::async_trait]
 impl SystemCtl for RecordingSystemCtl {
     async fn is_active(&self, name: &str) -> Result<ServiceStatus, ServiceError> {
+        #[allow(clippy::expect_used)] // test recorder; mutex is never poisoned
         Ok(self
             .states
             .lock()
@@ -178,6 +176,7 @@ impl SystemCtl for RecordingSystemCtl {
     }
 
     async fn is_enabled(&self, name: &str) -> Result<bool, ServiceError> {
+        #[allow(clippy::expect_used)] // test recorder; mutex is never poisoned
         Ok(self
             .enabled
             .lock()
@@ -187,16 +186,16 @@ impl SystemCtl for RecordingSystemCtl {
             .unwrap_or(false))
     }
 
-    async fn run(
-        &self,
-        name: &str,
-        action: ServiceAction,
-    ) -> Result<CommandOutput, ServiceError> {
+    async fn run(&self, name: &str, action: ServiceAction) -> Result<CommandOutput, ServiceError> {
+        #[allow(clippy::expect_used)] // test recorder; mutex is never poisoned
         self.calls
             .lock()
             .expect("calls")
             .push((name.to_string(), action));
-        let mut states = self.states.lock().expect("states");
+        let mut states = {
+            #[allow(clippy::expect_used)] // test recorder; mutex is never poisoned
+            self.states.lock().expect("states")
+        };
         match action {
             ServiceAction::Start => {
                 states.insert(name.to_string(), ServiceStatus::Active);
@@ -208,12 +207,14 @@ impl SystemCtl for RecordingSystemCtl {
                 states.insert(name.to_string(), ServiceStatus::Active);
             }
             ServiceAction::Enable => {
+                #[allow(clippy::expect_used)] // test recorder; mutex is never poisoned
                 self.enabled
                     .lock()
                     .expect("enabled")
                     .insert(name.to_string(), true);
             }
             ServiceAction::Disable => {
+                #[allow(clippy::expect_used)] // test recorder; mutex is never poisoned
                 self.enabled
                     .lock()
                     .expect("enabled")
@@ -243,7 +244,10 @@ pub struct ServiceLister {
 impl ServiceLister {
     /// Construct a lister with the default allow-list.
     pub fn new(systemctl: Arc<dyn SystemCtl>) -> Self {
-        Self::with_allowlist(systemctl, DEFAULT_ALLOWLIST.iter().map(|s| s.to_string()).collect())
+        Self::with_allowlist(
+            systemctl,
+            DEFAULT_ALLOWLIST.iter().map(|s| s.to_string()).collect(),
+        )
     }
 
     /// Construct a lister with a custom allow-list.
@@ -333,7 +337,8 @@ impl ServiceActor {
         } else {
             AuditOutcome::Failure
         };
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),

@@ -54,7 +54,7 @@ impl ContainerRuntimeModule {
         Self {
             service,
             migrations: vec![Migration {
-                module: MODULE_NAME.into(),
+                module: MODULE_NAME,
                 version: "001".into(),
                 description: "container runtime initial schema".into(),
                 sql: crate::migrations::CONTAINER_RUNTIME_V001.into(),

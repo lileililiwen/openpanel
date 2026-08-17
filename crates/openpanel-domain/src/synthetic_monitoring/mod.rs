@@ -220,20 +220,14 @@ pub trait SyntheticRepository: Send + Sync + 'static {
     /// Persist a check result.
     async fn save_result(&self, result: &CheckResult) -> Result<(), RepoError>;
     /// List recent results for a check.
-    async fn list_results(
-        &self,
-        check_id: Uuid,
-        limit: u32,
-    ) -> Result<Vec<CheckResult>, RepoError>;
+    async fn list_results(&self, check_id: Uuid, limit: u32)
+    -> Result<Vec<CheckResult>, RepoError>;
 }
 
 /// Classify a probe into a `CheckStatus` given the configured
 /// thresholds. Pure function — the test harness calls it directly
 /// to assert the alert boundaries.
-pub fn classify(
-    status: CheckStatus,
-    warn_threshold: CheckStatus,
-) -> CheckStatus {
+pub fn classify(status: CheckStatus, warn_threshold: CheckStatus) -> CheckStatus {
     // The `warn_threshold` argument lets the caller widen the
     // soft signal (e.g. a 5xx is Fail, a 4xx is Warn, anything
     // else is Ok). The threshold itself is the floor; the

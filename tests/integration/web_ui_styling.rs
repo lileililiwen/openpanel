@@ -59,13 +59,7 @@ const PUBLIC_ROUTES: &[&str] = &[
 ];
 
 /// All known form-class tokens accepted by the contract.
-const ACCEPTED_FORM_TOKENS: &[&str] = &[
-    "form",
-    "form-grid",
-    "form-row",
-    "form-inline",
-    "inline",
-];
+const ACCEPTED_FORM_TOKENS: &[&str] = &["form", "form-grid", "form-row", "form-inline", "inline"];
 
 async fn login_cookie(server: &TestServer, username: &str, password: &str) -> String {
     let resp = server
@@ -131,9 +125,8 @@ fn assert_all_forms_have_class(html: &str, route: &str) {
         }
         idx += 1;
         found_any = true;
-        let class = form_class(tag).unwrap_or_else(|| {
-            panic!("{route}: form #{idx} has no class attribute: `{tag}`")
-        });
+        let class = form_class(tag)
+            .unwrap_or_else(|| panic!("{route}: form #{idx} has no class attribute: `{tag}`"));
         let has_global = class
             .split_whitespace()
             .any(|t| ACCEPTED_FORM_TOKENS.contains(&t));
@@ -153,7 +146,6 @@ fn assert_all_forms_have_class(html: &str, route: &str) {
         // Some pages legitimately have no forms (e.g. /logs without
         // a log source selected). The styling contract still applies,
         // but the absence of a form is not a regression.
-        return;
     }
 }
 
@@ -381,12 +373,8 @@ async fn public_routes_emit_no_inline_width_at_three_breakpoints() {
     let widths = ["360", "768", "1280"];
     for route in PUBLIC_ROUTES {
         for width in widths {
-            let (status, body) = fetch_page(
-                &server,
-                &cookie,
-                &format!("{route}?width={width}"),
-            )
-            .await;
+            let (status, body) =
+                fetch_page(&server, &cookie, &format!("{route}?width={width}")).await;
             if is_skipped(status) {
                 continue;
             }
@@ -450,9 +438,8 @@ async fn no_ad_hoc_form_class_names() {
             let close = after.find('>').unwrap_or(after.len());
             let tag = &after[..close];
             if tag == "<form" || tag.starts_with("<form ") {
-                let class = form_class(tag).unwrap_or_else(|| {
-                    panic!("{route}: <form> without class: `{tag}`")
-                });
+                let class = form_class(tag)
+                    .unwrap_or_else(|| panic!("{route}: <form> without class: `{tag}`"));
                 for token in class.split_whitespace() {
                     assert!(
                         ACCEPTED_FORM_TOKENS.contains(&token),

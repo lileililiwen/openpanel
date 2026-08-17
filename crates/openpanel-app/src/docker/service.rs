@@ -124,7 +124,9 @@ impl DockerService {
     /// the caller's effective quota and refuses to start a
     /// container that would exceed any axis.
     pub fn attach_quota_gate(&self, gate: Arc<ContainerRuntimeService>) {
-        *self.quota_gate.write().expect("invariant: rwlock poisoned") = Some(gate);
+        #[allow(clippy::expect_used)] // rwlock poisoning is an unrecoverable invariant violation
+        let mut guard = self.quota_gate.write().expect("invariant: rwlock poisoned");
+        *guard = Some(gate);
     }
 
     /// List trusted image patterns.
@@ -204,6 +206,7 @@ impl DockerService {
                 "production image requires a sha256 digest pin".into(),
             ));
         }
+        #[allow(clippy::expect_used)] // rwlock poisoning is an unrecoverable invariant violation
         let gate: Option<Arc<ContainerRuntimeService>> = self
             .quota_gate
             .read()

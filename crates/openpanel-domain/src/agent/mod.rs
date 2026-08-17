@@ -27,6 +27,7 @@ impl AgentId {
     pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
+
     /// Underlying UUID.
     pub fn as_uuid(&self) -> Uuid {
         self.0
@@ -88,6 +89,7 @@ pub struct RecipeManifest {
 impl RecipeManifest {
     /// Build a new manifest. The `allowed_runners` set must be
     /// non-empty; the manifest name must be 3..=64 chars.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: Uuid,
         name: impl Into<String>,
@@ -128,6 +130,7 @@ impl RecipeManifest {
     }
 
     /// Restore from persistence.
+    #[allow(clippy::too_many_arguments)]
     pub fn restore(
         id: Uuid,
         name: String,
@@ -149,42 +152,52 @@ impl RecipeManifest {
             expires_at,
         }
     }
+
     /// Recipe id.
     pub fn id(&self) -> Uuid {
         self.id
     }
+
     /// Recipe name.
     pub fn name(&self) -> &str {
         &self.name
     }
+
     /// Forward actions.
     pub fn actions(&self) -> &[RecipeAction] {
         &self.actions
     }
+
     /// Rollback actions.
     pub fn rollback_actions(&self) -> &[RecipeAction] {
         &self.rollback_actions
     }
+
     /// Allowed runners.
     pub fn allowed_runners(&self) -> &BTreeSet<String> {
         &self.allowed_runners
     }
+
     /// Signature.
     pub fn signature(&self) -> &str {
         &self.signature
     }
+
     /// When the manifest was signed.
     pub fn signed_at(&self) -> DateTime<Utc> {
         self.signed_at
     }
+
     /// When the manifest expires.
     pub fn expires_at(&self) -> DateTime<Utc> {
         self.expires_at
     }
+
     /// Whether the manifest has expired at `now`.
     pub fn is_expired_at(&self, now: DateTime<Utc>) -> bool {
         now >= self.expires_at
     }
+
     /// Whether `runner` is in the allowed set.
     pub fn allows_runner(&self, runner: &str) -> bool {
         self.allowed_runners.contains(runner)
@@ -227,7 +240,9 @@ impl AgentRegistration {
             owner_id,
         }
     }
+
     /// Restore from persistence.
+    #[allow(clippy::too_many_arguments)]
     pub fn restore(
         id: AgentId,
         host_fingerprint: String,
@@ -254,31 +269,38 @@ impl AgentRegistration {
     pub fn id(&self) -> AgentId {
         self.id
     }
+
     /// SHA-256 fingerprint of the host's primary MAC address (or
     /// equivalent stable identifier).
     pub fn host_fingerprint(&self) -> &str {
         &self.host_fingerprint
     }
+
     /// Hostname reported by the agent at install.
     pub fn hostname(&self) -> &str {
         &self.hostname
     }
+
     /// Current status.
     pub fn status(&self) -> AgentStatus {
         self.status
     }
+
     /// SHA-256 fingerprint of the agent's mTLS client cert.
     pub fn cert_fingerprint(&self) -> &str {
         &self.cert_fingerprint
     }
+
     /// Last heartbeat observed.
     pub fn last_heartbeat_at(&self) -> Option<DateTime<Utc>> {
         self.last_heartbeat_at
     }
+
     /// When the agent was registered.
     pub fn registered_at(&self) -> DateTime<Utc> {
         self.registered_at
     }
+
     /// Owner account id.
     pub fn owner_id(&self) -> Uuid {
         self.owner_id
@@ -289,14 +311,17 @@ impl AgentRegistration {
         self.status = AgentStatus::Online;
         self.last_heartbeat_at = Some(now);
     }
+
     /// Mark the agent offline (e.g. missed heartbeat).
     pub fn mark_offline(&mut self) {
         self.status = AgentStatus::Offline;
     }
+
     /// Revoke the agent.
     pub fn revoke(&mut self) {
         self.status = AgentStatus::Revoked;
     }
+
     /// Whether the agent is currently usable.
     pub fn is_usable(&self) -> bool {
         matches!(self.status, AgentStatus::Online | AgentStatus::Pending)
@@ -375,34 +400,42 @@ impl FleetToken {
     pub fn id(&self) -> Uuid {
         self.id
     }
+
     /// Agent id.
     pub fn agent_id(&self) -> AgentId {
         self.agent_id
     }
+
     /// Scope.
     pub fn scope(&self) -> FleetTokenScope {
         self.scope
     }
+
     /// Hash of the plaintext token.
     pub fn token_hash(&self) -> &str {
         &self.token_hash
     }
+
     /// Issued at.
     pub fn issued_at(&self) -> DateTime<Utc> {
         self.issued_at
     }
+
     /// Expires at.
     pub fn expires_at(&self) -> DateTime<Utc> {
         self.expires_at
     }
+
     /// Whether the token has been revoked.
     pub fn is_revoked(&self) -> bool {
         self.revoked
     }
+
     /// Whether the token is currently usable.
     pub fn is_usable_at(&self, now: DateTime<Utc>) -> bool {
         !self.revoked && now < self.expires_at
     }
+
     /// Revoke the token.
     pub fn revoke(&mut self) {
         self.revoked = true;
@@ -432,10 +465,7 @@ pub trait AgentRepository: Send + Sync + 'static {
     /// Update a token (e.g. revoke).
     async fn update_token(&self, token: &FleetToken) -> Result<(), AgentError>;
     /// Find a token by hash.
-    async fn find_token_by_hash(
-        &self,
-        token_hash: &str,
-    ) -> Result<Option<FleetToken>, AgentError>;
+    async fn find_token_by_hash(&self, token_hash: &str) -> Result<Option<FleetToken>, AgentError>;
     /// Insert a recipe manifest.
     async fn insert_manifest(&self, manifest: &RecipeManifest) -> Result<(), AgentError>;
     /// Find a manifest by id.

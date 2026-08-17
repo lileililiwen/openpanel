@@ -48,9 +48,11 @@ impl FakeWpFilesystem {
 
 impl WpFilesystem for FakeWpFilesystem {
     fn snapshot(&self, wp_root: &str, dest: &str) -> Result<(), WpError> {
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
         let files = self.files.lock().expect("files");
         let snapshot = files.get(wp_root).cloned().unwrap_or_default();
         drop(files);
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
         self.snapshots
             .lock()
             .expect("snapshots")
@@ -59,12 +61,14 @@ impl WpFilesystem for FakeWpFilesystem {
     }
 
     fn restore(&self, dest: &str, wp_root: &str) -> Result<(), WpError> {
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
         let snapshot = self
             .snapshots
             .lock()
             .expect("snapshots")
             .remove(dest)
             .ok_or_else(|| WpError::UpdateFailedRolledBack(format!("missing snapshot {dest}")))?;
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
         self.files
             .lock()
             .expect("files")
@@ -73,10 +77,8 @@ impl WpFilesystem for FakeWpFilesystem {
     }
 
     fn drop_snapshot(&self, dest: &str) -> Result<(), WpError> {
-        self.snapshots
-            .lock()
-            .expect("snapshots")
-            .remove(dest);
+        #[allow(clippy::expect_used)] // poisoned test-double mutex is a programming error
+        self.snapshots.lock().expect("snapshots").remove(dest);
         Ok(())
     }
 }
@@ -98,11 +100,7 @@ impl WpScanner {
     /// reports it as `info` when current, `warn` when outdated,
     /// `cve` when the version is below a hard-coded CVE
     /// threshold.
-    pub async fn scan(
-        &self,
-        caller: &User,
-        site_id: Uuid,
-    ) -> Result<WpSecurityReport, WpError> {
+    pub async fn scan(&self, caller: &User, site_id: Uuid) -> Result<WpSecurityReport, WpError> {
         require_admin(caller)?;
         let site = self
             .repo
@@ -131,7 +129,8 @@ impl WpScanner {
             generated_at: Utc::now(),
             findings,
         };
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -229,7 +228,8 @@ impl WpUpdater {
         } else {
             AuditAction::WpUpdateRolledBack
         };
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -278,7 +278,8 @@ impl WpCacheLayer {
             .ok_or(WpError::NotWordpress)?;
         site.cache_mode = mode;
         self.repo.save_site(&site).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -311,22 +312,14 @@ impl WpToolkitService {
     }
 
     /// Register a managed WP site.
-    pub async fn register(
-        &self,
-        caller: &User,
-        site: WpSite,
-    ) -> Result<WpSite, WpError> {
+    pub async fn register(&self, caller: &User, site: WpSite) -> Result<WpSite, WpError> {
         require_admin(caller)?;
         self.scanner.repo.save_site(&site).await?;
         Ok(site)
     }
 
     /// Forward to the scanner.
-    pub async fn scan(
-        &self,
-        caller: &User,
-        site_id: Uuid,
-    ) -> Result<WpSecurityReport, WpError> {
+    pub async fn scan(&self, caller: &User, site_id: Uuid) -> Result<WpSecurityReport, WpError> {
         self.scanner.scan(caller, site_id).await
     }
 

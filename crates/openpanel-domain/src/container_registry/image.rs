@@ -1,8 +1,9 @@
 //! Stored image, image digest, and scan status.
 
+use std::fmt;
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::fmt;
 use uuid::Uuid;
 
 /// OCI image digest (`sha256:` + lowercase hex). Validated on

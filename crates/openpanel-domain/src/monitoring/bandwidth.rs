@@ -25,14 +25,18 @@ impl BandwidthPeriod {
             BandwidthPeriod::Hourly => current + Duration::hours(1),
             BandwidthPeriod::Daily => current + Duration::days(1),
             BandwidthPeriod::Monthly => {
-                // Move to the first of the next month, UTC.
+                // Move to the first of the next month, UTC. The
+                // year/month arithmetic stays within chrono's valid
+                // range, so the unwraps cannot fail.
                 if current.month() == 12 {
+                    #[allow(clippy::unwrap_used)]
                     current
                         .with_year(current.year() + 1)
                         .unwrap()
                         .with_month(1)
                         .unwrap()
                 } else {
+                    #[allow(clippy::unwrap_used)]
                     current.with_month(current.month() + 1).unwrap()
                 }
             }
@@ -43,12 +47,19 @@ impl BandwidthPeriod {
 /// A bandwidth window over a fixed period.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BandwidthWindow {
+    /// Owner account the window is attributed to.
     pub owner_id: Uuid,
+    /// Site the window is attributed to, when traffic is site-scoped.
     pub site_id: Option<Uuid>,
+    /// Aggregation period of the window.
     pub period: BandwidthPeriod,
+    /// Window start timestamp (UTC).
     pub starts_at: DateTime<Utc>,
+    /// Window end timestamp (UTC).
     pub ends_at: DateTime<Utc>,
+    /// Ingress bytes recorded in the window.
     pub bytes_in: u64,
+    /// Egress bytes recorded in the window.
     pub bytes_out: u64,
 }
 
@@ -106,10 +117,15 @@ impl BandwidthWindow {
 /// Per-account counter used to attribute traffic to a site.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BandwidthCounter {
+    /// Owner account the counter is attributed to.
     pub owner_id: Uuid,
+    /// Site the counter is attributed to, when traffic is site-scoped.
     pub site_id: Option<Uuid>,
+    /// Aggregation period of the counter.
     pub period: BandwidthPeriod,
+    /// Ingress bytes recorded.
     pub bytes_in: u64,
+    /// Egress bytes recorded.
     pub bytes_out: u64,
 }
 
@@ -124,6 +140,7 @@ impl BandwidthCounter {
             bytes_out: 0,
         }
     }
+
     /// Add bytes to the counter.
     pub fn add(&mut self, in_: u64, out: u64) {
         self.bytes_in = self.bytes_in.saturating_add(in_);
@@ -147,6 +164,7 @@ pub struct NoopBandwidthObserver;
 
 impl BandwidthObserver for NoopBandwidthObserver {
     fn on_byte(&self, _owner: Uuid, _site: Option<Uuid>, _in_: u64, _out: u64) {}
+
     fn on_window_close(&self, _window: &BandwidthWindow) {}
 }
 
@@ -161,10 +179,12 @@ impl BandwidthObserverFanout {
     pub fn new() -> Self {
         Self::default()
     }
+
     /// Register an observer.
     pub fn register(&mut self, observer: Box<dyn BandwidthObserver>) {
         self.observers.push(observer);
     }
+
     /// Registered observers.
     pub fn observers(&self) -> &[Box<dyn BandwidthObserver>] {
         &self.observers
@@ -177,6 +197,7 @@ impl BandwidthObserver for BandwidthObserverFanout {
             observer.on_byte(owner, site, in_, out);
         }
     }
+
     fn on_window_close(&self, window: &BandwidthWindow) {
         for observer in &self.observers {
             observer.on_window_close(window);
@@ -187,16 +208,22 @@ impl BandwidthObserver for BandwidthObserverFanout {
 /// A typed event: a threshold was crossed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BandwidthThresholdCrossed {
+    /// Owner account that crossed the threshold.
     pub owner_id: Uuid,
+    /// Site that crossed the threshold, when traffic is site-scoped.
     pub site_id: Option<Uuid>,
+    /// Aggregation period of the crossed window.
     pub period: BandwidthPeriod,
+    /// Percent of the limit consumed when the threshold fired.
     pub pct_used: f32,
+    /// Byte limit the percentage is relative to.
     pub limit_bytes: u64,
 }
 
 /// A typed event: a window closed.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct BandwidthWindowClosed {
+    /// The window that closed.
     pub window: BandwidthWindow,
 }
 
@@ -281,20 +308,24 @@ mod tests {
         let _ = Owner;
         let observer = NoopBandwidthObserver;
         observer.on_byte(Uuid::new_v4(), None, 1, 2);
-        let window = BandwidthWindow::new(Uuid::new_v4(), None, BandwidthPeriod::Hourly, Utc::now());
+        let window =
+            BandwidthWindow::new(Uuid::new_v4(), None, BandwidthPeriod::Hourly, Utc::now());
         observer.on_window_close(&window);
     }
 
     #[test]
     fn fanout_drives_all_observers() {
-        use std::sync::atomic::{AtomicU64, Ordering};
-        use std::sync::Arc;
+        use std::sync::{
+            Arc,
+            atomic::{AtomicU64, Ordering},
+        };
 
         struct Counting(Arc<AtomicU64>);
         impl BandwidthObserver for Counting {
             fn on_byte(&self, _owner: Uuid, _site: Option<Uuid>, in_: u64, _out: u64) {
                 self.0.fetch_add(in_, Ordering::SeqCst);
             }
+
             fn on_window_close(&self, _window: &BandwidthWindow) {}
         }
         let shared = Arc::new(AtomicU64::new(0));

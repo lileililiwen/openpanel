@@ -1,8 +1,8 @@
 //! Background task scaffolding for continuous binlog streaming.
 //!
-//! Production code spawns a [`BinlogStreamer`] per active stream;
-//! the streamer polls the engine [`LogTailer`], writes segments to
-//! the [`BinlogSink`], and checkpoints the resulting `LogSeq` in
+//! Production code spawns a `BinlogStreamer` per active stream;
+//! the streamer polls the engine `LogTailer`, writes segments to
+//! the `BinlogSink`, and checkpoints the resulting `LogSeq` in
 //! the database. The full background task lives behind a feature
 //! flag in the composition root; this module exposes the type so
 //! composition code can wire it without `openpanel-app` taking a
@@ -24,9 +24,14 @@ use crate::db_pitr::service::PitrService;
 /// points so the library code stays IO-agnostic.
 pub struct BinlogStreamer {
     database_id: Uuid,
+    // Consumed by the binary entry point loop; library code stays IO-agnostic.
+    #[allow(dead_code)]
     service: Arc<PitrService>,
+    #[allow(dead_code)]
     tailer: Arc<dyn LogTailer>,
+    #[allow(dead_code)]
     sink: Arc<dyn BinlogSink>,
+    #[allow(dead_code)]
     audit: Arc<dyn AuditService>,
     tick: Duration,
     shutdown: Arc<Notify>,

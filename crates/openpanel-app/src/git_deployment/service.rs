@@ -4,16 +4,14 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
+/// Re-export the domain verify_webhook helper.
+pub use openpanel_domain::verify_webhook as verify_webhook_with_secret;
 use openpanel_domain::{
-    DeployError, DeployRepo, DeployRepository, DeployRun, DeployStatus, Role, User,
-    verify_webhook,
+    DeployError, DeployRepo, DeployRepository, DeployRun, DeployStatus, Role, User, verify_webhook,
 };
 use uuid::Uuid;
 
 use crate::git_deployment::SqliteDeployRepository;
-
-/// Re-export the domain verify_webhook helper.
-pub use openpanel_domain::verify_webhook as verify_webhook_with_secret;
 
 /// Deploy service: link a repo, deploy, rollback, unlink.
 pub struct DeployService {
@@ -28,11 +26,7 @@ impl DeployService {
     }
 
     /// Link a repo to a site.
-    pub async fn link(
-        &self,
-        caller: &User,
-        repo: DeployRepo,
-    ) -> Result<DeployRepo, DeployError> {
+    pub async fn link(&self, caller: &User, repo: DeployRepo) -> Result<DeployRepo, DeployError> {
         require_admin(caller)?;
         repo.validate()?;
         self.repo.save_repo(&repo).await?;
@@ -89,7 +83,8 @@ impl DeployService {
         } else {
             AuditOutcome::Failure
         };
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),

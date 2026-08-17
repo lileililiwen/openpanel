@@ -2,8 +2,8 @@
 
 use chrono::{DateTime, Utc};
 use openpanel_domain::{
-    DestructiveActionClass, MaintenanceError, MaintenanceOverride, MaintenanceRepository,
-    MaintenanceWindow, RepoError,
+    DestructiveActionClass, MaintenanceOverride, MaintenanceRepository, MaintenanceWindow,
+    RepoError,
 };
 use sqlx::{Row, SqlitePool};
 use uuid::Uuid;
@@ -97,10 +97,7 @@ impl MaintenanceRepository for SqliteMaintenanceRepository {
         Ok(())
     }
 
-    async fn get_override(
-        &self,
-        id: Uuid,
-    ) -> Result<Option<MaintenanceOverride>, RepoError> {
+    async fn get_override(&self, id: Uuid) -> Result<Option<MaintenanceOverride>, RepoError> {
         let row = sqlx::query(
             "SELECT id, target_class, reason, ttl_secs, created_at, expires_at, consumed_at, issued_by \
              FROM maintenance_overrides WHERE id = ?",

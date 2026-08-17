@@ -32,10 +32,15 @@ pub enum TemplateRecordPolicy {
 /// A single record in a template.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TemplateRecord {
+    /// Record type, e.g. `A`, `TXT`, `MX`.
     pub kind: String,
+    /// Record name: `@` for the apex, or a qualified name.
     pub name: String,
+    /// Time to live in seconds.
     pub ttl: u32,
+    /// Record payload (rdata).
     pub value: String,
+    /// Whether the record is required for the zone to be complete.
     pub policy: TemplateRecordPolicy,
 }
 
@@ -67,7 +72,9 @@ impl TemplateRecord {
 /// A typed bundle of records applied to a freshly-enabled zone.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ZoneTemplate {
+    /// The template this bundle was built from.
     pub name: TemplateName,
+    /// The records applied to the freshly-enabled zone.
     pub records: Vec<TemplateRecord>,
 }
 
@@ -79,10 +86,12 @@ impl ZoneTemplate {
         }
         Ok(Self { name, records })
     }
+
     /// Find the records with a given name.
     pub fn find_by_name(&self, name: &str) -> impl Iterator<Item = &TemplateRecord> {
         self.records.iter().filter(move |r| r.name == name)
     }
+
     /// Render the strict template, the default for newly enabled
     /// zones.
     pub fn strict(domain: &str) -> Self {
@@ -103,6 +112,7 @@ impl ZoneTemplate {
             records,
         }
     }
+
     /// Render the relaxed template.
     pub fn relaxed(domain: &str) -> Self {
         Self {
@@ -113,6 +123,7 @@ impl ZoneTemplate {
             ],
         }
     }
+
     /// Render the parked template.
     pub fn parked() -> Self {
         Self {
@@ -126,6 +137,7 @@ impl ZoneTemplate {
             )],
         }
     }
+
     /// Look up a built-in template by name.
     pub fn lookup(name: TemplateName, domain: &str) -> Self {
         match name {
@@ -134,6 +146,7 @@ impl ZoneTemplate {
             TemplateName::Parked => Self::parked(),
         }
     }
+
     /// All required records (the application layer refuses to
     /// publish a zone whose required records did not apply).
     pub fn required_records(&self) -> impl Iterator<Item = &TemplateRecord> {
@@ -164,7 +177,7 @@ fn make_spf(domain: &str) -> TemplateRecord {
         "TXT",
         "@",
         3600,
-        &format!("v=spf1 mx -all"),
+        "v=spf1 mx -all",
         TemplateRecordPolicy::Required,
     )
     .replace_name(&format!("@.{domain}"))
@@ -258,8 +271,17 @@ mod tests {
 
     #[test]
     fn lookup_returns_built_in_templates() {
-        assert_eq!(ZoneTemplate::lookup(TemplateName::Strict, "example.com").name, TemplateName::Strict);
-        assert_eq!(ZoneTemplate::lookup(TemplateName::Relaxed, "example.com").name, TemplateName::Relaxed);
-        assert_eq!(ZoneTemplate::lookup(TemplateName::Parked, "example.com").name, TemplateName::Parked);
+        assert_eq!(
+            ZoneTemplate::lookup(TemplateName::Strict, "example.com").name,
+            TemplateName::Strict
+        );
+        assert_eq!(
+            ZoneTemplate::lookup(TemplateName::Relaxed, "example.com").name,
+            TemplateName::Relaxed
+        );
+        assert_eq!(
+            ZoneTemplate::lookup(TemplateName::Parked, "example.com").name,
+            TemplateName::Parked
+        );
     }
 }

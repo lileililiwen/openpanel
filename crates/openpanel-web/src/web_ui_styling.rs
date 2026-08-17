@@ -3,6 +3,7 @@
 //! `add-web-ui-styling-and-responsive-layout`).  These are plain
 //! string scans over the static assets — they make CI fail loudly
 //! if anyone re-introduces a regression.
+#![cfg(test)]
 
 const APP_CSS: &[u8] = include_bytes!("../assets/app.css");
 const TOKENS_CSS: &[u8] = include_bytes!("../assets/tokens.css");

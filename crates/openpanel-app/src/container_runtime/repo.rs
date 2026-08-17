@@ -341,7 +341,7 @@ fn row_to_quota(row: QuotaRow) -> Result<ContainerQuota, RepoError> {
         user_id,
         max_concurrent: row.max_concurrent.max(0) as u32,
         max_total: row.max_total.max(0) as u32,
-        cpu_pct_max: row.cpu_pct_max.max(0).min(255) as u8,
+        cpu_pct_max: row.cpu_pct_max.clamp(0, 255) as u8,
         memory_bytes_max: row.memory_bytes_max.max(0) as u64,
         egress_bytes_per_month: row.egress_bytes_per_month.max(0) as u64,
         updated_at: parse_dt(&row.updated_at)?,
@@ -364,7 +364,7 @@ fn row_to_metrics(row: MetricsRow) -> Result<ContainerMetrics, RepoError> {
     Ok(ContainerMetrics {
         user_id: parse_uuid(&row.user_id, "user_id")?,
         container_id: parse_uuid(&row.container_id, "container_id")?,
-        cpu_pct: row.cpu_pct.max(0).min(65535) as u16,
+        cpu_pct: row.cpu_pct.clamp(0, 65535) as u16,
         memory_bytes: row.memory_bytes.max(0) as u64,
         net_rx: row.net_rx.max(0) as u64,
         net_tx: row.net_tx.max(0) as u64,

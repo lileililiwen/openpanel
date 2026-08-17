@@ -29,19 +29,28 @@ pub enum TargetSiteType {
 /// A typed manifest for a web application.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WebApplicationManifest {
+    /// Stable catalog id.
     pub id: String,
+    /// Display name.
     pub name: String,
+    /// Version.
     pub version: String,
+    /// Target site type.
     pub target_site_type: TargetSiteType,
+    /// Whether the application requires a database.
     pub requires_db: bool,
+    /// Whether the application requires PHP.
     pub requires_php: bool,
+    /// Minimum storage bytes the site must have available.
     pub requires_storage_bytes: u64,
+    /// Install signature.
     pub install_signature: String,
 }
 
 impl WebApplicationManifest {
     /// Build a new manifest. The id, name, and version must be
     /// non-empty; the storage requirement must be 0+ bytes.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: impl Into<String>,
         name: impl Into<String>,
@@ -69,7 +78,9 @@ impl WebApplicationManifest {
             install_signature: install_signature.into(),
         })
     }
+
     /// Restore from persistence.
+    #[allow(clippy::too_many_arguments)]
     pub fn restore(
         id: String,
         name: String,
@@ -91,34 +102,42 @@ impl WebApplicationManifest {
             install_signature,
         }
     }
+
     /// Stable catalog id.
     pub fn id(&self) -> &str {
         &self.id
     }
+
     /// Display name.
     pub fn name(&self) -> &str {
         &self.name
     }
+
     /// Version.
     pub fn version(&self) -> &str {
         &self.version
     }
+
     /// Target site type.
     pub fn target_site_type(&self) -> TargetSiteType {
         self.target_site_type
     }
+
     /// Whether the application requires a database.
     pub fn requires_db(&self) -> bool {
         self.requires_db
     }
+
     /// Whether the application requires PHP.
     pub fn requires_php(&self) -> bool {
         self.requires_php
     }
+
     /// Minimum storage bytes the site must have available.
     pub fn requires_storage_bytes(&self) -> u64 {
         self.requires_storage_bytes
     }
+
     /// Install signature.
     pub fn install_signature(&self) -> &str {
         &self.install_signature
@@ -130,10 +149,15 @@ impl WebApplicationManifest {
 /// to install across kinds.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CatalogEntry {
+    /// The catalog entry kind.
     pub kind: ComponentKind,
+    /// Stable package id.
     pub package_id: String,
+    /// Display name.
     pub name: String,
+    /// Version.
     pub version: String,
+    /// Human-readable description.
     pub description: String,
 }
 
@@ -165,6 +189,7 @@ impl CatalogEntry {
     pub fn kind(&self) -> ComponentKind {
         self.kind
     }
+
     /// Stable package id.
     pub fn package_id(&self) -> &str {
         &self.package_id
@@ -184,7 +209,9 @@ pub enum SoftwareCenterRefineError {
     /// entry's kind.
     #[error("install adapter mismatch: entry is {entry:?}, adapter is {adapter:?}")]
     InstallKindMismatch {
+        /// The entry's kind.
         entry: ComponentKind,
+        /// The adapter's kind.
         adapter: ComponentKind,
     },
 }
@@ -196,10 +223,7 @@ pub fn check_install_kind(
     adapter: ComponentKind,
 ) -> Result<(), SoftwareCenterRefineError> {
     if entry != adapter {
-        return Err(SoftwareCenterRefineError::InstallKindMismatch {
-            entry,
-            adapter,
-        });
+        return Err(SoftwareCenterRefineError::InstallKindMismatch { entry, adapter });
     }
     Ok(())
 }
@@ -243,14 +267,8 @@ mod tests {
 
     #[test]
     fn entry_rejects_empty_package_id() {
-        let err = CatalogEntry::new(
-            ComponentKind::Application,
-            "",
-            "WordPress",
-            "6.0",
-            "blog",
-        )
-        .expect_err("must reject");
+        let err = CatalogEntry::new(ComponentKind::Application, "", "WordPress", "6.0", "blog")
+            .expect_err("must reject");
         assert_eq!(err, SoftwareCenterRefineError::InvalidEntry);
     }
 

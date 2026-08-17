@@ -172,8 +172,7 @@ fn decode_grant(row: sqlx::sqlite::SqliteRow) -> Result<DbGrant, RepoError> {
     let granted_by: String = row.try_get("granted_by").map_err(map_sqlx)?;
     let granted_at: String = row.try_get("granted_at").map_err(map_sqlx)?;
     let id = Uuid::parse_str(&id).map_err(|e| RepoError::new(e.to_string()))?;
-    let database_id = Uuid::parse_str(&database_id)
-        .map_err(|e| RepoError::new(e.to_string()))?;
+    let database_id = Uuid::parse_str(&database_id).map_err(|e| RepoError::new(e.to_string()))?;
     let user_id = Uuid::parse_str(&user_id).map_err(|e| RepoError::new(e.to_string()))?;
     let scope = match scope_kind.as_str() {
         "database" => GrantScope::Database,
@@ -193,8 +192,7 @@ fn decode_grant(row: sqlx::sqlite::SqliteRow) -> Result<DbGrant, RepoError> {
         "all" => Privilege::All,
         other => return Err(RepoError::new(format!("unknown privilege: {other}"))),
     };
-    let granted_by = Uuid::parse_str(&granted_by)
-        .map_err(|e| RepoError::new(e.to_string()))?;
+    let granted_by = Uuid::parse_str(&granted_by).map_err(|e| RepoError::new(e.to_string()))?;
     let granted_at = parse_ts(&granted_at)?;
     Ok(DbGrant {
         id,
@@ -212,8 +210,7 @@ fn decode_remote(row: sqlx::sqlite::SqliteRow) -> Result<RemoteAccess, RepoError
     let enabled: i64 = row.try_get("enabled").map_err(map_sqlx)?;
     let cidrs_json: String = row.try_get("allow_cidrs_json").map_err(map_sqlx)?;
     let wildcard_opt_in: i64 = row.try_get("wildcard_opt_in").map_err(map_sqlx)?;
-    let database_id = Uuid::parse_str(&database_id)
-        .map_err(|e| RepoError::new(e.to_string()))?;
+    let database_id = Uuid::parse_str(&database_id).map_err(|e| RepoError::new(e.to_string()))?;
     let allow_cidrs: Vec<String> = serde_json::from_str(&cidrs_json)
         .map_err(|e| RepoError::new(format!("invalid cidrs: {e}")))?;
     Ok(RemoteAccess {
@@ -233,8 +230,7 @@ fn decode_sso(row: sqlx::sqlite::SqliteRow) -> Result<AdminToolSession, RepoErro
     let expires_at: String = row.try_get("expires_at").map_err(map_sqlx)?;
     let consumed_at: Option<String> = row.try_get("consumed_at").map_err(map_sqlx)?;
     let id = Uuid::parse_str(&id).map_err(|e| RepoError::new(e.to_string()))?;
-    let database_id = Uuid::parse_str(&database_id)
-        .map_err(|e| RepoError::new(e.to_string()))?;
+    let database_id = Uuid::parse_str(&database_id).map_err(|e| RepoError::new(e.to_string()))?;
     let user_id = Uuid::parse_str(&user_id).map_err(|e| RepoError::new(e.to_string()))?;
     let created_at = parse_ts(&created_at)?;
     let expires_at = parse_ts(&expires_at)?;

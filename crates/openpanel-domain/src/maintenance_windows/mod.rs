@@ -3,7 +3,7 @@
 //! single-use override that lifts the lock for a bounded TTL.
 
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -157,14 +157,13 @@ pub trait MaintenanceRepository: Send + Sync + 'static {
     /// Persist an override.
     async fn save_override(&self, override_: &MaintenanceOverride) -> Result<(), RepoError>;
     /// Look up an override by id.
-    async fn get_override(
-        &self,
-        id: Uuid,
-    ) -> Result<Option<MaintenanceOverride>, RepoError>;
+    async fn get_override(&self, id: Uuid) -> Result<Option<MaintenanceOverride>, RepoError>;
 }
 
 #[cfg(test)]
 mod tests {
+    use chrono::Duration;
+
     use super::*;
 
     fn window(starts_in: i64, lasts: i64) -> MaintenanceWindow {

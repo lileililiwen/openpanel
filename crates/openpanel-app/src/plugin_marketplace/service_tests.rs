@@ -6,7 +6,7 @@ mod tests {
 
     use chrono::Utc;
     use ed25519_dalek::{Signer, SigningKey, VerifyingKey};
-    use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
+    use openpanel_core::{AuditEvent, AuditService};
     use openpanel_domain::{
         Capability, CapabilitySet, CatalogSnapshot, MarketplaceCa, MarketplacePlugin,
         PluginMarketplaceError, PluginRating, SignedCatalogEnvelope,
@@ -17,9 +17,7 @@ mod tests {
     use super::super::{
         cache::SqliteCatalogCache,
         client::{MarketplaceClient, MockMarketplaceClient},
-        service::{
-            InstallFromMarketplaceRequest, MarketplaceService,
-        },
+        service::{InstallFromMarketplaceRequest, MarketplaceService},
     };
 
     /// In-memory `AuditService` for tests.
@@ -34,6 +32,7 @@ mod tests {
             self.events.lock().await.push(event);
             Ok(())
         }
+
         async fn recent(&self, _limit: i64) -> Result<Vec<AuditEvent>, openpanel_core::CoreError> {
             Ok(self.events.lock().await.clone())
         }
@@ -54,10 +53,8 @@ mod tests {
         let payload = envelope.payload.clone();
         let signed = format!("{payload}\n{}", envelope.publisher_id);
         let sig = signing_key.sign(signed.as_bytes());
-        envelope.signature = base64::Engine::encode(
-            &base64::engine::general_purpose::STANDARD,
-            sig.to_bytes(),
-        );
+        envelope.signature =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, sig.to_bytes());
     }
 
     #[tokio::test]
@@ -83,7 +80,8 @@ mod tests {
         };
         sign_envelope(&mut envelope, &signing_key);
 
-        let client: Arc<MockMarketplaceClient> = Arc::new(MockMarketplaceClient::new().with_envelope(envelope));
+        let client: Arc<MockMarketplaceClient> =
+            Arc::new(MockMarketplaceClient::new().with_envelope(envelope));
         let cache = Arc::new(SqliteCatalogCache::new(pool.clone()));
         let plugins = Arc::new(crate::plugin::service::PluginService::new(
             Arc::new(crate::plugin::repo::SqlitePluginRegistry::new(pool.clone())),
@@ -94,7 +92,7 @@ mod tests {
         let service = MarketplaceService::new(client.clone(), cache, ca, plugins, audit);
 
         let outcome = service.discover(Some(0)).await.expect("discover");
-        assert_eq!(outcome.from_cache, false);
+        assert!(!outcome.from_cache);
         assert_eq!(outcome.catalog.entries.len(), 1);
         assert_eq!(outcome.catalog.entries[0].id, "com.example.demo");
 
@@ -127,7 +125,8 @@ mod tests {
         // Tamper with the payload after signing.
         envelope.payload = payload.replace("Demo", "TAMPERED");
 
-        let client: Arc<MockMarketplaceClient> = Arc::new(MockMarketplaceClient::new().with_envelope(envelope));
+        let client: Arc<MockMarketplaceClient> =
+            Arc::new(MockMarketplaceClient::new().with_envelope(envelope));
         let cache = Arc::new(SqliteCatalogCache::new(pool.clone()));
         let plugins = Arc::new(crate::plugin::service::PluginService::new(
             Arc::new(crate::plugin::repo::SqlitePluginRegistry::new(pool.clone())),
@@ -166,10 +165,8 @@ mod tests {
         let body = manifest.canonical_body();
         let signed = format!("{body}\n{}", manifest.publisher.as_str());
         let sig = signing_key.sign(signed.as_bytes());
-        manifest.signature = base64::Engine::encode(
-            &base64::engine::general_purpose::STANDARD,
-            sig.to_bytes(),
-        );
+        manifest.signature =
+            base64::Engine::encode(&base64::engine::general_purpose::STANDARD, sig.to_bytes());
 
         let audit: Arc<dyn AuditService> = Arc::new(RecordingAudit::default());
         let plugins = Arc::new(crate::plugin::service::PluginService::new(
@@ -186,10 +183,10 @@ mod tests {
             manifest,
             publisher_id: "publisher-demo".to_string(),
         };
-service
-        .install_from_marketplace(request, &verifying_key, "admin")
-        .await
-        .expect("install");
+        service
+            .install_from_marketplace(request, &verifying_key, "admin")
+            .await
+            .expect("install");
         let stored = service
             .plugins
             .find(&openpanel_domain::PluginId::new("com.example.demo").unwrap())
@@ -211,13 +208,8 @@ service
         ));
         let client: Arc<dyn MarketplaceClient> = Arc::new(MockMarketplaceClient::new());
         let cache = Arc::new(SqliteCatalogCache::new(pool.clone()));
-        let service = MarketplaceService::new(
-            client,
-            cache,
-            MarketplaceCa::empty(),
-            plugins,
-            audit,
-        );
+        let service =
+            MarketplaceService::new(client, cache, MarketplaceCa::empty(), plugins, audit);
 
         let manifest = openpanel_domain::PluginManifest {
             id: openpanel_domain::PluginId::new("com.example.demo").unwrap(),
@@ -269,13 +261,8 @@ service
         ));
         let client: Arc<dyn MarketplaceClient> = Arc::new(MockMarketplaceClient::new());
         let cache = Arc::new(SqliteCatalogCache::new(pool.clone()));
-        let service = MarketplaceService::new(
-            client,
-            cache,
-            MarketplaceCa::empty(),
-            plugins,
-            audit,
-        );
+        let service =
+            MarketplaceService::new(client, cache, MarketplaceCa::empty(), plugins, audit);
         let cached = service.cached().await.expect("cached");
         assert!(cached.is_none());
         let _ = CatalogSnapshot {

@@ -1,8 +1,7 @@
 //! HTTP client for the marketplace catalog.
 
 use async_trait::async_trait;
-use openpanel_domain::SignedCatalogEnvelope;
-use openpanel_domain::plugin_marketplace::error::PluginMarketplaceError;
+use openpanel_domain::{SignedCatalogEnvelope, plugin_marketplace::error::PluginMarketplaceError};
 
 /// Transport used by the marketplace service to fetch a signed
 /// envelope. Production code wires [`HttpMarketplaceClient`]; tests
@@ -81,13 +80,21 @@ impl MockMarketplaceClient {
 
     /// Set the envelope the next call will return.
     pub fn with_envelope(self, envelope: SignedCatalogEnvelope) -> Self {
-        *self.envelope.lock().unwrap() = Some(envelope);
+        {
+            #[allow(clippy::unwrap_used)] // mock; mutex is never poisoned
+            let mut guard = self.envelope.lock().unwrap();
+            *guard = Some(envelope);
+        }
         self
     }
 
     /// Make the next call return `error` instead of an envelope.
     pub fn with_error(self, error: PluginMarketplaceError) -> Self {
-        *self.error.lock().unwrap() = Some(error);
+        {
+            #[allow(clippy::unwrap_used)] // mock; mutex is never poisoned
+            let mut guard = self.error.lock().unwrap();
+            *guard = Some(error);
+        }
         self
     }
 }
@@ -95,9 +102,11 @@ impl MockMarketplaceClient {
 #[async_trait]
 impl MarketplaceClient for MockMarketplaceClient {
     async fn fetch_envelope(&self) -> Result<SignedCatalogEnvelope, PluginMarketplaceError> {
+        #[allow(clippy::unwrap_used)] // mock; mutex is never poisoned
         if let Some(err) = self.error.lock().unwrap().take() {
             return Err(err);
         }
+        #[allow(clippy::unwrap_used)] // mock; mutex is never poisoned
         self.envelope
             .lock()
             .unwrap()

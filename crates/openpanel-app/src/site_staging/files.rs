@@ -15,7 +15,10 @@ pub enum PromoteOutcome {
     Success,
     /// A step failed; the rollback chain was performed. The
     /// `reason` field is a sanitized error message.
-    RolledBack { reason: String },
+    RolledBack {
+        /// Sanitized error message from the failed step.
+        reason: String,
+    },
 }
 
 /// Filesystem abstraction for the staging bounded context.

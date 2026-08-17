@@ -6,7 +6,7 @@ use chrono::Utc;
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::{
     LogAuthorization, LogDownloadRecord, LogDownloadRepository, LogLine, LogPage, LogQuery,
-    LogReader, LogSource, LogViewerError, User,
+    LogReader, LogViewerError, User,
 };
 use uuid::Uuid;
 
@@ -30,16 +30,19 @@ impl InMemoryLogReader {
 
     /// Append a single line.
     pub fn push(&self, line: LogLine) {
+        #[allow(clippy::expect_used)]
         self.lines.lock().expect("lines").push(line);
     }
 
     /// Append many lines at once.
     pub fn extend(&self, lines: impl IntoIterator<Item = LogLine>) {
+        #[allow(clippy::expect_used)]
         self.lines.lock().expect("lines").extend(lines);
     }
 
     /// Snapshot the raw line list.
     pub fn lines(&self) -> Vec<LogLine> {
+        #[allow(clippy::expect_used)]
         self.lines.lock().expect("lines").clone()
     }
 }
@@ -53,6 +56,7 @@ impl Default for InMemoryLogReader {
 #[async_trait::async_trait]
 impl LogReader for InMemoryLogReader {
     async fn query(&self, query: &LogQuery) -> Result<LogPage, LogViewerError> {
+        #[allow(clippy::expect_used)]
         let lines = self.lines.lock().expect("lines");
         let mut matching: Vec<LogLine> = lines
             .iter()
@@ -67,19 +71,21 @@ impl LogReader for InMemoryLogReader {
                 None => true,
             })
             .filter(|line| match &query.filter {
-                Some(filter) => line.message.contains(filter.as_str())
-                    || line.service.contains(filter.as_str())
-                    || line.level.contains(filter.as_str()),
+                Some(filter) => {
+                    line.message.contains(filter.as_str())
+                        || line.service.contains(filter.as_str())
+                        || line.level.contains(filter.as_str())
+                }
                 None => true,
             })
             .cloned()
             .collect();
         let total = matching.len() as u32;
-        if let Some(tail) = query.range.tail {
-            if matching.len() > tail as usize {
-                let drop = matching.len() - tail as usize;
-                matching.drain(0..drop);
-            }
+        if let Some(tail) = query.range.tail
+            && matching.len() > tail as usize
+        {
+            let drop = matching.len() - tail as usize;
+            matching.drain(0..drop);
         }
         Ok(LogPage {
             lines: matching,
@@ -120,11 +126,7 @@ impl LogAggregator {
     }
 
     /// Authorize + run a query. Returns the page.
-    pub async fn view(
-        &self,
-        caller: &User,
-        query: &LogQuery,
-    ) -> Result<LogPage, LogViewerError> {
+    pub async fn view(&self, caller: &User, query: &LogQuery) -> Result<LogPage, LogViewerError> {
         self.auth.authorize(caller, query)?;
         self.reader.query(query).await
     }
@@ -145,7 +147,8 @@ impl LogAggregator {
             downloaded_at: Utc::now(),
         };
         self.repo.save_download(&record).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),

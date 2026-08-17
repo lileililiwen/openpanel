@@ -5,7 +5,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use chrono::Utc;
 use openpanel_core::NoopAuditService;
-use openpanel_domain::{AuditRetentionPolicy, REDACTED, Role};
+use openpanel_domain::{AuditRetentionPolicy, ComplianceRepository, REDACTED, Role};
 use openpanel_test_support::TestDb;
 use uuid::Uuid;
 
@@ -14,7 +14,6 @@ use crate::compliance::{
     GdprSourceMailbox, GdprSourceSite, GdprSources, HardeningWizard, InMemoryRuleExecutor,
     SqliteComplianceRepository,
 };
-use openpanel_domain::ComplianceRepository;
 
 fn owner_user() -> openpanel_domain::User {
     use openpanel_domain::{Email, Password, Username};
@@ -108,10 +107,7 @@ async fn retention_policy_round_trip_and_default() {
     assert_eq!(default.ttl_days, 365);
     assert!(!default.export_before_purge);
 
-    let updated = service
-        .set(&caller, 90, true)
-        .await
-        .expect("set retention");
+    let updated = service.set(&caller, 90, true).await.expect("set retention");
     assert_eq!(updated.ttl_days, 90);
     assert!(updated.export_before_purge);
     let policy = service.get(&caller).await.expect("get");
@@ -162,7 +158,10 @@ struct FixtureSources;
 
 #[async_trait]
 impl GdprSources for FixtureSources {
-    async fn sites_for(&self, _: Uuid) -> Result<Vec<GdprSourceSite>, openpanel_domain::ComplianceError> {
+    async fn sites_for(
+        &self,
+        _: Uuid,
+    ) -> Result<Vec<GdprSourceSite>, openpanel_domain::ComplianceError> {
         Ok(vec![GdprSourceSite {
             id: Uuid::new_v4(),
             domain: "example.com".into(),
@@ -170,13 +169,18 @@ impl GdprSources for FixtureSources {
             owner_id: Uuid::nil(),
         }])
     }
-    async fn mail_for(&self, _: Uuid) -> Result<Vec<GdprSourceMailbox>, openpanel_domain::ComplianceError> {
+
+    async fn mail_for(
+        &self,
+        _: Uuid,
+    ) -> Result<Vec<GdprSourceMailbox>, openpanel_domain::ComplianceError> {
         Ok(vec![GdprSourceMailbox {
             address: "user@example.com".into(),
             display_name: "User".into(),
             quota_bytes: Some(1_000_000),
         }])
     }
+
     async fn databases_for(
         &self,
         _: Uuid,
@@ -187,6 +191,7 @@ impl GdprSources for FixtureSources {
             owner_id: Uuid::nil(),
         }])
     }
+
     async fn api_tokens_for(
         &self,
         _: Uuid,
@@ -221,10 +226,12 @@ async fn gdpr_export_records_pii_count_in_audit() {
     let db = TestDb::new().await;
     let repo = make_repo(&db).await;
     let audit = Arc::new(NoopAuditService);
-    let exporter =
-        GdprExporter::new(repo, audit).with_sources(Arc::new(FixtureSources));
+    let exporter = GdprExporter::new(repo, audit).with_sources(Arc::new(FixtureSources));
     let caller = owner_user();
-    exporter.export(&caller, Uuid::new_v4()).await.expect("export");
+    exporter
+        .export(&caller, Uuid::new_v4())
+        .await
+        .expect("export");
 }
 
 #[tokio::test]
@@ -238,12 +245,9 @@ async fn hardening_run_persists_multiple_rules() {
         .harden(&caller, "cis-debian-12-minimal")
         .await
         .expect("harden");
-    let runs = repo
-        .list_hardening_runs(10)
-        .await
-        .expect("list runs");
+    let runs = repo.list_hardening_runs(10).await.expect("list runs");
     assert_eq!(runs.len(), 1);
-    assert!(runs[0].rules.len() >= 1);
+    assert!(!runs[0].rules.is_empty());
     let _ = outcome;
     let _ = Utc::now();
 }
@@ -259,7 +263,11 @@ async fn retention_policy_persists_singleton() {
         updated_by: Uuid::nil(),
     };
     repo.save_retention_policy(&policy).await.expect("save");
-    let loaded = repo.get_retention_policy().await.expect("get").expect("present");
+    let loaded = repo
+        .get_retention_policy()
+        .await
+        .expect("get")
+        .expect("present");
     assert_eq!(loaded.ttl_days, 30);
     assert!(loaded.export_before_purge);
     // Singleton: second save overwrites the first.
@@ -270,7 +278,11 @@ async fn retention_policy_persists_singleton() {
         updated_by: Uuid::nil(),
     };
     repo.save_retention_policy(&second).await.expect("save");
-    let loaded = repo.get_retention_policy().await.expect("get").expect("present");
+    let loaded = repo
+        .get_retention_policy()
+        .await
+        .expect("get")
+        .expect("present");
     assert_eq!(loaded.ttl_days, 60);
 }
 

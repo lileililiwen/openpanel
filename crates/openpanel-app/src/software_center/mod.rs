@@ -1565,7 +1565,7 @@ impl SoftwareCenterService {
     /// Validates the Owner, consumes the one-shot preview, checks the
     /// host state digest, and acquires the durable lock upfront (so an
     /// invalid or busy request fails fast), then spawns the shared
-    /// [`Self::run_execute_job`] pipeline. The confirm page and the
+    /// `Self::run_execute_job` pipeline. The confirm page and the
     /// storefront poll live progress through
     /// [`Self::system_job_progress`].
     pub async fn start_execute(

@@ -127,6 +127,7 @@ impl ClonePlan {
     pub const MAX_VALIDITY_SECONDS: i64 = 300;
 
     /// Build a plan.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: Uuid,
         source: CloneSource,

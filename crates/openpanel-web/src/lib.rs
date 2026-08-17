@@ -63,5 +63,7 @@ pub mod waf;
 /// OpenSpec change (token-only styling, mobile-first layout,
 /// focus ring, etc.).
 pub mod web_ui_styling;
+/// Webmail client web pages.
+pub mod webmail;
 
 pub use router::{WebRuntime, WebState, router};

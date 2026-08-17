@@ -5,16 +5,15 @@ use std::sync::Arc;
 
 use chrono::{DateTime, Duration, Utc};
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
+// Re-export so callers can use the trait in `Arc<dyn DnsProviderPort>`.
+pub use openpanel_domain::DnsProviderPort;
 use openpanel_domain::{
-    AcmeEndpointMode, CertRequest, ChallengeKind, DnsLease, Role, User, WildcardError,
-    WildcardRepository, is_provider_allowed,
+    AcmeEndpointMode, CertRequest, DnsLease, Role, User, WildcardError, WildcardRepository,
+    is_provider_allowed,
 };
 use uuid::Uuid;
 
 use crate::wildcard_ssl::SqliteWildcardRepository;
-
-// Re-export so callers can use the trait in `Arc<dyn DnsProviderPort>`.
-pub use openpanel_domain::DnsProviderPort;
 
 /// DNS-01 challenge solver. Publishes a TXT lease through the
 /// DNS provider port, runs the supplied challenge closure, and
@@ -51,7 +50,9 @@ impl Dns01ChallengeSolver {
     {
         require_admin(caller)?;
         if !is_provider_allowed(&request.dns_provider) {
-            return Err(WildcardError::ProviderNotAllowed(request.dns_provider.clone()));
+            return Err(WildcardError::ProviderNotAllowed(
+                request.dns_provider.clone(),
+            ));
         }
         let fqdn = format!("_acme-challenge.{}", request.apex);
         let value = format!("token-{}", Uuid::new_v4());
@@ -71,7 +72,8 @@ impl Dns01ChallengeSolver {
         self.dns.revoke_txt(fqdn.clone()).await?;
         self.repo.revoke_lease(lease.id).await?;
         if let Err(error) = result {
-            self.audit
+            let _ = self
+                .audit
                 .record(
                     AuditEvent::new(
                         caller.username().as_str(),
@@ -106,7 +108,11 @@ impl WildcardIssuer {
         solver: Dns01ChallengeSolver,
         audit: Arc<dyn AuditService>,
     ) -> Self {
-        Self { repo, solver, audit }
+        Self {
+            repo,
+            solver,
+            audit,
+        }
     }
 
     /// Issue a cert. The challenge closure here is a no-op for
@@ -131,7 +137,8 @@ impl WildcardIssuer {
             Ok(_) => AuditOutcome::Success,
             Err(_) => AuditOutcome::Failure,
         };
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -152,7 +159,12 @@ impl WildcardIssuer {
 /// Renewal scheduler. The scheduler lists outstanding leases and
 /// the next renewal deadline for a request.
 pub struct CertRenewalScheduler {
+    /// Held for lifecycle parity with the issuer; the v1 scheduler
+    /// computes renewal deadlines from the request itself.
+    #[allow(dead_code)]
     repo: Arc<SqliteWildcardRepository>,
+    /// Audit stream reserved for renewal events in a later change.
+    #[allow(dead_code)]
     audit: Arc<dyn AuditService>,
 }
 

@@ -26,16 +26,12 @@ impl CollaboratorsModule {
         let collaborators = Arc::new(SqliteCollaboratorRepository::new(pool.clone()));
         let grants = Arc::new(SqliteSiteGrantRepository::new(pool));
         let resolver = Arc::new(GrantResolver::new(grants.clone()));
-        let service = Arc::new(CollaboratorService::new(
-            collaborators,
-            grants,
-            audit,
-        ));
+        let service = Arc::new(CollaboratorService::new(collaborators, grants, audit));
         Self {
             service,
             resolver,
             migrations: vec![Migration {
-                module: MODULE_NAME.into(),
+                module: MODULE_NAME,
                 version: "001".into(),
                 description: "collaborators initial schema".into(),
                 sql: crate::migrations::COLLABORATORS_V001.into(),

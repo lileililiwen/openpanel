@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use openpanel_core::NoopAuditService;
-use openpanel_domain::{DbPrivilegeRepository, GrantScope, Privilege, Role};
+use openpanel_domain::{GrantScope, Privilege, Role};
 use openpanel_test_support::TestDb;
 use uuid::Uuid;
 
@@ -163,13 +163,7 @@ async fn remote_access_accepts_wildcard_with_opt_in() {
     let caller = admin_user();
     let database_id = Uuid::new_v4();
     let access = controller
-        .set(
-            &caller,
-            database_id,
-            true,
-            vec!["0.0.0.0/0".into()],
-            true,
-        )
+        .set(&caller, database_id, true, vec!["0.0.0.0/0".into()], true)
         .await
         .expect("set");
     assert!(access.wildcard_opt_in);
@@ -195,9 +189,7 @@ async fn sso_session_issued_and_consumed_once() {
         .await
         .expect("consume");
     assert!(consumed.consumed_at.is_some());
-    let second = sso
-        .consume(&caller, session.id, &session.token)
-        .await;
+    let second = sso.consume(&caller, session.id, &session.token).await;
     assert!(matches!(
         second,
         Err(openpanel_domain::DbPrivilegeError::InvalidSsoToken)
@@ -226,19 +218,25 @@ async fn grant_validation_rejects_unsafe_table_names() {
     let bad = make_grant(
         Uuid::new_v4(),
         Uuid::new_v4(),
-        GrantScope::Table { name: "1starts_with_digit".into() },
+        GrantScope::Table {
+            name: "1starts_with_digit".into(),
+        },
     );
     assert!(bad.validate().is_err());
     let bad = make_grant(
         Uuid::new_v4(),
         Uuid::new_v4(),
-        GrantScope::Table { name: "drop-table".into() },
+        GrantScope::Table {
+            name: "drop-table".into(),
+        },
     );
     assert!(bad.validate().is_err());
     let good = make_grant(
         Uuid::new_v4(),
         Uuid::new_v4(),
-        GrantScope::Table { name: "users".into() },
+        GrantScope::Table {
+            name: "users".into(),
+        },
     );
     assert!(good.validate().is_ok());
 }
@@ -260,15 +258,18 @@ async fn list_user_grants_filters_by_user() {
         .await
         .expect("apply alice");
     service
-        .apply(
-            &caller,
-            make_grant(database_id, bob, GrantScope::Database),
-        )
+        .apply(&caller, make_grant(database_id, bob, GrantScope::Database))
         .await
         .expect("apply bob");
-    let alice_grants = service.list_user(&caller, database_id, alice).await.expect("alice");
+    let alice_grants = service
+        .list_user(&caller, database_id, alice)
+        .await
+        .expect("alice");
     assert_eq!(alice_grants.len(), 1);
-    let bob_grants = service.list_user(&caller, database_id, bob).await.expect("bob");
+    let bob_grants = service
+        .list_user(&caller, database_id, bob)
+        .await
+        .expect("bob");
     assert_eq!(bob_grants.len(), 1);
     assert_ne!(alice_grants[0].id, bob_grants[0].id);
 }

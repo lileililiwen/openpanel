@@ -270,8 +270,7 @@ impl HostingPlansService {
     /// Unassign a plan from a user.
     pub async fn unassign_plan(&self, user_id: Uuid, actor: &str) -> Result<(), HostingPlansError> {
         let now = Utc::now();
-        let prev = self.repo.remove_current_assignment(user_id, now).await?;
-        if prev.is_some() {
+        if let Some(prev) = self.repo.remove_current_assignment(user_id, now).await? {
             self.users
                 .update_hosting_plan_id(user_id, None)
                 .await
@@ -281,9 +280,7 @@ impl HostingPlansService {
                 .record(
                     AuditEvent::new(actor, AuditAction::PlanUnassigned, AuditOutcome::Success)
                         .target(user_id.to_string())
-                        .metadata(
-                            serde_json::json!({"plan_id": prev.unwrap().as_uuid().to_string()}),
-                        ),
+                        .metadata(serde_json::json!({"plan_id": prev.as_uuid().to_string()})),
                 )
                 .await
                 .ok();
@@ -328,6 +325,7 @@ impl HostingPlansService {
     }
 
     fn cache_hit(&self, user_id: Uuid) -> Option<EffectiveQuotas> {
+        #[allow(clippy::expect_used)] // rwlock poisoning is an unrecoverable invariant violation
         let cache = self.cache.read().expect("cache poisoned");
         cache.entries.get(&user_id).and_then(|(caps, stored_at)| {
             let now = Utc::now();
@@ -341,11 +339,13 @@ impl HostingPlansService {
     }
 
     fn cache_store(&self, user_id: Uuid, caps: EffectiveQuotas) {
+        #[allow(clippy::expect_used)] // rwlock poisoning is an unrecoverable invariant violation
         let mut cache = self.cache.write().expect("cache poisoned");
         cache.entries.insert(user_id, (caps, Utc::now()));
     }
 
     fn invalidate_cache(&self, user_id: Option<Uuid>) {
+        #[allow(clippy::expect_used)] // rwlock poisoning is an unrecoverable invariant violation
         let mut cache = self.cache.write().expect("cache poisoned");
         match user_id {
             Some(id) => {

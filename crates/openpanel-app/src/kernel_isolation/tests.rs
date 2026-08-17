@@ -4,8 +4,8 @@ use std::sync::Arc;
 
 use openpanel_core::NoopAuditService;
 use openpanel_domain::{
-    CgroupLimit, IsolationError, IsolationPolicy, IsolationRepository, Role,
-    UserNamespaceConfig, user_cgroup_path,
+    CgroupLimit, IsolationError, IsolationPolicy, IsolationRepository, Role, UserNamespaceConfig,
+    user_cgroup_path,
 };
 use openpanel_test_support::TestDb;
 use uuid::Uuid;
@@ -85,8 +85,7 @@ async fn enforcer_writes_three_keys_per_apply() {
     for path in &paths {
         assert_eq!(path, &expected);
     }
-    let keys: std::collections::HashSet<_> =
-        calls.iter().map(|(_, k, _)| k.clone()).collect();
+    let keys: std::collections::HashSet<_> = calls.iter().map(|(_, k, _)| k.clone()).collect();
     assert!(keys.contains("cpu.max"));
     assert!(keys.contains("memory.high"));
     assert!(keys.contains("memory.max"));
@@ -105,6 +104,7 @@ async fn enforcer_keeps_isolation_on_partial_failure() {
                 Ok(format!("{path}/{key}"))
             }
         }
+
         fn read(&self, _path: &str, _key: &str) -> Result<u64, IsolationError> {
             Ok(0)
         }
@@ -147,15 +147,27 @@ async fn repo_round_trips_limit_and_namespace_and_policy() {
     let user_id = Uuid::new_v4();
     let limit = CgroupLimit::default_for(user_id);
     repo.save_limit(&limit).await.expect("save limit");
-    let loaded = repo.get_limit(user_id).await.expect("get").expect("present");
+    let loaded = repo
+        .get_limit(user_id)
+        .await
+        .expect("get")
+        .expect("present");
     assert_eq!(loaded.user_id, user_id);
     let ns = UserNamespaceConfig::default_for(user_id);
     repo.save_namespace(&ns).await.expect("save ns");
-    let loaded_ns = repo.get_namespace(user_id).await.expect("get ns").expect("present");
+    let loaded_ns = repo
+        .get_namespace(user_id)
+        .await
+        .expect("get ns")
+        .expect("present");
     assert!(loaded_ns.enabled);
     let policy = IsolationPolicy::default();
     repo.save_policy(&policy).await.expect("save policy");
-    let loaded_policy = repo.get_policy().await.expect("get policy").expect("present");
+    let loaded_policy = repo
+        .get_policy()
+        .await
+        .expect("get policy")
+        .expect("present");
     assert_eq!(loaded_policy.default_pids_max, policy.default_pids_max);
 }
 

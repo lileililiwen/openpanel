@@ -4,7 +4,10 @@
 //! list, and scan badges. CSRF is enforced on POSTs through the
 //! shared `ValidateCsrf` extractor.
 
-use axum::{extract::State, response::IntoResponse, response::Response};
+use axum::{
+    extract::State,
+    response::{IntoResponse, Response},
+};
 use maud::{Markup, html};
 
 use crate::router::WebState;
@@ -14,11 +17,7 @@ const REGISTRY_UI_HEADER: &str = "registry-ui-pending";
 /// Render the registry index.
 pub async fn page(State(state): State<WebState>) -> Response {
     let cfg = state.registry.config();
-    let namespaces = state
-        .registry
-        .list_namespaces()
-        .await
-        .unwrap_or_default();
+    let namespaces = state.registry.list_namespaces().await.unwrap_or_default();
     render(&cfg, &namespaces).into_response()
 }
 

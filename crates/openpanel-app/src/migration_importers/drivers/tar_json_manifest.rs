@@ -12,9 +12,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use openpanel_domain::{
-    DriverKind, ImportConflict, ImportedResource, ImportedResourceKind, MigrationDriver,
-    MigrationError, MigrationPlan, MigrationPlanId, MigrationRunId, MigrationWarning,
-    PlannedResource,
+    DriverKind, ImportedResource, ImportedResourceKind, MigrationDriver, MigrationError,
+    MigrationPlan, MigrationPlanId, MigrationRunId, MigrationWarning, PlannedResource,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -262,6 +261,7 @@ impl<T: ManifestTranslator> MigrationDriver for TarWithJsonManifestDriver<T> {
                     declared.bytes,
                 )?;
             }
+            #[allow(clippy::unwrap_used)] // guarded by the `is_some()` short-circuit above
             if declared.depends_on.is_some()
                 && !manifest
                     .resources
@@ -360,6 +360,7 @@ impl<T: ManifestTranslator> MigrationDriver for TarWithJsonManifestDriver<T> {
 
 /// Extension used by the driver for a stable human label.
 pub trait ManifestResourceExt {
+    /// Stable human-readable label for the resource kind.
     fn kind_name(&self) -> &'static str;
 }
 

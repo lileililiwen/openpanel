@@ -232,10 +232,8 @@ pub trait DbPrivilegeRepository: Send + Sync + 'static {
     /// Persist the remote-access state for one database.
     async fn save_remote_access(&self, access: &RemoteAccess) -> Result<(), RepoError>;
     /// Load the remote-access state for one database.
-    async fn get_remote_access(
-        &self,
-        database_id: Uuid,
-    ) -> Result<Option<RemoteAccess>, RepoError>;
+    async fn get_remote_access(&self, database_id: Uuid)
+    -> Result<Option<RemoteAccess>, RepoError>;
 
     /// Persist an admin-tool SSO session.
     async fn save_sso_session(&self, session: &AdminToolSession) -> Result<(), RepoError>;

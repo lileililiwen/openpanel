@@ -7,7 +7,6 @@ use chrono::Utc;
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::{
     QuotaError, QuotaPolicy, QuotaRepository, QuotaSubject, QuotaUsage, UserRepository,
-    identity::repository::UserRepository as _,
 };
 use uuid::Uuid;
 
@@ -28,11 +27,7 @@ impl QuotaService {
         users: Arc<dyn UserRepository>,
         audit: Arc<dyn AuditService>,
     ) -> Self {
-        Self {
-            repo,
-            users,
-            audit,
-        }
+        Self { repo, users, audit }
     }
 
     /// Build a service backed by the SQLite adapter.
@@ -80,19 +75,26 @@ impl QuotaService {
         if user.is_none() {
             return Err(QuotaError::SubjectNotFound);
         }
-        let existing = self.repo.find_by_subject(QuotaSubject::User, user_id).await?;
+        let existing = self
+            .repo
+            .find_by_subject(QuotaSubject::User, user_id)
+            .await?;
         match existing {
             Some(_) => self.repo.update(&policy).await?,
             None => self.repo.insert(&policy).await?,
         }
         self.audit
             .record(
-                AuditEvent::new(actor, AuditAction::QuotaPolicyChanged, AuditOutcome::Success)
-                    .target(policy.id().to_string())
-                    .metadata(serde_json::json!({
-                        "subject_kind": "user",
-                        "subject_id": user_id.to_string(),
-                    })),
+                AuditEvent::new(
+                    actor,
+                    AuditAction::QuotaPolicyChanged,
+                    AuditOutcome::Success,
+                )
+                .target(policy.id().to_string())
+                .metadata(serde_json::json!({
+                    "subject_kind": "user",
+                    "subject_id": user_id.to_string(),
+                })),
             )
             .await
             .ok();
@@ -100,16 +102,16 @@ impl QuotaService {
     }
 
     /// Delete a policy.
-    pub async fn delete(
-        &self,
-        id: Uuid,
-        actor: &str,
-    ) -> Result<(), QuotaError> {
+    pub async fn delete(&self, id: Uuid, actor: &str) -> Result<(), QuotaError> {
         self.repo.delete(id).await?;
         self.audit
             .record(
-                AuditEvent::new(actor, AuditAction::QuotaPolicyDeleted, AuditOutcome::Success)
-                    .target(id.to_string()),
+                AuditEvent::new(
+                    actor,
+                    AuditAction::QuotaPolicyDeleted,
+                    AuditOutcome::Success,
+                )
+                .target(id.to_string()),
             )
             .await
             .ok();
@@ -139,30 +141,38 @@ impl QuotaService {
         if !usage.over_hard.is_empty() {
             self.audit
                 .record(
-                    AuditEvent::new(actor, AuditAction::QuotaHardLimitReached, AuditOutcome::Failure)
-                        .target(policy.subject_id().to_string())
-                        .metadata(serde_json::json!({
-                            "over_hard": usage.over_hard.iter().map(|d| match d {
-                                openpanel_domain::quotas::QuotaDimension::Disk => "disk",
-                                openpanel_domain::quotas::QuotaDimension::Bandwidth => "bandwidth",
-                                openpanel_domain::quotas::QuotaDimension::Inodes => "inodes",
-                            }).collect::<Vec<_>>(),
-                        })),
+                    AuditEvent::new(
+                        actor,
+                        AuditAction::QuotaHardLimitReached,
+                        AuditOutcome::Failure,
+                    )
+                    .target(policy.subject_id().to_string())
+                    .metadata(serde_json::json!({
+                        "over_hard": usage.over_hard.iter().map(|d| match d {
+                            openpanel_domain::quotas::QuotaDimension::Disk => "disk",
+                            openpanel_domain::quotas::QuotaDimension::Bandwidth => "bandwidth",
+                            openpanel_domain::quotas::QuotaDimension::Inodes => "inodes",
+                        }).collect::<Vec<_>>(),
+                    })),
                 )
                 .await
                 .ok();
         } else if !usage.over_soft.is_empty() {
             self.audit
                 .record(
-                    AuditEvent::new(actor, AuditAction::QuotaSoftLimitReached, AuditOutcome::Success)
-                        .target(policy.subject_id().to_string())
-                        .metadata(serde_json::json!({
-                            "over_soft": usage.over_soft.iter().map(|d| match d {
-                                openpanel_domain::quotas::QuotaDimension::Disk => "disk",
-                                openpanel_domain::quotas::QuotaDimension::Bandwidth => "bandwidth",
-                                openpanel_domain::quotas::QuotaDimension::Inodes => "inodes",
-                            }).collect::<Vec<_>>(),
-                        })),
+                    AuditEvent::new(
+                        actor,
+                        AuditAction::QuotaSoftLimitReached,
+                        AuditOutcome::Success,
+                    )
+                    .target(policy.subject_id().to_string())
+                    .metadata(serde_json::json!({
+                        "over_soft": usage.over_soft.iter().map(|d| match d {
+                            openpanel_domain::quotas::QuotaDimension::Disk => "disk",
+                            openpanel_domain::quotas::QuotaDimension::Bandwidth => "bandwidth",
+                            openpanel_domain::quotas::QuotaDimension::Inodes => "inodes",
+                        }).collect::<Vec<_>>(),
+                    })),
                 )
                 .await
                 .ok();
@@ -171,10 +181,7 @@ impl QuotaService {
     }
 
     /// Most recent sample for a subject.
-    pub async fn latest_usage(
-        &self,
-        subject_id: Uuid,
-    ) -> Result<Option<QuotaUsage>, QuotaError> {
+    pub async fn latest_usage(&self, subject_id: Uuid) -> Result<Option<QuotaUsage>, QuotaError> {
         self.repo.latest_usage(subject_id).await
     }
 }

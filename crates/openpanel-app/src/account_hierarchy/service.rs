@@ -8,21 +8,27 @@ use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::{
     AccountHierarchyError, AccountRelationship, HierarchyNode, HierarchyRepository, IdentityError,
     PoolAxis, PoolClaim, QuotaPool, Role, User, UserRepository, check_pool_claim,
-    identity::repository::UserRepository as _,
 };
 use uuid::Uuid;
 
-use crate::{account_hierarchy::repo::SqliteHierarchyRepository, identity::IdentityService};
+use crate::account_hierarchy::repo::SqliteHierarchyRepository;
 
+// Referenced only as vocabulary by `_POOL_EXHAUSTED` below.
+#[allow(dead_code)]
 const POOL_EXHAUSTED_REFUSAL: &str = "pool_exhausted";
 const FORBIDDEN_REFUSAL: &str = "forbidden";
 
 /// Child-account creation request.
 pub struct CreateChildRequest {
+    /// The child's login name.
     pub username: String,
+    /// The child's contact email address.
     pub email: String,
+    /// The child's initial password (redacted in `Debug` output).
     pub password: String,
+    /// Role granted to the child account.
     pub role: Role,
+    /// Optional hosting plan assigned at creation time.
     pub initial_plan_id: Option<openpanel_domain::HostingPlanId>,
 }
 
@@ -395,8 +401,11 @@ impl HierarchyService {
 /// Per-axis usage breakdown for a parent.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PoolUsageRow {
+    /// The quota axis this row describes.
     pub axis: PoolAxis,
+    /// Total bytes allocated to the pool.
     pub total_bytes: u64,
+    /// Bytes consumed so far within the pool.
     pub used_bytes: u64,
 }
 

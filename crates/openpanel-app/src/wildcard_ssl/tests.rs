@@ -5,7 +5,7 @@ use std::sync::Arc;
 use chrono::Utc;
 use openpanel_core::NoopAuditService;
 use openpanel_domain::{
-    AcmeEndpointMode, CertRequest, ChallengeKind, Role, WildcardRepository,
+    AcmeEndpointMode, CertRequest, ChallengeKind, RecordingDnsProvider, Role, WildcardRepository,
 };
 use openpanel_test_support::TestDb;
 use uuid::Uuid;
@@ -13,7 +13,6 @@ use uuid::Uuid;
 use crate::wildcard_ssl::{
     CertRenewalScheduler, Dns01ChallengeSolver, SqliteWildcardRepository, WildcardIssuer,
 };
-use openpanel_domain::RecordingDnsProvider;
 
 fn admin_user() -> openpanel_domain::User {
     use openpanel_domain::{Email, Password, Username};
@@ -47,11 +46,7 @@ async fn solver_publishes_then_revokes_lease() {
     let db = TestDb::new().await;
     let repo = Arc::new(SqliteWildcardRepository::new(db.pool()));
     let dns = Arc::new(RecordingDnsProvider::new());
-    let solver = Dns01ChallengeSolver::new(
-        repo.clone(),
-        dns.clone(),
-        Arc::new(NoopAuditService),
-    );
+    let solver = Dns01ChallengeSolver::new(repo.clone(), dns.clone(), Arc::new(NoopAuditService));
     let request = make_request(true);
     repo.save_request(&request).await.expect("save");
     solver
@@ -71,16 +66,14 @@ async fn solver_revokes_lease_on_failure() {
     let db = TestDb::new().await;
     let repo = Arc::new(SqliteWildcardRepository::new(db.pool()));
     let dns = Arc::new(RecordingDnsProvider::new());
-    let solver = Dns01ChallengeSolver::new(
-        repo.clone(),
-        dns.clone(),
-        Arc::new(NoopAuditService),
-    );
+    let solver = Dns01ChallengeSolver::new(repo.clone(), dns.clone(), Arc::new(NoopAuditService));
     let request = make_request(true);
     repo.save_request(&request).await.expect("save");
     let res = solver
         .solve(&admin_user(), &request, |_value| async {
-            Err(openpanel_domain::WildcardError::ChallengeFailed("nope".into()))
+            Err(openpanel_domain::WildcardError::ChallengeFailed(
+                "nope".into(),
+            ))
         })
         .await;
     assert!(matches!(
@@ -96,11 +89,7 @@ async fn solver_rejects_disallowed_provider() {
     let db = TestDb::new().await;
     let repo = Arc::new(SqliteWildcardRepository::new(db.pool()));
     let dns = Arc::new(RecordingDnsProvider::new());
-    let solver = Dns01ChallengeSolver::new(
-        repo.clone(),
-        dns.clone(),
-        Arc::new(NoopAuditService),
-    );
+    let solver = Dns01ChallengeSolver::new(repo.clone(), dns.clone(), Arc::new(NoopAuditService));
     let request = CertRequest::new(
         Uuid::new_v4(),
         "example.com",
@@ -125,23 +114,19 @@ async fn issuer_persists_request_and_audits() {
     let db = TestDb::new().await;
     let repo = Arc::new(SqliteWildcardRepository::new(db.pool()));
     let dns = Arc::new(RecordingDnsProvider::new());
-    let solver = Dns01ChallengeSolver::new(
-        repo.clone(),
-        dns.clone(),
-        Arc::new(NoopAuditService),
-    );
-    let issuer = WildcardIssuer::new(
-        repo.clone(),
-        solver,
-        Arc::new(NoopAuditService),
-    );
+    let solver = Dns01ChallengeSolver::new(repo.clone(), dns.clone(), Arc::new(NoopAuditService));
+    let issuer = WildcardIssuer::new(repo.clone(), solver, Arc::new(NoopAuditService));
     let request = make_request(true);
     let req_id = request.id;
     issuer
         .issue(&admin_user(), request.clone())
         .await
         .expect("issue");
-    let loaded = repo.get_request(req_id).await.expect("get").expect("present");
+    let loaded = repo
+        .get_request(req_id)
+        .await
+        .expect("get")
+        .expect("present");
     assert_eq!(loaded.apex, "example.com");
     assert!(loaded.wildcard);
     assert_eq!(loaded.dns_provider, "route53");
@@ -158,7 +143,7 @@ async fn scheduler_returns_60_days_after_creation() {
     let next = scheduler.next_renewal(&admin_user(), &request);
     let now = Utc::now();
     let diff = (next - now).num_days();
-    assert!(diff >= 59 && diff <= 61);
+    assert!((59..=61).contains(&diff));
 }
 
 #[tokio::test]
@@ -196,11 +181,7 @@ async fn non_admin_cannot_issue() {
     let db = TestDb::new().await;
     let repo = Arc::new(SqliteWildcardRepository::new(db.pool()));
     let dns = Arc::new(RecordingDnsProvider::new());
-    let solver = Dns01ChallengeSolver::new(
-        repo.clone(),
-        dns.clone(),
-        Arc::new(NoopAuditService),
-    );
+    let solver = Dns01ChallengeSolver::new(repo.clone(), dns.clone(), Arc::new(NoopAuditService));
     let issuer = WildcardIssuer::new(repo, solver, Arc::new(NoopAuditService));
     let user = openpanel_domain::User::new(
         Uuid::new_v4(),
@@ -210,7 +191,10 @@ async fn non_admin_cannot_issue() {
         Role::User,
     );
     let res = issuer.issue(&user, make_request(true)).await;
-    assert!(matches!(res, Err(openpanel_domain::WildcardError::Forbidden)));
+    assert!(matches!(
+        res,
+        Err(openpanel_domain::WildcardError::Forbidden)
+    ));
 }
 
 #[tokio::test]

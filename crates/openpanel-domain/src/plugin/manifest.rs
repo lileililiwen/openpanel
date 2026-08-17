@@ -222,10 +222,12 @@ impl PluginManifest {
             "entrypoint".into(),
             serde_json::Value::String(self.entrypoint.clone()),
         );
-        value.insert(
-            "capabilities".into(),
-            serde_json::to_value(&self.capabilities).expect("capabilities serialise"),
-        );
+        #[allow(clippy::expect_used)]
+        // Manifest fields are plain serde-serialisable data, so
+        // serialisation cannot fail in practice.
+        let capabilities =
+            serde_json::to_value(&self.capabilities).expect("capabilities serialise");
+        value.insert("capabilities".into(), capabilities);
         value.insert(
             "permissions".into(),
             serde_json::Value::Array(
@@ -235,15 +237,15 @@ impl PluginManifest {
                     .collect(),
             ),
         );
-        value.insert(
-            "ui".into(),
-            serde_json::to_value(&self.ui).expect("ui serialises"),
-        );
+        #[allow(clippy::expect_used)]
+        let ui = serde_json::to_value(&self.ui).expect("ui serialises");
+        value.insert("ui".into(), ui);
         value.insert(
             "publisher".into(),
             serde_json::Value::String(self.publisher.as_str().to_string()),
         );
         let json = serde_json::Value::Object(value);
+        #[allow(clippy::expect_used)]
         serde_json::to_string(&json).expect("manifest serialises")
     }
 

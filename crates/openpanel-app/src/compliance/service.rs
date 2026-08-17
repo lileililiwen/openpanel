@@ -18,13 +18,10 @@ use crate::compliance::SqliteComplianceRepository;
 /// the host configuration; tests use the in-memory fake.
 pub trait RuleExecutor: Send + Sync + 'static {
     /// Apply the rule and return the pre/post images.
-    fn apply(
-        &self,
-        rule_id: &str,
-        title: &str,
-    ) -> Result<RuleImages, ComplianceError>;
+    fn apply(&self, rule_id: &str, title: &str) -> Result<RuleImages, ComplianceError>;
     /// Roll back a previously applied rule to its pre-image.
-    fn rollback(&self, rule_id: &str, pre_image: &serde_json::Value) -> Result<(), ComplianceError>;
+    fn rollback(&self, rule_id: &str, pre_image: &serde_json::Value)
+    -> Result<(), ComplianceError>;
 }
 
 /// Pre/post images for a single rule.
@@ -53,11 +50,9 @@ impl InMemoryRuleExecutor {
 }
 
 impl RuleExecutor for InMemoryRuleExecutor {
-    fn apply(
-        &self,
-        rule_id: &str,
-        title: &str,
-    ) -> Result<RuleImages, ComplianceError> {
+    fn apply(&self, rule_id: &str, title: &str) -> Result<RuleImages, ComplianceError> {
+        #[allow(clippy::expect_used)]
+        // The mutex is only poisoned if a previous holder panicked; this executor has no panic paths.
         let mut state = self.state.lock().expect("state");
         let pre = state
             .entry(rule_id.to_string())
@@ -65,10 +60,19 @@ impl RuleExecutor for InMemoryRuleExecutor {
         let post = serde_json::json!({"title": title, "applied": true});
         let pre_copy = pre.clone();
         *pre = post.clone();
-        Ok(RuleImages { pre: pre_copy, post })
+        Ok(RuleImages {
+            pre: pre_copy,
+            post,
+        })
     }
 
-    fn rollback(&self, rule_id: &str, pre_image: &serde_json::Value) -> Result<(), ComplianceError> {
+    fn rollback(
+        &self,
+        rule_id: &str,
+        pre_image: &serde_json::Value,
+    ) -> Result<(), ComplianceError> {
+        #[allow(clippy::expect_used)]
+        // The mutex is only poisoned if a previous holder panicked; this executor has no panic paths.
         let mut state = self.state.lock().expect("state");
         state.insert(rule_id.to_string(), pre_image.clone());
         Ok(())
@@ -96,10 +100,7 @@ pub struct HardeningWizard {
 
 impl HardeningWizard {
     /// Construct a wizard with the default in-memory executor.
-    pub fn new(
-        repo: Arc<SqliteComplianceRepository>,
-        audit: Arc<dyn AuditService>,
-    ) -> Self {
+    pub fn new(repo: Arc<SqliteComplianceRepository>, audit: Arc<dyn AuditService>) -> Self {
         Self {
             repo,
             audit,
@@ -145,7 +146,8 @@ impl HardeningWizard {
         }
         run.finish();
         self.repo.save_hardening_run(&run).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -183,7 +185,8 @@ impl HardeningWizard {
         let mut reverted = Vec::new();
         for rule in run.rollback_targets() {
             self.executor.rollback(&rule.id, &rule.pre_image)?;
-            self.audit
+            let _ = self
+                .audit
                 .record(
                     AuditEvent::new(
                         caller.username().as_str(),
@@ -225,10 +228,7 @@ impl AuditRetentionService {
 
     /// Get the current retention policy, falling back to the
     /// caller-supplied default when none is stored.
-    pub async fn get(
-        &self,
-        caller: &User,
-    ) -> Result<AuditRetentionPolicy, ComplianceError> {
+    pub async fn get(&self, caller: &User) -> Result<AuditRetentionPolicy, ComplianceError> {
         require_admin(caller)?;
         Ok(self
             .repo
@@ -245,7 +245,7 @@ impl AuditRetentionService {
         export_before_purge: bool,
     ) -> Result<AuditRetentionPolicy, ComplianceError> {
         require_admin(caller)?;
-        let mut policy = AuditRetentionPolicy {
+        let policy = AuditRetentionPolicy {
             ttl_days,
             export_before_purge,
             updated_at: chrono::Utc::now(),
@@ -253,7 +253,8 @@ impl AuditRetentionService {
         };
         policy.validate()?;
         self.repo.save_retention_policy(&policy).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -281,7 +282,8 @@ impl AuditRetentionService {
         let policy = self.get(caller).await?;
         let cutoff = chrono::Utc::now() - chrono::Duration::days(policy.ttl_days as i64);
         let count = log.purge_before(cutoff).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -304,7 +306,10 @@ impl AuditRetentionService {
 pub trait AuditPurge: Send + Sync {
     /// Delete every audit record with `ts < cutoff` and return the
     /// number removed.
-    async fn purge_before(&self, cutoff: chrono::DateTime<chrono::Utc>) -> Result<u64, ComplianceError>;
+    async fn purge_before(
+        &self,
+        cutoff: chrono::DateTime<chrono::Utc>,
+    ) -> Result<u64, ComplianceError>;
 }
 
 /// GDPR data exporter. Aggregates the user's PII across sites, mail,
@@ -397,7 +402,8 @@ impl GdprExporter {
             generated_at: chrono::Utc::now(),
         };
         self.repo.save_gdpr_export(&export).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -420,33 +426,46 @@ impl GdprExporter {
 /// Site record supplied to the GDPR exporter.
 #[derive(Debug, Clone)]
 pub struct GdprSourceSite {
+    /// Site record id.
     pub id: Uuid,
+    /// Primary domain name.
     pub domain: String,
+    /// Semicolon-separated domain aliases.
     pub aliases: String,
+    /// Owner user id.
     pub owner_id: Uuid,
 }
 
 /// Mailbox record supplied to the GDPR exporter.
 #[derive(Debug, Clone)]
 pub struct GdprSourceMailbox {
+    /// Mailbox address.
     pub address: String,
+    /// Display name.
     pub display_name: String,
+    /// Quota in bytes, when set.
     pub quota_bytes: Option<u64>,
 }
 
 /// Database record supplied to the GDPR exporter.
 #[derive(Debug, Clone)]
 pub struct GdprSourceDatabase {
+    /// Database record id.
     pub id: Uuid,
+    /// Database name.
     pub name: String,
+    /// Owner user id.
     pub owner_id: Uuid,
 }
 
 /// API token record supplied to the GDPR exporter.
 #[derive(Debug, Clone)]
 pub struct GdprSourceApiToken {
+    /// Token record id.
     pub id: Uuid,
+    /// Token name.
     pub name: String,
+    /// Granted scopes.
     pub scopes: Vec<String>,
 }
 
@@ -482,19 +501,16 @@ impl GdprSources for EmptyGdprSources {
     async fn sites_for(&self, _: Uuid) -> Result<Vec<GdprSourceSite>, ComplianceError> {
         Ok(Vec::new())
     }
+
     async fn mail_for(&self, _: Uuid) -> Result<Vec<GdprSourceMailbox>, ComplianceError> {
         Ok(Vec::new())
     }
-    async fn databases_for(
-        &self,
-        _: Uuid,
-    ) -> Result<Vec<GdprSourceDatabase>, ComplianceError> {
+
+    async fn databases_for(&self, _: Uuid) -> Result<Vec<GdprSourceDatabase>, ComplianceError> {
         Ok(Vec::new())
     }
-    async fn api_tokens_for(
-        &self,
-        _: Uuid,
-    ) -> Result<Vec<GdprSourceApiToken>, ComplianceError> {
+
+    async fn api_tokens_for(&self, _: Uuid) -> Result<Vec<GdprSourceApiToken>, ComplianceError> {
         Ok(Vec::new())
     }
 }
@@ -518,12 +534,10 @@ pub struct ProfileSpec {
 /// Shipped profile definitions. The default profile covers a
 /// conservative subset of CIS recommendations relevant to a single
 /// host running OpenPanel.
-pub const PROFILES: &[ProfileSpec] = &[
-    ProfileSpec {
-        id: "cis-debian-12-minimal",
-        rules: &["5.2.1", "5.2.4", "5.2.6", "5.4.1"],
-    },
-];
+pub const PROFILES: &[ProfileSpec] = &[ProfileSpec {
+    id: "cis-debian-12-minimal",
+    rules: &["5.2.1", "5.2.4", "5.2.6", "5.4.1"],
+}];
 
 /// Default profile id used when the caller does not specify one.
 pub const DEFAULT_PROFILE: &str = "cis-debian-12-minimal";
@@ -531,13 +545,18 @@ pub const DEFAULT_PROFILE: &str = "cis-debian-12-minimal";
 /// Shipped CIS rule titles, used by the wizard to produce
 /// human-readable output.
 const RULE_TITLES: &[(&str, &str)] = &[
-    ("5.2.1", "Ensure password creation requirements are configured"),
+    (
+        "5.2.1",
+        "Ensure password creation requirements are configured",
+    ),
     ("5.2.4", "Ensure password hashing algorithm is SHA-512"),
     ("5.2.6", "Ensure password reuse is limited"),
     ("5.4.1", "Ensure password expiration is configured"),
 ];
 
 fn rules_for_profile(profile: &str) -> Vec<RuleSpec> {
+    #[allow(clippy::expect_used)]
+    // PROFILES is a compile-time non-empty const, so `first()` always yields a profile.
     let spec = PROFILES
         .iter()
         .find(|p| p.id == profile)

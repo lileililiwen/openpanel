@@ -6,8 +6,7 @@ use std::sync::Arc;
 use chrono::{Duration, Utc};
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::{
-    AdminToolSession, DbGrant, DbPrivilegeError, DbPrivilegeRepository, GrantScope, Privilege,
-    RemoteAccess, Role, User,
+    AdminToolSession, DbGrant, DbPrivilegeError, DbPrivilegeRepository, RemoteAccess, Role, User,
 };
 use uuid::Uuid;
 
@@ -29,15 +28,12 @@ impl PrivilegeService {
     }
 
     /// Apply a new grant. Caller MUST be Admin/Owner.
-    pub async fn apply(
-        &self,
-        caller: &User,
-        mut grant: DbGrant,
-    ) -> Result<DbGrant, DbPrivilegeError> {
+    pub async fn apply(&self, caller: &User, grant: DbGrant) -> Result<DbGrant, DbPrivilegeError> {
         require_admin(caller)?;
         grant.validate()?;
         self.repo.save_grant(&grant).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -59,7 +55,8 @@ impl PrivilegeService {
     pub async fn revoke(&self, caller: &User, id: Uuid) -> Result<(), DbPrivilegeError> {
         require_admin(caller)?;
         self.repo.delete_grant(id).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -136,14 +133,11 @@ impl RemoteAccessController {
         wildcard_opt_in: bool,
     ) -> Result<RemoteAccess, DbPrivilegeError> {
         require_admin(caller)?;
-        let access = RemoteAccess::from_request(
-            database_id,
-            enabled,
-            allow_cidrs,
-            wildcard_opt_in,
-        )?;
+        let access =
+            RemoteAccess::from_request(database_id, enabled, allow_cidrs, wildcard_opt_in)?;
         self.repo.save_remote_access(&access).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -206,7 +200,8 @@ impl AdminToolSso {
             consumed_at: None,
         };
         self.repo.save_sso_session(&session).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),

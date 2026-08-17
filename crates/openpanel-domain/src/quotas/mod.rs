@@ -63,10 +63,12 @@ impl QuotaLimit {
         }
         Ok(())
     }
+
     /// Whether `usage` is over the soft limit.
     pub fn is_over_soft(&self, usage: u64) -> bool {
         usage > self.soft_bytes
     }
+
     /// Whether `usage` is over the hard limit.
     pub fn is_over_hard(&self, usage: u64) -> bool {
         usage > self.hard_bytes
@@ -116,7 +118,9 @@ impl QuotaPolicy {
             updated_at: now,
         })
     }
+
     /// Build from persistence.
+    #[allow(clippy::too_many_arguments)]
     pub fn restore(
         id: Uuid,
         subject_kind: QuotaSubject,
@@ -147,38 +151,47 @@ impl QuotaPolicy {
     pub fn id(&self) -> Uuid {
         self.id
     }
+
     /// Subject kind.
     pub fn subject_kind(&self) -> QuotaSubject {
         self.subject_kind
     }
+
     /// Subject id.
     pub fn subject_id(&self) -> Uuid {
         self.subject_id
     }
+
     /// Disk limit.
     pub fn disk(&self) -> &QuotaLimit {
         &self.disk
     }
+
     /// Bandwidth limit.
     pub fn bandwidth(&self) -> &QuotaLimit {
         &self.bandwidth
     }
+
     /// Inode limit.
     pub fn inodes(&self) -> &QuotaLimit {
         &self.inodes
     }
+
     /// Max file size in bytes (optional).
     pub fn max_file_size_bytes(&self) -> Option<u64> {
         self.max_file_size_bytes
     }
+
     /// Optional CPU shares (best-effort).
     pub fn cpu_shares(&self) -> Option<u32> {
         self.cpu_shares
     }
+
     /// When the policy was created.
     pub fn created_at(&self) -> DateTime<Utc> {
         self.created_at
     }
+
     /// When the policy was last updated.
     pub fn updated_at(&self) -> DateTime<Utc> {
         self.updated_at
@@ -191,6 +204,7 @@ impl QuotaPolicy {
         self.touch();
         Ok(())
     }
+
     /// Update the bandwidth limit.
     pub fn set_bandwidth(&mut self, limit: QuotaLimit) -> Result<(), QuotaError> {
         limit.validate()?;
@@ -198,6 +212,7 @@ impl QuotaPolicy {
         self.touch();
         Ok(())
     }
+
     /// Update the inode limit.
     pub fn set_inodes(&mut self, limit: QuotaLimit) -> Result<(), QuotaError> {
         limit.validate()?;
@@ -205,11 +220,13 @@ impl QuotaPolicy {
         self.touch();
         Ok(())
     }
+
     /// Set the max file size. `None` disables the limit.
     pub fn set_max_file_size_bytes(&mut self, value: Option<u64>) {
         self.max_file_size_bytes = value;
         self.touch();
     }
+
     /// Set the CPU shares. `None` disables the limit.
     pub fn set_cpu_shares(&mut self, value: Option<u32>) {
         self.cpu_shares = value;
@@ -224,12 +241,19 @@ impl QuotaPolicy {
 /// A sampled usage snapshot.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QuotaUsage {
+    /// Subject id.
     pub subject_id: Uuid,
+    /// When the sample was taken.
     pub sampled_at: DateTime<Utc>,
+    /// Disk bytes consumed.
     pub disk_used_bytes: u64,
+    /// Inode count consumed.
     pub disk_inodes_used: u64,
+    /// Bandwidth bytes consumed this month.
     pub bandwidth_used_bytes_this_month: u64,
+    /// Dimensions over their soft limit.
     pub over_soft: BTreeSet<QuotaDimension>,
+    /// Dimensions over their hard limit.
     pub over_hard: BTreeSet<QuotaDimension>,
 }
 
@@ -298,10 +322,7 @@ pub trait QuotaRepository: Send + Sync + 'static {
     /// Insert a sample.
     async fn insert_usage(&self, usage: &QuotaUsage) -> Result<(), QuotaError>;
     /// Most recent sample for a subject.
-    async fn latest_usage(
-        &self,
-        subject_id: Uuid,
-    ) -> Result<Option<QuotaUsage>, QuotaError>;
+    async fn latest_usage(&self, subject_id: Uuid) -> Result<Option<QuotaUsage>, QuotaError>;
     /// Default impl to satisfy the policy finder port.
     async fn exists(&self, _id: Uuid) -> Result<bool, RepoError> {
         Ok(true)
@@ -353,14 +374,20 @@ mod tests {
     fn limit_validates_zero_hard() {
         let mut limit = sample_limit();
         limit.hard_bytes = 0;
-        assert_eq!(limit.validate().expect_err("must reject"), QuotaError::InvalidLimit);
+        assert_eq!(
+            limit.validate().expect_err("must reject"),
+            QuotaError::InvalidLimit
+        );
     }
 
     #[test]
     fn limit_validates_soft_above_hard() {
         let mut limit = sample_limit();
         limit.soft_bytes = 500;
-        assert_eq!(limit.validate().expect_err("must reject"), QuotaError::InvalidLimit);
+        assert_eq!(
+            limit.validate().expect_err("must reject"),
+            QuotaError::InvalidLimit
+        );
     }
 
     #[test]

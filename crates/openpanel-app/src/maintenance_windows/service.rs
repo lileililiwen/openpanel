@@ -42,7 +42,8 @@ impl MaintenanceEnforcer {
             }
         }
         self.repo.save_window(&window).await?;
-        self.audit
+        let _ = self
+            .audit
             .record(
                 AuditEvent::new(
                     caller.username().as_str(),
@@ -59,11 +60,7 @@ impl MaintenanceEnforcer {
     }
 
     /// Delete a maintenance window.
-    pub async fn cancel(
-        &self,
-        caller: &User,
-        id: Uuid,
-    ) -> Result<(), MaintenanceError> {
+    pub async fn cancel(&self, caller: &User, id: Uuid) -> Result<(), MaintenanceError> {
         require_admin(caller)?;
         self.repo.delete_window(id).await?;
         Ok(())

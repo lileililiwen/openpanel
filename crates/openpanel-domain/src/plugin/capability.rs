@@ -145,14 +145,14 @@ mod tests {
 
     #[test]
     fn capability_set_validate_rejects_bad_names() {
-        let mut set = CapabilitySet::new();
+        let set = CapabilitySet::new();
         // Push directly through BTreeSet to bypass normal constructor.
         let _ = set;
         let bad = Capability {
             version: 1,
             name: "Bad-Name!".into(),
         };
-        let mut set = CapabilitySet::new();
+        let set = CapabilitySet::new();
         let _ = set;
         let set: CapabilitySet = [bad].into_iter().collect();
         assert!(set.validate().is_err());

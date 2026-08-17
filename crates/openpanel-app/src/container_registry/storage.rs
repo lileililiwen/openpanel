@@ -4,17 +4,22 @@
 //! `storage_root`. The default implementation uses the real
 //! filesystem via `tokio::fs`; tests wire a `MemoryStorageLayer`.
 
-use async_trait::async_trait;
 use std::path::PathBuf;
 
+use async_trait::async_trait;
+
+/// Errors raised by the storage layer.
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
+    /// The underlying I/O operation failed.
     #[error("io error: {0}")]
     Io(String),
+    /// The supplied path was not valid for the storage root.
     #[error("invalid path: {0}")]
     InvalidPath(String),
 }
 
+/// Storage adapter for image blobs and manifests.
 #[async_trait]
 pub trait StorageLayer: Send + Sync {
     /// Write `bytes` at `path` (relative to `storage_root`).

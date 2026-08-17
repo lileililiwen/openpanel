@@ -10,6 +10,5 @@ mod tests;
 pub use module::{DnsSecSecondaryModule, MODULE_NAME};
 pub use repo::SqliteDnsSecRepository;
 pub use service::{
-    AxfrSender, DnsSecService, GlueRecordService, KeyRolloverEngine, Registrar,
-    RecordingRegistrar,
+    AxfrSender, DnsSecService, GlueRecordService, KeyRolloverEngine, RecordingRegistrar, Registrar,
 };

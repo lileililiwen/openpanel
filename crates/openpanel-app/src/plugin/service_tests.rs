@@ -4,7 +4,7 @@
 mod tests {
     use std::sync::Arc;
 
-    use openpanel_core::{AuditAction, AuditOutcome, AuditService, audit::AuditEvent};
+    use openpanel_core::{AuditService, audit::AuditEvent};
     use openpanel_domain::plugin::{
         Capability, CapabilitySet, ManifestRuntime, PluginId, PluginManifest, PluginVersion,
         PublisherKey, manifest::PluginUi,

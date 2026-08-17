@@ -7,11 +7,7 @@
 //! When nginx is not installed (tests, dev sandboxes) the write is
 //! still performed but `-t` / reload are skipped — a successful no-op.
 
-use std::{
-    fs,
-    path::{Path, PathBuf},
-    process::Command,
-};
+use std::{fs, path::PathBuf, process::Command};
 
 /// Outcome of an apply attempt.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

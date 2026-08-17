@@ -4,9 +4,7 @@ use std::sync::Arc;
 
 use openpanel_core::{AppContext, AuditService, Migration, Module};
 
-use super::{
-    AuditRetentionService, GdprExporter, HardeningWizard, SqliteComplianceRepository,
-};
+use super::{AuditRetentionService, GdprExporter, HardeningWizard, SqliteComplianceRepository};
 
 /// Stable compliance module name.
 pub const MODULE_NAME: &str = "compliance";
@@ -31,10 +29,7 @@ impl ComplianceModule {
         let pool = ctx.db.pool().await;
         let repo = Arc::new(SqliteComplianceRepository::new(pool));
         let wizard = Arc::new(HardeningWizard::new(repo.clone(), ctx.audit.clone()));
-        let retention = Arc::new(AuditRetentionService::new(
-            repo.clone(),
-            ctx.audit.clone(),
-        ));
+        let retention = Arc::new(AuditRetentionService::new(repo.clone(), ctx.audit.clone()));
         let exporter = Arc::new(GdprExporter::new(repo.clone(), ctx.audit.clone()));
         Self {
             repo,

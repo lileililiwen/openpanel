@@ -56,7 +56,7 @@ impl SiteStagingModule {
         Self {
             service,
             migrations: vec![Migration {
-                module: MODULE_NAME.into(),
+                module: MODULE_NAME,
                 version: "001".into(),
                 description: "site-staging initial schema".into(),
                 sql: crate::migrations::SITE_STAGING_V001.into(),

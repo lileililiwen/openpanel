@@ -6,9 +6,9 @@ use std::sync::Arc;
 use chrono::{Duration, Utc};
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::{
-    DriverKind, ImportedResource, MigrationDriver, MigrationError, MigrationPlan, MigrationPlanId,
-    MigrationRepository, MigrationRun, MigrationRunId, MigrationRunStatus, PlannedResource,
-    TranslationLog, TranslationLogEntry, TranslationOutcome,
+    DriverKind, ImportedResource, MigrationDriver, MigrationError, MigrationPlan,
+    MigrationRepository, MigrationRun, MigrationRunId, MigrationRunStatus, TranslationLog,
+    TranslationLogEntry, TranslationOutcome,
 };
 use uuid::Uuid;
 
@@ -266,6 +266,8 @@ fn redact_diagnostic(source_key: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+    use openpanel_domain::PlannedResource;
+
     use super::*;
 
     #[test]

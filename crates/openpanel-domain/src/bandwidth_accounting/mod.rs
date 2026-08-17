@@ -16,22 +16,25 @@ use crate::{
 #[async_trait]
 pub trait BandwidthReader: Send + Sync + 'static {
     /// Return the rolling windows for `owner_id` in `period`.
-    async fn rolling(
-        &self,
-        owner_id: Uuid,
-        period: BandwidthPeriod,
-    ) -> Vec<BandwidthWindow>;
+    async fn rolling(&self, owner_id: Uuid, period: BandwidthPeriod) -> Vec<BandwidthWindow>;
 }
 
 /// A persisted counter row.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct BandwidthCounterRow {
+    /// The bucket period (`hourly`, `daily`, or `monthly`).
     pub period_kind: String,
+    /// The owner this counter belongs to.
     pub owner_id: Uuid,
+    /// The site this counter belongs to, if any.
     pub site_id: Option<Uuid>,
+    /// The start of the rolling window this row counts.
     pub period_starts_at: DateTime<Utc>,
+    /// Inbound bytes counted in the window.
     pub bytes_in: u64,
+    /// Outbound bytes counted in the window.
     pub bytes_out: u64,
+    /// Last write time for this counter row.
     pub updated_at: DateTime<Utc>,
 }
 
@@ -67,6 +70,9 @@ pub trait BandwidthRepository: Send + Sync + 'static {
 /// into repository updates. The default impl is a no-op; the
 /// follow-on storage layer wires the SQLite-backed repository.
 pub struct BandwidthStorageObserver<R: BandwidthRepository> {
+    // Reserved for the follow-on storage layer; the current
+    // observer hooks are synchronous no-ops.
+    #[allow(dead_code)]
     repo: R,
 }
 
@@ -75,22 +81,47 @@ impl<R: BandwidthRepository> BandwidthStorageObserver<R> {
     pub fn new(repo: R) -> Self {
         Self { repo }
     }
+
     /// Compute the period start for `now` and `period`.
-    pub fn period_start_for(
-        period: BandwidthPeriod,
-        now: DateTime<Utc>,
-    ) -> DateTime<Utc> {
-        use chrono::Datelike;
-        use chrono::Timelike;
+    pub fn period_start_for(period: BandwidthPeriod, now: DateTime<Utc>) -> DateTime<Utc> {
+        use chrono::{Datelike, Timelike};
         match period {
             BandwidthPeriod::Hourly => {
-                now.with_minute(0).unwrap().with_second(0).unwrap().with_nanosecond(0).unwrap()
+                #[allow(clippy::unwrap_used)]
+                // Truncating a UTC instant to minute/second/nanosecond
+                // zero always yields a valid `DateTime<Utc>`.
+                now.with_minute(0)
+                    .unwrap()
+                    .with_second(0)
+                    .unwrap()
+                    .with_nanosecond(0)
+                    .unwrap()
             }
-            BandwidthPeriod::Daily => {
-                now.with_hour(0).unwrap().with_minute(0).unwrap().with_second(0).unwrap().with_nanosecond(0).unwrap()
+            BandwidthPeriod::Daily =>
+            {
+                #[allow(clippy::unwrap_used)]
+                now.with_hour(0)
+                    .unwrap()
+                    .with_minute(0)
+                    .unwrap()
+                    .with_second(0)
+                    .unwrap()
+                    .with_nanosecond(0)
+                    .unwrap()
             }
-            BandwidthPeriod::Monthly => {
-                now.with_day(1).unwrap().with_hour(0).unwrap().with_minute(0).unwrap().with_second(0).unwrap().with_nanosecond(0).unwrap()
+            BandwidthPeriod::Monthly =>
+            {
+                #[allow(clippy::unwrap_used)]
+                now.with_day(1)
+                    .unwrap()
+                    .with_hour(0)
+                    .unwrap()
+                    .with_minute(0)
+                    .unwrap()
+                    .with_second(0)
+                    .unwrap()
+                    .with_nanosecond(0)
+                    .unwrap()
             }
         }
     }
@@ -104,41 +135,37 @@ impl<R: BandwidthRepository> BandwidthObserver for BandwidthStorageObserver<R> {
         // tests synchronous.
         let _ = (owner, site, in_, out);
     }
+
     fn on_window_close(&self, _window: &BandwidthWindow) {}
 }
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use chrono::TimeZone;
+
+    use super::*;
 
     #[test]
     fn hourly_period_start_truncates_to_hour() {
         let now = Utc.with_ymd_and_hms(2026, 8, 13, 10, 45, 30).unwrap();
-        let start = BandwidthStorageObserver::<NoopRepo>::period_start_for(
-            BandwidthPeriod::Hourly,
-            now,
-        );
+        let start =
+            BandwidthStorageObserver::<NoopRepo>::period_start_for(BandwidthPeriod::Hourly, now);
         assert_eq!(start, Utc.with_ymd_and_hms(2026, 8, 13, 10, 0, 0).unwrap());
     }
 
     #[test]
     fn daily_period_start_truncates_to_day() {
         let now = Utc.with_ymd_and_hms(2026, 8, 13, 10, 45, 30).unwrap();
-        let start = BandwidthStorageObserver::<NoopRepo>::period_start_for(
-            BandwidthPeriod::Daily,
-            now,
-        );
+        let start =
+            BandwidthStorageObserver::<NoopRepo>::period_start_for(BandwidthPeriod::Daily, now);
         assert_eq!(start, Utc.with_ymd_and_hms(2026, 8, 13, 0, 0, 0).unwrap());
     }
 
     #[test]
     fn monthly_period_start_truncates_to_first() {
         let now = Utc.with_ymd_and_hms(2026, 8, 13, 10, 45, 30).unwrap();
-        let start = BandwidthStorageObserver::<NoopRepo>::period_start_for(
-            BandwidthPeriod::Monthly,
-            now,
-        );
+        let start =
+            BandwidthStorageObserver::<NoopRepo>::period_start_for(BandwidthPeriod::Monthly, now);
         assert_eq!(start, Utc.with_ymd_and_hms(2026, 8, 1, 0, 0, 0).unwrap());
     }
 
@@ -156,6 +183,7 @@ mod tests {
         ) -> Result<(), RepoError> {
             Ok(())
         }
+
         async fn windows_for_owner(
             &self,
             _owner_id: Uuid,
@@ -163,6 +191,7 @@ mod tests {
         ) -> Vec<BandwidthWindow> {
             Vec::new()
         }
+
         async fn windows_for_site(
             &self,
             _site_id: Uuid,

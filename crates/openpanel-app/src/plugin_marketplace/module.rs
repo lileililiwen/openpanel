@@ -2,13 +2,9 @@
 
 use std::sync::Arc;
 
-use openpanel_core::{AppContext, AuditService, Migration, Module};
+use openpanel_core::{AppContext, Migration, Module};
 
-use super::{
-    cache::SqliteCatalogCache,
-    client::MarketplaceClient,
-    service::MarketplaceService,
-};
+use super::{cache::SqliteCatalogCache, client::MarketplaceClient, service::MarketplaceService};
 use crate::plugin::service::PluginService;
 
 /// Stable module identifier.
@@ -45,7 +41,7 @@ impl PluginMarketplaceModule {
         Self {
             service,
             migrations: vec![Migration {
-                module: MODULE_NAME.into(),
+                module: MODULE_NAME,
                 version: "001".into(),
                 description: "marketplace catalog cache initial schema".into(),
                 sql: crate::migrations::PLUGIN_MARKETPLACE_V001.into(),

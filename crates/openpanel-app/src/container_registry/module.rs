@@ -5,9 +5,7 @@ use std::sync::Arc;
 use openpanel_core::{AppContext, AuditService, Migration, Module};
 
 use super::{
-    repo::{
-        SqliteImageRepository, SqliteNamespaceRepository, SqliteScanResultRepository,
-    },
+    repo::{SqliteImageRepository, SqliteNamespaceRepository, SqliteScanResultRepository},
     scan::NoopScanHook,
     service::ContainerRegistryService,
     storage::{MemoryStorage, StorageLayer},
@@ -42,18 +40,12 @@ impl ContainerRegistryModule {
         let storage = storage.unwrap_or_else(|| Arc::new(MemoryStorage::new()));
         let scan_hook = scan_hook.unwrap_or_else(|| Arc::new(NoopScanHook));
         let service = Arc::new(ContainerRegistryService::new(
-            namespaces,
-            images,
-            scans,
-            storage,
-            scan_hook,
-            audit,
-            config,
+            namespaces, images, scans, storage, scan_hook, audit, config,
         ));
         Self {
             service,
             migrations: vec![Migration {
-                module: MODULE_NAME.into(),
+                module: MODULE_NAME,
                 version: "001".into(),
                 description: "container registry initial schema".into(),
                 sql: crate::migrations::CONTAINER_REGISTRY_V001.into(),

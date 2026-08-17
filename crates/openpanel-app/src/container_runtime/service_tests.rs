@@ -2,17 +2,17 @@
 //! the `## 1. Testing` group of the change's tasks.md:
 //!
 //! * 1.1 Unit tests: quota math; egress accounting; credential
-//!       cipher round-trip.
+//!   cipher round-trip.
 //! * 1.2 Property tests live in the domain crate
-//!       (`container_runtime::prop`) — these test the
-//!       monotonically invariant quota axes and password
-//!       zeroization (the latter is enforced via the `redacted`
-//!       view that the service returns and via the never-leak
-//!       audit invariant asserted below).
+//!   (`container_runtime::prop`) — these test the
+//!   monotonically invariant quota axes and password
+//!   zeroization (the latter is enforced via the `redacted`
+//!   view that the service returns and via the never-leak
+//!   audit invariant asserted below).
 //! * 1.3 Service tests with mock docker (NoopRegistryHostAdapter)
-//!       and the no-op audit service.
+//!   and the no-op audit service.
 //! * 1.4 Integration (live fixture) is exercised through
-//!       `tests/integration/container_runtime.rs`.
+//!   `tests/integration/container_runtime.rs`.
 //! * 1.5 CLI E2E: `tests/cli/container_runtime.rs`.
 //! * 1.6 Web: `tests/integration/container_runtime_web.rs`.
 

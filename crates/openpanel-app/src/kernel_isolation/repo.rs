@@ -88,10 +88,7 @@ impl IsolationRepository for SqliteIsolationRepository {
         Ok(())
     }
 
-    async fn get_namespace(
-        &self,
-        user_id: Uuid,
-    ) -> Result<Option<UserNamespaceConfig>, RepoError> {
+    async fn get_namespace(&self, user_id: Uuid) -> Result<Option<UserNamespaceConfig>, RepoError> {
         let row = sqlx::query(
             "SELECT user_id, enabled, cgroup_namespace, pid_namespace FROM user_namespaces WHERE user_id = ?",
         )

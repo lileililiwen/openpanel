@@ -69,7 +69,8 @@ mod tests {
 
     #[test]
     fn parses_security_origin() {
-        let output = "Inst libssl3 [3.0.11-1~deb12u1] (3.0.13-1~deb12u1 Debian:12.4/security [amd64])\n";
+        let output =
+            "Inst libssl3 [3.0.11-1~deb12u1] (3.0.13-1~deb12u1 Debian:12.4/security [amd64])\n";
         let updates = parse_apt_dry_run(output);
         assert_eq!(updates.len(), 1);
         assert_eq!(updates[0].name, "libssl3");
@@ -80,8 +81,7 @@ mod tests {
 
     #[test]
     fn parses_non_security_origin() {
-        let output =
-            "Inst bash [5.2.15-2] (5.2.15-2+b1 Debian:12.4 [amd64])\n";
+        let output = "Inst bash [5.2.15-2] (5.2.15-2+b1 Debian:12.4 [amd64])\n";
         let updates = parse_apt_dry_run(output);
         assert_eq!(updates.len(), 1);
         assert_eq!(updates[0].kind, UpdateKind::Other);

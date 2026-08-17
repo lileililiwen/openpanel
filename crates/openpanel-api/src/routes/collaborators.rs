@@ -13,8 +13,7 @@ use axum::{
     Json, Router,
     extract::{Path, State},
     http::StatusCode,
-    response::IntoResponse,
-    routing::{delete, get, post, put},
+    routing::{get, post},
 };
 use openpanel_app::collaborators::{
     CollaboratorService, GrantResolver, InviteCollaboratorError, InviteRequest, UpdateRequest,
@@ -26,25 +25,14 @@ use uuid::Uuid;
 use crate::{ApiError, ApiResult, AuthUser};
 
 /// Build the `/sites/{id}/collaborators` routes.
-pub fn router(
-    service: Arc<CollaboratorService>,
-    resolver: Arc<GrantResolver>,
-) -> Router {
+pub fn router(service: Arc<CollaboratorService>, resolver: Arc<GrantResolver>) -> Router {
     Router::new()
-        .route(
-            "/{id}/collaborators",
-            post(invite).get(list_for_site),
-        )
+        .route("/{id}/collaborators", post(invite).get(list_for_site))
         .route(
             "/{id}/collaborators/{uid}",
-            get(detail)
-                .put(update)
-                .delete(revoke),
+            get(detail).put(update).delete(revoke),
         )
-        .route(
-            "/{id}/collaborators/{uid}/resolve",
-            get(resolve_for_user),
-        )
+        .route("/{id}/collaborators/{uid}/resolve", get(resolve_for_user))
         .with_state((service, resolver))
 }
 
@@ -71,7 +59,10 @@ async fn invite(
         .invite(account_id, request, user.username().as_str())
         .await
         .map_err(map_invite_error)?;
-    Ok((StatusCode::CREATED, Json(CollaboratorView::from(&collaborator))))
+    Ok((
+        StatusCode::CREATED,
+        Json(CollaboratorView::from(&collaborator)),
+    ))
 }
 
 async fn list_for_site(
@@ -148,7 +139,10 @@ async fn resolve_for_user(
     Path((site_id, uid)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<ResolveView>> {
     let id = parse_collaborator_id(&uid.to_string())?;
-    let set = resolver.resolve(&id, site_id).await.map_err(map_invite_error)?;
+    let set = resolver
+        .resolve(&id, site_id)
+        .await
+        .map_err(map_invite_error)?;
     let scopes: Vec<&'static str> = set.iter().map(|p| p.as_str()).collect();
     Ok(Json(ResolveView { scopes }))
 }

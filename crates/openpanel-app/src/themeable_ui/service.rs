@@ -11,8 +11,6 @@ use openpanel_domain::{
 };
 use uuid::Uuid;
 
-use crate::themeable_ui::SqliteThemeableUiRepository;
-
 /// Max logo upload size in bytes (256 KiB, per the spec).
 pub const MAX_LOGO_BYTES: u64 = 256 * 1024;
 
@@ -70,6 +68,7 @@ impl ThemeableUiService {
     /// via the supplied `scope`. `scope` MUST be the owner's
     /// effective scope; the service refuses when it is not
     /// `Reseller`.
+    #[allow(clippy::too_many_arguments)]
     pub async fn set_override(
         &self,
         actor: &str,

@@ -6,7 +6,10 @@
 //! `RealInstallerFs` is the production wiring; tests can use
 //! the `InMemoryInstallerFs`).
 
-use std::{path::PathBuf, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use async_trait::async_trait;
 use chrono::Utc;
@@ -38,18 +41,14 @@ pub trait InstallerFs: Send + Sync {
     /// Write `bytes` to `path`. Creates parent directories.
     async fn write_file(
         &self,
-        path: &PathBuf,
+        path: &Path,
         bytes: &[u8],
     ) -> Result<(), WebApplicationInstallerError>;
     /// Recursively delete `path`. Returns Ok(()) when the path
     /// does not exist.
-    async fn remove_tree(&self, path: &PathBuf) -> Result<(), WebApplicationInstallerError>;
+    async fn remove_tree(&self, path: &Path) -> Result<(), WebApplicationInstallerError>;
     /// Move a tree from `src` to `dst` atomically.
-    async fn move_tree(
-        &self,
-        src: &PathBuf,
-        dst: &PathBuf,
-    ) -> Result<(), WebApplicationInstallerError>;
+    async fn move_tree(&self, src: &Path, dst: &Path) -> Result<(), WebApplicationInstallerError>;
 }
 
 /// Production wiring for `InstallerFs`. Real filesystem I/O
@@ -59,10 +58,10 @@ pub struct RealInstallerFs;
 impl InstallerFs for RealInstallerFs {
     async fn write_file(
         &self,
-        path: &PathBuf,
+        path: &Path,
         bytes: &[u8],
     ) -> Result<(), WebApplicationInstallerError> {
-        let path = path.clone();
+        let path = path.to_owned();
         let bytes = bytes.to_vec();
         tokio::task::spawn_blocking(move || -> Result<(), WebApplicationInstallerError> {
             if let Some(parent) = path.parent() {
@@ -77,8 +76,8 @@ impl InstallerFs for RealInstallerFs {
         .map_err(|e| WebApplicationInstallerError::Refused(format!("join: {e}")))?
     }
 
-    async fn remove_tree(&self, path: &PathBuf) -> Result<(), WebApplicationInstallerError> {
-        let path = path.clone();
+    async fn remove_tree(&self, path: &Path) -> Result<(), WebApplicationInstallerError> {
+        let path = path.to_owned();
         tokio::task::spawn_blocking(move || -> Result<(), WebApplicationInstallerError> {
             if path.exists() {
                 std::fs::remove_dir_all(&path)
@@ -90,13 +89,9 @@ impl InstallerFs for RealInstallerFs {
         .map_err(|e| WebApplicationInstallerError::Refused(format!("join: {e}")))?
     }
 
-    async fn move_tree(
-        &self,
-        src: &PathBuf,
-        dst: &PathBuf,
-    ) -> Result<(), WebApplicationInstallerError> {
-        let src = src.clone();
-        let dst = dst.clone();
+    async fn move_tree(&self, src: &Path, dst: &Path) -> Result<(), WebApplicationInstallerError> {
+        let src = src.to_owned();
+        let dst = dst.to_owned();
         tokio::task::spawn_blocking(move || -> Result<(), WebApplicationInstallerError> {
             if let Some(parent) = dst.parent() {
                 std::fs::create_dir_all(parent)
@@ -201,6 +196,7 @@ impl WebApplicationInstallerService {
 
     /// Build a typed `InstallPlan` for a `(app_id, site_id)`
     /// pair. The plan is persisted and audited.
+    #[allow(clippy::too_many_arguments)]
     pub async fn plan(
         &self,
         actor: &str,
@@ -276,10 +272,10 @@ impl WebApplicationInstallerService {
         confirmed_at: chrono::DateTime<chrono::Utc>,
         idempotency_key: Option<&str>,
     ) -> Result<InstallRun, WebApplicationInstallerError> {
-        if let Some(key) = idempotency_key {
-            if let Some(prev) = self.repo.find_run_by_idempotency_key(key).await? {
-                return Ok(prev);
-            }
+        if let Some(key) = idempotency_key
+            && let Some(prev) = self.repo.find_run_by_idempotency_key(key).await?
+        {
+            return Ok(prev);
         }
         let plan =
             self.repo
@@ -303,10 +299,10 @@ impl WebApplicationInstallerService {
             .repo
             .find_installed(plan.site_id(), plan.app_id())
             .await?
+            && existing.install_path() == plan.install_path()
+            && existing.removed_at().is_none()
         {
-            if existing.install_path() == plan.install_path() && existing.removed_at().is_none() {
-                return Err(WebApplicationInstallerError::AlreadyInstalled);
-            }
+            return Err(WebApplicationInstallerError::AlreadyInstalled);
         }
         // Verify every artifact's sha256.
         for a in plan.artifacts() {

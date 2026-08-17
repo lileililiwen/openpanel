@@ -93,7 +93,11 @@ async fn updater_applies_updates_and_persists_history() {
         .await
         .expect("history");
     assert_eq!(history.len(), 1);
-    let updated = repo.get_site(site.site_id).await.expect("get").expect("present");
+    let updated = repo
+        .get_site(site.site_id)
+        .await
+        .expect("get")
+        .expect("present");
     assert_eq!(updated.core_version, "6.4.0");
 }
 
@@ -119,7 +123,11 @@ async fn updater_rolls_back_downgrade() {
         .expect("apply");
     assert!(!result.success);
     assert!(result.rolled_back);
-    let after = repo.get_site(site.site_id).await.expect("get").expect("present");
+    let after = repo
+        .get_site(site.site_id)
+        .await
+        .expect("get")
+        .expect("present");
     assert_eq!(after.core_version, "6.4.0");
 }
 
@@ -201,7 +209,9 @@ async fn non_admin_cannot_use_wp_toolkit() {
         Role::User,
     );
     let _ = service.scan(&user, Uuid::new_v4()).await;
-    let _ = service.set_cache(&user, Uuid::new_v4(), WpCacheMode::Standard).await;
+    let _ = service
+        .set_cache(&user, Uuid::new_v4(), WpCacheMode::Standard)
+        .await;
 }
 
 #[test]

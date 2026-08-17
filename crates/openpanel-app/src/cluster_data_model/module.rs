@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use openpanel_core::{AppContext, Migration, Module};
 
-use crate::cluster_data_model::{ClusterService, SqliteClusterRepository};
+use crate::cluster_data_model::ClusterService;
 
 /// Stable module name.
 pub const MODULE_NAME: &str = "cluster-data-model";
@@ -25,8 +25,7 @@ impl ClusterDataModelModule {
             migrations: vec![Migration {
                 module: MODULE_NAME,
                 version: "001".to_string(),
-                description: "cluster nodes, shared storage, replicated databases"
-                    .to_string(),
+                description: "cluster nodes, shared storage, replicated databases".to_string(),
                 sql: crate::migrations::CLUSTER_DATA_MODEL_V001.to_string(),
             }],
         }

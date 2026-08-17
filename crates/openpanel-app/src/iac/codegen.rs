@@ -2,11 +2,13 @@
 //! descriptors against `openapi.rs` and detects drift between
 //! committed and freshly-generated artifacts.
 
-use openpanel_domain::iac::contract::ApiContract;
-use openpanel_domain::iac::error::IacError;
-use openpanel_domain::iac::provider::TerraformProvider;
-use openpanel_domain::iac::sdk::{Language, SdkPackage};
-use openpanel_domain::iac::IacError as DomainIacError;
+use openpanel_domain::iac::{
+    IacError as DomainIacError,
+    contract::ApiContract,
+    error::IacError,
+    provider::TerraformProvider,
+    sdk::{Language, SdkPackage},
+};
 
 /// Outcome of a drift check.
 #[derive(Debug, Clone, PartialEq, serde::Serialize)]

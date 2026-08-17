@@ -207,10 +207,7 @@ pub trait IsolationRepository: Send + Sync + 'static {
     /// Persist a namespace config.
     async fn save_namespace(&self, config: &UserNamespaceConfig) -> Result<(), RepoError>;
     /// Load a namespace config by user id.
-    async fn get_namespace(
-        &self,
-        user_id: Uuid,
-    ) -> Result<Option<UserNamespaceConfig>, RepoError>;
+    async fn get_namespace(&self, user_id: Uuid) -> Result<Option<UserNamespaceConfig>, RepoError>;
 
     /// Persist the singleton policy.
     async fn save_policy(&self, policy: &IsolationPolicy) -> Result<(), RepoError>;
@@ -232,9 +229,11 @@ mod tests {
 
     #[test]
     fn policy_validates_high_le_max() {
-        let mut policy = IsolationPolicy::default();
-        policy.default_memory_high_mib = 4096;
-        policy.default_memory_max_mib = 1024;
+        let policy = IsolationPolicy {
+            default_memory_high_mib: 4096,
+            default_memory_max_mib: 1024,
+            ..IsolationPolicy::default()
+        };
         assert!(policy.validate().is_err());
     }
 
@@ -255,9 +254,11 @@ mod tests {
 
     #[test]
     fn policy_default_limit_carries_values() {
-        let mut policy = IsolationPolicy::default();
-        policy.default_cpu_millicores = 2000;
-        policy.default_pids_max = 128;
+        let policy = IsolationPolicy {
+            default_cpu_millicores: 2000,
+            default_pids_max: 128,
+            ..IsolationPolicy::default()
+        };
         let limit = policy.default_limit_for(Uuid::new_v4());
         assert_eq!(limit.cpu_millicores, 2000);
         assert_eq!(limit.pids_max, 128);

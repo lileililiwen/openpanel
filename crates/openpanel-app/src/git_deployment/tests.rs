@@ -8,9 +8,7 @@ use openpanel_domain::{DeployRepo, DeployRepository, Role, verify_webhook};
 use openpanel_test_support::TestDb;
 use uuid::Uuid;
 
-use crate::git_deployment::{
-    DeployService, SqliteDeployRepository, WebhookVerifier,
-};
+use crate::git_deployment::{DeployService, SqliteDeployRepository, WebhookVerifier};
 
 fn admin_user() -> openpanel_domain::User {
     use openpanel_domain::{Email, Password, Username};
@@ -133,10 +131,7 @@ async fn non_admin_cannot_link() {
     let service = DeployService::new(repo, Arc::new(NoopAuditService));
     let user = non_admin_user();
     let res = service.link(&user, make_repo(Uuid::new_v4())).await;
-    assert!(matches!(
-        res,
-        Err(openpanel_domain::DeployError::Forbidden)
-    ));
+    assert!(matches!(res, Err(openpanel_domain::DeployError::Forbidden)));
 }
 
 #[tokio::test]
@@ -150,18 +145,22 @@ async fn webhook_verifier_accepts_matching_signature() {
     let r = make_repo(site_id);
     service.link(&caller, r.clone()).await.expect("link");
     let body = b"{\"ref\":\"main\"}";
-    let sig = format!(
-        "{:016x}",
-        {
-            use std::collections::hash_map::DefaultHasher;
-            use std::hash::{Hash, Hasher};
-            let mut hasher = DefaultHasher::new();
-            r.webhook_secret.hash(&mut hasher);
-            body.hash(&mut hasher);
-            hasher.finish()
-        }
+    let sig = format!("{:016x}", {
+        use std::{
+            collections::hash_map::DefaultHasher,
+            hash::{Hash, Hasher},
+        };
+        let mut hasher = DefaultHasher::new();
+        r.webhook_secret.hash(&mut hasher);
+        body.hash(&mut hasher);
+        hasher.finish()
+    });
+    assert!(
+        verifier
+            .verify(repo, site_id, body, Some(&sig))
+            .await
+            .is_ok()
     );
-    assert!(verifier.verify(repo, site_id, body, Some(&sig)).await.is_ok());
 }
 
 #[tokio::test]
@@ -172,7 +171,10 @@ async fn webhook_verifier_rejects_bad_signature() {
     let verifier = WebhookVerifier::new();
     let caller = admin_user();
     let site_id = Uuid::new_v4();
-    service.link(&caller, make_repo(site_id)).await.expect("link");
+    service
+        .link(&caller, make_repo(site_id))
+        .await
+        .expect("link");
     let body = b"{\"ref\":\"main\"}";
     let res = verifier.verify(repo, site_id, body, Some("wrong")).await;
     assert!(matches!(
@@ -185,17 +187,16 @@ async fn webhook_verifier_rejects_bad_signature() {
 fn webhook_helper_accepts_matching() {
     let body = b"{}";
     let secret = "0123456789abcdef";
-    let sig = format!(
-        "{:016x}",
-        {
-            use std::collections::hash_map::DefaultHasher;
-            use std::hash::{Hash, Hasher};
-            let mut hasher = DefaultHasher::new();
-            secret.hash(&mut hasher);
-            body.hash(&mut hasher);
-            hasher.finish()
-        }
-    );
+    let sig = format!("{:016x}", {
+        use std::{
+            collections::hash_map::DefaultHasher,
+            hash::{Hash, Hasher},
+        };
+        let mut hasher = DefaultHasher::new();
+        secret.hash(&mut hasher);
+        body.hash(&mut hasher);
+        hasher.finish()
+    });
     assert!(verify_webhook(secret, body, Some(&sig)).is_ok());
 }
 
@@ -207,7 +208,10 @@ async fn webhook_verifier_rejects_missing_signature() {
     let verifier = WebhookVerifier::new();
     let caller = admin_user();
     let site_id = Uuid::new_v4();
-    service.link(&caller, make_repo(site_id)).await.expect("link");
+    service
+        .link(&caller, make_repo(site_id))
+        .await
+        .expect("link");
     let res = verifier.verify(repo, site_id, b"{}".as_ref(), None).await;
     assert!(matches!(
         res,

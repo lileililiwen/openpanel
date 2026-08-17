@@ -36,23 +36,20 @@ impl LbRepository for SqliteLbRepository {
     }
 
     async fn list_pools(&self) -> Result<Vec<Pool>, RepoError> {
-        let rows = sqlx::query(
-            "SELECT id, name, algorithm, created_at FROM lb_pools ORDER BY created_at",
-        )
-        .fetch_all(&self.pool)
-        .await
-        .map_err(|e| RepoError::new(e.to_string()))?;
+        let rows =
+            sqlx::query("SELECT id, name, algorithm, created_at FROM lb_pools ORDER BY created_at")
+                .fetch_all(&self.pool)
+                .await
+                .map_err(|e| RepoError::new(e.to_string()))?;
         rows.into_iter().map(decode_pool).collect()
     }
 
     async fn get_pool(&self, id: Uuid) -> Result<Option<Pool>, RepoError> {
-        let row = sqlx::query(
-            "SELECT id, name, algorithm, created_at FROM lb_pools WHERE id = ?",
-        )
-        .bind(id.to_string())
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| RepoError::new(e.to_string()))?;
+        let row = sqlx::query("SELECT id, name, algorithm, created_at FROM lb_pools WHERE id = ?")
+            .bind(id.to_string())
+            .fetch_optional(&self.pool)
+            .await
+            .map_err(|e| RepoError::new(e.to_string()))?;
         row.map(decode_pool).transpose()
     }
 

@@ -176,9 +176,15 @@ pub trait DeployRepository: Send + Sync + 'static {
 
 /// Verify a webhook signature. Pure function used by both the
 /// service and the tests.
-pub fn verify_webhook(secret: &str, body: &[u8], presented: Option<&str>) -> Result<(), DeployError> {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+pub fn verify_webhook(
+    secret: &str,
+    body: &[u8],
+    presented: Option<&str>,
+) -> Result<(), DeployError> {
+    use std::{
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+    };
     let presented = presented.ok_or(DeployError::InvalidWebhookSignature)?;
     let mut hasher = DefaultHasher::new();
     secret.hash(&mut hasher);
@@ -194,8 +200,10 @@ pub fn verify_webhook(secret: &str, body: &[u8], presented: Option<&str>) -> Res
 /// Compute a deterministic commit SHA placeholder for the
 /// fixture builder. Production wiring uses the real git CLI.
 pub fn commit_placeholder(input: &str) -> String {
-    use std::collections::hash_map::DefaultHasher;
-    use std::hash::{Hash, Hasher};
+    use std::{
+        collections::hash_map::DefaultHasher,
+        hash::{Hash, Hasher},
+    };
     let mut hasher = DefaultHasher::new();
     input.hash(&mut hasher);
     format!("{:016x}", hasher.finish())
@@ -210,17 +218,16 @@ mod tests {
         let body = b"{\"ref\":\"main\"}";
         let secret = "0123456789abcdef";
         // Pre-compute the matching signature.
-        let sig = format!(
-            "{:016x}",
-            {
-                use std::collections::hash_map::DefaultHasher;
-                use std::hash::{Hash, Hasher};
-                let mut hasher = DefaultHasher::new();
-                secret.hash(&mut hasher);
-                body.hash(&mut hasher);
-                hasher.finish()
-            }
-        );
+        let sig = format!("{:016x}", {
+            use std::{
+                collections::hash_map::DefaultHasher,
+                hash::{Hash, Hasher},
+            };
+            let mut hasher = DefaultHasher::new();
+            secret.hash(&mut hasher);
+            body.hash(&mut hasher);
+            hasher.finish()
+        });
         assert!(verify_webhook(secret, body, Some(&sig)).is_ok());
     }
 
@@ -256,7 +263,7 @@ mod tests {
 
     #[test]
     fn repo_validation_rejects_chroot_escape() {
-        let mut repo = DeployRepo {
+        let repo = DeployRepo {
             id: Uuid::new_v4(),
             site_id: Uuid::new_v4(),
             url: "https://example.com/repo.git".into(),

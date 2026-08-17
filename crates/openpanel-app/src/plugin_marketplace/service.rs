@@ -4,15 +4,13 @@ use std::sync::Arc;
 
 use chrono::Utc;
 use openpanel_core::audit::{AuditAction, AuditEvent, AuditOutcome, AuditService};
-use openpanel_domain::plugin::PluginManifest;
 use openpanel_domain::{
     CatalogCache, CatalogSnapshot, MarketplaceCa, MarketplaceCatalog, PluginMarketplaceError,
-    SignedCatalogEnvelope, verify_envelope,
+    SignedCatalogEnvelope, common::error::RepoError, plugin::PluginManifest, verify_envelope,
 };
-use openpanel_domain::common::error::RepoError;
 
-use crate::plugin::service::PluginService;
 use super::client::MarketplaceClient;
+use crate::plugin::service::PluginService;
 
 /// Discovery outcome.
 #[derive(Debug, Clone)]
@@ -111,7 +109,10 @@ impl MarketplaceService {
 
     /// Snapshot the current CA.
     pub fn ca(&self) -> MarketplaceCa {
-        self.ca.read().map(|g| g.clone()).unwrap_or_else(|_| MarketplaceCa::empty())
+        self.ca
+            .read()
+            .map(|g| g.clone())
+            .unwrap_or_else(|_| MarketplaceCa::empty())
     }
 
     /// Fetch a fresh signed envelope, verify it against the CA,
@@ -121,9 +122,7 @@ impl MarketplaceService {
         now: Option<u64>,
     ) -> Result<DiscoverOutcome, PluginMarketplaceError> {
         let envelope = self.client.fetch_envelope().await?;
-        let now = now.unwrap_or_else(|| {
-            Utc::now().timestamp().max(0) as u64
-        });
+        let now = now.unwrap_or_else(|| Utc::now().timestamp().max(0) as u64);
         let ca = self.ca();
         let catalog = verify_envelope(&envelope, &ca, now)?;
         // Cache the verified snapshot by digest.
@@ -144,9 +143,7 @@ impl MarketplaceService {
 
     /// Fetch from the cache only; returns `None` if no snapshot is
     /// cached.
-    pub async fn cached(
-        &self,
-    ) -> Result<Option<CatalogSnapshot>, PluginMarketplaceError> {
+    pub async fn cached(&self) -> Result<Option<CatalogSnapshot>, PluginMarketplaceError> {
         self.cache
             .latest()
             .await
@@ -165,12 +162,12 @@ impl MarketplaceService {
             .map_err(PluginMarketplaceError::from)
     }
 
-/// Install a plugin from a marketplace catalog entry.
-///
-/// The catalog entry MUST chain to the marketplace CA; the
-/// manifest MUST chain to the same publisher key. The install
-/// itself is delegated to the base plugin service.
-pub async fn install_from_marketplace(
+    /// Install a plugin from a marketplace catalog entry.
+    ///
+    /// The catalog entry MUST chain to the marketplace CA; the
+    /// manifest MUST chain to the same publisher key. The install
+    /// itself is delegated to the base plugin service.
+    pub async fn install_from_marketplace(
         &self,
         request: InstallFromMarketplaceRequest,
         publisher_key: &ed25519_dalek::VerifyingKey,
@@ -185,21 +182,16 @@ pub async fn install_from_marketplace(
         // The marketplace install path also requires that the
         // plugin id matches between catalog entry and manifest.
         if request.manifest.id.as_str() != request.plugin_id {
-            return Err(PluginMarketplaceError::ManifestUrlMismatch(
-                request.plugin_id.clone(),
-            )
-            .into());
+            return Err(
+                PluginMarketplaceError::ManifestUrlMismatch(request.plugin_id.clone()).into(),
+            );
         }
         // Capability check.
-        request
-            .manifest
-            .capabilities
-            .validate()
-            .map_err(|e| {
-                PluginMarketplaceError::from(openpanel_domain::PluginError::InvalidManifest(
-                    format!("invalid capabilities: {e}"),
-                ))
-            })?;
+        request.manifest.capabilities.validate().map_err(|e| {
+            PluginMarketplaceError::from(openpanel_domain::PluginError::InvalidManifest(format!(
+                "invalid capabilities: {e}"
+            )))
+        })?;
         // Persist the manifest URL for the audit trail.
         self.plugins
             .install_manifest(&request.manifest, actor)
