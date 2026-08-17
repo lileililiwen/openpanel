@@ -83,6 +83,10 @@ pub mod per_site_php_runtime;
 /// SFTP / jailed shells bounded context: per-site SSH/SFTP
 /// grants that map onto OpenSSH's `internal-sftp` + `ForceCommand`.
 pub mod sftp_jailed_shells;
+/// Bandwidth accounting bounded context: typed bridge between
+/// the `BandwidthObserver` collector and the SQLite-backed
+/// rolling-window store.
+pub mod bandwidth_accounting;
 /// AI Ops bounded context: conversational session, tool-call
 /// allowlist, proposed/approved/executed/denied actions.
 pub mod ai_ops;
@@ -323,6 +327,9 @@ pub use per_site_php_runtime::{
 pub use sftp_jailed_shells::{
     JailPublicKey, JailedShellStatus, SftpJailError, SftpJailGrant, SftpJailRepository,
     render_sshd_config,
+};
+pub use bandwidth_accounting::{
+    BandwidthCounterRow, BandwidthReader, BandwidthRepository, BandwidthStorageObserver,
 };
 pub use agent::RecipeManifest as _RecipeManifest;
 pub use sites::{error::SiteError, repository::SiteRepository, site::Site, status::SiteStatus};
