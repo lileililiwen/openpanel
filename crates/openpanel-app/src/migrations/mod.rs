@@ -119,3 +119,5 @@ pub const HOSTING_PLANS_V001: &str = include_str!("hosting_plans/V001__init.sql"
 /// Account hierarchy v001: `account_relationships`, `quota_pools`,
 /// and `pool_claims` tables.
 pub const ACCOUNT_HIERARCHY_V001: &str = include_str!("account_hierarchy/V001__init.sql");
+/// Quotas v001: `quota_policies` and `quota_usages` tables.
+pub const QUOTAS_V001: &str = include_str!("quotas/V001__init.sql");

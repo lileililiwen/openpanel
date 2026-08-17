@@ -9,6 +9,9 @@
 /// Account hierarchy bounded context: parent-child relationships,
 /// tree traversal, cycle detection, and pooled quota caps.
 pub mod account_hierarchy;
+/// Quotas bounded context: per-user / per-site resource quotas
+/// with soft/hard limits and grace windows.
+pub mod quotas;
 /// AI Ops bounded context: conversational agent with tool-call
 /// allowlist and human-in-the-loop approval gate.
 pub mod ai_ops;
@@ -120,6 +123,7 @@ pub mod wildcard_ssl;
 pub mod wordpress_toolkit;
 
 pub use account_hierarchy::{AccountHierarchyModule, HierarchyService, SqliteHierarchyRepository};
+pub use quotas::{QuotaService, QuotasModule, SqliteQuotaRepository};
 pub use ai_ops::{
     ActionApproval, AiOpsModule, AskService, SqliteAiOpsRepository, ToolExecutor, default_allowlist,
 };

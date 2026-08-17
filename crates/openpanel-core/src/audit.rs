@@ -376,6 +376,14 @@ pub enum AuditAction {
     AccountHierarchyPoolClaimed,
     /// A child released share bytes from a parent's pool.
     AccountHierarchyPoolReleased,
+    /// A quota policy was created or updated.
+    QuotaPolicyChanged,
+    /// A quota policy was deleted.
+    QuotaPolicyDeleted,
+    /// A user exceeded a soft quota limit (warning).
+    QuotaSoftLimitReached,
+    /// A user exceeded a hard quota limit (blocking).
+    QuotaHardLimitReached,
 }
 
 impl AuditAction {
@@ -544,6 +552,10 @@ impl AuditAction {
             AuditAction::AccountHierarchyPoolSet => "account_hierarchy_pool_set",
             AuditAction::AccountHierarchyPoolClaimed => "account_hierarchy_pool_claimed",
             AuditAction::AccountHierarchyPoolReleased => "account_hierarchy_pool_released",
+            AuditAction::QuotaPolicyChanged => "quota_policy_changed",
+            AuditAction::QuotaPolicyDeleted => "quota_policy_deleted",
+            AuditAction::QuotaSoftLimitReached => "quota_soft_limit_reached",
+            AuditAction::QuotaHardLimitReached => "quota_hard_limit_reached",
         }
     }
 }
@@ -807,6 +819,10 @@ impl AuditService for SqliteAuditService {
                 "account_hierarchy_pool_set" => AuditAction::AccountHierarchyPoolSet,
                 "account_hierarchy_pool_claimed" => AuditAction::AccountHierarchyPoolClaimed,
                 "account_hierarchy_pool_released" => AuditAction::AccountHierarchyPoolReleased,
+                "quota_policy_changed" => AuditAction::QuotaPolicyChanged,
+                "quota_policy_deleted" => AuditAction::QuotaPolicyDeleted,
+                "quota_soft_limit_reached" => AuditAction::QuotaSoftLimitReached,
+                "quota_hard_limit_reached" => AuditAction::QuotaHardLimitReached,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

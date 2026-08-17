@@ -63,6 +63,11 @@ pub mod waf;
 /// relationships, tree traversal, cycle detection, and
 /// pooled quota caps shared by children.
 pub mod account_hierarchy;
+/// Quotas bounded context: per-user/per-site disk, bandwidth,
+/// inode, max-file-size, and CPU-share limits with soft/hard
+/// pairs and grace windows. Enforcement is owned by the
+/// application layer's typed ports.
+pub mod quotas;
 /// AI Ops bounded context: conversational session, tool-call
 /// allowlist, proposed/approved/executed/denied actions.
 pub mod ai_ops;
@@ -284,6 +289,10 @@ pub use service_manager::{
 pub use site_staging::{
     PromotionRepository, PromotionRun, PromotionStatus, SiteStagingError, SnapshotId, StagingSlot,
     StagingSlotRepository, StagingSnapshotRepository, SyncMode, SyncPolicy,
+};
+pub use quotas::{
+    QuotaDimension, QuotaError, QuotaLimit, QuotaPolicy, QuotaRepository, QuotaSubject,
+    QuotaUsage,
 };
 pub use sites::{error::SiteError, repository::SiteRepository, site::Site, status::SiteStatus};
 pub use ssl::{
