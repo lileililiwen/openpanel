@@ -124,3 +124,6 @@ pub const QUOTAS_V001: &str = include_str!("quotas/V001__init.sql");
 /// Agent v001: `agents`, `fleet_tokens`, and `recipe_manifests`
 /// tables.
 pub const AGENT_V001: &str = include_str!("agent/V001__init.sql");
+/// Cluster data model v001: `cluster_nodes`, `shared_storage`,
+/// and `replicated_databases` tables.
+pub const CLUSTER_DATA_MODEL_V001: &str = include_str!("cluster_data_model/V001__init.sql");

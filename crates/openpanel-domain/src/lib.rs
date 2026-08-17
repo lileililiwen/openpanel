@@ -73,6 +73,9 @@ pub mod quotas;
 /// signed `RecipeManifest`. The agent refuses non-mTLS traffic and
 /// validates every recipe against its allowlist before executing.
 pub mod agent;
+/// Cluster data model bounded context: typed host roles, shared
+/// storage declarations, and replicated database metadata.
+pub mod cluster_data_model;
 /// AI Ops bounded context: conversational session, tool-call
 /// allowlist, proposed/approved/executed/denied actions.
 pub mod ai_ops;
@@ -302,6 +305,10 @@ pub use quotas::{
 pub use agent::{
     AgentError, AgentId, AgentRegistration, AgentRepository, AgentStatus, FleetToken,
     FleetTokenScope, RecipeAction, RecipeManifest, is_manifest_signature_valid,
+};
+pub use cluster_data_model::{
+    ClusterError, ClusterNode, ClusterRepository, ClusterTopology, FailoverPolicy, NodeId,
+    NodeRole, ReplicatedDatabase, ReplicationMode, SharedStorage, SharedStorageKind, StorageId,
 };
 pub use agent::RecipeManifest as _RecipeManifest;
 pub use sites::{error::SiteError, repository::SiteRepository, site::Site, status::SiteStatus};

@@ -394,6 +394,14 @@ pub enum AuditAction {
     FleetTokenRevoked,
     /// A signed recipe manifest was stored for later dispatch.
     RecipeManifestStored,
+    /// A cluster node was declared.
+    ClusterNodeDeclared,
+    /// A cluster node's role was changed.
+    ClusterNodeRoleChanged,
+    /// A shared storage volume was declared.
+    ClusterStorageDeclared,
+    /// A replicated database was declared.
+    ClusterReplicatedDatabaseDeclared,
 }
 
 impl AuditAction {
@@ -571,6 +579,10 @@ impl AuditAction {
             AuditAction::FleetTokenIssued => "fleet_token_issued",
             AuditAction::FleetTokenRevoked => "fleet_token_revoked",
             AuditAction::RecipeManifestStored => "recipe_manifest_stored",
+            AuditAction::ClusterNodeDeclared => "cluster_node_declared",
+            AuditAction::ClusterNodeRoleChanged => "cluster_node_role_changed",
+            AuditAction::ClusterStorageDeclared => "cluster_storage_declared",
+            AuditAction::ClusterReplicatedDatabaseDeclared => "cluster_replicated_database_declared",
         }
     }
 }
@@ -843,6 +855,10 @@ impl AuditService for SqliteAuditService {
                 "fleet_token_issued" => AuditAction::FleetTokenIssued,
                 "fleet_token_revoked" => AuditAction::FleetTokenRevoked,
                 "recipe_manifest_stored" => AuditAction::RecipeManifestStored,
+                "cluster_node_declared" => AuditAction::ClusterNodeDeclared,
+                "cluster_node_role_changed" => AuditAction::ClusterNodeRoleChanged,
+                "cluster_storage_declared" => AuditAction::ClusterStorageDeclared,
+                "cluster_replicated_database_declared" => AuditAction::ClusterReplicatedDatabaseDeclared,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

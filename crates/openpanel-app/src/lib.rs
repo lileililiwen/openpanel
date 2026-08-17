@@ -15,6 +15,9 @@ pub mod quotas;
 /// Agent bounded context: per-host agent registry, fleet tokens,
 /// and signed recipe manifests.
 pub mod agent;
+/// Cluster data model bounded context: typed host roles, shared
+/// storage, and replicated database metadata.
+pub mod cluster_data_model;
 /// AI Ops bounded context: conversational agent with tool-call
 /// allowlist and human-in-the-loop approval gate.
 pub mod ai_ops;
@@ -128,6 +131,7 @@ pub mod wordpress_toolkit;
 pub use account_hierarchy::{AccountHierarchyModule, HierarchyService, SqliteHierarchyRepository};
 pub use quotas::{QuotaService, QuotasModule, SqliteQuotaRepository};
 pub use agent::{AgentModule, AgentService, SqliteAgentRepository};
+pub use cluster_data_model::{ClusterDataModelModule, ClusterService, SqliteClusterRepository};
 pub use ai_ops::{
     ActionApproval, AiOpsModule, AskService, SqliteAiOpsRepository, ToolExecutor, default_allowlist,
 };
