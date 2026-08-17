@@ -138,6 +138,10 @@ pub const OFFSITE_BACKUP_TARGETS_V001: &str = include_str!("offsite_backup_targe
 pub const SITE_CLONE_TEMPLATE_V001: &str = include_str!("site_clone_template/V001__init.sql");
 /// Themeable UI and white-label v001: `theme_overrides` table.
 pub const THEMEABLE_UI_V001: &str = include_str!("themeable_ui/V001__init.sql");
+/// Web application installer v001: `web_app_installs`,
+/// `web_app_runs`, `web_app_idempotency`, and `web_app_plans`.
+pub const WEB_APPLICATION_INSTALLER_V001: &str =
+    include_str!("web_application_installer/V001__init.sql");
 /// Site cache and CDN integration v001: `site_cache_policies`,
 /// `cdn_integrations`, and `cdn_purge_log` tables.
 pub const SITE_CACHE_CDN_V001: &str = include_str!("site_cache_cdn/V001__init.sql");

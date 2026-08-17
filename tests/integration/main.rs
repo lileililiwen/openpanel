@@ -52,6 +52,8 @@ mod system_services;
 /// Themeable UI / white-label integration tests.
 mod themeable_ui;
 mod waf;
+/// Web application installer integration tests.
+mod web_application_installer;
 mod web_ui;
 /// Web-UI audit route group integration tests.
 mod web_ui_audit;

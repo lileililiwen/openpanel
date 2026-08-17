@@ -10,7 +10,7 @@ use openpanel_cli::{
     RegistryCommand, SecurityAllowlistCommand, SecurityCommand, SecurityRuleCommand,
     ServicesCommand, SiteCacheCommand, SiteCloneCommand, SiteCommand, SiteTemplateCommand,
     SoftwareCommand, SslCommand, StagingCommand, TokenCommand, TwoFactorCommand, UserCommand,
-    WafCommand, handlers,
+    WafCommand, WebappCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -154,6 +154,12 @@ async fn main() -> anyhow::Result<()> {
                     .await
                 }
                 BrandingCommand::Clear => handlers::branding_clear(config).await,
+            },
+            SiteCommand::Webapp { action } => match action {
+                WebappCommand::Preview { site, app, path } => {
+                    handlers::webapp_preview(config, site, app, path).await
+                }
+                WebappCommand::List { site } => handlers::webapp_list(config, site).await,
             },
         },
         Command::Cdn { action } => match action {

@@ -421,6 +421,21 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         )),
         site_clone_template_module.repo(),
         themeable_ui_svc.clone(),
+        // Web application installer: real service over the same
+        // pool + audit, with the production filesystem and
+        // reqwest downloader.
+        Arc::new(openpanel_app::WebApplicationInstallerService::new(
+            Arc::new(
+                openpanel_app::web_application_installer::SqliteWebApplicationInstallerRepository::new(
+                    pool.clone(),
+                ),
+            ),
+            audit.clone(),
+            Arc::new(openpanel_app::RealInstallerFs),
+            Arc::new(openpanel_app::ReqwestArtifactDownloader::new()),
+            master_key,
+            None,
+        )),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -5079,5 +5094,111 @@ pub async fn branding_clear(config: Arc<Config>) -> anyhow::Result<()> {
     .await
     .map_err(|e| anyhow::anyhow!(format!("{e:?}")))?;
     println!("ok");
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// web-application-installer CLI handlers.
+// ---------------------------------------------------------------------------
+
+/// Build the `WebApplicationInstallerService` for CLI subcommands.
+async fn build_web_application_installer(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::WebApplicationInstallerService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
+    let master_key = load_master_key(&config)?;
+    let identity_module = IdentityModule::new(&ctx, master_key).await;
+    let repo =
+        openpanel_app::web_application_installer::SqliteWebApplicationInstallerRepository::new(
+            pool,
+        );
+    let svc = Arc::new(openpanel_app::WebApplicationInstallerService::new(
+        Arc::new(repo),
+        audit,
+        Arc::new(openpanel_app::RealInstallerFs),
+        Arc::new(openpanel_app::ReqwestArtifactDownloader::new()),
+        master_key,
+        None,
+    ));
+    Ok((svc, identity_module.service()))
+}
+
+/// `openpanel site webapp preview --site ... --app ... --path ...`.
+pub async fn webapp_preview(
+    config: Arc<Config>,
+    site: String,
+    app: String,
+    path: String,
+) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_web_application_installer(config).await?;
+    let caller = identity_svc
+        .list_users()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("admin user not found"))?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let plan = svc
+        .plan(
+            caller.username().as_str(),
+            app,
+            site_id,
+            path,
+            vec![],
+            openpanel_domain::InstallDb::None,
+            vec![],
+            vec!["preview-only; no artifacts are fetched".to_string()],
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!(format!("{e:?}")))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "plan_id": plan.id().to_string(),
+            "app_id": plan.app_id(),
+            "site_id": plan.site_id().to_string(),
+            "install_path": plan.install_path(),
+            "content_hash": plan.content_hash(),
+            "expires_at": plan.expires_at().to_rfc3339(),
+        }))?
+    );
+    Ok(())
+}
+
+/// `openpanel site webapp list --site ...`.
+pub async fn webapp_list(config: Arc<Config>, site: String) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_web_application_installer(config).await?;
+    let _caller = identity_svc
+        .list_users()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("admin user not found"))?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let rows = svc
+        .list_installed(site_id)
+        .await
+        .map_err(|e| anyhow::anyhow!(format!("{e:?}")))?;
+    let view: Vec<_> = rows
+        .iter()
+        .map(|i| {
+            serde_json::json!({
+                "install_id": i.install_id(),
+                "site_id": i.site_id().to_string(),
+                "app_id": i.app_id(),
+                "version": i.version(),
+                "install_path": i.install_path(),
+                "created_at": i.created_at().to_rfc3339(),
+                "removed_at": i.removed_at().map(|t| t.to_rfc3339()),
+            })
+        })
+        .collect();
+    println!("{}", serde_json::to_string_pretty(&view)?);
     Ok(())
 }

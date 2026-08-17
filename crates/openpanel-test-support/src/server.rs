@@ -25,11 +25,12 @@ use openpanel_app::{
     HostingPlansService, IdentityModule, IdentityService, InMemoryBinlogSink,
     InMemoryStagingFilesystem, LogService, LogsModule, MailModule, MailService, MarketplaceService,
     MigrationImportersModule, MonitoringModule, MonitoringService, NotificationModule,
-    NotificationService, OffsiteBackupTargetsModule, PitrService, PluginService, SecurityModule,
-    SecurityService, SiteCacheCdnModule, SiteCloneService, SiteCloneTemplateModule,
-    SiteStagingModule, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
-    SslModule, SslPaths, SslService, StagingService, SystemServicesModule, ThemeableUiService,
-    WafModule, WafService,
+    NotificationService, OffsiteBackupTargetsModule, PitrService, PluginService, RealInstallerFs,
+    ReqwestArtifactDownloader, SecurityModule, SecurityService, SiteCacheCdnModule,
+    SiteCloneService, SiteCloneTemplateModule, SiteStagingModule, SitesModule, SitesService,
+    SoftwareCenterModule, SoftwareCenterService, SslModule, SslPaths, SslService, StagingService,
+    SystemServicesModule, ThemeableUiService, WafModule, WafService,
+    WebApplicationInstallerService,
     identity::two_factor::TwoFactorCrypto,
     security::MemoryFirewall,
     sites::{nginx::NginxPaths, repo::SqliteSiteRepository},
@@ -269,6 +270,7 @@ pub struct TestServer {
     site_cache_cdn: Arc<openpanel_app::SiteCacheService>,
     site_clone_template: Arc<openpanel_app::SiteCloneService>,
     themeable_ui: Arc<openpanel_app::ThemeableUiService>,
+    web_application_installer: Arc<openpanel_app::WebApplicationInstallerService>,
 }
 
 impl TestServer {
@@ -632,6 +634,24 @@ impl TestServer {
             audit.clone(),
             None,
         ));
+        // Apply the web-app-installer migration and build the
+        // service over the same pool + audit.
+        sqlx::query(openpanel_app::migrations::WEB_APPLICATION_INSTALLER_V001)
+            .execute(&pool)
+            .await
+            .expect("web_application_installer migrations");
+        let web_application_installer_svc = Arc::new(WebApplicationInstallerService::new(
+            Arc::new(
+                openpanel_app::web_application_installer::SqliteWebApplicationInstallerRepository::new(
+                    pool.clone(),
+                ),
+            ),
+            audit.clone(),
+            Arc::new(RealInstallerFs),
+            Arc::new(ReqwestArtifactDownloader::new()),
+            master_key,
+            Some(sandbox.path().join("webapp-archives")),
+        ));
         let site_clone_template_repo = site_clone_template_module.repo();
         docker_svc.attach_quota_gate(container_runtime_svc.clone());
         let ftp_svc = ftp_module.service();
@@ -773,6 +793,10 @@ impl TestServer {
             // Themeable UI: real service over the same SQLite
             // pool and audit sink.
             themeable_ui_svc.clone(),
+            // Web application installer: real service over the
+            // same pool + audit; the in-memory install fs keeps
+            // tests hermetic.
+            web_application_installer_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -874,6 +898,7 @@ impl TestServer {
             site_cache_cdn: site_cache_cdn_svc,
             site_clone_template: site_clone_template_svc,
             themeable_ui: themeable_ui_svc,
+            web_application_installer: web_application_installer_svc,
             ftp: ftp_svc,
             api_tokens: api_token_svc,
             notifications: notification_svc,
@@ -987,6 +1012,11 @@ impl TestServer {
     /// The themeable UI / white-label service.
     pub fn themeable_ui(&self) -> Arc<openpanel_app::ThemeableUiService> {
         self.themeable_ui.clone()
+    }
+
+    /// The web application installer service.
+    pub fn web_application_installer(&self) -> Arc<openpanel_app::WebApplicationInstallerService> {
+        self.web_application_installer.clone()
     }
 
     /// The per-site WAF service.

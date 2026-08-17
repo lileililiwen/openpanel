@@ -74,6 +74,10 @@ pub mod system_services;
 pub mod themeable_ui;
 /// Per-site typed web application firewall rules.
 pub mod waf;
+/// Web application installer bounded context: `InstallPlan`,
+/// `InstallRun`, `InstalledWebApp`, `IdempotencyKey`, and
+/// `InstallArtifact` records.
+pub mod web_application_installer;
 
 /// Account hierarchy bounded context: parent-child user
 /// relationships, tree traversal, cycle detection, and
@@ -392,6 +396,11 @@ pub use themeable_ui::{
     ThemeableUiRepository, Typography, contrast_ratio,
 };
 pub use waf::{Rule, RuleSet, WafError, WafRepository};
+pub use web_application_installer::{
+    CONFIRM_WINDOW_SECONDS, IDEMPOTENCY_TTL_SECONDS, IdempotencyKey, InstallArtifact, InstallDb,
+    InstallOverlay, InstallPlan, InstallRun, InstalledWebApp, MAX_PLAN_VALIDITY_SECONDS,
+    WebApplicationInstallerError, WebApplicationInstallerRepository,
+};
 pub use wildcard_ssl::{
     ALLOWED_DNS_PROVIDERS, AcmeEndpointMode, CHALLENGE_SERVER_BIND, CertRequest, ChallengeKind,
     DnsLease, DnsProviderPort, RecordingDnsProvider, WildcardError, WildcardRepository,

@@ -138,6 +138,9 @@ pub mod system_services;
 /// resolution.
 pub mod themeable_ui;
 pub mod waf;
+/// Web application installer bounded context: typed install
+/// plans, install runs, idempotency, and uninstall.
+pub mod web_application_installer;
 /// Wildcard SSL with DNS-01 challenge bounded context: cert
 /// request with `ChallengeKind::Dns01`, ACME endpoint mode, and
 /// a DNS lease lifecycle.
@@ -310,6 +313,10 @@ pub use themeable_ui::{
     DEFAULT_BRANDING_ROOT, MAX_LOGO_BYTES, SqliteThemeableUiRepository, ThemeableUiService,
 };
 pub use waf::{WafModule, WafService};
+pub use web_application_installer::{
+    ArtifactDownloader, InstallerFs, RealInstallerFs, ReqwestArtifactDownloader,
+    SqliteWebApplicationInstallerRepository, WebApplicationInstallerService,
+};
 pub use wildcard_ssl::{
     CertRenewalScheduler, Dns01ChallengeSolver, RecordingDnsProvider, SqliteWildcardRepository,
     WildcardIssuer, WildcardSslModule,

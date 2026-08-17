@@ -1143,6 +1143,12 @@ pub enum SiteCommand {
         #[command(subcommand)]
         action: BrandingCommand,
     },
+    /// Manage installed web applications.
+    Webapp {
+        /// Webapp subcommand.
+        #[command(subcommand)]
+        action: WebappCommand,
+    },
 }
 
 /// Subcommands for managing per-site collaborators.
@@ -1736,4 +1742,27 @@ pub enum BrandingCommand {
     },
     /// Clear the caller's theme override.
     Clear,
+}
+
+/// Web application installer subcommands.
+#[derive(Debug, Subcommand)]
+pub enum WebappCommand {
+    /// Preview an install plan for a site + app.
+    Preview {
+        /// Site id.
+        #[arg(long)]
+        site: String,
+        /// App id (e.g. `wordpress`).
+        #[arg(long)]
+        app: String,
+        /// Install path under the site root.
+        #[arg(long)]
+        path: String,
+    },
+    /// List installed web apps for a site.
+    List {
+        /// Site id.
+        #[arg(long)]
+        site: String,
+    },
 }

@@ -10,8 +10,9 @@ use openpanel_app::{
     IdentityService, LogService, MailService, MarketplaceService, MonitoringService,
     NotificationService, PitrService, PluginService, SecurityService, SiteCacheService,
     SiteCloneService, SitesService, SoftwareCenterService, SslService, StagingService,
-    ThemeableUiService, WafService, identity::TwoFactorService, security::LoginThrottleService,
-    site_clone_template::SqliteSiteCloneTemplateRepository, system_services::ServiceManager,
+    ThemeableUiService, WafService, WebApplicationInstallerService, identity::TwoFactorService,
+    security::LoginThrottleService, site_clone_template::SqliteSiteCloneTemplateRepository,
+    system_services::ServiceManager,
 };
 
 use crate::{
@@ -35,6 +36,7 @@ use crate::{
         software_center::router as software_center_router, ssl::router as ssl_router,
         system_services::router as system_services_router,
         themeable_ui::router as themeable_ui_router, waf::router as waf_router,
+        web_application_installer::router as web_application_installer_router,
     },
 };
 
@@ -79,6 +81,7 @@ pub fn build_router(
     site_clone_template_svc: Arc<SiteCloneService>,
     site_clone_template_repo: Arc<SqliteSiteCloneTemplateRepository>,
     themeable_ui: Arc<ThemeableUiService>,
+    web_application_installer: Arc<WebApplicationInstallerService>,
 ) -> Router {
     let auth_state = ApiAuthState {
         identity: identity.clone(),
@@ -125,6 +128,7 @@ pub fn build_router(
             site_clone_template_repo,
         ))
         .merge(themeable_ui_router(themeable_ui))
+        .merge(web_application_installer_router(web_application_installer))
         .layer(from_fn_with_state(auth_state, api_auth_middleware));
 
     Router::new()

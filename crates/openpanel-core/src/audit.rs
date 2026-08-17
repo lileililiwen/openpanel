@@ -454,6 +454,16 @@ pub enum AuditAction {
     ThemeOverrideUpdated,
     /// A theme override was cleared.
     ThemeOverrideCleared,
+    /// A web-app install plan was created.
+    WebAppInstallPlanned,
+    /// A web-app install completed.
+    WebAppInstalled,
+    /// An install artifact was rejected (sha256 mismatch).
+    InstallArtifactRejected,
+    /// A web-app was uninstalled (files archived).
+    WebAppUninstalled,
+    /// A web-app was uninstalled and its database dropped.
+    WebAppUninstalledDroppedDb,
 }
 
 impl AuditAction {
@@ -663,6 +673,11 @@ impl AuditAction {
             AuditAction::TemplateSignatureFailed => "template_signature_failed",
             AuditAction::ThemeOverrideUpdated => "theme_override_updated",
             AuditAction::ThemeOverrideCleared => "theme_override_cleared",
+            AuditAction::WebAppInstallPlanned => "web_app_install_planned",
+            AuditAction::WebAppInstalled => "web_app_installed",
+            AuditAction::InstallArtifactRejected => "install_artifact_rejected",
+            AuditAction::WebAppUninstalled => "web_app_uninstalled",
+            AuditAction::WebAppUninstalledDroppedDb => "web_app_uninstalled_dropped_db",
         }
     }
 }
@@ -969,6 +984,11 @@ impl AuditService for SqliteAuditService {
                 "template_signature_failed" => AuditAction::TemplateSignatureFailed,
                 "theme_override_updated" => AuditAction::ThemeOverrideUpdated,
                 "theme_override_cleared" => AuditAction::ThemeOverrideCleared,
+                "web_app_install_planned" => AuditAction::WebAppInstallPlanned,
+                "web_app_installed" => AuditAction::WebAppInstalled,
+                "install_artifact_rejected" => AuditAction::InstallArtifactRejected,
+                "web_app_uninstalled" => AuditAction::WebAppUninstalled,
+                "web_app_uninstalled_dropped_db" => AuditAction::WebAppUninstalledDroppedDb,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

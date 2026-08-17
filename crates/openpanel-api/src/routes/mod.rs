@@ -60,3 +60,6 @@ pub mod system_services;
 pub mod themeable_ui;
 /// Per-site web application firewall routes (`/sites/{id}/waf`).
 pub mod waf;
+/// Web application installer routes
+/// (`/sites/{id}/web-apps`, `/web-apps/{id}`).
+pub mod web_application_installer;
