@@ -59,6 +59,10 @@ pub mod system_services;
 /// Per-site typed web application firewall rules.
 pub mod waf;
 
+/// Account hierarchy bounded context: parent-child user
+/// relationships, tree traversal, cycle detection, and
+/// pooled quota caps shared by children.
+pub mod account_hierarchy;
 /// AI Ops bounded context: conversational session, tool-call
 /// allowlist, proposed/approved/executed/denied actions.
 pub mod ai_ops;
@@ -139,6 +143,10 @@ pub mod i18n;
 /// Observability export: Prometheus metrics, OTLP traces, JSONL logs.
 pub mod observability_export;
 
+pub use account_hierarchy::{
+    AccountHierarchyError, AccountRelationship, HierarchyNode, HierarchyRepository,
+    HierarchyStatus, PoolAxis, PoolClaim, QuotaPool, check_pool_claim, would_cycle,
+};
 pub use ai_ops::{
     AiAction, AiActionId, AiActionStatus, AiMessage, AiOpsError, AiOpsRepository, AiSession,
     AiSessionId, MessageRole, ToolCallAllowlist, ToolKind, ToolName, ToolResult, ToolSpec,

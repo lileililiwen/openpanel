@@ -116,3 +116,6 @@ pub const CONTAINER_RUNTIME_V001: &str = include_str!("container_runtime/V001__i
 /// Hosting plans v001: `hosting_plans` table and the
 /// append-only `user_plan_assignments` table.
 pub const HOSTING_PLANS_V001: &str = include_str!("hosting_plans/V001__init.sql");
+/// Account hierarchy v001: `account_relationships`, `quota_pools`,
+/// and `pool_claims` tables.
+pub const ACCOUNT_HIERARCHY_V001: &str = include_str!("account_hierarchy/V001__init.sql");

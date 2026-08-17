@@ -17,16 +17,17 @@ use std::{
 
 use openpanel_api::build_router;
 use openpanel_app::{
-    ApiTokenModule, ApiTokenService, ApplyReport, BackupService, BackupsModule,
-    CollaboratorService, ContainerRuntimeModule, ContainerRuntimeService, CronModule, CronService,
-    DatabasesModule, DatabasesService, DbPitrModule, DnsModule, DnsService, DockerAdapter,
-    DockerModule, DockerService, ExecResult, FilesModule, FilesService, FtpModule, FtpService,
-    GrantResolver, HostingPlansModule, HostingPlansService, IdentityModule, IdentityService,
-    InMemoryBinlogSink, InMemoryStagingFilesystem, LogService, LogsModule, MailModule, MailService,
-    MarketplaceService, MonitoringModule, MonitoringService, NotificationModule,
-    NotificationService, PitrService, PluginService, SecurityModule, SecurityService,
-    SiteStagingModule, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
-    SslModule, SslPaths, SslService, StagingService, SystemServicesModule, WafModule, WafService,
+    AccountHierarchyModule, ApiTokenModule, ApiTokenService, ApplyReport, BackupService,
+    BackupsModule, CollaboratorService, ContainerRuntimeModule, ContainerRuntimeService,
+    CronModule, CronService, DatabasesModule, DatabasesService, DbPitrModule, DnsModule,
+    DnsService, DockerAdapter, DockerModule, DockerService, ExecResult, FilesModule, FilesService,
+    FtpModule, FtpService, GrantResolver, HierarchyService, HostingPlansModule,
+    HostingPlansService, IdentityModule, IdentityService, InMemoryBinlogSink,
+    InMemoryStagingFilesystem, LogService, LogsModule, MailModule, MailService, MarketplaceService,
+    MonitoringModule, MonitoringService, NotificationModule, NotificationService, PitrService,
+    PluginService, SecurityModule, SecurityService, SiteStagingModule, SitesModule, SitesService,
+    SoftwareCenterModule, SoftwareCenterService, SslModule, SslPaths, SslService, StagingService,
+    SystemServicesModule, WafModule, WafService,
     identity::two_factor::TwoFactorCrypto,
     security::MemoryFirewall,
     sites::{nginx::NginxPaths, repo::SqliteSiteRepository},
@@ -260,6 +261,7 @@ pub struct TestServer {
     registry: Arc<openpanel_app::ContainerRegistryService>,
     /// Hosting plans service.
     hosting_plans: Arc<HostingPlansService>,
+    account_hierarchy: Arc<openpanel_app::HierarchyService>,
 }
 
 impl TestServer {
@@ -390,6 +392,7 @@ impl TestServer {
         )
         .await;
         let hosting_plans_module = HostingPlansModule::new(&ctx).await;
+        let account_hierarchy_module = AccountHierarchyModule::new(&ctx).await;
         let ftp_module = FtpModule::new(&ctx).await.expect("ftp module");
 
         let databases_module = DatabasesModule::new(&ctx, master_key).await;
@@ -450,6 +453,13 @@ impl TestServer {
             )
             .await
             .expect("hosting-plans migrations");
+        runner
+            .apply_module(
+                account_hierarchy_module.name(),
+                &account_hierarchy_module.migrations(),
+            )
+            .await
+            .expect("account-hierarchy migrations");
         runner
             .apply_module(ftp_module.name(), &ftp_module.migrations())
             .await
@@ -554,6 +564,7 @@ impl TestServer {
         let docker_svc = docker_module.service();
         let container_runtime_svc = container_runtime_module.service();
         let hosting_plans_svc = hosting_plans_module.service();
+        let account_hierarchy_svc = account_hierarchy_module.service();
         docker_svc.attach_quota_gate(container_runtime_svc.clone());
         let ftp_svc = ftp_module.service();
         let databases_svc = databases_module.service();
@@ -684,6 +695,7 @@ impl TestServer {
             registry_svc.clone(),
             container_runtime_svc.clone(),
             hosting_plans_svc.clone(),
+            account_hierarchy_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -778,6 +790,7 @@ impl TestServer {
             docker: docker_svc,
             container_runtime: container_runtime_svc,
             hosting_plans: hosting_plans_svc,
+            account_hierarchy: account_hierarchy_svc,
             ftp: ftp_svc,
             api_tokens: api_token_svc,
             notifications: notification_svc,

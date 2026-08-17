@@ -6,6 +6,9 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+/// Account hierarchy bounded context: parent-child relationships,
+/// tree traversal, cycle detection, and pooled quota caps.
+pub mod account_hierarchy;
 /// AI Ops bounded context: conversational agent with tool-call
 /// allowlist and human-in-the-loop approval gate.
 pub mod ai_ops;
@@ -116,6 +119,7 @@ pub mod wildcard_ssl;
 /// (with rollback on failure), security scan, and cache layer.
 pub mod wordpress_toolkit;
 
+pub use account_hierarchy::{AccountHierarchyModule, HierarchyService, SqliteHierarchyRepository};
 pub use ai_ops::{
     ActionApproval, AiOpsModule, AskService, SqliteAiOpsRepository, ToolExecutor, default_allowlist,
 };

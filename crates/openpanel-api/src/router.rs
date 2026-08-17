@@ -6,16 +6,17 @@ use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
 use openpanel_app::{
     ApiTokenService, BackupService, CollaboratorService, ContainerRegistryService,
     ContainerRuntimeService, CronService, DatabasesService, DnsService, DockerService,
-    FilesService, FtpService, GrantResolver, HostingPlansService, IdentityService, LogService,
-    MailService, MarketplaceService, MonitoringService, NotificationService, PitrService,
-    PluginService, SecurityService, SitesService, SoftwareCenterService, SslService,
-    StagingService, WafService, identity::TwoFactorService, security::LoginThrottleService,
-    system_services::ServiceManager,
+    FilesService, FtpService, GrantResolver, HierarchyService, HostingPlansService,
+    IdentityService, LogService, MailService, MarketplaceService, MonitoringService,
+    NotificationService, PitrService, PluginService, SecurityService, SitesService,
+    SoftwareCenterService, SslService, StagingService, WafService, identity::TwoFactorService,
+    security::LoginThrottleService, system_services::ServiceManager,
 };
 
 use crate::{
     middleware::session::{ApiAuthState, api_auth_middleware},
     routes::{
+        account_hierarchy::router as account_hierarchy_router,
         api_tokens::router as api_tokens_router, backups::router as backups_router,
         collaborators::router as collaborators_router,
         container_registry::router as container_registry_router,
@@ -70,6 +71,7 @@ pub fn build_router(
     registry: Arc<ContainerRegistryService>,
     container_runtime: Arc<ContainerRuntimeService>,
     hosting_plans: Arc<HostingPlansService>,
+    account_hierarchy: Arc<HierarchyService>,
 ) -> Router {
     let auth_state = ApiAuthState {
         identity: identity.clone(),
@@ -109,6 +111,7 @@ pub fn build_router(
         .nest("/registry", container_registry_router(registry))
         .nest("/container", container_runtime_router(container_runtime))
         .merge(hosting_plans_router(hosting_plans))
+        .merge(account_hierarchy_router(account_hierarchy))
         .layer(from_fn_with_state(auth_state, api_auth_middleware));
 
     Router::new()

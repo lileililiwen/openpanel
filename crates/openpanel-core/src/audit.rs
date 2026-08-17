@@ -364,6 +364,18 @@ pub enum AuditAction {
     PlanReassigned,
     /// A hosting plan was detached from a user.
     PlanUnassigned,
+    /// A child account was created by a parent.
+    AccountHierarchyChildCreated,
+    /// A child account was attached to a parent.
+    AccountHierarchyAttached,
+    /// A child account was detached from a parent.
+    AccountHierarchyDetached,
+    /// A parent declared or updated a quota pool.
+    AccountHierarchyPoolSet,
+    /// A child claimed share bytes from a parent's pool.
+    AccountHierarchyPoolClaimed,
+    /// A child released share bytes from a parent's pool.
+    AccountHierarchyPoolReleased,
 }
 
 impl AuditAction {
@@ -526,6 +538,12 @@ impl AuditAction {
             AuditAction::PlanAssigned => "plan_assigned",
             AuditAction::PlanReassigned => "plan_reassigned",
             AuditAction::PlanUnassigned => "plan_unassigned",
+            AuditAction::AccountHierarchyChildCreated => "account_hierarchy_child_created",
+            AuditAction::AccountHierarchyAttached => "account_hierarchy_attached",
+            AuditAction::AccountHierarchyDetached => "account_hierarchy_detached",
+            AuditAction::AccountHierarchyPoolSet => "account_hierarchy_pool_set",
+            AuditAction::AccountHierarchyPoolClaimed => "account_hierarchy_pool_claimed",
+            AuditAction::AccountHierarchyPoolReleased => "account_hierarchy_pool_released",
         }
     }
 }
@@ -783,6 +801,12 @@ impl AuditService for SqliteAuditService {
                 "plan_assigned" => AuditAction::PlanAssigned,
                 "plan_reassigned" => AuditAction::PlanReassigned,
                 "plan_unassigned" => AuditAction::PlanUnassigned,
+                "account_hierarchy_child_created" => AuditAction::AccountHierarchyChildCreated,
+                "account_hierarchy_attached" => AuditAction::AccountHierarchyAttached,
+                "account_hierarchy_detached" => AuditAction::AccountHierarchyDetached,
+                "account_hierarchy_pool_set" => AuditAction::AccountHierarchyPoolSet,
+                "account_hierarchy_pool_claimed" => AuditAction::AccountHierarchyPoolClaimed,
+                "account_hierarchy_pool_released" => AuditAction::AccountHierarchyPoolReleased,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

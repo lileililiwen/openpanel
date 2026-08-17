@@ -293,6 +293,16 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .context("apply hosting-plans migrations")?;
     let hosting_plans_svc = hosting_plans_module.service();
 
+    let account_hierarchy_module = openpanel_app::AccountHierarchyModule::new(&ctx).await;
+    runner
+        .apply_module(
+            account_hierarchy_module.name(),
+            &account_hierarchy_module.migrations(),
+        )
+        .await
+        .context("apply account_hierarchy migrations")?;
+    let account_hierarchy_svc = account_hierarchy_module.service();
+
     // Site-staging module: in-memory filesystem layer for the CLI
     // (no live nginx / rsync in offline mode).
     let staging_fs: Arc<dyn openpanel_app::StagingFilesystemLayer> =
@@ -338,6 +348,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         registry_svc.clone(),
         container_runtime_svc.clone(),
         hosting_plans_svc.clone(),
+        account_hierarchy_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,

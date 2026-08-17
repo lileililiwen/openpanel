@@ -6,6 +6,8 @@
 #[path = "../common/mod.rs"]
 mod common;
 
+/// Account hierarchy HTTP integration tests.
+mod account_hierarchy;
 mod api_tokens;
 mod backups;
 /// Per-site collaborator HTTP integration tests.

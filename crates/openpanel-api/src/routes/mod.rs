@@ -1,5 +1,7 @@
 //! Per-resource HTTP route modules. Each submodule exposes a `router(...)` builder.
 
+/// Account hierarchy routes (`/users/{id}/children`, `/users/{id}/tree`).
+pub mod account_hierarchy;
 pub mod api_tokens;
 /// Backup and restore routes (`/backups`).
 pub mod backups;
