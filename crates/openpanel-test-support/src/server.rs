@@ -24,7 +24,8 @@ use openpanel_app::{
     FtpModule, FtpService, GrantResolver, HierarchyService, HostingPlansModule,
     HostingPlansService, IdentityModule, IdentityService, InMemoryBinlogSink,
     InMemoryStagingFilesystem, LogService, LogsModule, MailModule, MailService, MarketplaceService,
-    MonitoringModule, MonitoringService, NotificationModule, NotificationService, PitrService,
+    MigrationImportersModule, MonitoringModule, MonitoringService, NotificationModule,
+    NotificationService, PitrService,
     PluginService, SecurityModule, SecurityService, SiteStagingModule, SitesModule, SitesService,
     SoftwareCenterModule, SoftwareCenterService, SslModule, SslPaths, SslService, StagingService,
     SystemServicesModule, WafModule, WafService,
@@ -262,6 +263,7 @@ pub struct TestServer {
     /// Hosting plans service.
     hosting_plans: Arc<HostingPlansService>,
     account_hierarchy: Arc<openpanel_app::HierarchyService>,
+    migration_importers: Arc<openpanel_app::MigrationService>,
 }
 
 impl TestServer {
@@ -460,6 +462,14 @@ impl TestServer {
             )
             .await
             .expect("account-hierarchy migrations");
+        let migration_importers_module = MigrationImportersModule::new(&ctx).await;
+        runner
+            .apply_module(
+                migration_importers_module.name(),
+                &migration_importers_module.migrations(),
+            )
+            .await
+            .expect("migration-importers migrations");
         runner
             .apply_module(ftp_module.name(), &ftp_module.migrations())
             .await
@@ -565,6 +575,8 @@ impl TestServer {
         let container_runtime_svc = container_runtime_module.service();
         let hosting_plans_svc = hosting_plans_module.service();
         let account_hierarchy_svc = account_hierarchy_module.service();
+        let migration_importers_svc = migration_importers_module.service();
+        let _ = migration_importers_svc;
         docker_svc.attach_quota_gate(container_runtime_svc.clone());
         let ftp_svc = ftp_module.service();
         let databases_svc = databases_module.service();
@@ -791,6 +803,7 @@ impl TestServer {
             container_runtime: container_runtime_svc,
             hosting_plans: hosting_plans_svc,
             account_hierarchy: account_hierarchy_svc,
+            migration_importers: migration_importers_svc,
             ftp: ftp_svc,
             api_tokens: api_token_svc,
             notifications: notification_svc,
@@ -881,7 +894,12 @@ impl TestServer {
         self.software_center.clone()
     }
 
-    /// Per-site WAF service.
+    /// The migration importers service.
+    pub fn migration_importers(&self) -> Arc<openpanel_app::MigrationService> {
+        self.migration_importers.clone()
+    }
+
+    /// The per-site WAF service.
     pub fn waf(&self) -> Arc<WafService> {
         self.waf.clone()
     }

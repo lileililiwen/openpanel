@@ -402,6 +402,16 @@ pub enum AuditAction {
     ClusterStorageDeclared,
     /// A replicated database was declared.
     ClusterReplicatedDatabaseDeclared,
+    /// A migration source bundle was previewed (dry run).
+    MigrationPreviewed,
+    /// A confirmed migration plan committed its imported resources.
+    MigrationRunCommitted,
+    /// A migration run failed and was rolled back to its commit point.
+    MigrationRunRolledBack,
+    /// A migration rollback undo ran and deleted the imported resources.
+    MigrationRollbackCompleted,
+    /// A source bundle was refused because it was already imported.
+    MigrationAlreadyImportedRejected,
 }
 
 impl AuditAction {
@@ -582,7 +592,14 @@ impl AuditAction {
             AuditAction::ClusterNodeDeclared => "cluster_node_declared",
             AuditAction::ClusterNodeRoleChanged => "cluster_node_role_changed",
             AuditAction::ClusterStorageDeclared => "cluster_storage_declared",
-            AuditAction::ClusterReplicatedDatabaseDeclared => "cluster_replicated_database_declared",
+            AuditAction::ClusterReplicatedDatabaseDeclared => {
+                "cluster_replicated_database_declared"
+            }
+            AuditAction::MigrationPreviewed => "migration_previewed",
+            AuditAction::MigrationRunCommitted => "migration_run_committed",
+            AuditAction::MigrationRunRolledBack => "migration_run_rolled_back",
+            AuditAction::MigrationRollbackCompleted => "migration_rollback_completed",
+            AuditAction::MigrationAlreadyImportedRejected => "migration_already_imported_rejected",
         }
     }
 }
@@ -858,7 +875,16 @@ impl AuditService for SqliteAuditService {
                 "cluster_node_declared" => AuditAction::ClusterNodeDeclared,
                 "cluster_node_role_changed" => AuditAction::ClusterNodeRoleChanged,
                 "cluster_storage_declared" => AuditAction::ClusterStorageDeclared,
-                "cluster_replicated_database_declared" => AuditAction::ClusterReplicatedDatabaseDeclared,
+                "cluster_replicated_database_declared" => {
+                    AuditAction::ClusterReplicatedDatabaseDeclared
+                }
+                "migration_previewed" => AuditAction::MigrationPreviewed,
+                "migration_run_committed" => AuditAction::MigrationRunCommitted,
+                "migration_run_rolled_back" => AuditAction::MigrationRunRolledBack,
+                "migration_rollback_completed" => AuditAction::MigrationRollbackCompleted,
+                "migration_already_imported_rejected" => {
+                    AuditAction::MigrationAlreadyImportedRejected
+                }
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

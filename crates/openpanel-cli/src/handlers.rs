@@ -303,6 +303,19 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .context("apply account_hierarchy migrations")?;
     let account_hierarchy_svc = account_hierarchy_module.service();
 
+    // Migration importers module: cPanel / Baota backup import
+    // pipeline with preview, atomic run, and rollback.
+    let migration_importers_module = openpanel_app::MigrationImportersModule::new(&ctx).await;
+    runner
+        .apply_module(
+            migration_importers_module.name(),
+            &migration_importers_module.migrations(),
+        )
+        .await
+        .context("apply migration-importers migrations")?;
+    let migration_importers_svc = migration_importers_module.service();
+    let _ = migration_importers_svc;
+
     // Site-staging module: in-memory filesystem layer for the CLI
     // (no live nginx / rsync in offline mode).
     let staging_fs: Arc<dyn openpanel_app::StagingFilesystemLayer> =

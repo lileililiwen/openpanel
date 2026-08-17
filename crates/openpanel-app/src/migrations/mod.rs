@@ -127,3 +127,6 @@ pub const AGENT_V001: &str = include_str!("agent/V001__init.sql");
 /// Cluster data model v001: `cluster_nodes`, `shared_storage`,
 /// and `replicated_databases` tables.
 pub const CLUSTER_DATA_MODEL_V001: &str = include_str!("cluster_data_model/V001__init.sql");
+/// Migration importers v001: `migration_runs`,
+/// `imported_resources`, and `translation_log_entries` tables.
+pub const MIGRATION_IMPORTERS_V001: &str = include_str!("migration_importers/V001__init.sql");

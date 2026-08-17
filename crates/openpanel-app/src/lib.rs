@@ -18,6 +18,9 @@ pub mod agent;
 /// Cluster data model bounded context: typed host roles, shared
 /// storage, and replicated database metadata.
 pub mod cluster_data_model;
+/// Migration importers bounded context: cPanel / Baota backup
+/// import pipelines with preview, atomic run, and rollback.
+pub mod migration_importers;
 /// AI Ops bounded context: conversational agent with tool-call
 /// allowlist and human-in-the-loop approval gate.
 pub mod ai_ops;
@@ -132,6 +135,11 @@ pub use account_hierarchy::{AccountHierarchyModule, HierarchyService, SqliteHier
 pub use quotas::{QuotaService, QuotasModule, SqliteQuotaRepository};
 pub use agent::{AgentModule, AgentService, SqliteAgentRepository};
 pub use cluster_data_model::{ClusterDataModelModule, ClusterService, SqliteClusterRepository};
+pub use migration_importers::{
+    JsonManifest, JsonManifestBundle, ManifestResource, ManifestTranslator,
+    MigrationImportersModule, MigrationService, RefuseAll, SqliteMigrationRepository,
+    TarWithJsonManifestDriver, sniff_tar_manifest,
+};
 pub use ai_ops::{
     ActionApproval, AiOpsModule, AskService, SqliteAiOpsRepository, ToolExecutor, default_allowlist,
 };

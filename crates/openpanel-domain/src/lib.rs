@@ -91,6 +91,10 @@ pub mod bandwidth_accounting;
 /// `AllowlistMode`, `IpCidr`, and the per-role `AllowlistOverride`
 /// policy that the `IpAllowlistMiddleware` consumes.
 pub mod admin_ip_allowlist;
+/// Migration importers bounded context: the `MigrationDriver`
+/// contract, `MigrationPlan` preview results, `ImportedResource`
+/// outcomes, and the redacted `TranslationLog`.
+pub mod migration_importers;
 /// AI Ops bounded context: conversational session, tool-call
 /// allowlist, proposed/approved/executed/denied actions.
 pub mod ai_ops;
@@ -337,6 +341,12 @@ pub use bandwidth_accounting::{
 };
 pub use admin_ip_allowlist::{
     AdminIpAllowlist, AdminIpAllowlistError, AllowlistMode, AllowlistOverride, IpCidr,
+};
+pub use migration_importers::{
+    DriverKind, ImportConflict, ImportedResource, ImportedResourceKind, MigrationDriver,
+    MigrationError, MigrationPlan, MigrationPlanId, MigrationRepository, MigrationRun,
+    MigrationRunId, MigrationRunStatus, MigrationSource, MigrationWarning, PlannedResource,
+    SharedMigrationDriver, TranslationLog, TranslationLogEntry, TranslationOutcome,
 };
 pub use agent::RecipeManifest as _RecipeManifest;
 pub use sites::{error::SiteError, repository::SiteRepository, site::Site, status::SiteStatus};

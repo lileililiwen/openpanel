@@ -29,6 +29,8 @@ mod hosting_plans;
 mod identity;
 mod logs;
 mod mail;
+/// Migration importers preview / run / rollback integration tests.
+mod migration_importers;
 mod monitoring;
 /// Plugin marketplace HTTP integration tests.
 mod plugin_marketplace;
