@@ -1,55 +1,50 @@
 # dns Specification
 
 ## Purpose
-TBD - created by archiving change add-dns-zone-management. Update Purpose after archive.
+
+The DNS bounded context covers provider accounts, zones, records,
+and lifecycle. After this refinement, it also owns the
+`ZoneTemplate`, `TemplateRecord`, and `TemplateName` value
+objects that the template applier consumes at zone enable time.
+
 ## Requirements
-### Requirement: DNS Provider Accounts
 
-Owners SHALL create, test, rotate, disable, and delete provider accounts with capability/permission discovery. Credentials MUST be encrypted at rest, accepted only over protected mutations, never returned, and redacted from errors, logs, audit, API, CLI, and web output.
+### Requirement: Zone Template
 
-#### Scenario: Add a valid provider token
+The DNS bounded context SHALL model a `ZoneTemplate` carrying `name: TemplateName` (`Strict | Relaxed | Parked`) and `records: Vec<TemplateRecord>`. The constructor rejects empty template record lists.
 
-- **WHEN** an Owner submits valid least-privilege credentials
-- **THEN** encrypted credentials and discovered capabilities are stored and the plaintext is not returned
+#### Scenario: Empty template rejected
 
-#### Scenario: Credential test fails
+- **WHEN** `ZoneTemplate::new(TemplateName::Parked, vec![])` is called
+- **THEN** the constructor returns `TemplateError::EmptyTemplate`.
 
-- **WHEN** a provider rejects credentials
-- **THEN** a redacted provider diagnostic is returned and no plaintext credential is persisted in logs or audit
+### Requirement: Template Record
 
-### Requirement: Zone Synchronization
+The DNS bounded context SHALL model a `TemplateRecord { kind, name, ttl, value, policy }`. The constructor rejects empty kind or name.
 
-The system SHALL list and synchronize accessible provider zones and records without deleting remote-only data. Each synchronized zone SHALL record provider identity, remote version, last success/error, and drift status.
+#### Scenario: Empty kind rejected
 
-#### Scenario: External record appears
+- **WHEN** `TemplateRecord::new("", "@", 60, "v=spf1", TemplateRecordPolicy::Required)` is called
+- **THEN** the constructor returns `TemplateError::InvalidRecord`.
 
-- **WHEN** synchronization finds a remote record absent locally
-- **THEN** the record is imported and marked synchronized without mutating the provider
+### Requirement: Built-in Templates
 
-### Requirement: Typed Record Lifecycle
+The DNS bounded context SHALL expose `ZoneTemplate::strict(domain)`, `ZoneTemplate::relaxed(domain)`, and `ZoneTemplate::parked()` as the three built-in templates. The strict template includes apex A/AAAA, MX, SPF, DMARC, and an optional CAA record. The relaxed template includes apex A and SPF. The parked template includes a single parking-page A record.
 
-Authorized callers SHALL create, list, update, and delete A, AAAA, CNAME, TXT, MX, CAA, NS, and SRV records subject to provider capability, DNS name/value/TTL validation, CNAME exclusivity, ownership, and optimistic remote-version checks.
+#### Scenario: Strict template has required records
 
-#### Scenario: Concurrent remote edit
+- **WHEN** `ZoneTemplate::strict("example.com")` is built
+- **THEN** `required_records().count() >= 3` and at least one SPF + one DMARC record is present.
 
-- **WHEN** a caller updates using a stale remote version
-- **THEN** the system returns a conflict with refreshed metadata and does not overwrite the external edit
+#### Scenario: Lookup returns built-in templates
 
-#### Scenario: CNAME conflicts with A
+- **WHEN** `ZoneTemplate::lookup(TemplateName::Strict, ...)` is called
+- **THEN** the returned template has `name = TemplateName::Strict`.
 
-- **WHEN** a caller creates a CNAME at a name already holding an A record
-- **THEN** validation rejects the mutation before contacting the provider
+### Requirement: Behaviour Parity
 
-### Requirement: DNS Automation and Surfaces
+The refinement introduces the new template types without changing the existing zone lifecycle. The follow-on `apply-template` change wires the applier into `DnsService::enable`.
 
-REST, CLI, and `/dns` web surfaces SHALL expose provider accounts, zones, records, synchronization, mutation, and propagation checks with existing role/site ownership rules. Site record proposals and temporary DNS-01 TXT leases SHALL require explicit authorization; cleanup SHALL delete only the leased record.
+### Requirement: Audit and Event Surface
 
-#### Scenario: Create site record proposal
-
-- **WHEN** site creation requests DNS automation for a configured zone
-- **THEN** the caller sees the exact proposed records and provider before confirming mutation
-
-#### Scenario: DNS-01 cleanup
-
-- **WHEN** a DNS-01 workflow finishes
-- **THEN** only its provider record identifier is deleted, even if other TXT values share the name
+The follow-on implementation SHALL emit `DnsTemplateApplied` and `DnsTemplatePreviewed` audit events. The bounded context as archived today owns the typed model and the in-memory template renderers.

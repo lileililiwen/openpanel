@@ -10,6 +10,13 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
+// Re-export the zone template refinement types from the
+// `refine-dns-with-zone-templates` change so callers can import them
+// from the `dns` module without crossing module boundaries.
+pub use templates::{TemplateError, TemplateName, TemplateRecord, TemplateRecordPolicy, ZoneTemplate};
+
+mod templates;
+
 /// DNS validation failure.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum DnsError {
