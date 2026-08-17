@@ -172,6 +172,7 @@ flate2 = "1"
 tar = "0.4"
 base64 = { workspace = true }
 ed25519-dalek = { workspace = true }
+async-trait = { workspace = true }
 
 [[test]]
 name = "integration"

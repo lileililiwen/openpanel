@@ -21,6 +21,10 @@ pub mod cluster_data_model;
 /// Migration importers bounded context: cPanel / Baota backup
 /// import pipelines with preview, atomic run, and rollback.
 pub mod migration_importers;
+/// Offsite backup targets bounded context: encrypted credential
+/// lifecycle, KEK management, remote target attachment, and the
+/// upload service driving `BackupTargetAdapter` implementations.
+pub mod offsite_backup_targets;
 /// AI Ops bounded context: conversational agent with tool-call
 /// allowlist and human-in-the-loop approval gate.
 pub mod ai_ops;
@@ -139,6 +143,11 @@ pub use migration_importers::{
     JsonManifest, JsonManifestBundle, ManifestResource, ManifestTranslator,
     MigrationImportersModule, MigrationService, RefuseAll, SqliteMigrationRepository,
     TarWithJsonManifestDriver, sniff_tar_manifest,
+};
+pub use offsite_backup_targets::{
+    BackupUploadService, OffsiteBackupTargetsModule, SqliteOffsiteBackupRepository,
+    decrypt_payload, decrypt_payload as kek_decrypt, derive_kek, encrypt_payload,
+    encrypt_payload as kek_encrypt, master_key_fingerprint, unwrap_kek, wrap_kek,
 };
 pub use ai_ops::{
     ActionApproval, AiOpsModule, AskService, SqliteAiOpsRepository, ToolExecutor, default_allowlist,

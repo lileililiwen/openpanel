@@ -12,6 +12,10 @@
 /// Scoped personal API token credentials and lifecycle invariants.
 pub mod api_tokens;
 pub mod backups;
+/// Offsite backup targets bounded context: the `BackupTargetAdapter`
+/// contract, encrypted `BackupCredential` records, per-plan
+/// `RemoteTargetConfig`, and `KekRef` wrapper records.
+pub mod offsite_backup_targets;
 /// Per-site collaborator bounded context: invite collaborators
 /// scoped to specific sites with limited permission sets.
 pub mod collaborators;
@@ -347,6 +351,10 @@ pub use migration_importers::{
     MigrationError, MigrationPlan, MigrationPlanId, MigrationRepository, MigrationRun,
     MigrationRunId, MigrationRunStatus, MigrationSource, MigrationWarning, PlannedResource,
     SharedMigrationDriver, TranslationLog, TranslationLogEntry, TranslationOutcome,
+};
+pub use offsite_backup_targets::{
+    BackupCredential, BackupTargetAdapter, CredentialKind, KekRef, OffsiteBackupError,
+    OffsiteBackupRepository, RemoteTargetConfig,
 };
 pub use agent::RecipeManifest as _RecipeManifest;
 pub use sites::{error::SiteError, repository::SiteRepository, site::Site, status::SiteStatus};

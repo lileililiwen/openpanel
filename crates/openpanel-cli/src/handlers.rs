@@ -316,6 +316,20 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let migration_importers_svc = migration_importers_module.service();
     let _ = migration_importers_svc;
 
+    // Offsite backup targets module: encrypted credential
+    // lifecycle, KEK management, and remote target attachment.
+    let offsite_backup_module =
+        openpanel_app::OffsiteBackupTargetsModule::new(&ctx).await;
+    runner
+        .apply_module(
+            offsite_backup_module.name(),
+            &offsite_backup_module.migrations(),
+        )
+        .await
+        .context("apply offsite-backup-targets migrations")?;
+    let offsite_backup_svc = offsite_backup_module.service();
+    let _ = offsite_backup_svc;
+
     // Site-staging module: in-memory filesystem layer for the CLI
     // (no live nginx / rsync in offline mode).
     let staging_fs: Arc<dyn openpanel_app::StagingFilesystemLayer> =

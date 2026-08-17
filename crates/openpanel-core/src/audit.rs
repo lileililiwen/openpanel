@@ -412,6 +412,16 @@ pub enum AuditAction {
     MigrationRollbackCompleted,
     /// A source bundle was refused because it was already imported.
     MigrationAlreadyImportedRejected,
+    /// An offsite backup credential was created (encrypted at rest).
+    BackupCredentialCreated,
+    /// An offsite backup credential was deleted.
+    BackupCredentialDeleted,
+    /// A deletion was refused because the credential is in use.
+    BackupCredentialInUseRejected,
+    /// A remote target was attached to a backup plan.
+    BackupRemoteTargetAttached,
+    /// A remote target reachability probe completed.
+    BackupRemoteTested,
 }
 
 impl AuditAction {
@@ -600,6 +610,11 @@ impl AuditAction {
             AuditAction::MigrationRunRolledBack => "migration_run_rolled_back",
             AuditAction::MigrationRollbackCompleted => "migration_rollback_completed",
             AuditAction::MigrationAlreadyImportedRejected => "migration_already_imported_rejected",
+            AuditAction::BackupCredentialCreated => "backup_credential_created",
+            AuditAction::BackupCredentialDeleted => "backup_credential_deleted",
+            AuditAction::BackupCredentialInUseRejected => "backup_credential_in_use_rejected",
+            AuditAction::BackupRemoteTargetAttached => "backup_remote_target_attached",
+            AuditAction::BackupRemoteTested => "backup_remote_tested",
         }
     }
 }
@@ -885,6 +900,11 @@ impl AuditService for SqliteAuditService {
                 "migration_already_imported_rejected" => {
                     AuditAction::MigrationAlreadyImportedRejected
                 }
+                "backup_credential_created" => AuditAction::BackupCredentialCreated,
+                "backup_credential_deleted" => AuditAction::BackupCredentialDeleted,
+                "backup_credential_in_use_rejected" => AuditAction::BackupCredentialInUseRejected,
+                "backup_remote_target_attached" => AuditAction::BackupRemoteTargetAttached,
+                "backup_remote_tested" => AuditAction::BackupRemoteTested,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

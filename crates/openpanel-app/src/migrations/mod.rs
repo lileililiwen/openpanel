@@ -130,3 +130,6 @@ pub const CLUSTER_DATA_MODEL_V001: &str = include_str!("cluster_data_model/V001_
 /// Migration importers v001: `migration_runs`,
 /// `imported_resources`, and `translation_log_entries` tables.
 pub const MIGRATION_IMPORTERS_V001: &str = include_str!("migration_importers/V001__init.sql");
+/// Offsite backup targets v001: `backup_credentials`,
+/// `backup_remote_targets`, and `backup_kek_wrappers` tables.
+pub const OFFSITE_BACKUP_TARGETS_V001: &str = include_str!("offsite_backup_targets/V001__init.sql");

@@ -31,6 +31,8 @@ mod logs;
 mod mail;
 /// Migration importers preview / run / rollback integration tests.
 mod migration_importers;
+/// Offsite backup targets credential / remote-config integration tests.
+mod offsite_backup_targets;
 mod monitoring;
 /// Plugin marketplace HTTP integration tests.
 mod plugin_marketplace;
