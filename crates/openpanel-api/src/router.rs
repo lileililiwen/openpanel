@@ -7,12 +7,12 @@ use openpanel_app::{
     ApiTokenService, BackupService, CollaboratorService, ContainerRegistryService,
     ContainerRuntimeService, CronService, DatabasesService, DnsService, DockerService,
     FilesService, FtpService, GrantResolver, HierarchyService, HostingPlansService,
-    IdentityService, LogService, MailService, MarketplaceService, MonitoringService,
-    NotificationService, PitrService, PluginService, SecurityService, SiteCacheService,
-    SiteCloneService, SitesService, SoftwareCenterService, SslService, StagingService,
-    ThemeableUiService, WafService, WebApplicationInstallerService, identity::TwoFactorService,
-    security::LoginThrottleService, site_clone_template::SqliteSiteCloneTemplateRepository,
-    system_services::ServiceManager,
+    IdentityService, LogService, MailService, MalwareScannerService, MarketplaceService,
+    MonitoringService, NotificationService, PitrService, PluginService, SecurityService,
+    SiteCacheService, SiteCloneService, SitesService, SoftwareCenterService, SslService,
+    StagingService, ThemeableUiService, WafService, WebApplicationInstallerService,
+    identity::TwoFactorService, security::LoginThrottleService,
+    site_clone_template::SqliteSiteCloneTemplateRepository, system_services::ServiceManager,
 };
 
 use crate::{
@@ -27,8 +27,8 @@ use crate::{
         dns::router as dns_router, docker::router as docker_router, files::router as files_router,
         ftp::router as ftp_router, hosting_plans::router as hosting_plans_router,
         identity::router as identity_router, logs::router as logs_router,
-        mail::router as mail_router, monitoring::router as monitoring_router,
-        notifications::router as notifications_router,
+        mail::router as mail_router, malware_scanner::router as malware_scanner_router,
+        monitoring::router as monitoring_router, notifications::router as notifications_router,
         plugin_marketplace::router as plugin_marketplace_router,
         security::router as security_router, site_cache_cdn::router as site_cache_cdn_router,
         site_clone_template::router as site_clone_template_router,
@@ -82,6 +82,7 @@ pub fn build_router(
     site_clone_template_repo: Arc<SqliteSiteCloneTemplateRepository>,
     themeable_ui: Arc<ThemeableUiService>,
     web_application_installer: Arc<WebApplicationInstallerService>,
+    malware_scanner: Arc<MalwareScannerService>,
 ) -> Router {
     let auth_state = ApiAuthState {
         identity: identity.clone(),
@@ -129,6 +130,7 @@ pub fn build_router(
         ))
         .merge(themeable_ui_router(themeable_ui))
         .merge(web_application_installer_router(web_application_installer))
+        .merge(malware_scanner_router(malware_scanner))
         .layer(from_fn_with_state(auth_state, api_auth_middleware));
 
     Router::new()

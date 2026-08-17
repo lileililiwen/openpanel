@@ -436,6 +436,15 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
             master_key,
             None,
         )),
+        // Malware scanner: real service over the same pool + audit.
+        Arc::new(openpanel_app::MalwareScannerService::new(
+            Arc::new(
+                openpanel_app::malware_scanner::SqliteMalwareScannerRepository::new(pool.clone()),
+            ),
+            audit.clone(),
+            Arc::new(openpanel_app::RealScannerFs),
+            None,
+        )),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -5196,6 +5205,91 @@ pub async fn webapp_list(config: Arc<Config>, site: String) -> anyhow::Result<()
                 "install_path": i.install_path(),
                 "created_at": i.created_at().to_rfc3339(),
                 "removed_at": i.removed_at().map(|t| t.to_rfc3339()),
+            })
+        })
+        .collect();
+    println!("{}", serde_json::to_string_pretty(&view)?);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// malware-scanner CLI handlers.
+// ---------------------------------------------------------------------------
+
+/// Build the `MalwareScannerService` for CLI subcommands.
+async fn build_malware_scanner(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::MalwareScannerService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
+    let master_key = load_master_key(&config)?;
+    let identity_module = IdentityModule::new(&ctx, master_key).await;
+    let repo = openpanel_app::malware_scanner::SqliteMalwareScannerRepository::new(pool);
+    let svc = Arc::new(openpanel_app::MalwareScannerService::new(
+        Arc::new(repo),
+        audit,
+        Arc::new(openpanel_app::RealScannerFs),
+        None,
+    ));
+    Ok((svc, identity_module.service()))
+}
+
+/// `openpanel site scan start --site ...`.
+pub async fn scan_start(config: Arc<Config>, site: String) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_malware_scanner(config).await?;
+    let caller = identity_svc
+        .list_users()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("admin user not found"))?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let chroot = std::path::PathBuf::from(format!("/var/www/{site_id}"));
+    let run = svc
+        .scan(caller.username().as_str(), site_id, chroot)
+        .await
+        .map_err(|e| anyhow::anyhow!(format!("{e:?}")))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "scan_id": run.id().to_string(),
+            "site_id": run.site_id().to_string(),
+            "status": "completed",
+            "findings": run.findings().len(),
+        }))?
+    );
+    Ok(())
+}
+
+/// `openpanel site scan list --site ...`.
+pub async fn scan_list(config: Arc<Config>, site: String) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_malware_scanner(config).await?;
+    let _caller = identity_svc
+        .list_users()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("admin user not found"))?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let rows = svc
+        .list_runs(site_id)
+        .await
+        .map_err(|e| anyhow::anyhow!(format!("{e:?}")))?;
+    let view: Vec<_> = rows
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "id": r.id().to_string(),
+                "profile_id": r.profile_id().to_string(),
+                "status": format!("{:?}", r.status()).to_lowercase(),
+                "started_at": r.started_at().to_rfc3339(),
+                "finished_at": r.finished_at().map(|t| t.to_rfc3339()),
+                "findings": r.findings().len(),
             })
         })
         .collect();

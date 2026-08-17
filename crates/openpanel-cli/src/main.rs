@@ -7,7 +7,7 @@ use openpanel_cli::{
     DnsCommand, DockerCommand, FileCommand, FtpCommand, IacCommand, LogsCommand, MailCommand,
     MarketplaceCommand, MonitoringCommand, NotificationChannelCommand, NotificationCommand,
     NotificationSubscriptionCommand, PitrCommand, PluginCommand, RecoveryCodeCommand,
-    RegistryCommand, SecurityAllowlistCommand, SecurityCommand, SecurityRuleCommand,
+    RegistryCommand, ScanCommand, SecurityAllowlistCommand, SecurityCommand, SecurityRuleCommand,
     ServicesCommand, SiteCacheCommand, SiteCloneCommand, SiteCommand, SiteTemplateCommand,
     SoftwareCommand, SslCommand, StagingCommand, TokenCommand, TwoFactorCommand, UserCommand,
     WafCommand, WebappCommand, handlers,
@@ -160,6 +160,10 @@ async fn main() -> anyhow::Result<()> {
                     handlers::webapp_preview(config, site, app, path).await
                 }
                 WebappCommand::List { site } => handlers::webapp_list(config, site).await,
+            },
+            SiteCommand::Scan { action } => match action {
+                ScanCommand::Start { site } => handlers::scan_start(config, site).await,
+                ScanCommand::List { site } => handlers::scan_list(config, site).await,
             },
         },
         Command::Cdn { action } => match action {

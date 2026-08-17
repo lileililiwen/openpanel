@@ -40,6 +40,9 @@ pub mod identity;
 pub mod logs;
 /// Hosted mail domains, addresses, quotas, aliases, and relay policy.
 pub mod mail;
+/// Web application malware scanner bounded context:
+/// `ScanProfile`, `ScanRun`, `ScanFinding`, `QuarantineRecord`.
+pub mod malware_scanner;
 pub mod monitoring;
 /// Notification channels, subscriptions, events, and durable delivery state.
 pub mod notifications;
@@ -246,7 +249,7 @@ pub use compliance::{
 };
 pub use container_registry::{
     ImageDigest, ImageNamespace, NamespaceId, RegistryConfig, RegistryError, RetentionPolicy,
-    RetentionVerdict, ScanFinding, ScanResult, ScanStatus, StoredImage,
+    RetentionVerdict, ScanFinding as ContainerScanFinding, ScanResult, ScanStatus, StoredImage,
 };
 pub use container_runtime::{
     ContainerMetrics, ContainerQuota, ContainerRuntimeError, ContainerRuntimeRepository,
@@ -326,6 +329,10 @@ pub use mail_filtering::{
 pub use maintenance_windows::{
     DestructiveActionClass, MaintenanceError, MaintenanceOverride, MaintenanceRepository,
     MaintenanceWindow,
+};
+pub use malware_scanner::{
+    MalwareScannerError, MalwareScannerRepository, OnInfection, QuarantineRecord, RunStatus,
+    ScanEngine, ScanFinding, ScanProfile, ScanRun, Severity,
 };
 pub use migration_importers::{
     DriverKind, ImportConflict, ImportedResource, ImportedResourceKind, MigrationDriver,

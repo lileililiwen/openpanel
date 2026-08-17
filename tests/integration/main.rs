@@ -29,6 +29,8 @@ mod hosting_plans;
 mod identity;
 mod logs;
 mod mail;
+/// Malware scanner integration tests.
+mod malware_scanner;
 /// Migration importers preview / run / rollback integration tests.
 mod migration_importers;
 mod monitoring;

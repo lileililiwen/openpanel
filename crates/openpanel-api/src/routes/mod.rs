@@ -33,6 +33,8 @@ pub mod identity;
 pub mod logs;
 /// Hosted mail routes (`/mail`).
 pub mod mail;
+/// Malware scanner routes (`/sites/{id}/scan`, `/scans/{id}`).
+pub mod malware_scanner;
 /// Monitoring resource routes (`/monitoring`).
 pub mod monitoring;
 pub mod notifications;

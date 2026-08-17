@@ -23,14 +23,14 @@ use openpanel_app::{
     DnsService, DockerAdapter, DockerModule, DockerService, ExecResult, FilesModule, FilesService,
     FtpModule, FtpService, GrantResolver, HierarchyService, HostingPlansModule,
     HostingPlansService, IdentityModule, IdentityService, InMemoryBinlogSink,
-    InMemoryStagingFilesystem, LogService, LogsModule, MailModule, MailService, MarketplaceService,
-    MigrationImportersModule, MonitoringModule, MonitoringService, NotificationModule,
-    NotificationService, OffsiteBackupTargetsModule, PitrService, PluginService, RealInstallerFs,
-    ReqwestArtifactDownloader, SecurityModule, SecurityService, SiteCacheCdnModule,
-    SiteCloneService, SiteCloneTemplateModule, SiteStagingModule, SitesModule, SitesService,
-    SoftwareCenterModule, SoftwareCenterService, SslModule, SslPaths, SslService, StagingService,
-    SystemServicesModule, ThemeableUiService, WafModule, WafService,
-    WebApplicationInstallerService,
+    InMemoryStagingFilesystem, LogService, LogsModule, MailModule, MailService,
+    MalwareScannerService, MarketplaceService, MigrationImportersModule, MonitoringModule,
+    MonitoringService, NotificationModule, NotificationService, OffsiteBackupTargetsModule,
+    PitrService, PluginService, RealInstallerFs, RealScannerFs, ReqwestArtifactDownloader,
+    SecurityModule, SecurityService, SiteCacheCdnModule, SiteCloneService, SiteCloneTemplateModule,
+    SiteStagingModule, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
+    SslModule, SslPaths, SslService, StagingService, SystemServicesModule, ThemeableUiService,
+    WafModule, WafService, WebApplicationInstallerService,
     identity::two_factor::TwoFactorCrypto,
     security::MemoryFirewall,
     sites::{nginx::NginxPaths, repo::SqliteSiteRepository},
@@ -271,6 +271,7 @@ pub struct TestServer {
     site_clone_template: Arc<openpanel_app::SiteCloneService>,
     themeable_ui: Arc<openpanel_app::ThemeableUiService>,
     web_application_installer: Arc<openpanel_app::WebApplicationInstallerService>,
+    malware_scanner: Arc<openpanel_app::MalwareScannerService>,
 }
 
 impl TestServer {
@@ -652,6 +653,19 @@ impl TestServer {
             master_key,
             Some(sandbox.path().join("webapp-archives")),
         ));
+        // Apply the malware-scanner migration and build the service.
+        sqlx::query(openpanel_app::migrations::MALWARE_SCANNER_V001)
+            .execute(&pool)
+            .await
+            .expect("malware_scanner migrations");
+        let malware_scanner_svc = Arc::new(MalwareScannerService::new(
+            Arc::new(
+                openpanel_app::malware_scanner::SqliteMalwareScannerRepository::new(pool.clone()),
+            ),
+            audit.clone(),
+            Arc::new(RealScannerFs),
+            Some(sandbox.path().join("quarantine")),
+        ));
         let site_clone_template_repo = site_clone_template_module.repo();
         docker_svc.attach_quota_gate(container_runtime_svc.clone());
         let ftp_svc = ftp_module.service();
@@ -797,6 +811,9 @@ impl TestServer {
             // same pool + audit; the in-memory install fs keeps
             // tests hermetic.
             web_application_installer_svc.clone(),
+            // Malware scanner: real service over the same pool +
+            // audit; the scan fs writes under the sandbox.
+            malware_scanner_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -899,6 +916,7 @@ impl TestServer {
             site_clone_template: site_clone_template_svc,
             themeable_ui: themeable_ui_svc,
             web_application_installer: web_application_installer_svc,
+            malware_scanner: malware_scanner_svc,
             ftp: ftp_svc,
             api_tokens: api_token_svc,
             notifications: notification_svc,
@@ -1017,6 +1035,11 @@ impl TestServer {
     /// The web application installer service.
     pub fn web_application_installer(&self) -> Arc<openpanel_app::WebApplicationInstallerService> {
         self.web_application_installer.clone()
+    }
+
+    /// The malware scanner service.
+    pub fn malware_scanner(&self) -> Arc<openpanel_app::MalwareScannerService> {
+        self.malware_scanner.clone()
     }
 
     /// The per-site WAF service.

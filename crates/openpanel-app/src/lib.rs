@@ -91,6 +91,9 @@ pub mod mail_filtering;
 /// schedule that blocks destructive actions, with a
 /// single-use override that lifts the lock for a bounded TTL.
 pub mod maintenance_windows;
+/// Web application malware scanner bounded context: scan
+/// profiles, runs, findings, and quarantine.
+pub mod malware_scanner;
 /// Migration importers bounded context: cPanel / Baota backup
 /// import pipelines with preview, atomic run, and rollback.
 pub mod migration_importers;
@@ -246,6 +249,10 @@ pub use mail_filtering::{
 };
 pub use maintenance_windows::{
     MaintenanceEnforcer, MaintenanceWindowsModule, SqliteMaintenanceRepository,
+};
+pub use malware_scanner::{
+    DEFAULT_QUARANTINE_ROOT, MalwareScannerService, RESTORE_WINDOW_SECONDS, RealScannerFs,
+    ScannerFs, SqliteMalwareScannerRepository,
 };
 pub use migration_importers::{
     JsonManifest, JsonManifestBundle, ManifestResource, ManifestTranslator,

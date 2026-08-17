@@ -1149,6 +1149,12 @@ pub enum SiteCommand {
         #[command(subcommand)]
         action: WebappCommand,
     },
+    /// Malware scanning subcommands.
+    Scan {
+        /// Scan subcommand.
+        #[command(subcommand)]
+        action: ScanCommand,
+    },
 }
 
 /// Subcommands for managing per-site collaborators.
@@ -1760,6 +1766,23 @@ pub enum WebappCommand {
         path: String,
     },
     /// List installed web apps for a site.
+    List {
+        /// Site id.
+        #[arg(long)]
+        site: String,
+    },
+}
+
+/// Malware scanning subcommands.
+#[derive(Debug, Subcommand)]
+pub enum ScanCommand {
+    /// Run an on-demand scan for a site.
+    Start {
+        /// Site id.
+        #[arg(long)]
+        site: String,
+    },
+    /// List scan runs for a site.
     List {
         /// Site id.
         #[arg(long)]

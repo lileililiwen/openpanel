@@ -464,6 +464,18 @@ pub enum AuditAction {
     WebAppUninstalled,
     /// A web-app was uninstalled and its database dropped.
     WebAppUninstalledDroppedDb,
+    /// A scan profile was created.
+    ScanProfileCreated,
+    /// A scan completed.
+    ScanCompleted,
+    /// A file was moved to quarantine.
+    QuarantineRecordCreated,
+    /// A quarantined file was restored.
+    QuarantineRecordRestored,
+    /// A site was blocked due to a quarantine policy.
+    SiteBlockedQuarantined,
+    /// A site block expired.
+    SiteBlockExpired,
 }
 
 impl AuditAction {
@@ -678,6 +690,12 @@ impl AuditAction {
             AuditAction::InstallArtifactRejected => "install_artifact_rejected",
             AuditAction::WebAppUninstalled => "web_app_uninstalled",
             AuditAction::WebAppUninstalledDroppedDb => "web_app_uninstalled_dropped_db",
+            AuditAction::ScanProfileCreated => "scan_profile_created",
+            AuditAction::ScanCompleted => "scan_completed",
+            AuditAction::QuarantineRecordCreated => "quarantine_record_created",
+            AuditAction::QuarantineRecordRestored => "quarantine_record_restored",
+            AuditAction::SiteBlockedQuarantined => "site_blocked_quarantined",
+            AuditAction::SiteBlockExpired => "site_block_expired",
         }
     }
 }
@@ -989,6 +1007,12 @@ impl AuditService for SqliteAuditService {
                 "install_artifact_rejected" => AuditAction::InstallArtifactRejected,
                 "web_app_uninstalled" => AuditAction::WebAppUninstalled,
                 "web_app_uninstalled_dropped_db" => AuditAction::WebAppUninstalledDroppedDb,
+                "scan_profile_created" => AuditAction::ScanProfileCreated,
+                "scan_completed" => AuditAction::ScanCompleted,
+                "quarantine_record_created" => AuditAction::QuarantineRecordCreated,
+                "quarantine_record_restored" => AuditAction::QuarantineRecordRestored,
+                "site_blocked_quarantined" => AuditAction::SiteBlockedQuarantined,
+                "site_block_expired" => AuditAction::SiteBlockExpired,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

@@ -21,9 +21,9 @@ use axum::{
 use openpanel_app::container_registry::{
     ContainerRegistryService, ImageBlob, PushError, PushRequest,
 };
-use openpanel_domain::container_registry::namespace::NamespaceId;
-use openpanel_domain::container_registry::retention::RetentionPolicy;
-use openpanel_domain::container_registry::RegistryConfig;
+use openpanel_domain::container_registry::{
+    RegistryConfig, namespace::NamespaceId, retention::RetentionPolicy,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -57,7 +57,10 @@ async fn put_update_config(
     AuthUser(user, _session): AuthUser,
     Json(body): Json<UpdateConfigBody>,
 ) -> ApiResult<Json<RegistryConfigView>> {
-    if !matches!(user.role(), openpanel_domain::Role::Owner | openpanel_domain::Role::Admin) {
+    if !matches!(
+        user.role(),
+        openpanel_domain::Role::Owner | openpanel_domain::Role::Admin
+    ) {
         return Err(ApiError::Forbidden);
     }
     let mut cfg = svc.config();
@@ -83,7 +86,10 @@ async fn create_namespace(
     AuthUser(user, _session): AuthUser,
     Json(body): Json<CreateNamespaceBody>,
 ) -> ApiResult<(StatusCode, Json<NamespaceView>)> {
-    if !matches!(user.role(), openpanel_domain::Role::Owner | openpanel_domain::Role::Admin) {
+    if !matches!(
+        user.role(),
+        openpanel_domain::Role::Owner | openpanel_domain::Role::Admin
+    ) {
         return Err(ApiError::Forbidden);
     }
     let id = NamespaceId::new(&body.namespace).map_err(|e| ApiError::BadRequest(e.to_string()))?;
@@ -159,10 +165,7 @@ async fn push_image(
         .push(user.id(), req, user.username().as_str())
         .await
         .map_err(map_push_error)?;
-    Ok((
-        StatusCode::CREATED,
-        Json(PushResultView::from(&result)),
-    ))
+    Ok((StatusCode::CREATED, Json(PushResultView::from(&result))))
 }
 
 fn map_push_error(e: PushError) -> ApiError {
@@ -276,8 +279,8 @@ struct ScanFindingView {
     summary: String,
 }
 
-impl From<&openpanel_domain::ScanFinding> for ScanFindingView {
-    fn from(f: &openpanel_domain::ScanFinding) -> Self {
+impl From<&openpanel_domain::ContainerScanFinding> for ScanFindingView {
+    fn from(f: &openpanel_domain::ContainerScanFinding) -> Self {
         Self {
             id: f.id.clone(),
             severity: f.severity.clone(),
