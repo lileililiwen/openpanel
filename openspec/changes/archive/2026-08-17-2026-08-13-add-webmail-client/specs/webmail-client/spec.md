@@ -9,7 +9,7 @@ is never revealed to or stored in the browser.
 
 # webmail-client Specification
 
-## Requirements
+## ADDED Requirements
 
 ### Requirement: Session Credential Lifecycle
 
