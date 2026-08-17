@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::sites::{error::SiteError, status::SiteStatus};
+use crate::per_site_php_runtime::PhpRuntimeRef;
 
 const DOMAIN_RE: &str =
     r"^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+$";
@@ -23,6 +24,9 @@ pub struct Site {
     document_root: String,
     php_enabled: bool,
     php_version: Option<String>,
+    php_runtime: Option<PhpRuntimeRef>,
+    clone_template_id: Option<Uuid>,
+    instance_origin_id: Option<Uuid>,
     status: SiteStatus,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -75,6 +79,9 @@ impl Site {
             document_root,
             php_enabled,
             php_version,
+            php_runtime: None,
+            clone_template_id: None,
+            instance_origin_id: None,
             status: SiteStatus::Active,
             created_at: now,
             updated_at: now,
@@ -156,6 +163,48 @@ impl Site {
             document_root,
             php_enabled,
             php_version,
+            php_runtime: None,
+            clone_template_id: None,
+            instance_origin_id: None,
+            status,
+            created_at,
+            updated_at,
+            created_by,
+            modified_by,
+        }
+    }
+
+    /// Restore from persistence with the optional `php_runtime`,
+    /// `clone_template_id`, and `instance_origin_id` fields.
+    #[allow(clippy::too_many_arguments)]
+    pub fn restore_full(
+        id: Uuid,
+        owner_id: Uuid,
+        primary_domain: String,
+        aliases: Vec<String>,
+        document_root: String,
+        php_enabled: bool,
+        php_version: Option<String>,
+        php_runtime: Option<PhpRuntimeRef>,
+        clone_template_id: Option<Uuid>,
+        instance_origin_id: Option<Uuid>,
+        status: SiteStatus,
+        created_at: DateTime<Utc>,
+        updated_at: DateTime<Utc>,
+        created_by: String,
+        modified_by: String,
+    ) -> Self {
+        Self {
+            id,
+            owner_id,
+            primary_domain,
+            aliases,
+            document_root,
+            php_enabled,
+            php_version,
+            php_runtime,
+            clone_template_id,
+            instance_origin_id,
             status,
             created_at,
             updated_at,
@@ -167,6 +216,58 @@ impl Site {
     /// The site's unique identifier.
     pub fn id(&self) -> Uuid {
         self.id
+    }
+    /// The PHP runtime reference (None if no PHP runtime is assigned).
+    pub fn php_runtime(&self) -> Option<&PhpRuntimeRef> {
+        self.php_runtime.as_ref()
+    }
+    /// The clone template id (None if this site is not a clone).
+    pub fn clone_template_id(&self) -> Option<Uuid> {
+        self.clone_template_id
+    }
+    /// The instance origin id (None if this site was not cloned).
+    pub fn instance_origin_id(&self) -> Option<Uuid> {
+        self.instance_origin_id
+    }
+    /// Set the PHP runtime reference.
+    pub fn set_php_runtime(&mut self, runtime: Option<PhpRuntimeRef>) {
+        self.php_runtime = runtime;
+    }
+    /// Set the clone template id.
+    pub fn set_clone_template_id(&mut self, id: Option<Uuid>) {
+        self.clone_template_id = id;
+    }
+    /// Set the instance origin id.
+    pub fn set_instance_origin_id(&mut self, id: Option<Uuid>) {
+        self.instance_origin_id = id;
+    }
+
+    /// Build a draft clone of `source` for the given `target_domain`
+    /// and `new_owner_id`. The clone is a `Site` value with a fresh
+    /// `id`, `instance_origin_id = source.id`, an empty alias list,
+    /// and the same `php_runtime` field. The follow-on
+    /// `add-site-clone-and-template-export` change owns the file
+    /// copy and config overlay.
+    pub fn clone(
+        source: &Site,
+        new_id: Uuid,
+        target_domain: impl Into<String>,
+        new_owner_id: Uuid,
+        created_by: impl Into<String>,
+    ) -> Result<Self, SiteError> {
+        let mut site = Site::new(
+            new_id,
+            new_owner_id,
+            target_domain,
+            Vec::new(),
+            source.document_root.clone(),
+            source.php_enabled,
+            source.php_version.clone(),
+            created_by,
+        )?;
+        site.set_php_runtime(source.php_runtime.clone());
+        site.set_instance_origin_id(Some(source.id));
+        Ok(site)
     }
 
     /// The id of the user who owns this site.
@@ -367,6 +468,23 @@ mod tests {
         assert_eq!(s.status(), SiteStatus::Disabled);
         s.enable("admin");
         assert_eq!(s.status(), SiteStatus::Active);
+    }
+
+    #[test]
+    fn clone_builds_draft_with_origin_id() {
+        let source = make_site().expect("source");
+        let original_id = source.id();
+        let clone = Site::clone(
+            &source,
+            Uuid::new_v4(),
+            "clone.example.com",
+            Uuid::new_v4(),
+            "admin",
+        )
+        .expect("clone");
+        assert_eq!(clone.instance_origin_id(), Some(original_id));
+        assert_eq!(clone.primary_domain(), "clone.example.com");
+        assert_ne!(clone.id(), source.id());
     }
 }
 
