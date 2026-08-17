@@ -10,6 +10,16 @@ use uuid::Uuid;
 
 use crate::cron::CronSchedule;
 
+// Re-export the resource-scoped restore + remote-target policy
+// refinement types from the `refine-backups-with-resource-restore-and-policies`
+// change so callers can import them from the `backups` module.
+pub use refine::{
+    BackupRefineError, BackupTargetKind, BackupTargetPolicy, ResourceKind, RestoreRequest,
+    RestoreScope,
+};
+
+mod refine;
+
 /// Domain validation and transition failures.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum BackupError {

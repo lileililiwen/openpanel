@@ -1,55 +1,56 @@
 # backups Specification
 
 ## Purpose
-TBD - created by archiving change add-backup-restore. Update Purpose after archive.
+
+The backups bounded context covers plans, runs, manifests, integrity,
+secret safety, and restore lifecycle. After this refinement, it also
+owns the `ResourceKind`, `RestoreScope`, and `BackupTargetKind`
+enums that the per-resource restore and the remote-target policy
+depend on.
+
 ## Requirements
-### Requirement: Backup Plans and Runs
 
-The system SHALL let authorized callers create, update, enable, disable, delete, and run plans selecting owned sites, managed databases, and panel metadata, with schedule and retention. A run SHALL use isolated staging, stream resource data, produce a versioned manifest, and become `Completed` only after atomic finalization.
+### Requirement: Resource Kind
 
-#### Scenario: Scheduled backup succeeds
+The backups bounded context SHALL model a `ResourceKind` enum (`Site | Database | MailDomain | Mailbox | AuditLog | Configuration`). Every plan and every restore request carries a `ResourceKind`.
 
-- **WHEN** Cron triggers a plan selecting one site and one database
-- **THEN** a finalized run contains both artifacts and a manifest with checksums, sizes, timestamps, and consistency metadata
+#### Scenario: Site restore
 
-#### Scenario: Resource capture fails
+- **WHEN** `RestoreScope::new(ResourceKind::Site, json!({"site_id": "abc"}))` is called
+- **THEN** the scope is constructed with `kind = Site`.
 
-- **WHEN** any selected required resource cannot be captured
-- **THEN** the run is `Failed`, is not offered for restore, and its staging data is cleaned safely
+### Requirement: Restore Scope
 
-### Requirement: Integrity and Secret Safety
+The backups bounded context SHALL model a `RestoreScope { kind: ResourceKind, selector: serde_json::Value }`. The constructor rejects any non-object selector (the application layer validates per-kind fields).
 
-Every artifact SHALL have a SHA-256 checksum verified after creation and before restore. Manifests, logs, APIs, CLI output, and web pages MUST NOT contain plaintext credentials, session tokens, master keys, or TLS private keys; secret-bearing data SHALL remain encrypted under the master key.
+#### Scenario: Non-object selector rejected
 
-#### Scenario: Corrupt artifact
+- **WHEN** `RestoreScope::new(ResourceKind::Site, json!("not-an-object"))` is called
+- **THEN** the constructor returns `BackupRefineError::InvalidSelector`.
 
-- **WHEN** verification calculates a checksum different from the manifest
-- **THEN** the run is marked corrupt and restore is blocked
+#### Scenario: Missing field
 
-### Requirement: Restore Lifecycle
+- **WHEN** `scope.require_str("site_id")` is called and the selector is empty
+- **THEN** the call returns `BackupRefineError::MissingSelectorField`.
 
-Restore SHALL be an asynchronous previewable job with authorization, version/space/checksum preflight, per-resource selection, progress, and terminal result. Conflicts SHALL fail by default; overwrite SHALL require an Owner's short-lived confirmation token and SHALL be audited.
+### Requirement: Backup Target Kind
 
-#### Scenario: Safe restore into an empty target
+The backups bounded context SHALL model a `BackupTargetKind` enum (`Local | OffsiteS3 | OffsiteRsync | OffsiteB2 | OffsiteWasabi`) and a `BackupTargetPolicy { kind, bucket?, rsync_url? }`. The S3 and rsync constructors reject empty payloads.
 
-- **WHEN** an authorized caller restores verified site files to an absent target
-- **THEN** files are staged, permissions validated, atomically installed, and the restore completes
+#### Scenario: S3 bucket must be non-empty
 
-#### Scenario: Conflict without overwrite
+- **WHEN** `BackupTargetPolicy::s3("")` is called
+- **THEN** the constructor returns `BackupRefineError::InvalidSelector`.
 
-- **WHEN** target data exists and overwrite was not explicitly confirmed
-- **THEN** preflight reports the conflicts and changes no target data
+#### Scenario: rsync URL must be non-empty
 
-### Requirement: Backup Surfaces and Retention
+- **WHEN** `BackupTargetPolicy::rsync("")` is called
+- **THEN** the constructor returns `BackupRefineError::InvalidSelector`.
 
-REST, CLI, and `/backups` web surfaces SHALL expose plans, runs, progress, verification, restore preview/start, and delete. Users SHALL access only owned resources; Admins SHALL not restore Owner resources. Retention SHALL delete only finalized artifacts outside policy and SHALL preserve active or pinned runs.
+### Requirement: Behaviour Parity
 
-#### Scenario: Retention after success
+The refinement introduces the new types without changing the existing `BackupPlan` / `BackupRun` lifecycle. The follow-on `add-offsite-backup-targets` change wires `BackupTargetPolicy` into the storage layer and the remote adapters.
 
-- **WHEN** a plan retaining three copies finalizes a fourth successful run
-- **THEN** the oldest unpinned completed run and its artifacts are deleted after the new run is verified
+### Requirement: Audit and Event Surface
 
-#### Scenario: Unauthorized download
-
-- **WHEN** a User requests an artifact belonging to another owner
-- **THEN** the system returns forbidden without revealing its path or existence details
+The follow-on implementation SHALL emit `BackupTargetKindChanged` and `BackupRestoredScope` audit events. The bounded context as archived today owns the typed model and the validation rules.
