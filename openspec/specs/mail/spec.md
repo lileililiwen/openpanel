@@ -1,69 +1,52 @@
 # mail Specification
 
 ## Purpose
-TBD - created by archiving change add-mail-hosting. Update Purpose after archive.
+
+The mail bounded context covers mail domain lifecycle, mailbox and
+alias management, MTA configuration, and quota. After this
+refinement, it also owns the DKIM / SPF / DMARC defaults and the
+per-mailbox quota value objects that the mail service consumes
+when a domain is enabled.
+
 ## Requirements
-### Requirement: Mail Readiness and Domain Lifecycle
 
-Owners SHALL run readiness checks and create, list, enable, disable, and delete mail domains only when supported mail services, hostname, TLS, storage, ports, and required DNS records are valid or explicitly acknowledged where external. Domain deletion SHALL require confirmation and report dependent mailboxes/aliases/backups.
+### Requirement: DKIM Keypair
 
-#### Scenario: Missing MX record
+The mail bounded context SHALL model a `DkimKeypair` carrying `domain`, `selector`, `algorithm` (`Rsa2048 | Ed25519`), `private_key_blob` (encrypted at rest), `public_key`, `created_at`, and `rotation_grace_until`. The constructor rejects empty `domain` or `selector`. The pair supports a rotation grace window during which both the old and new keys may sign.
 
-- **WHEN** an Owner attempts to enable a mail domain whose MX does not target the configured mail host
-- **THEN** enablement is blocked with the expected public record and no MTA reload occurs
+#### Scenario: Constructor rejects empty inputs
 
-#### Scenario: Domain deletion has mailboxes
+- **WHEN** `DkimKeypair::new("", _, _, _, _, _)` is called
+- **THEN** the constructor returns `MailError::Invalid`.
 
-- **WHEN** an Owner requests deletion of a domain with mailboxes
-- **THEN** the system returns dependency counts and requires a separate short-lived destructive confirmation
+#### Scenario: Rotation grace elapsed
 
-### Requirement: Mailboxes and Aliases
+- **WHEN** `rotation_grace_until` is in the past
+- **THEN** `rotation_grace_elapsed_at(now)` returns `true`.
 
-Authorized callers SHALL create, list, update quota, enable, disable, rotate password, and delete mailboxes, and SHALL manage non-looping aliases/forwarders for owned domains. Passwords SHALL meet policy, be stored as strong hashes, be returned only at creation/rotation, and never appear in later output or audit.
+### Requirement: Per-Mailbox Quota
 
-#### Scenario: Create mailbox
+The mail bounded context SHALL model a `MailboxQuota` (bytes) with constructors that validate a minimum and maximum. The `permits(used, incoming)` helper returns `true` only when the delivery fits within the quota.
 
-- **WHEN** an authorized caller creates `alice@example.com` within domain quota
-- **THEN** the mailbox is provisioned and its generated password is returned exactly once
+#### Scenario: Boundary delivery
 
-#### Scenario: Alias loop
+- **WHEN** `quota = 100`, `used = 80`, `incoming = 30`
+- **THEN** `permits` returns `false`.
 
-- **WHEN** a proposed alias creates a direct or transitive forwarding cycle
-- **THEN** validation rejects it before configuration changes
+### Requirement: Domain Sending Policy
 
-### Requirement: Safe Mail Service Configuration
+The mail bounded context SHALL model a `DomainSendingPolicy` carrying `outbound_per_minute`, `max_recipients_per_message`, and three `SendingRequirement` flags (`spf`, `dkim`, `dmarc`). The default applied at `enable_domain` requires `SPF` and `DKIM` and soft-fails `DMARC`. The `accepts(passed_spf, passed_dkim, passed_dmarc)` helper returns `Required` when a required check has not passed.
 
-The system SHALL generate isolated Postfix/Dovecot includes, validate candidate configuration, atomically apply and reload with rollback, enforce authenticated TLS submission, and reject unauthenticated relay to non-local domains. DKIM private keys SHALL be encrypted at rest, written mode `0600`, and never returned.
+#### Scenario: Required DKIM
 
-#### Scenario: Relay attempt
+- **WHEN** `dkim = Required` and `passed_dkim = false`
+- **THEN** `accepts` returns `MailErrorSendingPolicy::Required`.
 
-- **WHEN** an unauthenticated external client submits mail from a non-local sender to a non-local recipient
-- **THEN** the MTA rejects relay regardless of domain configuration
+#### Scenario: Soft-fail DMARC
 
-#### Scenario: Candidate config invalid
+- **WHEN** `dmarc = SoftFail` and `passed_dmarc = false`
+- **THEN** `accepts` returns `Ok(())`.
 
-- **WHEN** Postfix or Dovecot validation fails
-- **THEN** active includes remain unchanged and services are not reloaded
+### Requirement: Audit and Event Surface
 
-### Requirement: Quotas, Abuse Controls, and Diagnostics
-
-The system SHALL enforce mailbox/domain storage quotas and configurable outbound rate limits, and SHALL expose only aggregate queue/delivery status, service health, DNS/TLS readiness, and redacted errors. Message subjects, bodies, authentication secrets, and recipient lists MUST NOT be exposed.
-
-#### Scenario: Mailbox exceeds quota
-
-- **WHEN** delivery would exceed a mailbox quota
-- **THEN** delivery is rejected with the configured temporary/permanent policy and an aggregate event is recorded
-
-### Requirement: Mail Surfaces and Integration
-
-REST, CLI, and `/mail` web surfaces SHALL provide readiness, domains, mailboxes, aliases, quotas, password rotation, status, and diagnostics with site-style ownership rules, CSRF, and audit. Backup/restore SHALL include selected virtual mail data and metadata; DNS/SSL/service integrations SHALL use their public ports.
-
-#### Scenario: User lists mailboxes
-
-- **WHEN** a User lists mailboxes
-- **THEN** only mailboxes in that user's domains are returned with no password hashes or secrets
-
-#### Scenario: Backup selected mail domain
-
-- **WHEN** a backup plan selects a mail domain
-- **THEN** mailbox storage and required metadata are captured consistently without plaintext credentials
+The follow-on implementation SHALL emit `MailDkimKeypairGenerated`, `MailDkimRotated`, `MailboxQuotaExceeded`, and `MailSendingPolicyRejected` audit events. The bounded context as archived today owns the typed model and the validation rules.
