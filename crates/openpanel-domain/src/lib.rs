@@ -76,6 +76,10 @@ pub mod agent;
 /// Cluster data model bounded context: typed host roles, shared
 /// storage declarations, and replicated database metadata.
 pub mod cluster_data_model;
+/// Per-site PHP runtime bounded context: `PhpRuntimeRef`,
+/// `PhpFpmPoolSpec`, and the typed lifecycle for assigning /
+/// swapping runtimes per site.
+pub mod per_site_php_runtime;
 /// AI Ops bounded context: conversational session, tool-call
 /// allowlist, proposed/approved/executed/denied actions.
 pub mod ai_ops;
@@ -230,9 +234,9 @@ pub use git_deployment::{
 };
 pub use hosting::HostingPlanId;
 pub use hosting_plans::{
-    AppId, EffectiveQuotas, HostingPlan, HostingPlanRepository, HostingPlansError, PhpRuntimeRef,
-    PlanAssignment, PlanFeature, PlanFeatureState, PlanId, PlanPrice, PlanQuotas, PlanResolver,
-    PlanStatus,
+    AppId, EffectiveQuotas, HostedPhpRuntimeRef, HostingPlan, HostingPlanRepository,
+    HostingPlansError, PlanAssignment, PlanFeature, PlanFeatureState, PlanId, PlanPrice,
+    PlanQuotas, PlanResolver, PlanStatus,
 };
 pub use iac::{
     ApiContract, IacError, Language, Operation, OperationId, ProviderResource, ResourceEndpoint,
@@ -309,6 +313,9 @@ pub use agent::{
 pub use cluster_data_model::{
     ClusterError, ClusterNode, ClusterRepository, ClusterTopology, FailoverPolicy, NodeId,
     NodeRole, ReplicatedDatabase, ReplicationMode, SharedStorage, SharedStorageKind, StorageId,
+};
+pub use per_site_php_runtime::{
+    PhpFpmPoolSpec, PhpRuntimeError, PhpRuntimeRef, PhpRuntimeRepository, PhpRuntimeStatus,
 };
 pub use agent::RecipeManifest as _RecipeManifest;
 pub use sites::{error::SiteError, repository::SiteRepository, site::Site, status::SiteStatus};

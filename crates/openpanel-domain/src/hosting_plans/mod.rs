@@ -58,11 +58,11 @@ impl std::fmt::Display for AppId {
 /// runtime is provisioned.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct PhpRuntimeRef(pub String);
+pub struct HostedPhpRuntimeRef(pub String);
 
-impl PhpRuntimeRef {
+impl HostedPhpRuntimeRef {
     /// Construct a runtime reference. The string is validated by
-    /// [`PhpRuntimeRef::parse`].
+    /// [`HostedPhpRuntimeRef::parse`].
     pub fn new(value: impl Into<String>) -> Self {
         Self(value.into())
     }
@@ -98,7 +98,7 @@ impl PhpRuntimeRef {
     }
 }
 
-impl std::fmt::Display for PhpRuntimeRef {
+impl std::fmt::Display for HostedPhpRuntimeRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(&self.0)
     }
@@ -262,7 +262,7 @@ pub struct HostingPlan {
     features: BTreeMap<PlanFeature, PlanFeatureState>,
     quota_caps: PlanQuotas,
     allowed_apps: Vec<AppId>,
-    allowed_php_runtimes: Vec<PhpRuntimeRef>,
+    allowed_php_runtimes: Vec<HostedPhpRuntimeRef>,
     status: PlanStatus,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
@@ -335,7 +335,7 @@ impl HostingPlan {
     }
 
     /// Allowed PHP runtime versions.
-    pub fn allowed_php_runtimes(&self) -> &[PhpRuntimeRef] {
+    pub fn allowed_php_runtimes(&self) -> &[HostedPhpRuntimeRef] {
         &self.allowed_php_runtimes
     }
 
@@ -398,14 +398,14 @@ impl HostingPlan {
     }
 
     /// Replace the allowed PHP runtime list. Each entry is
-    /// validated through [`PhpRuntimeRef::parse`].
+    /// validated through [`HostedPhpRuntimeRef::parse`].
     pub fn set_allowed_php_runtimes(
         &mut self,
         runtimes: Vec<String>,
     ) -> Result<(), HostingPlansError> {
         let mut parsed = Vec::with_capacity(runtimes.len());
         for value in runtimes {
-            parsed.push(PhpRuntimeRef::parse(&value)?);
+            parsed.push(HostedPhpRuntimeRef::parse(&value)?);
         }
         self.allowed_php_runtimes = parsed;
         self.touch();
@@ -478,7 +478,7 @@ impl HostingPlan {
             .map_err(|e| HostingPlansError::Persistence(e.to_string()))?;
         let mut parsed_runtimes = Vec::with_capacity(allowed_php_runtimes.len());
         for value in allowed_php_runtimes {
-            parsed_runtimes.push(PhpRuntimeRef::parse(&value)?);
+            parsed_runtimes.push(HostedPhpRuntimeRef::parse(&value)?);
         }
         Ok(Self {
             id,
