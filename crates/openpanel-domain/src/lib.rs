@@ -87,6 +87,10 @@ pub mod sftp_jailed_shells;
 /// the `BandwidthObserver` collector and the SQLite-backed
 /// rolling-window store.
 pub mod bandwidth_accounting;
+/// Admin IP allowlist bounded context: `AdminIpAllowlist`,
+/// `AllowlistMode`, `IpCidr`, and the per-role `AllowlistOverride`
+/// policy that the `IpAllowlistMiddleware` consumes.
+pub mod admin_ip_allowlist;
 /// AI Ops bounded context: conversational session, tool-call
 /// allowlist, proposed/approved/executed/denied actions.
 pub mod ai_ops;
@@ -330,6 +334,9 @@ pub use sftp_jailed_shells::{
 };
 pub use bandwidth_accounting::{
     BandwidthCounterRow, BandwidthReader, BandwidthRepository, BandwidthStorageObserver,
+};
+pub use admin_ip_allowlist::{
+    AdminIpAllowlist, AdminIpAllowlistError, AllowlistMode, AllowlistOverride, IpCidr,
 };
 pub use agent::RecipeManifest as _RecipeManifest;
 pub use sites::{error::SiteError, repository::SiteRepository, site::Site, status::SiteStatus};
