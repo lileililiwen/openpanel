@@ -1,60 +1,64 @@
 # cron Specification
 
 ## Purpose
-TBD - created by archiving change add-cron-scheduling. Update Purpose after archive.
+
+The cron bounded context covers schedules, jobs, execution history
+and overlap policy. After this refinement, it also owns the
+`JobScope`, `CronQuota`, and role permission checker that
+constrain which roles may create which kinds of jobs.
+
 ## Requirements
-### Requirement: Scheduled Job Aggregate
 
-The system SHALL persist named jobs with owner, five-field schedule, IANA timezone, job kind, enabled state, timeout, overlap policy, and next-run timestamp. Invalid expressions, unknown timezones, unsafe working directories, empty executables, and non-positive timeouts MUST be rejected.
+### Requirement: Job Scope
 
-#### Scenario: Create a valid job
+The cron bounded context SHALL model a `JobScope` (`System |
+PerSite | PerUser`). The role permission checker MUST allow
+each role a specific subset of scopes:
 
-- **WHEN** an authorized caller creates `/usr/bin/php` with argument `artisan`, schedule `0 2 * * *`, timezone `Asia/Shanghai`, and a site-owned working directory
-- **THEN** the job is persisted with its next UTC run and no shell interpolation
+- `Owner` may create `System`, `PerSite`, and `PerUser` jobs.
+- `Admin` may create `PerSite` and `PerUser` jobs.
+- `User` may create `PerSite` and `PerUser` jobs but NOT `System` jobs.
 
-#### Scenario: Reject traversal
+#### Scenario: User cannot create system jobs
 
-- **WHEN** a working directory resolves outside every site owned by the job owner
-- **THEN** creation fails and no job is persisted
+- **WHEN** `role_allows_scope(Role::User, JobScope::System)` is called
+- **THEN** the function returns `false`.
 
-### Requirement: Due Job Execution
+#### Scenario: Owner can create any scope
 
-The scheduler SHALL transactionally lease due jobs, execute argv without a shell, enforce timeout/output/concurrency limits, apply the overlap policy, record terminal status and timestamps, and recover expired leases as interrupted runs.
+- **WHEN** `role_allows_scope(Role::Owner, scope)` is called for any `scope`
+- **THEN** the function returns `true`.
 
-#### Scenario: Overlapping run is skipped
+### Requirement: Per-User Quota
 
-- **WHEN** a job with `skip` policy becomes due while its previous lease is active
-- **THEN** no second process starts and a skipped run is recorded
+The cron bounded context SHALL model a `CronQuota` with `max_concurrent`, `max_due_per_minute`, and `max_total`. The `CronQuota::effective(global, user)` helper computes the per-axis maximum of a global default and a per-user override.
 
-#### Scenario: Timed-out process
+The `check_quota` helper validates the current state against the effective quota and returns `QuotaExceededTotal`, `QuotaExceededConcurrent`, or `QuotaExceededPerMinute` as appropriate.
 
-- **WHEN** a process exceeds its configured timeout
-- **THEN** the adapter terminates it and records `TimedOut` without blocking later schedules
+#### Scenario: Total overflow
 
-### Requirement: Cron Authorization and Surfaces
+- **WHEN** `total_active >= max_total`
+- **THEN** `check_quota` returns `CronScopeError::QuotaExceededTotal`.
 
-REST, CLI, and web surfaces SHALL support create, list, get, update, enable, disable, delete, run-now, run-list, and run-detail. Users SHALL access only their own jobs; Admins SHALL manage User-owned jobs; only Owners SHALL manage Owner-owned jobs. Every mutation and manual run SHALL be audited without command arguments or output.
+#### Scenario: Concurrent overflow
 
-#### Scenario: User lists jobs
+- **WHEN** `concurrent_active >= max_concurrent`
+- **THEN** `check_quota` returns `CronScopeError::QuotaExceededConcurrent`.
 
-- **WHEN** a User requests `GET /api/v1/cron/jobs`
-- **THEN** only that user's jobs are returned
+### Requirement: Working Directory and Executable Allow-List
 
-#### Scenario: Manual execution
+The cron bounded context SHALL expose `is_under_owned_site(workdir, owned_roots)` and `is_executable_allowed(executable, allow_list)` helpers. Both are pure functions used by the scheduler when constructing a job.
 
-- **WHEN** an authorized caller invokes `openpanel cron run --id <id>`
-- **THEN** one leased execution starts and the CLI returns its run ID and status
+#### Scenario: Working directory not under owned site
 
-### Requirement: Execution History Retention
+- **WHEN** `workdir` does not start with any of the owned roots
+- **THEN** `is_under_owned_site` returns `false`.
 
-The system SHALL retain bounded run metadata and capped stdout/stderr, prune records older than the configured retention, escape output in HTML, and never include inherited environment values.
+#### Scenario: Executable not in allow-list
 
-#### Scenario: View failed run
+- **WHEN** `executable` is not in the `allow_list`
+- **THEN** `is_executable_allowed` returns `false`.
 
-- **WHEN** an authorized caller opens a failed run detail
-- **THEN** status, timestamps, exit code, and capped escaped output are returned
+### Requirement: Audit and Event Surface
 
-#### Scenario: Retention pruning
-
-- **WHEN** cleanup runs with a 30-day policy
-- **THEN** completed runs older than 30 days are deleted while active leases remain
+The follow-on implementation SHALL emit `CronScopeDenied` audit events when `role_allows_scope` returns `false`. The bounded context as archived today owns the typed model and the pure-function helpers.

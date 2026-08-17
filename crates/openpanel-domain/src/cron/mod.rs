@@ -12,6 +12,17 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
+// Re-export the scope / quota refinement types from the
+// `refine-cron-with-role-permissions` change so callers can
+// import them from the `cron` module.
+pub use scope::{
+    CronQuota, CronScopeError, JobScope, check_quota, is_executable_allowed,
+    is_under_owned_site, role_allows_scope,
+};
+pub use scope::cron_global_default as cron_global_default;
+
+mod scope;
+
 /// Errors caused by invalid cron data or state transitions.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum CronError {
