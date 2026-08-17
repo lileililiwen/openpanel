@@ -133,6 +133,10 @@ pub mod ssl;
 /// checks with a per-check throttle and typed alert decision.
 pub mod synthetic_monitoring;
 pub mod system_services;
+/// Themeable UI and white-label bounded context: per-account
+/// theme overrides, palette validation, logo upload, and host
+/// resolution.
+pub mod themeable_ui;
 pub mod waf;
 /// Wildcard SSL with DNS-01 challenge bounded context: cert
 /// request with `ChallengeKind::Dns01`, ACME endpoint mode, and
@@ -302,6 +306,9 @@ pub use synthetic_monitoring::{
     SyntheticMonitoringModule,
 };
 pub use system_services::{ServiceManager, SystemServicesModule};
+pub use themeable_ui::{
+    DEFAULT_BRANDING_ROOT, MAX_LOGO_BYTES, SqliteThemeableUiRepository, ThemeableUiService,
+};
 pub use waf::{WafModule, WafService};
 pub use wildcard_ssl::{
     CertRenewalScheduler, Dns01ChallengeSolver, RecordingDnsProvider, SqliteWildcardRepository,

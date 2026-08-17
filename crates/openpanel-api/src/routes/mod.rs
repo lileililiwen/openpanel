@@ -56,5 +56,7 @@ pub mod software_center;
 pub mod ssl;
 /// Allowlisted system-service routes (`/services`).
 pub mod system_services;
+/// Themeable UI / white-label routes (`/admin/branding`).
+pub mod themeable_ui;
 /// Per-site web application firewall routes (`/sites/{id}/waf`).
 pub mod waf;

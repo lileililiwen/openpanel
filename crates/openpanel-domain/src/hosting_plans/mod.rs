@@ -264,6 +264,11 @@ pub struct HostingPlan {
     allowed_apps: Vec<AppId>,
     allowed_php_runtimes: Vec<HostedPhpRuntimeRef>,
     status: PlanStatus,
+    /// Per the `themeable-ui` change: the branding scope attached
+    /// to this plan. `Reseller` enables the per-account override
+    /// API; `System` is reserved for the panel's own themes;
+    /// `Disabled` (the default) blocks all branding endpoints.
+    branding_scope: crate::themeable_ui::BrandingScope,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -294,6 +299,7 @@ impl HostingPlan {
             allowed_apps: Vec::new(),
             allowed_php_runtimes: Vec::new(),
             status: PlanStatus::Active,
+            branding_scope: crate::themeable_ui::BrandingScope::default(),
             created_at: Utc::now(),
             updated_at: Utc::now(),
         })
@@ -352,6 +358,17 @@ impl HostingPlan {
     /// Last-mutation timestamp.
     pub fn updated_at(&self) -> DateTime<Utc> {
         self.updated_at
+    }
+
+    /// The branding scope attached to this plan.
+    pub fn branding_scope(&self) -> crate::themeable_ui::BrandingScope {
+        self.branding_scope
+    }
+
+    /// Set the branding scope.
+    pub fn set_branding_scope(&mut self, scope: crate::themeable_ui::BrandingScope) {
+        self.branding_scope = scope;
+        self.updated_at = Utc::now();
     }
 
     /// Replace the price list. Each entry is validated.
@@ -490,6 +507,7 @@ impl HostingPlan {
             allowed_apps: allowed_apps.into_iter().map(AppId).collect(),
             allowed_php_runtimes: parsed_runtimes,
             status,
+            branding_scope: crate::themeable_ui::BrandingScope::default(),
             created_at,
             updated_at,
         })

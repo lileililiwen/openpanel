@@ -28,7 +28,8 @@ use openpanel_app::{
     NotificationService, OffsiteBackupTargetsModule, PitrService, PluginService, SecurityModule,
     SecurityService, SiteCacheCdnModule, SiteCloneService, SiteCloneTemplateModule,
     SiteStagingModule, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
-    SslModule, SslPaths, SslService, StagingService, SystemServicesModule, WafModule, WafService,
+    SslModule, SslPaths, SslService, StagingService, SystemServicesModule, ThemeableUiService,
+    WafModule, WafService,
     identity::two_factor::TwoFactorCrypto,
     security::MemoryFirewall,
     sites::{nginx::NginxPaths, repo::SqliteSiteRepository},
@@ -267,6 +268,7 @@ pub struct TestServer {
     offsite_backup_targets: Arc<openpanel_app::BackupUploadService>,
     site_cache_cdn: Arc<openpanel_app::SiteCacheService>,
     site_clone_template: Arc<openpanel_app::SiteCloneService>,
+    themeable_ui: Arc<openpanel_app::ThemeableUiService>,
 }
 
 impl TestServer {
@@ -616,6 +618,20 @@ impl TestServer {
             None,
             None,
         ));
+        let themeable_ui_repo =
+            openpanel_app::themeable_ui::SqliteThemeableUiRepository::new(pool.clone());
+        // Apply the themeable_ui migration so the integration
+        // tests can upsert and read theme overrides. The
+        // migration SQL is exposed via the `openpanel_app` crate.
+        sqlx::query(openpanel_app::migrations::THEMEABLE_UI_V001)
+            .execute(&pool)
+            .await
+            .expect("themeable_ui migrations");
+        let themeable_ui_svc = Arc::new(ThemeableUiService::new(
+            Arc::new(themeable_ui_repo),
+            audit.clone(),
+            None,
+        ));
         let site_clone_template_repo = site_clone_template_module.repo();
         docker_svc.attach_quota_gate(container_runtime_svc.clone());
         let ftp_svc = ftp_module.service();
@@ -754,6 +770,9 @@ impl TestServer {
             // that the rest of the test server uses.
             site_clone_template_svc.clone(),
             site_clone_template_repo.clone(),
+            // Themeable UI: real service over the same SQLite
+            // pool and audit sink.
+            themeable_ui_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -782,6 +801,7 @@ impl TestServer {
             collaborators_svc.clone(),
             registry_svc.clone(),
             container_runtime_svc.clone(),
+            themeable_ui_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -853,6 +873,7 @@ impl TestServer {
             offsite_backup_targets: offsite_backup_svc,
             site_cache_cdn: site_cache_cdn_svc,
             site_clone_template: site_clone_template_svc,
+            themeable_ui: themeable_ui_svc,
             ftp: ftp_svc,
             api_tokens: api_token_svc,
             notifications: notification_svc,
@@ -961,6 +982,11 @@ impl TestServer {
     /// The site clone + template export service.
     pub fn site_clone_template(&self) -> Arc<openpanel_app::SiteCloneService> {
         self.site_clone_template.clone()
+    }
+
+    /// The themeable UI / white-label service.
+    pub fn themeable_ui(&self) -> Arc<openpanel_app::ThemeableUiService> {
+        self.themeable_ui.clone()
     }
 
     /// The per-site WAF service.

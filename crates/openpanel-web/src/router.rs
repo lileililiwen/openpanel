@@ -128,6 +128,8 @@ pub struct WebState {
     pub registry: Arc<ContainerRegistryService>,
     /// Per-user container quota, registry credentials, metrics, and egress.
     pub container_runtime: Arc<ContainerRuntimeService>,
+    /// Themeable UI / white-label service.
+    pub themeable_ui: Arc<openpanel_app::ThemeableUiService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
     /// Atomically persisted allowlisted panel preferences.
@@ -251,6 +253,7 @@ pub fn router(
     collaborators: Arc<CollaboratorService>,
     registry: Arc<ContainerRegistryService>,
     container_runtime: Arc<ContainerRuntimeService>,
+    themeable_ui: Arc<openpanel_app::ThemeableUiService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -283,6 +286,7 @@ pub fn router(
         collaborators,
         registry,
         container_runtime,
+        themeable_ui,
         csrf: Arc::new(CsrfStore::new()),
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
@@ -549,6 +553,7 @@ pub fn router(
             "/cdn/integrations/{id}/purge",
             get(crate::site_cache_cdn::cdn_purge_page),
         )
+        .route("/admin/branding", get(crate::themeable_ui::page))
         .route("/sites/{id}/collaborators", get(crate::collaborators::page))
         .route("/registry", get(crate::container_registry::page))
         .route("/audit", get(crate::audit::audit_index))

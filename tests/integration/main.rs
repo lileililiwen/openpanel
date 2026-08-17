@@ -49,6 +49,8 @@ mod smoke;
 mod software_center;
 mod ssl;
 mod system_services;
+/// Themeable UI / white-label integration tests.
+mod themeable_ui;
 mod waf;
 mod web_ui;
 /// Web-UI audit route group integration tests.

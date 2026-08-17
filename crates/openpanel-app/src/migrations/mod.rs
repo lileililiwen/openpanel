@@ -136,6 +136,8 @@ pub const OFFSITE_BACKUP_TARGETS_V001: &str = include_str!("offsite_backup_targe
 /// Site clone + template export v001: `site_templates`,
 /// `clone_plans`, `clone_runs`, and `anonymisation_tokens` tables.
 pub const SITE_CLONE_TEMPLATE_V001: &str = include_str!("site_clone_template/V001__init.sql");
+/// Themeable UI and white-label v001: `theme_overrides` table.
+pub const THEMEABLE_UI_V001: &str = include_str!("themeable_ui/V001__init.sql");
 /// Site cache and CDN integration v001: `site_cache_policies`,
 /// `cdn_integrations`, and `cdn_purge_log` tables.
 pub const SITE_CACHE_CDN_V001: &str = include_str!("site_cache_cdn/V001__init.sql");

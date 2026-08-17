@@ -51,6 +51,8 @@ pub mod ssl;
 pub mod system_services;
 /// String-table stub used by every template.
 pub mod t;
+/// Themeable UI / white-label editor page.
+pub mod themeable_ui;
 pub mod two_factor;
 pub mod users;
 /// Per-site WAF editor page.

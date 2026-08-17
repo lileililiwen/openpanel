@@ -2,10 +2,10 @@
 
 use clap::Parser;
 use openpanel_cli::{
-    BackupCommand, BackupPlanCommand, BackupRestoreCommand, CdnCommand, Cli, CollaboratorCommand,
-    Command, ContainerRuntimeCommand, CronCommand, DatabaseCommand, DnsCommand, DockerCommand,
-    FileCommand, FtpCommand, IacCommand, LogsCommand, MailCommand, MarketplaceCommand,
-    MonitoringCommand, NotificationChannelCommand, NotificationCommand,
+    BackupCommand, BackupPlanCommand, BackupRestoreCommand, BrandingCommand, CdnCommand, Cli,
+    CollaboratorCommand, Command, ContainerRuntimeCommand, CronCommand, DatabaseCommand,
+    DnsCommand, DockerCommand, FileCommand, FtpCommand, IacCommand, LogsCommand, MailCommand,
+    MarketplaceCommand, MonitoringCommand, NotificationChannelCommand, NotificationCommand,
     NotificationSubscriptionCommand, PitrCommand, PluginCommand, RecoveryCodeCommand,
     RegistryCommand, SecurityAllowlistCommand, SecurityCommand, SecurityRuleCommand,
     ServicesCommand, SiteCacheCommand, SiteCloneCommand, SiteCommand, SiteTemplateCommand,
@@ -127,6 +127,33 @@ async fn main() -> anyhow::Result<()> {
                     handlers::site_template_export(config, site, name).await
                 }
                 SiteTemplateCommand::List => handlers::site_template_list(config).await,
+            },
+            SiteCommand::Branding { action } => match action {
+                BrandingCommand::Show => handlers::branding_show(config).await,
+                BrandingCommand::Set {
+                    brand_name,
+                    color_fg,
+                    color_bg,
+                    color_accent,
+                    contrast_min,
+                    font_family,
+                    base_size_px,
+                    panel_domain,
+                } => {
+                    handlers::branding_set(
+                        config,
+                        brand_name,
+                        color_fg,
+                        color_bg,
+                        color_accent,
+                        contrast_min,
+                        font_family,
+                        base_size_px,
+                        panel_domain,
+                    )
+                    .await
+                }
+                BrandingCommand::Clear => handlers::branding_clear(config).await,
             },
         },
         Command::Cdn { action } => match action {

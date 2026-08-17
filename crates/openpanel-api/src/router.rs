@@ -9,8 +9,8 @@ use openpanel_app::{
     FilesService, FtpService, GrantResolver, HierarchyService, HostingPlansService,
     IdentityService, LogService, MailService, MarketplaceService, MonitoringService,
     NotificationService, PitrService, PluginService, SecurityService, SiteCacheService,
-    SiteCloneService, SitesService, SoftwareCenterService, SslService, StagingService, WafService,
-    identity::TwoFactorService, security::LoginThrottleService,
+    SiteCloneService, SitesService, SoftwareCenterService, SslService, StagingService,
+    ThemeableUiService, WafService, identity::TwoFactorService, security::LoginThrottleService,
     site_clone_template::SqliteSiteCloneTemplateRepository, system_services::ServiceManager,
 };
 
@@ -33,7 +33,8 @@ use crate::{
         site_clone_template::router as site_clone_template_router,
         site_staging::router as site_staging_router, sites::router as sites_router,
         software_center::router as software_center_router, ssl::router as ssl_router,
-        system_services::router as system_services_router, waf::router as waf_router,
+        system_services::router as system_services_router,
+        themeable_ui::router as themeable_ui_router, waf::router as waf_router,
     },
 };
 
@@ -77,6 +78,7 @@ pub fn build_router(
     site_cache_cdn: Arc<SiteCacheService>,
     site_clone_template_svc: Arc<SiteCloneService>,
     site_clone_template_repo: Arc<SqliteSiteCloneTemplateRepository>,
+    themeable_ui: Arc<ThemeableUiService>,
 ) -> Router {
     let auth_state = ApiAuthState {
         identity: identity.clone(),
@@ -122,6 +124,7 @@ pub fn build_router(
             site_clone_template_svc,
             site_clone_template_repo,
         ))
+        .merge(themeable_ui_router(themeable_ui))
         .layer(from_fn_with_state(auth_state, api_auth_middleware));
 
     Router::new()

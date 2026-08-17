@@ -450,6 +450,10 @@ pub enum AuditAction {
     SiteTemplateExported,
     /// A template signature failed to verify on retrieval.
     TemplateSignatureFailed,
+    /// A theme override was updated.
+    ThemeOverrideUpdated,
+    /// A theme override was cleared.
+    ThemeOverrideCleared,
 }
 
 impl AuditAction {
@@ -657,6 +661,8 @@ impl AuditAction {
             AuditAction::CloneKeptPii => "clone_kept_pii",
             AuditAction::SiteTemplateExported => "site_template_exported",
             AuditAction::TemplateSignatureFailed => "template_signature_failed",
+            AuditAction::ThemeOverrideUpdated => "theme_override_updated",
+            AuditAction::ThemeOverrideCleared => "theme_override_cleared",
         }
     }
 }
@@ -961,6 +967,8 @@ impl AuditService for SqliteAuditService {
                 "clone_kept_pii" => AuditAction::CloneKeptPii,
                 "site_template_exported" => AuditAction::SiteTemplateExported,
                 "template_signature_failed" => AuditAction::TemplateSignatureFailed,
+                "theme_override_updated" => AuditAction::ThemeOverrideUpdated,
+                "theme_override_cleared" => AuditAction::ThemeOverrideCleared,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

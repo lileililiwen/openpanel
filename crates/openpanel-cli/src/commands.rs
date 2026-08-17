@@ -1137,6 +1137,12 @@ pub enum SiteCommand {
         #[command(subcommand)]
         action: SiteTemplateCommand,
     },
+    /// Themeable UI / white-label commands.
+    Branding {
+        /// Branding subcommand.
+        #[command(subcommand)]
+        action: BrandingCommand,
+    },
 }
 
 /// Subcommands for managing per-site collaborators.
@@ -1694,4 +1700,40 @@ pub enum SiteTemplateCommand {
     },
     /// List stored templates.
     List,
+}
+
+/// Themeable UI / white-label subcommands.
+#[derive(Debug, Subcommand)]
+pub enum BrandingCommand {
+    /// Read the caller's theme override.
+    Show,
+    /// Replace the caller's theme override.
+    Set {
+        /// Brand name.
+        #[arg(long)]
+        brand_name: String,
+        /// Foreground hex color.
+        #[arg(long)]
+        color_fg: String,
+        /// Background hex color.
+        #[arg(long)]
+        color_bg: String,
+        /// Accent hex color.
+        #[arg(long)]
+        color_accent: String,
+        /// Minimum contrast (default 4.5).
+        #[arg(long, default_value_t = 4.5)]
+        contrast_min: f64,
+        /// Font family.
+        #[arg(long)]
+        font_family: String,
+        /// Base font size in px (10..=24).
+        #[arg(long)]
+        base_size_px: u16,
+        /// Optional panel-domain FQDN.
+        #[arg(long)]
+        panel_domain: Option<String>,
+    },
+    /// Clear the caller's theme override.
+    Clear,
 }

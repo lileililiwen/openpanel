@@ -68,6 +68,10 @@ pub mod software_center;
 pub mod ssl;
 /// Allowlisted host service lifecycle and health domain.
 pub mod system_services;
+/// Themeable UI and white-label bounded context: per-account
+/// `ThemeOverride`, `Palette` with WCAG-AA contrast enforcement,
+/// `Typography`, `PanelDomain`, and `BrandingScope`.
+pub mod themeable_ui;
 /// Per-site typed web application firewall rules.
 pub mod waf;
 
@@ -382,6 +386,10 @@ pub use ssl::{
 pub use synthetic_monitoring::{
     CheckResult, CheckStatus, CheckType, SyntheticCheck, SyntheticError, SyntheticRepository,
     classify,
+};
+pub use themeable_ui::{
+    BrandingScope, HexColor, Palette, PanelDomain, ThemeOverride, ThemeableUiError,
+    ThemeableUiRepository, Typography, contrast_ratio,
 };
 pub use waf::{Rule, RuleSet, WafError, WafRepository};
 pub use wildcard_ssl::{

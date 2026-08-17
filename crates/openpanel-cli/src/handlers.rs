@@ -342,6 +342,15 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let site_cache_cdn_svc = site_cache_cdn_module.service();
     let _ = site_cache_cdn_svc;
 
+    // Themeable UI: per-account override + palette validation.
+    let themeable_ui_repo =
+        openpanel_app::themeable_ui::SqliteThemeableUiRepository::new(pool.clone());
+    let themeable_ui_svc = Arc::new(openpanel_app::ThemeableUiService::new(
+        Arc::new(themeable_ui_repo),
+        audit.clone(),
+        None,
+    ));
+
     // Site clone + template export module: persistence only.
     let site_clone_template_module = openpanel_app::SiteCloneTemplateModule::new(&ctx).await;
     runner
@@ -411,6 +420,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
             None,
         )),
         site_clone_template_module.repo(),
+        themeable_ui_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -439,6 +449,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         collaborators_svc,
         registry_svc,
         container_runtime_svc,
+        themeable_ui_svc.clone(),
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
@@ -4933,5 +4944,140 @@ pub async fn site_template_list(config: Arc<Config>) -> anyhow::Result<()> {
         })
         .collect();
     println!("{}", serde_json::to_string_pretty(&view)?);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// themeable-ui CLI handlers.
+// ---------------------------------------------------------------------------
+
+/// Build the `ThemeableUiService` for CLI subcommands.
+async fn build_themeable_ui(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::ThemeableUiService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
+    let master_key = load_master_key(&config)?;
+    let identity_module = IdentityModule::new(&ctx, master_key).await;
+    let repo = openpanel_app::themeable_ui::SqliteThemeableUiRepository::new(pool);
+    let svc = Arc::new(openpanel_app::ThemeableUiService::new(
+        Arc::new(repo),
+        audit,
+        None,
+    ));
+    Ok((svc, identity_module.service()))
+}
+
+/// `openpanel site branding show`.
+pub async fn branding_show(config: Arc<Config>) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_themeable_ui(config).await?;
+    let caller = identity_svc
+        .list_users()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("admin user not found"))?;
+    let override_ = svc
+        .get_override(caller.username().as_str(), caller.id())
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    match override_ {
+        Some(o) => {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "owner_id": o.owner_id().to_string(),
+                    "brand_name": o.brand_name(),
+                    "color_fg": o.palette().color_fg().as_hex(),
+                    "color_bg": o.palette().color_bg().as_hex(),
+                    "color_accent": o.palette().color_accent().as_hex(),
+                    "contrast_min": o.palette().contrast_min(),
+                    "font_family": o.typography().font_family(),
+                    "base_size_px": o.typography().base_size_px(),
+                    "panel_domain": o.panel_domain().map(|d| d.fqdn().to_string()),
+                    "logo_path": o.logo_path(),
+                }))?
+            );
+        }
+        None => println!("(no override)"),
+    }
+    Ok(())
+}
+
+/// `openpanel site branding set ...`.
+#[allow(clippy::too_many_arguments)]
+pub async fn branding_set(
+    config: Arc<Config>,
+    brand_name: String,
+    color_fg: String,
+    color_bg: String,
+    color_accent: String,
+    contrast_min: f64,
+    font_family: String,
+    base_size_px: u16,
+    panel_domain: Option<String>,
+) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_themeable_ui(config).await?;
+    let caller = identity_svc
+        .list_users()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("admin user not found"))?;
+    let fg = openpanel_domain::HexColor::parse(&color_fg)
+        .map_err(|e| anyhow::anyhow!(format!("{e:?}")))?;
+    let bg = openpanel_domain::HexColor::parse(&color_bg)
+        .map_err(|e| anyhow::anyhow!(format!("{e:?}")))?;
+    let accent = openpanel_domain::HexColor::parse(&color_accent)
+        .map_err(|e| anyhow::anyhow!(format!("{e:?}")))?;
+    let palette = openpanel_domain::Palette::with_min_contrast(fg, bg, accent, contrast_min)
+        .map_err(|e| anyhow::anyhow!(format!("{e:?}")))?;
+    let typography = openpanel_domain::Typography::new(font_family, base_size_px)
+        .map_err(|e| anyhow::anyhow!(format!("{e:?}")))?;
+    let panel_domain = match panel_domain {
+        Some(fqdn) => Some(
+            openpanel_domain::PanelDomain::new(fqdn)
+                .map_err(|e| anyhow::anyhow!(format!("{e:?}")))?,
+        ),
+        None => None,
+    };
+    svc.set_override(
+        caller.username().as_str(),
+        caller.id(),
+        brand_name,
+        palette,
+        typography,
+        panel_domain,
+        openpanel_domain::BrandingScope::Reseller,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!(format!("{e:?}")))?;
+    println!("ok");
+    Ok(())
+}
+
+/// `openpanel site branding clear`.
+pub async fn branding_clear(config: Arc<Config>) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_themeable_ui(config).await?;
+    let caller = identity_svc
+        .list_users()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("admin user not found"))?;
+    svc.clear_override(
+        caller.username().as_str(),
+        caller.id(),
+        openpanel_domain::BrandingScope::Reseller,
+    )
+    .await
+    .map_err(|e| anyhow::anyhow!(format!("{e:?}")))?;
+    println!("ok");
     Ok(())
 }
