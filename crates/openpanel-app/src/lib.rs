@@ -12,6 +12,9 @@ pub mod account_hierarchy;
 /// Quotas bounded context: per-user / per-site resource quotas
 /// with soft/hard limits and grace windows.
 pub mod quotas;
+/// Agent bounded context: per-host agent registry, fleet tokens,
+/// and signed recipe manifests.
+pub mod agent;
 /// AI Ops bounded context: conversational agent with tool-call
 /// allowlist and human-in-the-loop approval gate.
 pub mod ai_ops;
@@ -124,6 +127,7 @@ pub mod wordpress_toolkit;
 
 pub use account_hierarchy::{AccountHierarchyModule, HierarchyService, SqliteHierarchyRepository};
 pub use quotas::{QuotaService, QuotasModule, SqliteQuotaRepository};
+pub use agent::{AgentModule, AgentService, SqliteAgentRepository};
 pub use ai_ops::{
     ActionApproval, AiOpsModule, AskService, SqliteAiOpsRepository, ToolExecutor, default_allowlist,
 };

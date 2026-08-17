@@ -384,6 +384,16 @@ pub enum AuditAction {
     QuotaSoftLimitReached,
     /// A user exceeded a hard quota limit (blocking).
     QuotaHardLimitReached,
+    /// An agent was registered with the control plane.
+    AgentRegistered,
+    /// An agent was revoked by the control plane.
+    AgentRevoked,
+    /// A fleet token was issued to an agent.
+    FleetTokenIssued,
+    /// A fleet token was revoked.
+    FleetTokenRevoked,
+    /// A signed recipe manifest was stored for later dispatch.
+    RecipeManifestStored,
 }
 
 impl AuditAction {
@@ -556,6 +566,11 @@ impl AuditAction {
             AuditAction::QuotaPolicyDeleted => "quota_policy_deleted",
             AuditAction::QuotaSoftLimitReached => "quota_soft_limit_reached",
             AuditAction::QuotaHardLimitReached => "quota_hard_limit_reached",
+            AuditAction::AgentRegistered => "agent_registered",
+            AuditAction::AgentRevoked => "agent_revoked",
+            AuditAction::FleetTokenIssued => "fleet_token_issued",
+            AuditAction::FleetTokenRevoked => "fleet_token_revoked",
+            AuditAction::RecipeManifestStored => "recipe_manifest_stored",
         }
     }
 }
@@ -823,6 +838,11 @@ impl AuditService for SqliteAuditService {
                 "quota_policy_deleted" => AuditAction::QuotaPolicyDeleted,
                 "quota_soft_limit_reached" => AuditAction::QuotaSoftLimitReached,
                 "quota_hard_limit_reached" => AuditAction::QuotaHardLimitReached,
+                "agent_registered" => AuditAction::AgentRegistered,
+                "agent_revoked" => AuditAction::AgentRevoked,
+                "fleet_token_issued" => AuditAction::FleetTokenIssued,
+                "fleet_token_revoked" => AuditAction::FleetTokenRevoked,
+                "recipe_manifest_stored" => AuditAction::RecipeManifestStored,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

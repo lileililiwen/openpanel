@@ -68,6 +68,11 @@ pub mod account_hierarchy;
 /// pairs and grace windows. Enforcement is owned by the
 /// application layer's typed ports.
 pub mod quotas;
+/// Agent bounded context: per-host agent runtime, registration,
+/// `FleetToken` (mTLS client cert + scoped bearer fallback), and
+/// signed `RecipeManifest`. The agent refuses non-mTLS traffic and
+/// validates every recipe against its allowlist before executing.
+pub mod agent;
 /// AI Ops bounded context: conversational session, tool-call
 /// allowlist, proposed/approved/executed/denied actions.
 pub mod ai_ops;
@@ -294,6 +299,11 @@ pub use quotas::{
     QuotaDimension, QuotaError, QuotaLimit, QuotaPolicy, QuotaRepository, QuotaSubject,
     QuotaUsage,
 };
+pub use agent::{
+    AgentError, AgentId, AgentRegistration, AgentRepository, AgentStatus, FleetToken,
+    FleetTokenScope, RecipeAction, RecipeManifest, is_manifest_signature_valid,
+};
+pub use agent::RecipeManifest as _RecipeManifest;
 pub use sites::{error::SiteError, repository::SiteRepository, site::Site, status::SiteStatus};
 pub use ssl::{
     certificate::{Certificate, KeyType},
