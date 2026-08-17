@@ -113,3 +113,6 @@ pub const MAINTENANCE_WINDOWS_V001: &str = include_str!("maintenance_windows/V00
 /// Container runtime: per-user quota, registry credentials,
 /// metrics samples, and monthly egress accounts.
 pub const CONTAINER_RUNTIME_V001: &str = include_str!("container_runtime/V001__init.sql");
+/// Hosting plans v001: `hosting_plans` table and the
+/// append-only `user_plan_assignments` table.
+pub const HOSTING_PLANS_V001: &str = include_str!("hosting_plans/V001__init.sql");

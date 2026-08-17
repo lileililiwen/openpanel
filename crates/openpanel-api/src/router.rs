@@ -6,10 +6,11 @@ use axum::{Json, Router, middleware::from_fn_with_state, routing::get};
 use openpanel_app::{
     ApiTokenService, BackupService, CollaboratorService, ContainerRegistryService,
     ContainerRuntimeService, CronService, DatabasesService, DnsService, DockerService,
-    FilesService, FtpService, GrantResolver, IdentityService, LogService, MailService,
-    MarketplaceService, MonitoringService, NotificationService, PitrService, PluginService,
-    SecurityService, SitesService, SoftwareCenterService, SslService, StagingService, WafService,
-    identity::TwoFactorService, security::LoginThrottleService, system_services::ServiceManager,
+    FilesService, FtpService, GrantResolver, HostingPlansService, IdentityService, LogService,
+    MailService, MarketplaceService, MonitoringService, NotificationService, PitrService,
+    PluginService, SecurityService, SitesService, SoftwareCenterService, SslService,
+    StagingService, WafService, identity::TwoFactorService, security::LoginThrottleService,
+    system_services::ServiceManager,
 };
 
 use crate::{
@@ -21,9 +22,10 @@ use crate::{
         container_runtime::router as container_runtime_router, cron::router as cron_router,
         databases::router as databases_router, db_pitr::router as db_pitr_router,
         dns::router as dns_router, docker::router as docker_router, files::router as files_router,
-        ftp::router as ftp_router, identity::router as identity_router,
-        logs::router as logs_router, mail::router as mail_router,
-        monitoring::router as monitoring_router, notifications::router as notifications_router,
+        ftp::router as ftp_router, hosting_plans::router as hosting_plans_router,
+        identity::router as identity_router, logs::router as logs_router,
+        mail::router as mail_router, monitoring::router as monitoring_router,
+        notifications::router as notifications_router,
         plugin_marketplace::router as plugin_marketplace_router,
         security::router as security_router, site_staging::router as site_staging_router,
         sites::router as sites_router, software_center::router as software_center_router,
@@ -67,6 +69,7 @@ pub fn build_router(
     grant_resolver: Arc<GrantResolver>,
     registry: Arc<ContainerRegistryService>,
     container_runtime: Arc<ContainerRuntimeService>,
+    hosting_plans: Arc<HostingPlansService>,
 ) -> Router {
     let auth_state = ApiAuthState {
         identity: identity.clone(),
@@ -105,6 +108,7 @@ pub fn build_router(
         .nest("/marketplace", plugin_marketplace_router(marketplace))
         .nest("/registry", container_registry_router(registry))
         .nest("/container", container_runtime_router(container_runtime))
+        .merge(hosting_plans_router(hosting_plans))
         .layer(from_fn_with_state(auth_state, api_auth_middleware));
 
     Router::new()

@@ -1,25 +1,21 @@
 //! Hosting plans bounded context: plan definitions, quota caps, and the
 //! `HostingPlanId` reference used by the `User` aggregate.
 //!
-//! This module starts with a placeholder `HostingPlanId` newtype plus
-//! a stub repository trait. The full plan domain (limits, subscription
-//! lifecycle, plan resolution) ships in the follow-on `add-hosting-plans`
-//! change. The placeholder exists so the `refine-identity-with-hierarchy-and-plan-fields`
-//! change can wire the `user.hosting_plan_id` field without inventing
-//! a temporary type that the follow-on change would have to replace.
+//! The full hosting-plans domain (aggregate, validator, resolver,
+//! assignment table) lives in [`crate::hosting_plans`]. This module
+//! is kept only to host the `HostingPlanId` newtype that the user
+//! aggregate references and the placeholder `HostingPlanRepository`
+//! that the placeholder identity `find_by_plan` lookup calls.
 
-use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-
-use crate::RepoError;
 
 /// Stable identifier for a hosting plan.
 ///
 /// Plans are referenced by `User.hosting_plan_id` and resolve into
 /// quota caps and allowed features. The full plan lifecycle
-/// (creation, modification, deletion) is owned by the follow-on
-/// `add-hosting-plans` change.
+/// (creation, modification, deletion) is owned by the
+/// `hosting_plans` module.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(transparent)]
 pub struct HostingPlanId(pub Uuid);
@@ -45,20 +41,5 @@ impl Default for HostingPlanId {
 impl std::fmt::Display for HostingPlanId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
-    }
-}
-
-/// Persistence operations for hosting plans.
-///
-/// The follow-on `add-hosting-plans` change provides the concrete
-/// implementation. The placeholder trait ships with the
-/// `refine-identity-with-hierarchy-and-plan-fields` change so the
-/// `UserRepository` trait can reference it without depending on the
-/// full plan domain.
-#[async_trait]
-pub trait HostingPlanRepository: Send + Sync + 'static {
-    /// Return `true` when a plan with the given id exists.
-    async fn exists(&self, _id: HostingPlanId) -> Result<bool, RepoError> {
-        Ok(false)
     }
 }

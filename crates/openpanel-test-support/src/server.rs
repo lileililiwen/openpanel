@@ -17,16 +17,16 @@ use std::{
 
 use openpanel_api::build_router;
 use openpanel_app::{
-    ApiTokenModule, ApiTokenService, ApplyReport, BackupService, BackupsModule, CollaboratorService,
-    CronModule, CronService, DatabasesModule, DatabasesService, DbPitrModule, DnsModule, DnsService,
-    DockerAdapter, DockerModule, DockerService, ExecResult, FilesModule, FilesService, FtpModule,
-    FtpService, GrantResolver, IdentityModule, IdentityService, InMemoryBinlogSink,
-    InMemoryStagingFilesystem, LogService, LogsModule, MailModule, MailService, MarketplaceService,
-    MonitoringModule, MonitoringService, NotificationModule, NotificationService, PitrService,
-    PluginService, SecurityModule, SecurityService, SiteStagingModule, SitesModule, SitesService,
-    SoftwareCenterModule, SoftwareCenterService, SslModule, SslPaths, SslService, StagingService,
-    SystemServicesModule,     WafModule, WafService,
-    ContainerRuntimeModule, ContainerRuntimeService,
+    ApiTokenModule, ApiTokenService, ApplyReport, BackupService, BackupsModule,
+    CollaboratorService, ContainerRuntimeModule, ContainerRuntimeService, CronModule, CronService,
+    DatabasesModule, DatabasesService, DbPitrModule, DnsModule, DnsService, DockerAdapter,
+    DockerModule, DockerService, ExecResult, FilesModule, FilesService, FtpModule, FtpService,
+    GrantResolver, HostingPlansModule, HostingPlansService, IdentityModule, IdentityService,
+    InMemoryBinlogSink, InMemoryStagingFilesystem, LogService, LogsModule, MailModule, MailService,
+    MarketplaceService, MonitoringModule, MonitoringService, NotificationModule,
+    NotificationService, PitrService, PluginService, SecurityModule, SecurityService,
+    SiteStagingModule, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
+    SslModule, SslPaths, SslService, StagingService, SystemServicesModule, WafModule, WafService,
     identity::two_factor::TwoFactorCrypto,
     security::MemoryFirewall,
     sites::{nginx::NginxPaths, repo::SqliteSiteRepository},
@@ -258,6 +258,8 @@ pub struct TestServer {
     grant_resolver: Arc<GrantResolver>,
     /// Container registry service.
     registry: Arc<openpanel_app::ContainerRegistryService>,
+    /// Hosting plans service.
+    hosting_plans: Arc<HostingPlansService>,
 }
 
 impl TestServer {
@@ -379,9 +381,15 @@ impl TestServer {
         let docker_module =
             DockerModule::with_adapters(&ctx, docker_runtime.clone(), docker_runtime, master_key)
                 .await;
-        let container_runtime_module =
-            ContainerRuntimeModule::new(&ctx, audit.clone(), master_key, openpanel_domain::PlanQuotaCaps::default(), None)
-                .await;
+        let container_runtime_module = ContainerRuntimeModule::new(
+            &ctx,
+            audit.clone(),
+            master_key,
+            openpanel_domain::PlanQuotaCaps::default(),
+            None,
+        )
+        .await;
+        let hosting_plans_module = HostingPlansModule::new(&ctx).await;
         let ftp_module = FtpModule::new(&ctx).await.expect("ftp module");
 
         let databases_module = DatabasesModule::new(&ctx, master_key).await;
@@ -435,6 +443,13 @@ impl TestServer {
             )
             .await
             .expect("container-runtime migrations");
+        runner
+            .apply_module(
+                hosting_plans_module.name(),
+                &hosting_plans_module.migrations(),
+            )
+            .await
+            .expect("hosting-plans migrations");
         runner
             .apply_module(ftp_module.name(), &ftp_module.migrations())
             .await
@@ -538,6 +553,7 @@ impl TestServer {
         let waf_svc = waf_module.service();
         let docker_svc = docker_module.service();
         let container_runtime_svc = container_runtime_module.service();
+        let hosting_plans_svc = hosting_plans_module.service();
         docker_svc.attach_quota_gate(container_runtime_svc.clone());
         let ftp_svc = ftp_module.service();
         let databases_svc = databases_module.service();
@@ -597,7 +613,8 @@ impl TestServer {
         // verify signatures before delegating.
         let mp_client: Arc<dyn openpanel_app::MarketplaceClient> =
             Arc::new(openpanel_app::MockMarketplaceClient::new());
-        let mp_module = openpanel_app::PluginMarketplaceModule::new(&ctx, mp_client, plugin_svc.clone()).await;
+        let mp_module =
+            openpanel_app::PluginMarketplaceModule::new(&ctx, mp_client, plugin_svc.clone()).await;
         runner
             .apply_module(mp_module.name(), &mp_module.migrations())
             .await
@@ -608,7 +625,10 @@ impl TestServer {
         let collaborators_module =
             openpanel_app::CollaboratorsModule::new(&ctx, audit.clone()).await;
         runner
-            .apply_module(collaborators_module.name(), &collaborators_module.migrations())
+            .apply_module(
+                collaborators_module.name(),
+                &collaborators_module.migrations(),
+            )
             .await
             .expect("collaborators migrations");
         let collaborators_svc = collaborators_module.service();
@@ -663,6 +683,7 @@ impl TestServer {
             grant_resolver.clone(),
             registry_svc.clone(),
             container_runtime_svc.clone(),
+            hosting_plans_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -756,6 +777,7 @@ impl TestServer {
             waf: waf_svc,
             docker: docker_svc,
             container_runtime: container_runtime_svc,
+            hosting_plans: hosting_plans_svc,
             ftp: ftp_svc,
             api_tokens: api_token_svc,
             notifications: notification_svc,

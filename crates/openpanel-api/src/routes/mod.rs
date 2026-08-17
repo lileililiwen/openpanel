@@ -23,6 +23,8 @@ pub mod docker;
 pub mod files;
 /// Per-site FTP account routes (`/sites/{id}/ftp/accounts`).
 pub mod ftp;
+/// Hosting plan routes (`/hosting-plans`).
+pub mod hosting_plans;
 /// Identity resource routes (`/identity`).
 pub mod identity;
 /// Authorized log and traffic routes (`/logs`).

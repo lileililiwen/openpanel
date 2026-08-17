@@ -343,6 +343,27 @@ pub enum AuditAction {
     /// container is throttled (1 Mbps) until the owner raises the
     /// limit. Consumed by the bandwidth accounting bounded context.
     BandwidthThresholdCrossed,
+    /// A hosting plan was created.
+    PlanCreated,
+    /// A hosting plan was updated (caps, features, or allowed apps).
+    PlanUpdated,
+    /// A hosting plan was disabled.
+    PlanDisabled,
+    /// A previously disabled plan was re-enabled.
+    PlanEnabled,
+    /// A hosting plan was cloned from an existing plan.
+    PlanCloned,
+    /// A hosting plan was deleted.
+    PlanDeleted,
+    /// A delete request was refused because the plan still has
+    /// current assignments.
+    PlanDeleteBlocked,
+    /// A user was assigned to a hosting plan.
+    PlanAssigned,
+    /// A user was reassigned from one plan to another.
+    PlanReassigned,
+    /// A hosting plan was detached from a user.
+    PlanUnassigned,
 }
 
 impl AuditAction {
@@ -495,6 +516,16 @@ impl AuditAction {
             AuditAction::ContainerImagePulled => "container_image_pulled",
             AuditAction::ContainerEgressLimitRaised => "container_egress_limit_raised",
             AuditAction::BandwidthThresholdCrossed => "bandwidth_threshold_crossed",
+            AuditAction::PlanCreated => "plan_created",
+            AuditAction::PlanUpdated => "plan_updated",
+            AuditAction::PlanDisabled => "plan_disabled",
+            AuditAction::PlanEnabled => "plan_enabled",
+            AuditAction::PlanCloned => "plan_cloned",
+            AuditAction::PlanDeleted => "plan_deleted",
+            AuditAction::PlanDeleteBlocked => "plan_delete_blocked",
+            AuditAction::PlanAssigned => "plan_assigned",
+            AuditAction::PlanReassigned => "plan_reassigned",
+            AuditAction::PlanUnassigned => "plan_unassigned",
         }
     }
 }
@@ -742,6 +773,16 @@ impl AuditService for SqliteAuditService {
                 "container_image_pulled" => AuditAction::ContainerImagePulled,
                 "container_egress_limit_raised" => AuditAction::ContainerEgressLimitRaised,
                 "bandwidth_threshold_crossed" => AuditAction::BandwidthThresholdCrossed,
+                "plan_created" => AuditAction::PlanCreated,
+                "plan_updated" => AuditAction::PlanUpdated,
+                "plan_disabled" => AuditAction::PlanDisabled,
+                "plan_enabled" => AuditAction::PlanEnabled,
+                "plan_cloned" => AuditAction::PlanCloned,
+                "plan_deleted" => AuditAction::PlanDeleted,
+                "plan_delete_blocked" => AuditAction::PlanDeleteBlocked,
+                "plan_assigned" => AuditAction::PlanAssigned,
+                "plan_reassigned" => AuditAction::PlanReassigned,
+                "plan_unassigned" => AuditAction::PlanUnassigned,
                 other => {
                     tracing::warn!(other, "unknown audit action");
                     continue;

@@ -8,6 +8,12 @@ mod common;
 
 mod api_tokens;
 mod backups;
+/// Per-site collaborator HTTP integration tests.
+mod collaborators;
+/// Container registry HTTP integration tests.
+mod container_registry;
+/// Container runtime HTTP + web integration tests.
+mod container_runtime;
 mod cron;
 mod databases;
 /// Database point-in-time recovery HTTP integration tests.
@@ -16,24 +22,20 @@ mod dns;
 mod docker;
 mod files;
 mod ftp;
+/// Hosting plans HTTP integration tests.
+mod hosting_plans;
 mod identity;
 mod logs;
 mod mail;
 mod monitoring;
+/// Plugin marketplace HTTP integration tests.
+mod plugin_marketplace;
 mod quality;
 mod security;
 /// Per-site staging HTTP integration tests.
 mod site_staging;
 mod sites;
 mod smoke;
-/// Plugin marketplace HTTP integration tests.
-mod plugin_marketplace;
-/// Per-site collaborator HTTP integration tests.
-mod collaborators;
-/// Container registry HTTP integration tests.
-mod container_registry;
-/// Container runtime HTTP + web integration tests.
-mod container_runtime;
 mod software_center;
 mod ssl;
 mod system_services;

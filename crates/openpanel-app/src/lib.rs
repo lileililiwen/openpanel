@@ -6,114 +6,149 @@
 #![deny(rustdoc::broken_intra_doc_links)]
 #![cfg_attr(test, allow(clippy::unwrap_used, clippy::expect_used, clippy::panic))]
 
+/// AI Ops bounded context: conversational agent with tool-call
+/// allowlist and human-in-the-loop approval gate.
+pub mod ai_ops;
 pub mod api_tokens;
+/// Non-PHP runtime bounded context: per-site runtime choice
+/// (Node / Python / Go / Ruby / .NET), pinned version, app port,
+/// supervisor unit, and the nginx reverse-proxy block that
+/// targets `127.0.0.1:APP_PORT`.
+pub mod app_runtimes;
 pub mod backups;
-pub mod cron;
-pub mod databases;
-/// Database point-in-time recovery: continuous binlog streaming,
-/// point-in-time restore, and incremental file-backup deltas.
-pub mod db_pitr;
-pub mod dns;
-pub mod docker;
-pub mod files;
-pub mod ftp;
-/// Internationalization bounded context: `LocaleService`, catalog
-/// resolution, locale-aware formatting, and per-user preferences.
-pub mod i18n;
-pub mod identity;
-pub mod logs;
-pub mod mail;
-pub mod migrations;
-pub mod monitoring;
-pub mod notifications;
-/// Plugin extension framework bounded context.
-pub mod plugin;
-/// Plugin marketplace bounded context.
-pub mod plugin_marketplace;
+/// Reseller billing integration bounded context: usage meters,
+/// chargeback pricing, integration state, and webhook HMAC
+/// verification.
+pub mod billing;
 /// Per-site collaborator bounded context.
 pub mod collaborators;
+/// Compliance bounded context: CIS hardening, audit retention,
+/// GDPR export with secret redaction.
+pub mod compliance;
 /// Container registry bounded context.
 pub mod container_registry;
 /// Container runtime bounded context: per-user quota, registry
 /// credentials, metrics, and monthly egress accounting.
 pub mod container_runtime;
+pub mod cron;
+pub mod databases;
+/// Database point-in-time recovery: continuous binlog streaming,
+/// point-in-time restore, and incremental file-backup deltas.
+pub mod db_pitr;
+/// Database privilege management bounded context: per-user grant
+/// scopes, remote access with an explicit wildcard opt-in, and
+/// short-lived single-use SSO tokens for the admin tool launcher.
+pub mod db_privileges;
+pub mod dns;
+/// DNSSEC + secondary DNS bounded context: zone signing keys,
+/// secondary nameserver ACLs, glue records, and DS records.
+pub mod dnssec_secondary;
+pub mod docker;
+pub mod files;
+pub mod ftp;
+/// Git deployment bounded context: a per-site git repo, deploy
+/// runs, and webhook HMAC verification.
+pub mod git_deployment;
+/// Hosting plans bounded context: plan definitions, quota caps,
+/// feature toggles, the read-side resolver, and the assignment
+/// table that backs `User.hosting_plan_id`.
+pub mod hosting_plans;
+/// Internationalization bounded context: `LocaleService`, catalog
+/// resolution, locale-aware formatting, and per-user preferences.
+pub mod i18n;
 /// Infrastructure-as-Code bounded context.
 pub mod iac;
+pub mod identity;
+/// IPv6 + address-pool bounded context: typed pools, allocations
+/// to sites, and the vhost binder that attaches the address set
+/// to a vhost.
+pub mod ip_allocation;
+/// Kernel resource isolation bounded context: per-user cgroup
+/// limits and namespace configuration.
+pub mod kernel_isolation;
+/// Load balancing and failover bounded context: pools of
+/// members with health probes and weighted rotation.
+pub mod load_balancing;
+/// Log viewer bounded context: typed queries over a JSONL store
+/// with role-based authorization.
+pub mod log_viewer;
+pub mod logs;
+pub mod mail;
+/// Mail anti-spam and filtering bounded context: per-mailbox
+/// anti-spam policy, greylist, Sieve filter scripts, autoresponder
+/// windows, forwarders, catch-all, and mailing lists.
+pub mod mail_filtering;
+/// Scheduled maintenance windows bounded context: a panel-wide
+/// schedule that blocks destructive actions, with a
+/// single-use override that lifts the lock for a bounded TTL.
+pub mod maintenance_windows;
+pub mod migrations;
+pub mod monitoring;
+pub mod notifications;
+/// OS update management bounded context: package updates,
+/// unattended-upgrades policy, reboot state.
+pub mod os_updates;
+/// Plugin extension framework bounded context.
+pub mod plugin;
+/// Plugin marketplace bounded context.
+pub mod plugin_marketplace;
 pub mod prelude;
 pub mod security;
+/// Service manager bounded context: allow-listed systemctl
+/// surface with audited lifecycle actions.
+pub mod service_manager;
 /// Per-site staging bounded context: staging slot creation, sync,
 /// and atomic promote.
 pub mod site_staging;
 pub mod sites;
 pub mod software_center;
 pub mod ssl;
-pub mod system_services;
-pub mod waf;
-/// AI Ops bounded context: conversational agent with tool-call
-/// allowlist and human-in-the-loop approval gate.
-pub mod ai_ops;
-/// Compliance bounded context: CIS hardening, audit retention,
-/// GDPR export with secret redaction.
-pub mod compliance;
-/// Service manager bounded context: allow-listed systemctl
-/// surface with audited lifecycle actions.
-pub mod service_manager;
-/// OS update management bounded context: package updates,
-/// unattended-upgrades policy, reboot state.
-pub mod os_updates;
 /// Synthetic monitoring bounded context: periodic HTTP / TCP / SSL
 /// checks with a per-check throttle and typed alert decision.
 pub mod synthetic_monitoring;
-/// Log viewer bounded context: typed queries over a JSONL store
-/// with role-based authorization.
-pub mod log_viewer;
-/// Database privilege management bounded context: per-user grant
-/// scopes, remote access with an explicit wildcard opt-in, and
-/// short-lived single-use SSO tokens for the admin tool launcher.
-pub mod db_privileges;
-/// IPv6 + address-pool bounded context: typed pools, allocations
-/// to sites, and the vhost binder that attaches the address set
-/// to a vhost.
-pub mod ip_allocation;
-/// Reseller billing integration bounded context: usage meters,
-/// chargeback pricing, integration state, and webhook HMAC
-/// verification.
-pub mod billing;
-/// Load balancing and failover bounded context: pools of
-/// members with health probes and weighted rotation.
-pub mod load_balancing;
-/// WordPress toolkit bounded context: staging, clone, update
-/// (with rollback on failure), security scan, and cache layer.
-pub mod wordpress_toolkit;
+pub mod system_services;
+pub mod waf;
 /// Wildcard SSL with DNS-01 challenge bounded context: cert
 /// request with `ChallengeKind::Dns01`, ACME endpoint mode, and
 /// a DNS lease lifecycle.
 pub mod wildcard_ssl;
-/// Non-PHP runtime bounded context: per-site runtime choice
-/// (Node / Python / Go / Ruby / .NET), pinned version, app port,
-/// supervisor unit, and the nginx reverse-proxy block that
-/// targets `127.0.0.1:APP_PORT`.
-pub mod app_runtimes;
-/// Kernel resource isolation bounded context: per-user cgroup
-/// limits and namespace configuration.
-pub mod kernel_isolation;
-/// DNSSEC + secondary DNS bounded context: zone signing keys,
-/// secondary nameserver ACLs, glue records, and DS records.
-pub mod dnssec_secondary;
-/// Mail anti-spam and filtering bounded context: per-mailbox
-/// anti-spam policy, greylist, Sieve filter scripts, autoresponder
-/// windows, forwarders, catch-all, and mailing lists.
-pub mod mail_filtering;
-/// Git deployment bounded context: a per-site git repo, deploy
-/// runs, and webhook HMAC verification.
-pub mod git_deployment;
-/// Scheduled maintenance windows bounded context: a panel-wide
-/// schedule that blocks destructive actions, with a
-/// single-use override that lifts the lock for a bounded TTL.
-pub mod maintenance_windows;
+/// WordPress toolkit bounded context: staging, clone, update
+/// (with rollback on failure), security scan, and cache layer.
+pub mod wordpress_toolkit;
 
+pub use ai_ops::{
+    ActionApproval, AiOpsModule, AskService, SqliteAiOpsRepository, ToolExecutor, default_allowlist,
+};
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
+pub use app_runtimes::{
+    AppRuntimesModule, ReverseProxyLayer, RuntimeService, SqliteRuntimeRepository,
+    SupervisorUnitBuilder,
+};
 pub use backups::{BackupService, BackupsModule};
+pub use billing::{
+    BillingModule, BillingService, ChargebackEngine, SqliteBillingRepository, UsageExporter,
+    WebhookRelay,
+};
+/// Per-site collaborator module.
+pub use collaborators::{
+    CollaboratorService, CollaboratorsModule, GrantResolver, InviteCollaboratorError,
+    InviteRequest, SqliteCollaboratorRepository, SqliteSiteGrantRepository, UpdateRequest,
+};
+pub use compliance::{
+    AuditRetentionService, ComplianceModule, GdprExporter, HardeningWizard,
+    SqliteComplianceRepository, default_profile,
+};
+/// Container registry module.
+pub use container_registry::{
+    ContainerRegistryModule, ContainerRegistryService, ImageBlob, NoopScanHook, PushError,
+    PushRequest, PushResult, ScanHook, ScanHookError, SqliteImageRepository,
+    SqliteNamespaceRepository, SqliteScanResultRepository,
+};
+/// Container runtime module.
+pub use container_runtime::{
+    ContainerRuntimeModule, ContainerRuntimeService, CreateCredentialResult, PullError,
+    PullRequest, PullResult, RegistryHostAdapter,
+};
 pub use cron::{CronModule, CronService};
 pub use databases::{DatabasesModule, service::DatabasesService};
 /// Database point-in-time recovery bounded-context module.
@@ -121,7 +156,15 @@ pub use db_pitr::{DbPitrModule, PitrService};
 /// In-memory `BinlogSink` / `LogTailer` adapters for tests and
 /// offline development.
 pub use db_pitr::{InMemoryBinlogSink, InMemoryLogTailer};
+pub use db_privileges::{
+    AdminToolSso, DbPrivilegeModule, PrivilegeService, RemoteAccessController,
+    SqliteDbPrivilegeRepository,
+};
 pub use dns::{DnsModule, DnsService};
+pub use dnssec_secondary::{
+    AxfrSender, DnsSecSecondaryModule, DnsSecService, GlueRecordService, KeyRolloverEngine,
+    RecordingRegistrar, Registrar, SqliteDnsSecRepository,
+};
 pub use docker::{
     ApplyReport, BollardDockerAdapter, DockerAdapter, DockerModule, DockerService, ExecResult,
     NetworkAdapter, RuntimeContainerState, SqliteDockerRepository,
@@ -132,14 +175,50 @@ pub use ftp::{
     FtpModule, FtpServerConfig, FtpServerTask, FtpService, FtpSessionRegistry, SqliteFtpRepository,
     UpdateFtpAccount,
 };
+pub use git_deployment::{
+    DeployService, GitDeploymentModule, SqliteDeployRepository, WebhookVerifier,
+    verify_webhook_with_secret,
+};
+pub use hosting_plans::{HostingPlansModule, HostingPlansService, SqliteHostingPlanRepository};
 pub use i18n::{
     I18nAppError, LocaleService, SqliteLocaleUserPrefsRepository, TranslationEntry, default_catalog,
 };
+/// Infrastructure-as-Code module.
+pub use iac::{
+    CodegenContract, CommittedArtifacts, DriftOutcome, GeneratedSurface, OpenApiRef, ParsedOpenApi,
+    render_go_stub, render_provider_stub, render_rust_stub, render_typescript_stub,
+};
 pub use identity::{IdentityModule, service::IdentityService};
+pub use ip_allocation::{
+    Allocator, IpAllocationModule, IpService, SqliteIpRepository, VhostBinder,
+};
+pub use kernel_isolation::{
+    CgroupEnforcer, CgroupWriter, KernelIsolationModule, NamespaceIsolator, QuotaBridge,
+    RecordingCgroupWriter, SqliteIsolationRepository,
+};
+pub use load_balancing::{
+    LbService, LoadBalancingModule, MemberRotator, RecordingHealthProbe, SqliteLbRepository,
+};
+pub use log_viewer::{
+    InMemoryLogReader, LogAggregator, LogViewerModule, SqliteLogViewerRepository,
+};
 pub use logs::{LogService, LogsModule};
 pub use mail::{MailModule, MailService};
+pub use mail_filtering::{
+    MailFilterService, MailFilteringModule, MailingListService, SieveCompiler, SpamScorer,
+    SqliteMailFilterRepository,
+};
+pub use maintenance_windows::{
+    MaintenanceEnforcer, MaintenanceWindowsModule, SqliteMaintenanceRepository,
+};
 pub use monitoring::{MonitoringModule, service::MonitoringService};
 pub use notifications::{NotificationModule, NotificationService};
+/// Re-export the `BinlogSink` trait so composition code can name it.
+pub use openpanel_domain::BinlogSink;
+pub use os_updates::{
+    OsUpdateApplier, OsUpdateLister, OsUpdateModule, PackageManager, RecordingPackageManager,
+    SqliteOsUpdateRepository, UnattendedConfig,
+};
 /// Plugin extension framework module.
 pub use plugin::{PluginModule, PluginService, SqlitePluginRegistry};
 /// Plugin marketplace module.
@@ -148,31 +227,11 @@ pub use plugin_marketplace::{
     InstallFromMarketplaceRequest, MarketplaceClient, MarketplaceService, MockMarketplaceClient,
     PluginMarketplaceModule, SqliteCatalogCache,
 };
-/// Per-site collaborator module.
-pub use collaborators::{
-    CollaboratorsModule, CollaboratorService, GrantResolver, InviteCollaboratorError,
-    InviteRequest, SqliteCollaboratorRepository, SqliteSiteGrantRepository, UpdateRequest,
-};
-/// Container registry module.
-pub use container_registry::{
-    ContainerRegistryModule, ContainerRegistryService, ImageBlob, NoopScanHook,
-    PushError, PushRequest, PushResult, ScanHook, ScanHookError,
-    SqliteImageRepository, SqliteNamespaceRepository, SqliteScanResultRepository,
-};
-/// Container runtime module.
-pub use container_runtime::{
-    ContainerRuntimeModule, ContainerRuntimeService, CreateCredentialResult, PullError,
-    PullRequest, PullResult, RegistryHostAdapter,
-};
-/// Infrastructure-as-Code module.
-pub use iac::{
-    CodegenContract, CommittedArtifacts, DriftOutcome, GeneratedSurface, OpenApiRef,
-    ParsedOpenApi, render_go_stub, render_provider_stub, render_rust_stub,
-    render_typescript_stub,
-};
-/// Re-export the `BinlogSink` trait so composition code can name it.
-pub use openpanel_domain::BinlogSink;
 pub use security::{SecurityModule, SecurityService};
+pub use service_manager::{
+    RecordingSystemCtl, ServiceActor, ServiceLister, ServiceManagerModule,
+    SqliteServiceManagerRepository,
+};
 /// Per-site staging bounded-context module.
 pub use site_staging::{
     InMemoryStagingFilesystem, SiteStagingModule, StagingFilesystemLayer, StagingService,
@@ -187,70 +246,17 @@ pub use ssl::{
     AcmeEndpoint, SslModule, SslPaths, SslService, challenge_server::AcmeHttpServer,
     module::CHALLENGE_SERVER_PORT,
 };
+pub use synthetic_monitoring::{
+    CheckRunner, ProbeScheduler, RecordingProbe, SqliteSyntheticRepository,
+    SyntheticMonitoringModule,
+};
 pub use system_services::{ServiceManager, SystemServicesModule};
 pub use waf::{WafModule, WafService};
-pub use ai_ops::{AiOpsModule, AskService, ActionApproval, SqliteAiOpsRepository, ToolExecutor, default_allowlist};
-pub use compliance::{
-    ComplianceModule, AuditRetentionService, GdprExporter, HardeningWizard,
-    SqliteComplianceRepository, default_profile,
-};
-pub use service_manager::{
-    ServiceManagerModule, RecordingSystemCtl, ServiceActor, ServiceLister,
-    SqliteServiceManagerRepository,
-};
-pub use os_updates::{
-    OsUpdateModule, OsUpdateApplier, OsUpdateLister, PackageManager, RecordingPackageManager,
-    SqliteOsUpdateRepository, UnattendedConfig,
-};
-pub use synthetic_monitoring::{
-    SyntheticMonitoringModule, CheckRunner, ProbeScheduler, RecordingProbe,
-    SqliteSyntheticRepository,
-};
-pub use log_viewer::{
-    LogViewerModule, InMemoryLogReader, LogAggregator, SqliteLogViewerRepository,
-};
-pub use db_privileges::{
-    DbPrivilegeModule, AdminToolSso, PrivilegeService, RemoteAccessController,
-    SqliteDbPrivilegeRepository,
-};
-pub use ip_allocation::{
-    IpAllocationModule, Allocator, IpService, SqliteIpRepository, VhostBinder,
-};
-pub use billing::{
-    BillingModule, BillingService, ChargebackEngine, SqliteBillingRepository, UsageExporter,
-    WebhookRelay,
-};
-pub use load_balancing::{
-    LoadBalancingModule, LbService, MemberRotator, RecordingHealthProbe, SqliteLbRepository,
+pub use wildcard_ssl::{
+    CertRenewalScheduler, Dns01ChallengeSolver, RecordingDnsProvider, SqliteWildcardRepository,
+    WildcardIssuer, WildcardSslModule,
 };
 pub use wordpress_toolkit::{
-    WordPressToolkitModule, FakeWpFilesystem, SqliteWpRepository, WpCacheLayer, WpScanner,
+    FakeWpFilesystem, SqliteWpRepository, WordPressToolkitModule, WpCacheLayer, WpScanner,
     WpToolkitService, WpUpdater,
-};
-pub use wildcard_ssl::{
-    WildcardSslModule, CertRenewalScheduler, Dns01ChallengeSolver, RecordingDnsProvider,
-    SqliteWildcardRepository, WildcardIssuer,
-};
-pub use app_runtimes::{
-    AppRuntimesModule, ReverseProxyLayer, RuntimeService, SqliteRuntimeRepository,
-    SupervisorUnitBuilder,
-};
-pub use kernel_isolation::{
-    KernelIsolationModule, CgroupEnforcer, CgroupWriter, NamespaceIsolator, QuotaBridge,
-    RecordingCgroupWriter, SqliteIsolationRepository,
-};
-pub use dnssec_secondary::{
-    DnsSecSecondaryModule, AxfrSender, DnsSecService, GlueRecordService, KeyRolloverEngine,
-    RecordingRegistrar, Registrar, SqliteDnsSecRepository,
-};
-pub use mail_filtering::{
-    MailFilteringModule, MailFilterService, MailingListService, SieveCompiler, SpamScorer,
-    SqliteMailFilterRepository,
-};
-pub use git_deployment::{
-    GitDeploymentModule, DeployService, SqliteDeployRepository, WebhookVerifier,
-    verify_webhook_with_secret,
-};
-pub use maintenance_windows::{
-    MaintenanceWindowsModule, MaintenanceEnforcer, SqliteMaintenanceRepository,
 };

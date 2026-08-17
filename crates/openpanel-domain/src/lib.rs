@@ -91,6 +91,9 @@ pub mod git_deployment;
 /// the `HostingPlanId` reference used by the `User` aggregate. The
 /// full plan domain ships in the follow-on `add-hosting-plans` change.
 pub mod hosting;
+/// Hosting plans full bounded context: `HostingPlan` aggregate,
+/// `PlanResolver`, feature map, and assignment table.
+pub mod hosting_plans;
 /// IPv6 + address-pool bounded context: typed pools, allocations
 /// to sites, and the vhost binder that attaches the address set
 /// to a vhost.
@@ -204,7 +207,12 @@ pub use git_deployment::{
     DeployError, DeployRepo, DeployRepository, DeployRun, DeployStatus, WebhookSecret,
     commit_placeholder, verify_webhook,
 };
-pub use hosting::{HostingPlanId, HostingPlanRepository};
+pub use hosting::HostingPlanId;
+pub use hosting_plans::{
+    AppId, EffectiveQuotas, HostingPlan, HostingPlanRepository, HostingPlansError, PhpRuntimeRef,
+    PlanAssignment, PlanFeature, PlanFeatureState, PlanId, PlanPrice, PlanQuotas, PlanResolver,
+    PlanStatus,
+};
 pub use iac::{
     ApiContract, IacError, Language, Operation, OperationId, ProviderResource, ResourceEndpoint,
     ResourceKind, SdkPackage, SdkSurface, TerraformProvider,

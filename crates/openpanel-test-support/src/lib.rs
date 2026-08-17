@@ -17,8 +17,11 @@ pub mod mocks;
 pub mod server;
 
 pub use db::TestDb;
+pub use hosting_plans::MemoryHostingPlanRepository;
 pub use mocks::{
     MockAudit, MockDatabaseRepo, MockFactorRepo, MockSessionRepo, MockSiteRepo, MockSnapshotRepo,
     MockUserRepo,
 };
 pub use server::TestServer;
+
+mod hosting_plans;

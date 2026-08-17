@@ -282,6 +282,17 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let container_runtime_svc = container_runtime_module.service();
     docker_svc.attach_quota_gate(container_runtime_svc.clone());
 
+    // Hosting plans module: plan definitions, lifecycle, and assignment.
+    let hosting_plans_module = openpanel_app::HostingPlansModule::new(&ctx).await;
+    runner
+        .apply_module(
+            hosting_plans_module.name(),
+            &hosting_plans_module.migrations(),
+        )
+        .await
+        .context("apply hosting-plans migrations")?;
+    let hosting_plans_svc = hosting_plans_module.service();
+
     // Site-staging module: in-memory filesystem layer for the CLI
     // (no live nginx / rsync in offline mode).
     let staging_fs: Arc<dyn openpanel_app::StagingFilesystemLayer> =
@@ -326,6 +337,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         grant_resolver.clone(),
         registry_svc.clone(),
         container_runtime_svc.clone(),
+        hosting_plans_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
