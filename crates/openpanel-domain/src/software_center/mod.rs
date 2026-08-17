@@ -1,6 +1,7 @@
 //! Pure domain invariants for the curated Software Center.
 
 mod recipe;
+mod refine;
 
 use std::{
     collections::{BTreeMap, BTreeSet, VecDeque},
@@ -10,6 +11,10 @@ use std::{
 pub use recipe::{
     ArtifactPin, CatalogEntryRecipe, CatalogHit, CatalogManifest, CatalogQuery, CatalogSearchPage,
     CatalogSort, Category, EntryKind, Homepage, License, Provenance, RecipeError, Tag, VersionSpec,
+};
+pub use refine::{
+    CatalogEntry, ComponentKind, SoftwareCenterRefineError, TargetSiteType,
+    WebApplicationManifest, check_install_kind,
 };
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
