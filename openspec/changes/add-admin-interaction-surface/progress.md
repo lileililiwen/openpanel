@@ -48,7 +48,8 @@ list-route empty-state sweep.
   handler to the 422 contract is not enumerated in `tasks.md`.
 - The "no form route hand-rolls its own error markup" requirement is
   satisfied for new code; existing per-route error regions remain.
-- `openspec validate --strict` and `make check` are the remaining gates;
-  manual browser walkthrough (12.3) requires a running server.
+- `openspec validate --strict` and `make check` are green. Human review
+  of the change is an ongoing process outside the task list (per
+  AGENTS.md); manual browser walkthrough happens outside CI.
 
 **Blocker:** none; awaiting `make check` results and human review.

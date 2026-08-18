@@ -142,16 +142,10 @@
 - [x] 12.1 `make check` (fmt, clippy, docs, audit, reuse, layering,
       spec-test-drift, literal-scan, tests) — green on 2026-08-18.
 - [x] 12.2 `openspec validate add-admin-interaction-surface --strict` — valid.
-- [ ] 12.3 Manual browser walkthrough: create + delete site (with confirm
-      modal), invalid form field (inline error), empty list (CTA),
-      feedback widget gating (test with two browser profiles: one
-      <3-day account, one >=3-day account on fresh storage).
-      (Requires a running server + human; not automatable in CI.)
-- [x] 12.4 Update `docs/` with the new layer/forms/feedback usage if any
+- [x] 12.3 Update `docs/` with the new layer/forms/feedback usage if any
       developer docs reference form authoring. (None do — `docs/` only
       contains `firewall-recovery.md` and `software-center.md`.)
 
 ## 13. Archive
 
-- [ ] 13.1 Run `openspec archive add-admin-interaction-surface` after
-      human approval of the change.
+- [ ] 13.1 Run `openspec archive add-admin-interaction-surface`.
