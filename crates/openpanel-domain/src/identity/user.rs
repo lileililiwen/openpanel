@@ -222,6 +222,7 @@ mod tests {
     use super::*;
 
     fn user_fields() -> (Uuid, Username, Email, Password, Role) {
+        Password::set_test_costs(8, 1);
         let id = Uuid::new_v4();
         let username = Username::new("alice".to_string()).expect("username");
         let email = Email::new("alice@example.com".to_string()).expect("email");

@@ -22,7 +22,14 @@ impl TestDb {
     /// Create a fresh test database. Panics if the connection or
     /// migration fails — those are programming errors, not test
     /// logic.
+    ///
+    /// Every test DB switches the domain's argon2 / bcrypt costs to their
+    /// fast test-fixture values so user-creation and recovery-code flows
+    /// don't spend ~0.5s per hash. Production binaries never construct a
+    /// `TestDb`, so the production defaults are untouched.
     pub async fn new() -> Self {
+        openpanel_domain::Password::set_test_costs(8, 1);
+        openpanel_domain::identity::RecoveryCode::set_test_cost(4);
         let id = Uuid::new_v4();
         let dir = PathBuf::from("/tmp/openpanel-test");
         std::fs::create_dir_all(&dir).expect("create test dir");

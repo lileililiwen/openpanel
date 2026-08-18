@@ -52,6 +52,15 @@ fn repo_root() -> PathBuf {
 /// also pass.
 #[test]
 fn non_test_gates_pass_on_repo() {
+    // When `make check` invokes this suite (via scripts/check-tests.sh),
+    // the non-test gates already ran in the parent process. Re-running a
+    // full `cargo clippy` + `cargo doc` compile here would duplicate
+    // minutes of work and starve every other test of CPU under parallel
+    // execution, so the parent sets OPENPANEL_TEST_SKIP_GATE_CANARY.
+    // Standalone `cargo test` (no env var) still runs the canary.
+    if std::env::var_os("OPENPANEL_TEST_SKIP_GATE_CANARY").is_some() {
+        return;
+    }
     if !cargo_available() || !make_available() {
         eprintln!("cargo/make not on PATH; skipping gate canary");
         return;

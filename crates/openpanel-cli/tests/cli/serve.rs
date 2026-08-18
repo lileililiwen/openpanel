@@ -22,64 +22,76 @@ async fn cli_serve_health_roundtrip() {
         migrate.stdout
     );
 
-    // Pick a random free port by binding to :0 and reusing the number.
-    let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
-    let port = listener.local_addr().unwrap().port();
-    drop(listener);
-
     // The databases module needs a master key; serve boots it eagerly.
     let master_key = {
         use base64::Engine;
         base64::engine::general_purpose::STANDARD.encode([0u8; 32])
     };
 
-    let mut child: Child = Command::new(&runner.bin)
-        .args(["serve"])
-        .env("OPENPANEL__DATABASE__URL", &base)
-        .env("OPENPANEL__SERVER__BIND", "127.0.0.1")
-        .env("OPENPANEL__SERVER__PORT", port.to_string())
-        .env("OPENPANEL__DATABASE__MASTER_KEY", &master_key)
-        .env("RUST_LOG", "warn")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::piped())
-        .spawn()
-        .expect("spawn openpanel serve");
+    // Pick a random free port by binding to :0 and reusing the number.
+    // The listener is released before the child binds it, so under
+    // parallel test threads another test can steal the port in between;
+    // retry the whole spawn on a fresh port when the child exits early
+    // or never becomes healthy.
+    let mut last_error = "no attempt made".to_string();
+    for _attempt in 0..5 {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        drop(listener);
 
-    // If the server exits early, surface its stderr in the timeout message.
-    if let Some(status) = child.try_wait().expect("try_wait") {
-        let err = child
-            .stderr
-            .take()
-            .map(|mut s| {
-                use std::io::Read;
-                let mut buf = String::new();
-                let _ = s.read_to_string(&mut buf);
-                buf
-            })
-            .unwrap_or_default();
-        panic!("openpanel serve exited early ({status}): {err}");
-    }
+        let mut child: Child = Command::new(&runner.bin)
+            .args(["serve"])
+            .env("OPENPANEL__DATABASE__URL", &base)
+            .env("OPENPANEL__SERVER__BIND", "127.0.0.1")
+            .env("OPENPANEL__SERVER__PORT", port.to_string())
+            .env("OPENPANEL__DATABASE__MASTER_KEY", &master_key)
+            .env("RUST_LOG", "warn")
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::piped())
+            .spawn()
+            .expect("spawn openpanel serve");
 
-    // Wait for /health to come up.
-    let url = format!("http://127.0.0.1:{port}/health");
-    let start = std::time::Instant::now();
-    loop {
-        if let Ok(resp) = reqwest::get(&url).await
-            && resp.status() == 200
-        {
-            let body: serde_json::Value = resp.json().await.unwrap();
-            assert_eq!(body["status"], "ok");
-            break;
+        // If the server exits immediately (e.g. the port was stolen),
+        // surface its stderr and retry with a fresh port.
+        if let Some(status) = child.try_wait().expect("try_wait") {
+            let err = child
+                .stderr
+                .take()
+                .map(|mut s| {
+                    use std::io::Read;
+                    let mut buf = String::new();
+                    let _ = s.read_to_string(&mut buf);
+                    buf
+                })
+                .unwrap_or_default();
+            last_error = format!("serve exited early ({status}): {err}");
+            continue;
         }
-        assert!(
-            start.elapsed() < Duration::from_secs(60),
-            "server did not become healthy in time"
-        );
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
 
-    // Shut down; `Child::kill()` sends SIGKILL on Unix, which is fine
-    // for tearing down the test server.
-    let _ = child.kill();
-    let _ = child.wait().expect("wait for shutdown");
+        // Wait for /health to come up.
+        let url = format!("http://127.0.0.1:{port}/health");
+        let start = std::time::Instant::now();
+        let mut healthy = false;
+        loop {
+            if let Ok(resp) = reqwest::get(&url).await
+                && resp.status() == 200
+            {
+                let body: serde_json::Value = resp.json().await.unwrap();
+                assert_eq!(body["status"], "ok");
+                healthy = true;
+                break;
+            }
+            if start.elapsed() >= Duration::from_secs(30) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+        let _ = child.kill();
+        let _ = child.wait().expect("wait for shutdown");
+        if healthy {
+            return;
+        }
+        last_error = format!("server on port {port} did not become healthy");
+    }
+    panic!("openpanel serve did not come up after retries: {last_error}");
 }

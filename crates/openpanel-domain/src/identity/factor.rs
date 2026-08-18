@@ -1,7 +1,10 @@
 //! Two-factor authentication: factor model, TOTP value object, and
 //! recovery codes.
 
-use std::fmt;
+use std::{
+    fmt,
+    sync::atomic::{AtomicU32, Ordering},
+};
 
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier, password_hash::SaltString};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -427,10 +430,24 @@ pub struct RecoveryCode {
     pub hash: String,
 }
 
+/// bcrypt cost used for recovery codes, overridable for test fixtures.
+static BCRYPT_COST_OVERRIDE: AtomicU32 = AtomicU32::new(bcrypt::DEFAULT_COST);
+
 impl RecoveryCode {
+    /// Lower the bcrypt cost for test fixtures and seed data.
+    ///
+    /// The resulting hash is cryptographically weak and MUST NOT be used
+    /// for real recovery codes. `openpanel-test-support` sets this for
+    /// every test database; production binaries never call it, so the
+    /// production default cost (`bcrypt::DEFAULT_COST`) is unchanged.
+    pub fn set_test_cost(cost: u32) {
+        BCRYPT_COST_OVERRIDE.store(cost.max(4), Ordering::Relaxed);
+    }
+
     /// Compute the bcrypt hash of a plaintext code.
     pub fn hash(plaintext: &str) -> Result<String, FactorError> {
-        bcrypt::hash(plaintext, bcrypt::DEFAULT_COST).map_err(|_| FactorError::InvalidSecret)
+        bcrypt::hash(plaintext, BCRYPT_COST_OVERRIDE.load(Ordering::Relaxed))
+            .map_err(|_| FactorError::InvalidSecret)
     }
 
     /// Verify a presented plaintext against the stored hash.
@@ -811,6 +828,7 @@ mod tests {
 
     #[test]
     fn recovery_code_round_trip_and_consume() {
+        RecoveryCode::set_test_cost(4);
         let user_id = Uuid::new_v4();
         let (mut set, plaintexts) = RecoveryCodeSet::generate(user_id, 3, Utc::now());
         assert_eq!(set.remaining(), 3);
@@ -944,6 +962,7 @@ mod tests {
 
         #[test]
         fn prop_recovery_codes_are_single_use(count in 1_u8..4) {
+            RecoveryCode::set_test_cost(4);
             let now = Utc::now();
             let (mut set, plaintexts) = RecoveryCodeSet::generate(Uuid::new_v4(), count, now);
             let code = &plaintexts[0];
