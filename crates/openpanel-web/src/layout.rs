@@ -1,214 +1,15 @@
 //! Shared HTML chrome: the HTMX shell (sidebar + topbar + content region)
 //! plus the `csrf_field` helper used by every state-changing form.
+//!
+//! The navigation model (sections, items, icons) lives in
+//! [`crate::nav_model`]; this module renders it.
 
 use std::collections::BTreeSet;
 
 use maud::{DOCTYPE, Markup, html};
 use openpanel_domain::Role;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum RequiredRole {
-    Authenticated,
-    Owner,
-}
-
-impl RequiredRole {
-    fn allows(self, role: Role) -> bool {
-        match self {
-            Self::Authenticated => true,
-            Self::Owner => matches!(role, Role::Owner),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-struct NavItem {
-    href: &'static str,
-    label: &'static str,
-    capability: &'static str,
-    role: RequiredRole,
-}
-
-#[derive(Debug, Clone, Copy)]
-struct NavSection {
-    label: &'static str,
-    items: &'static [NavItem],
-}
-
-const OVERVIEW: &[NavItem] = &[NavItem {
-    href: "/",
-    label: "Dashboard",
-    capability: "dashboard",
-    role: RequiredRole::Authenticated,
-}];
-const HOSTING: &[NavItem] = &[
-    NavItem {
-        href: "/sites",
-        label: "Sites",
-        capability: "sites",
-        role: RequiredRole::Authenticated,
-    },
-    NavItem {
-        href: "/files",
-        label: "Files",
-        capability: "files",
-        role: RequiredRole::Authenticated,
-    },
-    NavItem {
-        href: "/databases",
-        label: "Databases",
-        capability: "databases",
-        role: RequiredRole::Authenticated,
-    },
-    NavItem {
-        href: "/ssl",
-        label: "SSL",
-        capability: "ssl",
-        role: RequiredRole::Authenticated,
-    },
-    NavItem {
-        href: "/webmail",
-        label: "Webmail",
-        capability: "webmail",
-        role: RequiredRole::Authenticated,
-    },
-];
-const OPERATIONS: &[NavItem] = &[
-    NavItem {
-        href: "/monitoring",
-        label: "Monitoring",
-        capability: "monitoring",
-        role: RequiredRole::Authenticated,
-    },
-    NavItem {
-        href: "/logs",
-        label: "Logs",
-        capability: "logs",
-        role: RequiredRole::Authenticated,
-    },
-    NavItem {
-        href: "/backups",
-        label: "Backups",
-        capability: "backups",
-        role: RequiredRole::Authenticated,
-    },
-    NavItem {
-        href: "/cron",
-        label: "Cron",
-        capability: "cron",
-        role: RequiredRole::Authenticated,
-    },
-    NavItem {
-        href: "/services",
-        label: "Services",
-        capability: "system-services",
-        role: RequiredRole::Authenticated,
-    },
-];
-const SECURITY_NETWORK: &[NavItem] = &[
-    NavItem {
-        href: "/security",
-        label: "Security",
-        capability: "host-security",
-        role: RequiredRole::Owner,
-    },
-    NavItem {
-        href: "/dns",
-        label: "DNS",
-        capability: "dns",
-        role: RequiredRole::Authenticated,
-    },
-    NavItem {
-        href: "/mail",
-        label: "Mail",
-        capability: "mail",
-        role: RequiredRole::Authenticated,
-    },
-];
-const ADMINISTRATION: &[NavItem] = &[
-    NavItem {
-        href: "/docker",
-        label: "Containers",
-        capability: "docker",
-        role: RequiredRole::Owner,
-    },
-    NavItem {
-        href: "/container/quota",
-        label: "Container quota",
-        capability: "docker",
-        role: RequiredRole::Owner,
-    },
-    NavItem {
-        href: "/registry/credentials",
-        label: "Registry credentials",
-        capability: "docker",
-        role: RequiredRole::Owner,
-    },
-    NavItem {
-        href: "/software",
-        label: "Software Center",
-        capability: "software-center",
-        role: RequiredRole::Owner,
-    },
-    NavItem {
-        href: "/users",
-        label: "Users",
-        capability: "users",
-        role: RequiredRole::Owner,
-    },
-    NavItem {
-        href: "/registry",
-        label: "Container Registry",
-        capability: "container-registry",
-        role: RequiredRole::Owner,
-    },
-    NavItem {
-        href: "/plugins",
-        label: "Plugins",
-        capability: "plugins",
-        role: RequiredRole::Owner,
-    },
-    NavItem {
-        href: "/marketplace",
-        label: "Plugin Marketplace",
-        capability: "marketplace",
-        role: RequiredRole::Owner,
-    },
-    NavItem {
-        href: "/admin/branding",
-        label: "Branding",
-        capability: "themeable-ui",
-        role: RequiredRole::Owner,
-    },
-    NavItem {
-        href: "/settings",
-        label: "Settings",
-        capability: "settings",
-        role: RequiredRole::Owner,
-    },
-];
-const NAV_SECTIONS: &[NavSection] = &[
-    NavSection {
-        label: "Overview",
-        items: OVERVIEW,
-    },
-    NavSection {
-        label: "Hosting",
-        items: HOSTING,
-    },
-    NavSection {
-        label: "Operations",
-        items: OPERATIONS,
-    },
-    NavSection {
-        label: "Security & Network",
-        items: SECURITY_NETWORK,
-    },
-    NavSection {
-        label: "Administration",
-        items: ADMINISTRATION,
-    },
-];
+use crate::nav_model::{NAV_SECTIONS, NavItem, NavSection, icon_svg};
 
 /// Registered browser capabilities used to suppress unavailable navigation.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -239,6 +40,55 @@ impl CapabilitySet {
         self.0.contains(capability)
     }
 }
+
+/// Vanilla JS that powers the sidebar filter, section-collapse
+/// persistence, and the compact rail toggle. Deliberately tiny and
+/// framework-free; it only manipulates classes/attributes and
+/// localStorage, never page content.
+const NAV_JS: &str = r#"
+(function () {
+  var filter = document.getElementById('nav-filter');
+  if (filter) {
+    filter.addEventListener('input', function () {
+      var q = filter.value.trim().toLowerCase();
+      document.querySelectorAll('.nav-item').forEach(function (a) {
+        var label = (a.getAttribute('data-label') || '').toLowerCase();
+        a.hidden = q !== '' && label.indexOf(q) === -1;
+      });
+      document.querySelectorAll('.nav-section').forEach(function (s) {
+        if (q === '') { s.hidden = false; return; }
+        s.hidden = s.querySelectorAll('.nav-item:not([hidden])').length === 0;
+      });
+    });
+  }
+  document.querySelectorAll('.nav-section').forEach(function (s) {
+    var key = 'openpanel.nav.' + (s.getAttribute('data-section') || '') + '.open';
+    try {
+      var saved = localStorage.getItem(key);
+      if (saved === '0') { s.removeAttribute('open'); }
+      else if (saved === '1') { s.setAttribute('open', ''); }
+    } catch (e) {}
+    s.addEventListener('toggle', function () {
+      try { localStorage.setItem(key, s.open ? '1' : '0'); } catch (e) {}
+    });
+  });
+  var rail = document.getElementById('nav-rail-toggle');
+  if (rail) {
+    var rk = 'openpanel.nav.rail';
+    try {
+      if (localStorage.getItem(rk) === '1') {
+        document.body.classList.add('nav-rail');
+        rail.setAttribute('aria-pressed', 'true');
+      }
+    } catch (e) {}
+    rail.addEventListener('click', function () {
+      var on = document.body.classList.toggle('nav-rail');
+      rail.setAttribute('aria-pressed', on ? 'true' : 'false');
+      try { localStorage.setItem(rk, on ? '1' : '0'); } catch (e) {}
+    });
+  }
+})();
+"#;
 
 /// Render a hidden `_csrf` input carrying the current session's token.
 /// Every state-changing web form MUST include this field.
@@ -321,16 +171,40 @@ impl<'a> Shell<'a> {
                         details class="nav-disclosure" open {
                             summary { "Navigation" }
                             nav class="sidebar" aria-label="Primary navigation" {
+                                button id="nav-rail-toggle" type="button" class="nav-rail-toggle"
+                                    aria-pressed="false" title="Toggle compact sidebar" {
+                                    "Compact"
+                                }
+                                label class="nav-filter" {
+                                    span class="visually-hidden" { "Filter menu" }
+                                    input id="nav-filter" type="search"
+                                        placeholder="Filter menu" autocomplete="off";
+                                }
                                 @for section in NAV_SECTIONS {
                                     @let visible = self.visible_items(section);
                                     @if !visible.is_empty() {
-                                        section class="nav-section" {
-                                            h2 { (section.label) }
-                                            @for item in visible {
-                                                @if self.is_active(item) {
-                                                    a href=(item.href) aria-current="page" hx-boost="true" { (item.label) }
-                                                } @else {
-                                                    a href=(item.href) hx-boost="true" { (item.label) }
+                                        details class="nav-section" data-section=(section.label) open {
+                                            summary { (section.label) }
+                                            ul class="nav-items" {
+                                                @for item in visible {
+                                                    @if self.is_active(item) {
+                                                        li {
+                                                            a class="nav-item" href=(item.href)
+                                                                data-label=(item.label)
+                                                                aria-current="page" hx-boost="true" {
+                                                                (icon_svg(item.icon, item.label))
+                                                                span class="nav-label" { (item.label) }
+                                                            }
+                                                        }
+                                                    } @else {
+                                                        li {
+                                                            a class="nav-item" href=(item.href)
+                                                                data-label=(item.label) hx-boost="true" {
+                                                                (icon_svg(item.icon, item.label))
+                                                                span class="nav-label" { (item.label) }
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -360,6 +234,7 @@ impl<'a> Shell<'a> {
                             }
                         }
                     }
+                    script { (maud::PreEscaped(NAV_JS)) }
                 }
             }
         }
@@ -452,21 +327,72 @@ mod tests {
             .render()
             .into_string();
 
-        for group in ["Overview", "Hosting", "Operations", "Administration"] {
+        for group in ["Overview", "Websites", "Operations", "System"] {
             assert!(out.contains(group), "missing group {group}: {out}");
         }
+        for group in ["Mail &amp; Network", "Apps"] {
+            assert!(!out.contains(group), "empty group rendered: {out}");
+        }
         assert!(
-            !out.contains("Security &amp; Network"),
-            "empty group rendered: {out}"
-        );
-        assert!(
-            out.contains("href=\"/sites\" aria-current=\"page\""),
+            out.contains("href=\"/sites\" data-label=\"Sites\" aria-current=\"page\""),
             "sites active state: {out}"
         );
         assert!(out.contains("class=\"breadcrumbs\""), "breadcrumbs: {out}");
         assert!(
             !out.contains("href=\"/cron\""),
             "unregistered cron link: {out}"
+        );
+    }
+
+    #[test]
+    fn collapsible_sections_render_with_persistence_script() {
+        let out = Shell::new("admin", "tok123", html! {})
+            .with_navigation(Role::Owner, "/sites", CapabilitySet::shipped())
+            .render()
+            .into_string();
+        assert!(
+            out.contains("<details class=\"nav-section\" data-section=\"Operations\" open>"),
+            "section disclosure missing: {out}"
+        );
+        assert!(
+            out.contains("openpanel.nav.' + (s.getAttribute('data-section')"),
+            "localStorage persistence script missing: {out}"
+        );
+    }
+
+    #[test]
+    fn nav_filter_and_rail_controls_render() {
+        let out = Shell::new("admin", "tok123", html! {})
+            .with_navigation(Role::Owner, "/", CapabilitySet::shipped())
+            .render()
+            .into_string();
+        assert!(
+            out.contains("id=\"nav-filter\""),
+            "filter input missing: {out}"
+        );
+        assert!(
+            out.contains("data-label=\"Dashboard\""),
+            "filter labels missing: {out}"
+        );
+        assert!(
+            out.contains("id=\"nav-rail-toggle\""),
+            "rail toggle missing: {out}"
+        );
+        assert!(
+            out.contains("openpanel.nav.rail"),
+            "rail persistence: {out}"
+        );
+    }
+
+    #[test]
+    fn webmail_item_is_hidden_without_webmail_capability() {
+        let out = Shell::new("alice", "tok123", html! {})
+            .with_navigation(Role::User, "/", CapabilitySet::shipped())
+            .render()
+            .into_string();
+        assert!(
+            !out.contains("href=\"/webmail\""),
+            "webmail link leaked without capability: {out}"
         );
     }
 

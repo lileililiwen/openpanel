@@ -108,6 +108,91 @@ async fn web_valid_login_sets_cookie_and_renders_shell() {
     assert!(body.contains("Log out"));
 }
 
+/// The Owner sidebar renders the six grouped sections with inline icons,
+/// the filter box, the compact rail toggle, and active-state
+/// highlighting (panel-navigation contract).
+#[tokio::test]
+async fn web_sidebar_renders_grouped_sections_with_icons_for_owner() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let body = authed_get(&server, &cookie, "/").await;
+
+    for group in [
+        "Overview",
+        "Websites",
+        "Mail &amp; Network",
+        "Operations",
+        "Apps",
+        "System",
+    ] {
+        assert!(
+            body.contains(&format!("data-section=\"{group}\"")),
+            "missing group {group}: {body}"
+        );
+    }
+    assert!(body.contains("class=\"nav-icon\""), "nav icons missing");
+    assert!(
+        body.contains("<title>Sites</title>"),
+        "icon title matches label"
+    );
+    assert!(
+        body.contains("aria-current=\"page\""),
+        "active state missing"
+    );
+    assert!(body.contains("id=\"nav-filter\""), "filter box missing");
+    assert!(
+        body.contains("id=\"nav-rail-toggle\""),
+        "rail toggle missing"
+    );
+}
+
+/// A plain user sees only their groups: Owner-only items are omitted
+/// and sections that become empty are not rendered at all.
+#[tokio::test]
+async fn web_sidebar_hides_owner_groups_from_user() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    server
+        .identity()
+        .create_user(
+            "alice",
+            "alice@example.com",
+            "alice-password-1",
+            openpanel_domain::Role::User,
+            "test",
+        )
+        .await
+        .expect("create alice");
+    let cookie = login(&server, "alice", "alice-password-1").await;
+    let body = authed_get(&server, &cookie, "/").await;
+
+    assert!(
+        body.contains("href=\"/sites\""),
+        "sites link visible to user: {body}"
+    );
+    assert!(
+        !body.contains("class=\"nav-item\" href=\"/users\""),
+        "owner-only users nav link leaked: {body}"
+    );
+    assert!(
+        !body.contains("class=\"nav-item\" href=\"/settings\""),
+        "owner-only settings nav link leaked: {body}"
+    );
+    assert!(
+        !body.contains("data-section=\"System\""),
+        "empty System group rendered: {body}"
+    );
+    assert!(
+        !body.contains("data-section=\"Apps\""),
+        "empty Apps group rendered: {body}"
+    );
+}
+
 /// Invalid login returns 401, renders the error form, and sets no cookie.
 #[tokio::test]
 async fn web_invalid_login_returns_401_no_cookie() {

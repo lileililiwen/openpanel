@@ -886,7 +886,12 @@ impl TestServer {
                     .with("mail")
                     .with("software-center")
                     .with("docker")
-                    .with("ftp"),
+                    .with("ftp")
+                    .with("webmail")
+                    .with("container-registry")
+                    .with("plugins")
+                    .with("marketplace")
+                    .with("themeable-ui"),
             ),
         ));
 

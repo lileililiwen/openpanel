@@ -35,6 +35,8 @@ pub mod login;
 pub mod logs;
 pub mod mail;
 pub mod monitoring;
+/// Navigation model and icon set for the shell sidebar.
+pub mod nav_model;
 pub mod notifications;
 /// Plugin extension framework web page.
 pub mod plugin_extension;
