@@ -279,6 +279,8 @@ pub struct TestServer {
     web_application_installer: Arc<openpanel_app::WebApplicationInstallerService>,
     malware_scanner: Arc<openpanel_app::MalwareScannerService>,
     webmail: Arc<openpanel_app::WebmailService>,
+    /// Feedback widget submission service.
+    feedback: Arc<openpanel_app::FeedbackService>,
 }
 
 impl TestServer {
@@ -686,6 +688,13 @@ impl TestServer {
             audit.clone(),
             master_key,
         ));
+        // Feedback widget module: persists NPS-style submissions.
+        let feedback_module = openpanel_app::FeedbackModule::new(&ctx).await;
+        runner
+            .apply_module(feedback_module.name(), &feedback_module.migrations())
+            .await
+            .expect("feedback migrations");
+        let feedback_svc = feedback_module.service();
         let site_clone_template_repo = site_clone_template_module.repo();
         docker_svc.attach_quota_gate(container_runtime_svc.clone());
         let ftp_svc = ftp_module.service();
@@ -864,6 +873,7 @@ impl TestServer {
             container_runtime_svc.clone(),
             themeable_ui_svc.clone(),
             webmail_svc.clone(),
+            feedback_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -964,6 +974,7 @@ impl TestServer {
             collaborators: collaborators_svc,
             grant_resolver,
             registry: registry_svc,
+            feedback: feedback_svc,
         }
     }
 
@@ -1072,6 +1083,11 @@ impl TestServer {
     /// The webmail client service.
     pub fn webmail(&self) -> Arc<openpanel_app::WebmailService> {
         self.webmail.clone()
+    }
+
+    /// The feedback widget submission service.
+    pub fn feedback(&self) -> Arc<openpanel_app::FeedbackService> {
+        self.feedback.clone()
     }
 
     /// The per-site WAF service.

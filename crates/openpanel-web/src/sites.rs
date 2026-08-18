@@ -251,7 +251,13 @@ pub fn list_fragment(rows: &[SiteRow], can_create: bool, csrf: &str) -> Markup {
                 a class="btn" href="/sites/new" { "New site" }
             }
             @if rows.is_empty() {
-                p class="empty" { "No sites yet." }
+                @if can_create {
+                    (crate::ui_states::EmptyState::new("No sites yet", "Create your first site to start hosting.")
+                        .with_cta("/sites/new", "Create your first site")
+                        .render())
+                } @else {
+                    (crate::ui_states::EmptyState::new("No sites yet", "No sites are assigned to your account.").render())
+                }
             } @else {
                 table class="table" {
                     thead {
@@ -288,9 +294,9 @@ pub fn list_fragment(rows: &[SiteRow], can_create: bool, csrf: &str) -> Markup {
                                                 button type="submit" { "Enable" }
                                             }
                                         }
-                                        form class="inline" hx-delete=(format!("/sites/{}", row.id)) hx-target="#site-list" hx-confirm=(format!("Delete {}? This cannot be undone.", row.domain)) {
-                                            (csrf_field(csrf))
-                                            button type="submit" class="danger" { "Delete" }
+                                        a class="btn danger" hx-get=(format!("/layer/confirm?action=delete-site&id={}", row.id))
+                                            hx-target="#layer-root" href=(format!("/layer/confirm?action=delete-site&id={}", row.id)) {
+                                            "Delete"
                                         }
                                     }
                                 }

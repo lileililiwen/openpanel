@@ -98,6 +98,74 @@ pub fn csrf_field(token: &str) -> Markup {
     }
 }
 
+/// Inline JS that wires the shell's interaction surface: the
+/// `htmx:afterRequest` toast hook, confirm-modal teardown, and the
+/// feedback-widget hydration gate. Namespaced to a single listener so it
+/// never duplicates other handlers.
+const LAYER_JS: &str = r#"
+(function () {
+  document.body.addEventListener('htmx:afterRequest', function (evt) {
+    var xhr = evt.detail && evt.detail.xhr;
+    if (!xhr) return;
+    var trigger = xhr.getResponseHeader('HX-Trigger');
+    if (!trigger || trigger.indexOf('layer-toast') === -1) return;
+    var detail = {};
+    var idx = trigger.indexOf(':');
+    if (idx !== -1) {
+      try { detail = JSON.parse(trigger.slice(idx + 1)); } catch (e) {}
+    }
+    if (detail.feedback === 'submitted') {
+      try { localStorage.setItem('openpanel_feedback_seen', 'true'); } catch (e) {}
+    }
+    var kind = detail.kind || 'success';
+    var msg = detail.msg || 'Done';
+    fetch('/layer/toast?kind=' + encodeURIComponent(kind) + '&msg=' + encodeURIComponent(msg))
+      .then(function (r) { return r.text(); })
+      .then(function (html) {
+        var root = document.getElementById('layer-root');
+        if (!root) return;
+        root.insertAdjacentHTML('beforeend', html);
+        root.querySelectorAll('[data-op-auto-dismiss]').forEach(function (t) {
+          setTimeout(function () { t.remove(); }, 4000);
+          t.addEventListener('click', function () { t.remove(); });
+        });
+      })
+      .catch(function (e) { console.error('layer-toast fetch failed', e); });
+  });
+
+  document.body.addEventListener('htmx:afterRequest', function (evt) {
+    var root = document.getElementById('layer-root');
+    var elt = evt.detail && evt.detail.elt;
+    if (!root || !elt || !evt.detail.successful) return;
+    var inModal = (elt.closest && elt.closest('.op-modal')) ||
+      (elt.hasAttribute && elt.hasAttribute('data-op-confirm-form'));
+    if (inModal) { root.innerHTML = ''; }
+  });
+
+  document.addEventListener('click', function (e) {
+    var target = e.target;
+    var close = target.closest && target.closest('.op-feedback-close');
+    if (!close) return;
+    try { localStorage.setItem('openpanel_feedback_seen', 'true'); } catch (e) {}
+    var widget = document.getElementById('feedback-widget');
+    if (widget) { widget.remove(); }
+    var root = document.getElementById('feedback-widget-root');
+    if (root) { root.innerHTML = ''; }
+  });
+
+  var feedbackRoot = document.getElementById('feedback-widget-root');
+  if (feedbackRoot) {
+    var age = parseInt(feedbackRoot.getAttribute('data-account-age-days') || '-1', 10);
+    var seen = false;
+    try { seen = localStorage.getItem('openpanel_feedback_seen') === 'true'; } catch (e) {}
+    if (age >= 3 && !seen) {
+      var tpl = feedbackRoot.querySelector('template');
+      if (tpl) { feedbackRoot.appendChild(tpl.content.cloneNode(true)); }
+    }
+  }
+})();
+"#;
+
 /// The full-page shell: sidebar nav, topbar with the logged-in user and a
 /// logout form, and an HTMX-swappable content region.
 pub struct Shell<'a> {
@@ -110,6 +178,7 @@ pub struct Shell<'a> {
     theme: String,
     locale: String,
     timezone: String,
+    account_age_days: i64,
 }
 
 impl<'a> Shell<'a> {
@@ -125,7 +194,15 @@ impl<'a> Shell<'a> {
             theme: "dark".to_string(),
             locale: "en-US".to_string(),
             timezone: "UTC".to_string(),
+            account_age_days: -1,
         }
+    }
+
+    /// Record the authenticated account's age in days for the
+    /// feedback-widget gate. Negative when unknown (unauthenticated).
+    pub fn with_account_age_days(mut self, days: i64) -> Self {
+        self.account_age_days = days;
+        self
     }
 
     /// Apply validated display preferences to document metadata.
@@ -243,7 +320,15 @@ impl<'a> Shell<'a> {
                             }
                         }
                     }
+                    div id="layer-root" aria-live="polite" {}
+                    div id="form-errors" hx-swap-oob="true" aria-live="polite" {}
+                    div id="feedback-widget-root" data-account-age-days=(self.account_age_days) {
+                        @if crate::feedback::age_gate_passes(self.account_age_days) {
+                            (crate::feedback::widget_template(self.csrf))
+                        }
+                    }
                     script { (maud::PreEscaped(NAV_JS)) }
+                    script { (maud::PreEscaped(LAYER_JS)) }
                 }
             }
         }
@@ -394,6 +479,30 @@ mod tests {
     }
 
     #[test]
+    fn rail_toggle_has_accessible_name_and_expand_glyph() {
+        let out = Shell::new("admin", "tok123", html! {})
+            .with_navigation(Role::Owner, "/", CapabilitySet::shipped())
+            .render()
+            .into_string();
+        assert!(
+            out.contains("aria-label=\"Toggle compact sidebar\""),
+            "toggle accessible name: {out}"
+        );
+        assert!(
+            out.contains("class=\"nav-rail-expand\" aria-hidden=\"true\""),
+            "expand glyph present and decorative: {out}"
+        );
+        assert!(
+            out.contains("class=\"nav-rail-label\""),
+            "compact label span: {out}"
+        );
+        assert!(
+            out.contains("class=\"nav-section-label\""),
+            "section headings wrapped for rail clipping: {out}"
+        );
+    }
+
+    #[test]
     fn webmail_item_is_hidden_without_webmail_capability() {
         let out = Shell::new("alice", "tok123", html! {})
             .with_navigation(Role::User, "/", CapabilitySet::shipped())
@@ -446,6 +555,59 @@ mod tests {
         assert!(
             out.contains("data-timezone=\"Asia/Shanghai\""),
             "timezone: {out}"
+        );
+    }
+
+    #[test]
+    fn shell_mounts_layer_root_and_form_errors() {
+        let out = Shell::new("admin", "tok123", html! {})
+            .with_account_age_days(-1)
+            .render()
+            .into_string();
+        assert!(
+            out.contains("<div id=\"layer-root\" aria-live=\"polite\">"),
+            "layer root: {out}"
+        );
+        assert!(
+            out.contains("id=\"form-errors\" hx-swap-oob=\"true\""),
+            "form-errors container: {out}"
+        );
+        assert!(out.contains("htmx:afterRequest"), "toast hook wired: {out}");
+    }
+
+    #[test]
+    fn shell_mounts_feedback_gate_without_template_for_new_accounts() {
+        let out = Shell::new("admin", "tok123", html! {})
+            .with_account_age_days(2)
+            .render()
+            .into_string();
+        assert!(
+            out.contains("id=\"feedback-widget-root\" data-account-age-days=\"2\""),
+            "gate attribute: {out}"
+        );
+        assert!(
+            !out.contains("op-feedback-widget"),
+            "no widget for young account: {out}"
+        );
+    }
+
+    #[test]
+    fn shell_embeds_feedback_template_for_mature_accounts() {
+        let out = Shell::new("admin", "tok123", html! {})
+            .with_account_age_days(30)
+            .render()
+            .into_string();
+        assert!(
+            out.contains("data-account-age-days=\"30\""),
+            "gate attribute: {out}"
+        );
+        assert!(
+            out.contains("op-feedback-widget"),
+            "widget template embedded: {out}"
+        );
+        assert!(
+            out.contains("openpanel_feedback_seen"),
+            "localStorage gate referenced: {out}"
         );
     }
 }

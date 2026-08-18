@@ -135,16 +135,23 @@ fn content(
             label { "Max connections" input name="max_concurrent_connections" type="number" min="1" max="256" value="4"; }
             button type="submit" { "Create account" }
         }
-        table {
-            thead { tr { th { "Username" } th { "Home" } th { "Mode" } th { "Status" } th { "Actions" } } }
-            tbody { @for account in accounts { tr { td { (&account.username) } td { (&account.home) } td { @if account.read_only { "read only" } @else { "read/write" } } td { @if account.enabled { "enabled" } @else { "disabled" } } td {
-                @if account.enabled {
-                    form method="post" action=(format!("/sites/{site_id}/ftp/{}/disable", account.id)) class="form form-inline" { (csrf_field(csrf)) button { "Disable" } }
-                } @else {
-                    form method="post" action=(format!("/sites/{site_id}/ftp/{}/enable", account.id)) class="form form-inline" { (csrf_field(csrf)) button { "Enable" } }
-                }
-                form method="post" action=(format!("/sites/{site_id}/ftp/{}/delete", account.id)) class="form form-inline" { (csrf_field(csrf)) button { "Delete" } }
-            } } } }
+        @if accounts.is_empty() {
+            (crate::ui_states::EmptyState::new("No FTP accounts yet", "Create an account to let people connect to this site.").render())
+        } @else {
+            table {
+                thead { tr { th { "Username" } th { "Home" } th { "Mode" } th { "Status" } th { "Actions" } } }
+                tbody { @for account in accounts { tr { td { (&account.username) } td { (&account.home) } td { @if account.read_only { "read only" } @else { "read/write" } } td { @if account.enabled { "enabled" } @else { "disabled" } } td {
+                    @if account.enabled {
+                        form method="post" action=(format!("/sites/{site_id}/ftp/{}/disable", account.id)) class="form form-inline" { (csrf_field(csrf)) button { "Disable" } }
+                    } @else {
+                        form method="post" action=(format!("/sites/{site_id}/ftp/{}/enable", account.id)) class="form form-inline" { (csrf_field(csrf)) button { "Enable" } }
+                    }
+                    a class="btn danger" hx-get=(format!("/layer/confirm?action=delete-ftp-user&site_id={site_id}&account_id={}", account.id))
+                        hx-target="#layer-root" href=(format!("/layer/confirm?action=delete-ftp-user&site_id={site_id}&account_id={}", account.id)) {
+                        "Delete"
+                    }
+                } } } }
+            }
         }
     }
 }

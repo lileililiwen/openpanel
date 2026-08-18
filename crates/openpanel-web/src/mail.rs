@@ -28,9 +28,13 @@ pub async fn page(State(state): State<WebState>, WebUser(user, session): WebUser
         @if let Some(readiness) = readiness {
             p { "ready=" (readiness.ready) }
         }
-        ul {
-            @for domain in domains {
-                li { (domain.name.as_str()) }
+        @if domains.is_empty() {
+            (crate::ui_states::EmptyState::new("No mail domains yet", "Add a mail domain to start hosting mailboxes.").render())
+        } @else {
+            ul {
+                @for domain in domains {
+                    li { (domain.name.as_str()) }
+                }
             }
         }
         form method="post" action="/mail/domains" class="form" {

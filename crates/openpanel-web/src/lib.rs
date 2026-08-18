@@ -28,9 +28,15 @@ pub mod databases;
 pub mod db_pitr;
 pub mod dns;
 pub mod docker;
+/// Feedback widget: NPS-style rating persisted to the feedback context.
+pub mod feedback;
 pub mod files;
+pub mod forms;
 pub mod ftp;
+pub mod layer;
 pub mod layout;
+/// Named `hx-indicator` loading elements.
+pub mod loading;
 pub mod login;
 pub mod logs;
 pub mod mail;
@@ -58,6 +64,8 @@ pub mod t;
 /// Themeable UI / white-label editor page.
 pub mod themeable_ui;
 pub mod two_factor;
+/// Reusable empty / no-results / loading / error state components.
+pub mod ui_states;
 pub mod users;
 /// Per-site WAF editor page.
 pub mod waf;

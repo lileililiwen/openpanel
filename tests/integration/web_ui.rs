@@ -565,8 +565,8 @@ async fn web_sites_lists_created_sites() {
     assert!(body.contains("active"), "status: {body}");
     assert!(body.contains("admin"), "owner: {body}");
     assert!(
-        body.contains("hx-confirm"),
-        "delete requires confirmation: {body}"
+        body.contains("hx-get=\"/layer/confirm?action=delete-site"),
+        "delete routes through the confirm surface: {body}"
     );
 }
 
@@ -765,9 +765,14 @@ async fn web_sites_delete_removes_site() {
 
     let listed = authed_get(&server, &cookie, "/sites").await;
     assert!(
-        listed.contains(&format!("hx-delete=\"/sites/{}\"", site.id()))
-            && listed.contains("hx-confirm"),
-        "delete row is confirmable: {listed}"
+        listed.contains(&format!(
+            "hx-get=\"/layer/confirm?action=delete-site&amp;id={}\"",
+            site.id()
+        )) || listed.contains(&format!(
+            "hx-get=\"/layer/confirm?action=delete-site&id={}\"",
+            site.id()
+        )),
+        "delete row routes through the confirm surface: {listed}"
     );
 
     let del = server
@@ -1162,9 +1167,14 @@ async fn web_users_delete_removes_user() {
 
     let listed = authed_get(&server, &cookie, "/users").await;
     assert!(
-        listed.contains(&format!("hx-delete=\"/users/{}\"", frank.id()))
-            && listed.contains("hx-confirm"),
-        "delete row is confirmable: {listed}"
+        listed.contains(&format!(
+            "hx-get=\"/layer/confirm?action=delete-user&amp;id={}\"",
+            frank.id()
+        )) || listed.contains(&format!(
+            "hx-get=\"/layer/confirm?action=delete-user&id={}\"",
+            frank.id()
+        )),
+        "delete row routes through the confirm surface: {listed}"
     );
 
     let del = server
@@ -1520,8 +1530,10 @@ async fn web_ssl_revoke_removes_row() {
 
     let listed = authed_get(&server, &cookie, "/ssl").await;
     assert!(
-        listed.contains("hx-confirm")
-            && listed.contains("hx-post=\"/ssl/revoketest.example/revoke\""),
+        listed
+            .contains("hx-get=\"/layer/confirm?action=revoke-cert&amp;domain=revoketest.example\"")
+            || listed
+                .contains("hx-get=\"/layer/confirm?action=revoke-cert&domain=revoketest.example\""),
         "row has confirmable revoke: {listed}"
     );
 
@@ -1726,11 +1738,11 @@ async fn web_files_full_workflow() {
         .expect("POST chmod");
     assert_eq!(chmod.status(), 200, "chmod ok");
 
-    // delete (with confirmation hint visible in listing)
+    // delete (with confirmation surface visible in listing)
     let listed = authed_get(&server, &cookie, &format!("/sites/{}/files", site.id())).await;
     assert!(
-        listed.contains("hx-confirm") && listed.contains("hx-delete="),
-        "delete is confirmable: {listed}"
+        listed.contains("action=delete-entry") && listed.contains("path=renamed.txt"),
+        "delete routes through the confirm surface: {listed}"
     );
 
     let csrf = csrf_token_from_html(

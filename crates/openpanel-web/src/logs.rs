@@ -21,9 +21,15 @@ pub async fn page(State(state): State<WebState>, WebUser(user, session): WebUser
         h1 { "Logs & traffic" }
         p { "Bounded, redacted views of registered sources." }
         h2 { "Sources" }
-        ul { @for source in sources { li { a href=(format!("/logs/entries?source_id={}", source.id())) { (source.name()) } } } }
+        @if sources.is_empty() {
+            (crate::ui_states::EmptyState::new("No log sources yet", "Registered log sources appear here.").render())
+        } @else {
+            ul { @for source in sources { li { a href=(format!("/logs/entries?source_id={}", source.id())) { (source.name()) } } } }
+        }
         h2 { "Traffic" }
-        @if traffic.is_empty() { p { "No retained traffic summaries." } }
+        @if traffic.is_empty() {
+            (crate::ui_states::EmptyState::new("No retained traffic summaries", "Traffic summaries appear here once retention starts.").render())
+        }
     };
     state
         .render_shell(&user, &csrf, "/logs", content)

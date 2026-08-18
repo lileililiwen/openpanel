@@ -29,6 +29,9 @@ pub mod databases;
 /// Provider-backed DNS zones and typed records.
 pub mod dns;
 pub mod docker;
+/// Feedback aggregate for the NPS-style admin interaction surface:
+/// `FeedbackEntry`, `Sentiment`, `FeedbackRepository`, `FeedbackError`.
+pub mod feedback;
 pub mod files;
 /// Per-site FTP accounts, limits, and chroot path policy.
 pub mod ftp;
@@ -277,6 +280,11 @@ pub use db_privileges::{
 pub use dnssec_secondary::{
     DnsSecError, DnsSecPolicy, DnsSecRepository, DsRecord, GlueRecord, KeyRole, KskRolloverState,
     SecondaryNs, SigningAlgorithm, ZoneSigningKey,
+};
+pub use feedback::{
+    FEEDBACK_MIN_ACCOUNT_AGE_DAYS, FEEDBACK_RATE_LIMIT_PER_24H, FEEDBACK_RATE_WINDOW_SECS,
+    FeedbackEntry, FeedbackError, FeedbackRepository, MAX_FEEDBACK_COMMENT_LEN, Sentiment,
+    rate_limit_exceeded,
 };
 pub use files::{
     error::FileError,

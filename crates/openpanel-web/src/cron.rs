@@ -25,9 +25,15 @@ pub async fn list(State(state): State<WebState>, WebUser(user, session): WebUser
     let content = html! {
         h1 { "Cron jobs" }
         a href="/cron/new" { "Create cron job" }
-        table {
-            thead { tr { th { "Name" } th { "Schedule" } th { "Timezone" } th { "Status" } } }
-            tbody { @for job in jobs { tr { td { a href=(format!("/cron/jobs/{}", job.id())) { (job.name()) } } td { (job.schedule().expression()) } td { (job.schedule().timezone()) } td { @if job.enabled() { "Enabled" } @else { "Disabled" } } } } }
+        @if jobs.is_empty() {
+            (crate::ui_states::EmptyState::new("No cron jobs yet", "Schedule commands or HTTP requests to run automatically.")
+                .with_cta("/cron/new", "Create cron job")
+                .render())
+        } @else {
+            table {
+                thead { tr { th { "Name" } th { "Schedule" } th { "Timezone" } th { "Status" } } }
+                tbody { @for job in jobs { tr { td { a href=(format!("/cron/jobs/{}", job.id())) { (job.name()) } } td { (job.schedule().expression()) } td { (job.schedule().timezone()) } td { @if job.enabled() { "Enabled" } @else { "Disabled" } } } } }
+            }
         }
         a href="/cron/runs" { "Execution history" }
     };
@@ -119,7 +125,20 @@ pub async fn detail(
         Err(_) => return StatusCode::NOT_FOUND.into_response(),
     };
     let csrf = state.csrf.token_for(session.id());
-    let content = html! { h1 { (job.name()) } p { (job.schedule().expression()) " " (job.schedule().timezone()) } @for action in ["run", if job.enabled() { "disable" } else { "enable" }, "delete"] { form method="post" action=(format!("/cron/jobs/{id}/{action}")) class="form form-inline" { (crate::layout::csrf_field(&csrf)) button type="submit" { (action) } } } };
+    let content = html! {
+        h1 { (job.name()) }
+        p { (job.schedule().expression()) " " (job.schedule().timezone()) }
+        @for action in ["run", if job.enabled() { "disable" } else { "enable" }] {
+            form method="post" action=(format!("/cron/jobs/{id}/{action}")) class="form form-inline" {
+                (crate::layout::csrf_field(&csrf))
+                button type="submit" { (action) }
+            }
+        }
+        a class="btn danger" hx-get=(format!("/layer/confirm?action=delete-job&id={id}"))
+            hx-target="#layer-root" href=(format!("/layer/confirm?action=delete-job&id={id}")) {
+            "Delete"
+        }
+    };
     state
         .render_shell(&user, &csrf, "/cron", content)
         .await

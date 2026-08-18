@@ -4,7 +4,7 @@ use axum::{
     Form,
     extract::{Path, State},
     http::StatusCode,
-    response::{IntoResponse, Response},
+    response::{IntoResponse, Redirect, Response},
 };
 use maud::html;
 use serde::Deserialize;
@@ -20,13 +20,17 @@ pub async fn page(State(state): State<WebState>, WebUser(user, session): WebUser
     let content = html! {
         h1 { "DNS zones" }
         h2 { "Provider accounts" }
-        ul {
-            @for provider in providers {
-                li {
-                    (provider.name) " (" (provider.kind) ")"
-                    form method="post" action=(format!("/dns/providers/{}/sync", provider.id)) class="form form-inline" {
-                        input type="hidden" name="_csrf" value=(csrf);
-                        button { "Synchronize" }
+        @if providers.is_empty() {
+            (crate::ui_states::EmptyState::new("No provider accounts yet", "Add a DNS provider to sync your zones.").render())
+        } @else {
+            ul {
+                @for provider in providers {
+                    li {
+                        (provider.name) " (" (provider.kind) ")"
+                        form method="post" action=(format!("/dns/providers/{}/sync", provider.id)) class="form form-inline" {
+                            input type="hidden" name="_csrf" value=(csrf);
+                            button { "Synchronize" }
+                        }
                     }
                 }
             }
@@ -39,9 +43,13 @@ pub async fn page(State(state): State<WebState>, WebUser(user, session): WebUser
             button { "Add provider" }
         }
         h2 { "Zones" }
-        ul {
-            @for zone in zones {
-                li { a href=(format!("/dns/zones/{}", zone.id)) { (zone.name.as_str()) } }
+        @if zones.is_empty() {
+            (crate::ui_states::EmptyState::new("No zones yet", "Synchronize a provider to list its zones here.").render())
+        } @else {
+            ul {
+                @for zone in zones {
+                    li { a href=(format!("/dns/zones/{}", zone.id)) { (zone.name.as_str()) } }
+                }
             }
         }
     };
@@ -219,10 +227,9 @@ pub async fn zone_page(
                         input type="hidden" name="expected_version" value=(record.remote_version.as_str());
                         button { "Update" }
                     }
-                    form method="post" action=(format!("/dns/zones/{id}/records/{}/delete", record.remote_id)) class="form form-inline" {
-                        input type="hidden" name="_csrf" value=(csrf);
-                        input type="hidden" name="expected_version" value=(record.remote_version.as_str());
-                        button { "Delete" }
+                    a class="btn danger" hx-get=(format!("/layer/confirm?action=delete-record&zone={id}&record={}&expected_version={}", record.remote_id, crate::layer::urlencode(record.remote_version.as_str())))
+                        hx-target="#layer-root" href=(format!("/layer/confirm?action=delete-record&zone={id}&record={}&expected_version={}", record.remote_id, crate::layer::urlencode(record.remote_version.as_str()))) {
+                        "Delete"
                     }
                 }
             }
@@ -376,7 +383,7 @@ pub async fn delete_record(
         )
         .await
     {
-        Ok(()) => StatusCode::NO_CONTENT.into_response(),
+        Ok(()) => Redirect::to(&format!("/dns/zones/{id}")).into_response(),
         Err(error) => (StatusCode::UNPROCESSABLE_ENTITY, error.to_string()).into_response(),
     }
 }

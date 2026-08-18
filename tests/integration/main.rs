@@ -8,6 +8,8 @@ mod common;
 
 /// Account hierarchy HTTP integration tests.
 mod account_hierarchy;
+/// Interaction surface integration tests (layer, forms, ui states, feedback).
+mod admin_interaction_surface;
 mod api_tokens;
 mod backups;
 /// Per-site collaborator HTTP integration tests.

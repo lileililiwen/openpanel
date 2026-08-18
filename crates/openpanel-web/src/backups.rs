@@ -23,7 +23,24 @@ pub async fn page(State(state): State<WebState>, WebUser(user, session): WebUser
         .await
         .unwrap_or_default();
     let runs = state.backups.runs(user.id(), all).await.unwrap_or_default();
-    let content = html! {h1{"Backups"} a href="/backups/new"{"Create backup plan"} h2{"Plans"} ul{@for plan in plans{li{(plan.name()) " — " (plan.schedule())}}} h2{"Runs"} ul{@for run in runs{li{(format!("{:?}",run.state()))}}}};
+    let content = html! {
+        h1 { "Backups" }
+        a href="/backups/new" { "Create backup plan" }
+        h2 { "Plans" }
+        @if plans.is_empty() {
+            (crate::ui_states::EmptyState::new("No backup plans yet", "Create a plan to schedule automatic backups.")
+                .with_cta("/backups/new", "Create backup plan")
+                .render())
+        } @else {
+            ul { @for plan in plans { li { (plan.name()) " — " (plan.schedule()) } } }
+        }
+        h2 { "Runs" }
+        @if runs.is_empty() {
+            (crate::ui_states::EmptyState::new("No backup runs yet", "Backup runs appear here after a plan executes.").render())
+        } @else {
+            ul { @for run in runs { li { (format!("{:?}", run.state())) } } }
+        }
+    };
     state
         .render_shell(&user, &csrf, "/backups", content)
         .await

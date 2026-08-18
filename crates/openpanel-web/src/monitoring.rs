@@ -80,14 +80,14 @@ pub async fn landing(State(state): State<WebState>, WebUser(user, session): WebU
             hx-get=(format!("/monitoring/history?metric={}&range={range}", metric.as_str()))
             hx-trigger="load"
             hx-swap="outerHTML" {
-            p class="empty" { "Loading history…" }
+            (crate::ui_states::LoadingState::new("Loading history…").render())
         }
         h2 { "Recent alerts" }
         section id="alert-feed"
             hx-get="/monitoring/alerts"
             hx-trigger="load, every 60s"
             hx-swap="outerHTML" {
-            p class="empty" { "Loading alerts…" }
+            (crate::ui_states::LoadingState::new("Loading alerts…").render())
         }
     };
     state
@@ -171,7 +171,7 @@ pub fn history_fragment(samples: &[MetricSample], kind: MetricKind) -> Markup {
                 (humanize_range(samples))
             }
             @if samples.is_empty() {
-                p class="empty" { "No samples in this range." }
+                (crate::ui_states::EmptyState::new("No samples in this range", "Select a different metric or range.").render())
             } @else {
                 (sparkline(samples, kind))
             }
@@ -187,9 +187,11 @@ pub fn history_fragment(samples: &[MetricSample], kind: MetricKind) -> Markup {
 /// to the chart's user-unit box before emission.
 pub fn sparkline(samples: &[MetricSample], kind: MetricKind) -> Markup {
     if samples.is_empty() {
-        return html! {
-            p class="empty" { "No samples in this range." }
-        };
+        return crate::ui_states::EmptyState::new(
+            "No samples in this range",
+            "Select a different metric or range.",
+        )
+        .render();
     }
     let unit = samples.first().map(|s| s.unit).unwrap_or(Unit::Percent);
     let ymax = match unit {
@@ -237,7 +239,7 @@ pub fn alert_fragment(alerts: &[AlertView]) -> Markup {
     html! {
         section id="alert-feed" {
             @if alerts.is_empty() {
-                p class="empty" { "No alerts." }
+                (crate::ui_states::EmptyState::new("No alerts", "Alert events appear here when thresholds are crossed.").render())
             } @else {
                 table class="table alerts" {
                     thead {

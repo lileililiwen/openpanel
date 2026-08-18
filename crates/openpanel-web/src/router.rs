@@ -19,9 +19,9 @@ use openpanel_api::{
 use openpanel_app::{
     ApiTokenService, BackupService, CollaboratorService, ContainerRegistryService,
     ContainerRuntimeService, CronService, DatabasesService, DnsService, DockerService,
-    FilesService, FtpService, IdentityService, LogService, MailService, MonitoringService,
-    NotificationService, PitrService, SecurityService, SitesService, SoftwareCenterService,
-    SslService, StagingService, WafService, identity::TwoFactorService,
+    FeedbackService, FilesService, FtpService, IdentityService, LogService, MailService,
+    MonitoringService, NotificationService, PitrService, SecurityService, SitesService,
+    SoftwareCenterService, SslService, StagingService, WafService, identity::TwoFactorService,
     security::LoginThrottleService, system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
@@ -30,7 +30,7 @@ use openpanel_domain::{Session, SessionToken, User};
 use crate::{
     assets, backups, cron,
     csrf::{CsrfStore, ValidateCsrf},
-    dashboard, databases, files,
+    dashboard, databases, feedback, files, forms, layer,
     layout::CapabilitySet,
     login, logs, monitoring, security, settings,
     settings::{InstallationInfo, PanelPreferences, SettingsStore},
@@ -134,6 +134,8 @@ pub struct WebState {
     pub webmail: Arc<openpanel_app::WebmailService>,
     /// Per-session CSRF token store.
     pub csrf: Arc<CsrfStore>,
+    /// Feedback widget submission service.
+    pub feedback: Arc<FeedbackService>,
     /// Atomically persisted allowlisted panel preferences.
     pub settings: Arc<SettingsStore>,
     /// Redacted installation metadata for the Owner settings page.
@@ -155,6 +157,7 @@ impl WebState {
         let preferences = self.settings.current().await;
         crate::layout::Shell::new(user.username().as_str(), csrf, content)
             .with_navigation(user.role(), path, self.capabilities.clone())
+            .with_account_age_days(crate::feedback::account_age_days(user))
             .with_preferences(
                 &preferences.theme,
                 &preferences.locale,
@@ -257,6 +260,7 @@ pub fn router(
     container_runtime: Arc<ContainerRuntimeService>,
     themeable_ui: Arc<openpanel_app::ThemeableUiService>,
     webmail: Arc<openpanel_app::WebmailService>,
+    feedback: Arc<FeedbackService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -292,6 +296,7 @@ pub fn router(
         themeable_ui,
         webmail,
         csrf: Arc::new(CsrfStore::new()),
+        feedback,
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
             initial_preferences,
@@ -581,6 +586,13 @@ pub fn router(
             "/marketplace/{plugin_id}",
             get(crate::plugin_marketplace::page),
         )
+        .route("/layer/modal", get(layer::modal))
+        .route("/layer/confirm", get(layer::confirm))
+        .route("/layer/toast", get(layer::toast))
+        .route("/layer/tip", get(layer::tip))
+        .route("/layer/load", get(layer::load))
+        .route("/forms/validate", post(forms::validate))
+        .route("/feedback", post(feedback::submit))
         .route("/assets/htmx.min.js", get(assets::htmx_min_js))
         .route("/assets/app.css", get(assets::app_css))
         .route("/assets/tokens.css", get(assets::tokens_css))

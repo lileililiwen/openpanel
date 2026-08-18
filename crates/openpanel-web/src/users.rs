@@ -334,7 +334,7 @@ pub fn list_fragment(rows: &[UserRow], csrf: &str) -> Markup {
         section id="user-list" {
             a class="btn" href="/users/new" { "New user" }
             @if rows.is_empty() {
-                p class="empty" { "No users yet." }
+                (crate::ui_states::EmptyState::new("No users yet", "Create a user to grant them access to the panel.").render())
             } @else {
                 table class="table" {
                     thead {
@@ -384,9 +384,9 @@ pub fn list_fragment(rows: &[UserRow], csrf: &str) -> Markup {
                                             input type="password" name="password" placeholder="new password" required;
                                             button type="submit" { "Reset" }
                                         }
-                                        form class="inline" hx-delete=(format!("/users/{}", row.id)) hx-target="#user-list" hx-confirm=(format!("Delete user {}? This cannot be undone.", row.username)) {
-                                            (csrf_field(csrf))
-                                            button type="submit" class="danger" { "Delete" }
+                                        a class="btn danger" hx-get=(format!("/layer/confirm?action=delete-user&id={}", row.id))
+                                            hx-target="#layer-root" href=(format!("/layer/confirm?action=delete-user&id={}", row.id)) {
+                                            "Delete"
                                         }
                                     }
                                 }
@@ -571,12 +571,19 @@ mod tests {
     }
 
     #[test]
-    fn list_renders_delete_with_confirmation() {
+    fn list_renders_delete_via_layer_confirm() {
         let mut other = row(Uuid::new_v4(), "bob", "b@e.com", "user", "active");
         other.is_self = false;
+        let id = other.id;
         let out = list_fragment(&[other], "tok").into_string();
-        assert!(out.contains("hx-confirm"), "delete confirmable: {out}");
-        assert!(out.contains("hx-delete="), "delete wired: {out}");
+        assert!(
+            out.contains(&format!(
+                "hx-get=\"/layer/confirm?action=delete-user&amp;id={id}\""
+            )),
+            "delete routes through layer confirm: {out}"
+        );
+        assert!(!out.contains("hx-confirm"), "no native confirm: {out}");
+        assert!(!out.contains("hx-delete="), "no raw delete: {out}");
     }
 
     #[test]

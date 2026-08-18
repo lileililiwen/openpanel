@@ -53,6 +53,8 @@ pub mod dns;
 /// secondary nameserver ACLs, glue records, and DS records.
 pub mod dnssec_secondary;
 pub mod docker;
+/// Feedback widget submissions: SQLite repository, service, module.
+pub mod feedback;
 pub mod files;
 pub mod ftp;
 /// Git deployment bounded context: a per-site git repo, deploy
@@ -211,6 +213,8 @@ pub use docker::{
     ApplyReport, BollardDockerAdapter, DockerAdapter, DockerModule, DockerService, ExecResult,
     NetworkAdapter, RuntimeContainerState, SqliteDockerRepository,
 };
+/// Feedback widget module.
+pub use feedback::{FeedbackModule, FeedbackService, SqliteFeedbackRepository};
 pub use files::{FilesModule, service::FilesService};
 pub use ftp::{
     ChrootStorage, CreateFtpAccount, CreatedFtpAccount, FtpAccountView, FtpAuthenticator,

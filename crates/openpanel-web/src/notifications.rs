@@ -245,10 +245,14 @@ fn content(
             }
         }
         h2 { "Channels" }
-        @for channel in channels {
-            article { strong { (&channel.name) } " " (channel.kind.to_string()) " " (&channel.endpoint)
-                form method="post" action=(format!("/settings/notifications/channels/{}/test", channel.id)) class="form form-inline-row" { (csrf_field(csrf)) label { "Destination" input name="destination" placeholder="allowed destination" required; button type="submit" { "Test send" } } }
-                form method="post" action=(format!("/settings/notifications/channels/{}/disable", channel.id)) class="form form-inline" { (csrf_field(csrf)) button type="submit" { "Disable" } }
+        @if channels.is_empty() {
+            (crate::ui_states::EmptyState::new("No channels yet", "Add an SMTP or webhook channel to receive notifications.").render())
+        } @else {
+            @for channel in channels {
+                article { strong { (&channel.name) } " " (channel.kind.to_string()) " " (&channel.endpoint)
+                    form method="post" action=(format!("/settings/notifications/channels/{}/test", channel.id)) class="form form-inline-row" { (csrf_field(csrf)) label { "Destination" input name="destination" placeholder="allowed destination" required; button type="submit" { "Test send" } } }
+                    form method="post" action=(format!("/settings/notifications/channels/{}/disable", channel.id)) class="form form-inline" { (csrf_field(csrf)) button type="submit" { "Disable" } }
+                }
             }
         }
         h2 { "Add subscription" }
@@ -260,9 +264,13 @@ fn content(
             label { "Filter JSON" input name="filter_json" value="{}" required; }
             button type="submit" { "Subscribe" }
         }
-        @for subscription in subscriptions {
-            article { code { (subscription.id) } " " (&subscription.destination) " " (if subscription.enabled { "enabled" } else { "disabled" })
-                @if subscription.enabled { form method="post" action=(format!("/settings/notifications/subscriptions/{}/disable", subscription.id)) class="form form-inline" { (csrf_field(csrf)) button type="submit" { "Disable" } } }
+        @if subscriptions.is_empty() {
+            (crate::ui_states::EmptyState::new("No subscriptions yet", "Subscribe a channel to a kind of event.").render())
+        } @else {
+            @for subscription in subscriptions {
+                article { code { (subscription.id) } " " (&subscription.destination) " " (if subscription.enabled { "enabled" } else { "disabled" })
+                    @if subscription.enabled { form method="post" action=(format!("/settings/notifications/subscriptions/{}/disable", subscription.id)) class="form form-inline" { (csrf_field(csrf)) button type="submit" { "Disable" } } }
+                }
             }
         }
     }

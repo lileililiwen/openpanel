@@ -173,6 +173,15 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .await
         .context("apply software center migrations")?;
 
+    // Feedback widget module: persists NPS-style submissions from the
+    // admin interaction surface.
+    let feedback_module = openpanel_app::FeedbackModule::new(&ctx).await;
+    runner
+        .apply_module(feedback_module.name(), &feedback_module.migrations())
+        .await
+        .context("apply feedback migrations")?;
+    let feedback_svc = feedback_module.service();
+
     let mut background_tasks = docker_module.background_tasks(&ctx);
     background_tasks.extend(ftp_module.background_tasks(&ctx));
     background_tasks.extend(notification_module.background_tasks(&ctx));
@@ -484,6 +493,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         container_runtime_svc,
         themeable_ui_svc.clone(),
         webmail_svc.clone(),
+        feedback_svc,
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")

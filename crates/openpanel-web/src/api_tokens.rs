@@ -140,24 +140,28 @@ fn content(tokens: &[ApiTokenMetadata], csrf: &str, plaintext: Option<&str>) -> 
             label { "Lifetime in days" input name="expires_in_days" type="number" min="1" max="365" value="90"; }
             button type="submit" { "Create token" }
         }
-        table {
-            thead { tr { th { "Label" } th { "Scopes" } th { "Expires" } th { "Status" } th { "Actions" } } }
-            tbody {
-                @for token in tokens {
-                    tr {
-                        td { (&token.label) }
-                        td { @for scope in &token.scopes { code { (scope) } " " } }
-                        td { (token.expires_at) }
-                        td { @if token.revoked_at.is_some() { "revoked" } @else { "active" } }
-                        td {
-                            @if token.revoked_at.is_none() {
-                                form method="post" action=(format!("/settings/tokens/{}/rotate", token.id)) class="form form-inline" {
-                                    (csrf_field(csrf))
-                                    button type="submit" { "Rotate" }
-                                }
-                                form method="post" action=(format!("/settings/tokens/{}/revoke", token.id)) class="form form-inline" {
-                                    (csrf_field(csrf))
-                                    button type="submit" { "Revoke" }
+        @if tokens.is_empty() {
+            (crate::ui_states::EmptyState::new("No API tokens yet", "Create a scoped token to use with the API.").render())
+        } @else {
+            table {
+                thead { tr { th { "Label" } th { "Scopes" } th { "Expires" } th { "Status" } th { "Actions" } } }
+                tbody {
+                    @for token in tokens {
+                        tr {
+                            td { (&token.label) }
+                            td { @for scope in &token.scopes { code { (scope) } " " } }
+                            td { (token.expires_at) }
+                            td { @if token.revoked_at.is_some() { "revoked" } @else { "active" } }
+                            td {
+                                @if token.revoked_at.is_none() {
+                                    form method="post" action=(format!("/settings/tokens/{}/rotate", token.id)) class="form form-inline" {
+                                        (csrf_field(csrf))
+                                        button type="submit" { "Rotate" }
+                                    }
+                                    form method="post" action=(format!("/settings/tokens/{}/revoke", token.id)) class="form form-inline" {
+                                        (csrf_field(csrf))
+                                        button type="submit" { "Revoke" }
+                                    }
                                 }
                             }
                         }

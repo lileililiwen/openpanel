@@ -117,7 +117,7 @@ pub async fn landing(State(state): State<WebState>, WebUser(user, session): WebU
         h1 { "Files" }
         p { "Choose a site to manage its document root." }
         @if sites.is_empty() {
-            p class="empty" { "No sites available" }
+            (crate::ui_states::EmptyState::new("No sites available", "Create a site before managing its files.").render())
         } @else {
             ul class="resource-links" {
                 @for site in sites {
@@ -685,7 +685,7 @@ pub fn listing_fragment(site_id: Uuid, current: &str, rows: &[FileRow], csrf: &s
     html! {
         section id="files-listing" {
             @if rows.is_empty() {
-                p class="empty" { "Empty directory." }
+                (crate::ui_states::EmptyState::new("Empty directory", "This directory has no files yet. Upload or create one below.").render())
             } @else {
                 table class="table" {
                     thead {
@@ -722,10 +722,9 @@ pub fn listing_fragment(site_id: Uuid, current: &str, rows: &[FileRow], csrf: &s
                                         input type="text" name="mode" value=(row.mode) size="3";
                                         button type="submit" { "chmod" }
                                     }
-                                    form class="inline" hx-delete=(format!("/sites/{site_id}/files/remove")) hx-target="#files-listing" hx-confirm=(format!("Delete {}? This cannot be undone.", row.name)) {
-                                        (csrf_field(csrf))
-                                        input type="hidden" name="path" value=(full_path(current, &row.name));
-                                        button type="submit" class="danger" { "Delete" }
+                                    a class="btn danger" hx-get=(format!("/layer/confirm?action=delete-entry&site_id={site_id}&path={}", crate::layer::urlencode(&full_path(current, &row.name))))
+                                        hx-target="#layer-root" href=(format!("/layer/confirm?action=delete-entry&site_id={site_id}&path={}", crate::layer::urlencode(&full_path(current, &row.name)))) {
+                                        "Delete"
                                     }
                                 }
                             }
@@ -912,11 +911,16 @@ mod tests {
     }
 
     #[test]
-    fn listing_renders_delete_with_confirmation() {
+    fn listing_renders_delete_via_layer_confirm() {
         let rows = vec![info("a.txt", false, 0)];
         let out = listing_fragment(Uuid::new_v4(), "", &rows, "tok").into_string();
-        assert!(out.contains("hx-confirm"), "delete confirm: {out}");
-        assert!(out.contains("hx-delete="), "delete wired: {out}");
+        assert!(
+            out.contains("action=delete-entry&amp;site_id="),
+            "delete routes through layer confirm: {out}"
+        );
+        assert!(out.contains("path=a.txt"), "path forwarded: {out}");
+        assert!(!out.contains("hx-confirm"), "no native confirm: {out}");
+        assert!(!out.contains("hx-delete="), "no raw delete: {out}");
     }
 
     #[test]

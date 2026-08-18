@@ -352,7 +352,7 @@ pub fn list_fragment(rows: &[CertRow], csrf: &str) -> Markup {
         section id="ssl-list" {
             a class="btn" href="/ssl/new" { "Issue certificate" }
             @if rows.is_empty() {
-                p class="empty" { "No certificates yet." }
+                (crate::ui_states::EmptyState::new("No certificates yet", "Issue a certificate for a domain to enable HTTPS.").render())
             } @else {
                 table class="table" {
                     thead {
@@ -385,9 +385,9 @@ pub fn list_fragment(rows: &[CertRow], csrf: &str) -> Markup {
                                         (csrf_field(csrf))
                                         button type="submit" { "Renew" }
                                     }
-                                    form class="inline" hx-post=(format!("/ssl/{}/revoke", row.domain)) hx-target="#ssl-list" hx-confirm=(format!("Revoke and delete {}? This cannot be undone.", row.domain)) {
-                                        (csrf_field(csrf))
-                                        button type="submit" class="danger" { "Revoke" }
+                                    a class="btn danger" hx-get=(format!("/layer/confirm?action=revoke-cert&domain={}", row.domain))
+                                        hx-target="#layer-root" href=(format!("/layer/confirm?action=revoke-cert&domain={}", row.domain)) {
+                                        "Revoke"
                                     }
                                 }
                             }
@@ -578,14 +578,17 @@ mod tests {
     }
 
     #[test]
-    fn list_renders_revoke_with_confirmation() {
+    fn list_renders_revoke_via_layer_confirm() {
         let certs = vec![make_cert("a.example", CertificateSource::SelfSigned, true)];
         let rows = collect_rows(&certs);
         let out = list_fragment(&rows, "tok").into_string();
-        assert!(out.contains("hx-confirm"), "confirm: {out}");
         assert!(
-            out.contains("hx-post=\"/ssl/a.example/revoke\""),
-            "revoke wired: {out}"
+            out.contains("hx-get=\"/layer/confirm?action=revoke-cert&amp;domain=a.example\""),
+            "revoke routes through layer confirm: {out}"
+        );
+        assert!(
+            !out.contains("hx-post=\"/ssl/a.example/revoke\""),
+            "no raw revoke form: {out}"
         );
     }
 

@@ -303,7 +303,13 @@ pub fn list_fragment(rows: &[DbRow], can_manage: bool, csrf: &str) -> Markup {
                 a class="btn" href="/databases/new" { "Add database" }
             }
             @if rows.is_empty() {
-                p class="empty" { "No databases yet." }
+                @if can_manage {
+                    (crate::ui_states::EmptyState::new("No databases yet", "Create your first database to start storing data.")
+                        .with_cta("/databases/new", "Add database")
+                        .render())
+                } @else {
+                    (crate::ui_states::EmptyState::new("No databases yet", "No databases are assigned to your account.").render())
+                }
             } @else {
                 table class="table" {
                     thead {
@@ -328,13 +334,13 @@ pub fn list_fragment(rows: &[DbRow], can_manage: bool, csrf: &str) -> Markup {
                                             (csrf_field(csrf))
                                             button type="submit" { "Rotate password" }
                                         }
-                                        form class="inline" hx-post=(format!("/databases/{}/reveal", row.id)) hx-target="#password-panel" hx-swap="outerHTML" {
-                                            (csrf_field(csrf))
-                                            button type="submit" { "Reveal" }
+                                        a class="btn danger" hx-get=(format!("/layer/confirm?action=reveal-database-password&id={}", row.id))
+                                            hx-target="#layer-root" href=(format!("/layer/confirm?action=reveal-database-password&id={}", row.id)) {
+                                            "Reveal"
                                         }
-                                        form class="inline" hx-delete=(format!("/databases/{}", row.id)) hx-target="#databases-list" hx-confirm=(format!("Delete database {}? This cannot be undone.", row.name)) {
-                                            (csrf_field(csrf))
-                                            button type="submit" class="danger" { "Delete" }
+                                        a class="btn danger" hx-get=(format!("/layer/confirm?action=delete-database&id={}", row.id))
+                                            hx-target="#layer-root" href=(format!("/layer/confirm?action=delete-database&id={}", row.id)) {
+                                            "Delete"
                                         }
                                     }
                                 }
@@ -494,7 +500,7 @@ mod tests {
     }
 
     #[test]
-    fn list_renders_delete_with_confirmation() {
+    fn list_renders_delete_via_layer_confirm() {
         let dbs = [db("appdb")];
         let rows: Vec<DbRow> = dbs
             .iter()
@@ -507,8 +513,19 @@ mod tests {
             })
             .collect();
         let out = list_fragment(&rows, true, "tok").into_string();
-        assert!(out.contains("hx-confirm"), "confirm: {out}");
-        assert!(out.contains("hx-delete="), "delete wired: {out}");
+        assert!(
+            out.contains(&format!(
+                "hx-get=\"/layer/confirm?action=delete-database&amp;id={}\"",
+                rows[0].id
+            )),
+            "delete routes through layer confirm: {out}"
+        );
+        assert!(
+            out.contains("hx-get=\"/layer/confirm?action=reveal-database-password"),
+            "reveal routes through layer confirm: {out}"
+        );
+        assert!(!out.contains("hx-confirm"), "no native confirm: {out}");
+        assert!(!out.contains("hx-delete="), "no raw delete: {out}");
     }
 
     #[test]

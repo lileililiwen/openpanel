@@ -141,7 +141,7 @@ pub fn alerts_section(alerts: &[AlertView]) -> Markup {
         section class="alerts" {
             h2 { "Recent alerts" }
             @if alerts.is_empty() {
-                p class="empty" { "No alerts" }
+                (crate::ui_states::EmptyState::new("No alerts", "Alert events appear here when thresholds are crossed.").render())
             } @else {
                 ul {
                     @for alert in alerts {
