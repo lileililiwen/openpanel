@@ -139,6 +139,10 @@ html[data-theme="light"] {
 
 .nav-rail-toggle:hover { color: var(--text); border-color: var(--accent); }
 
+/* The rail toggle's expand glyph is hidden in the default (expanded)
+   layout and shown only while `body.nav-rail` is active. */
+.nav-rail-expand { display: none; }
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -276,12 +280,37 @@ code, kbd, pre, samp {
   .topbar { padding: var(--op-space-3) var(--op-space-4); }
   #content { padding: var(--op-space-4); }
 
-  /* Compact rail mode: icon-only sidebar, label overlay on hover/focus. */
+  /* Compact rail mode: icon-only sidebar, label overlay on hover/focus.
+     The rail toggle stays reachable (icon form) so the user can always
+     switch back; section headings are clipped out of view. */
   body.nav-rail .layout { grid-template-columns: 64px minmax(0, 1fr); }
   body.nav-rail .sidebar { padding: var(--op-space-4) var(--op-space-1); }
-  body.nav-rail .nav-filter,
-  body.nav-rail .nav-rail-toggle { display: none; }
-  body.nav-rail .nav-section > summary { justify-content: center; margin-inline: 0; }
+  body.nav-rail .nav-filter { display: none; }
+  body.nav-rail .nav-rail-toggle {
+    display: inline-flex;
+    justify-content: center;
+    align-items: center;
+    margin: var(--op-space-1) auto var(--op-space-3);
+    padding: var(--op-space-1);
+    border-color: transparent;
+  }
+  body.nav-rail .nav-rail-toggle .nav-rail-label { display: none; }
+  body.nav-rail .nav-rail-toggle .nav-rail-expand { display: inline-flex; }
+  body.nav-rail .nav-section > summary {
+    justify-content: center;
+    margin-inline: 0;
+    position: relative;
+  }
+  body.nav-rail .nav-section-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
   body.nav-rail .nav-item { justify-content: center; position: relative; }
   body.nav-rail .nav-icon { width: var(--op-space-6); height: var(--op-space-6); }
   body.nav-rail .nav-label {

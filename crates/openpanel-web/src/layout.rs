@@ -172,8 +172,15 @@ impl<'a> Shell<'a> {
                             summary { "Navigation" }
                             nav class="sidebar" aria-label="Primary navigation" {
                                 button id="nav-rail-toggle" type="button" class="nav-rail-toggle"
-                                    aria-pressed="false" title="Toggle compact sidebar" {
-                                    "Compact"
+                                    aria-pressed="false" aria-label="Toggle compact sidebar" title="Toggle compact sidebar" {
+                                    span class="nav-rail-expand" aria-hidden="true" {
+                                        svg class="nav-icon" viewBox="0 0 24 24" fill="none"
+                                            stroke="currentColor" stroke-width="2"
+                                            stroke-linecap="round" stroke-linejoin="round" {
+                                            path d="M15 18l-6-6 6-6";
+                                        }
+                                    }
+                                    span class="nav-rail-label" { "Compact" }
                                 }
                                 label class="nav-filter" {
                                     span class="visually-hidden" { "Filter menu" }
@@ -184,7 +191,9 @@ impl<'a> Shell<'a> {
                                     @let visible = self.visible_items(section);
                                     @if !visible.is_empty() {
                                         details class="nav-section" data-section=(section.label) open {
-                                            summary { (section.label) }
+                                            summary {
+                                                span class="nav-section-label" { (section.label) }
+                                            }
                                             ul class="nav-items" {
                                                 @for item in visible {
                                                     @if self.is_active(item) {
