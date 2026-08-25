@@ -3,21 +3,33 @@ use std::sync::Arc;
 
 use axum::{
     Json, Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     routing::{get, post},
 };
-use openpanel_app::mail::{
-    DomainDeletionPreview, MailAlias, MailDomain, MailService, MailServiceError, MailStatus,
-    Mailbox, MailboxCredential, Readiness,
+use openpanel_app::{
+    MailFilterService, MailingListService,
+    mail::{
+        DomainDeletionPreview, MailAlias, MailDomain, MailService, MailServiceError, MailStatus,
+        Mailbox, MailboxCredential, Readiness,
+    },
 };
-use openpanel_domain::mail::MailQuota;
+use openpanel_domain::{
+    mail::MailQuota,
+    mail_filtering::{
+        AutoResponder, AutoResponderMode, CatchAll, Forwarder, MailingList, SieveScript,
+    },
+};
 use serde::Deserialize;
 use uuid::Uuid;
 
 use crate::{ApiError, ApiResult, AuthUser};
 /// Build `/mail` routes.
-pub fn router(service: Arc<MailService>) -> Router {
+pub fn router(
+    service: Arc<MailService>,
+    filters: Arc<MailFilterService>,
+    mailing_lists: Arc<MailingListService>,
+) -> Router {
     Router::new()
         .route("/readiness", get(readiness))
         .route("/domains", get(domains).post(create_domain))
@@ -36,7 +48,334 @@ pub fn router(service: Arc<MailService>) -> Router {
         .route("/mailboxes/delete", post(delete_mailbox))
         .route("/aliases/{id}/delete", post(delete_alias))
         .route("/status", get(status))
+        .route("/queue", get(queue))
         .with_state(service)
+        .merge(filter_routes(filters, mailing_lists))
+}
+
+// ---- mail-filtering surfaces (sieve / autoresponder / forwarders /
+// catch-all / lists / queue). The bounded context's services enforce
+// Owner|Admin RBAC; these handlers only map errors.
+
+type FilterState = (Arc<MailFilterService>, Arc<MailingListService>);
+
+fn filter_routes(
+    filters: Arc<MailFilterService>,
+    mailing_lists: Arc<MailingListService>,
+) -> Router {
+    Router::new()
+        .route("/mailboxes/{id}/filters", get(get_filters).put(put_filters))
+        .route(
+            "/mailboxes/{id}/autoresponder",
+            get(get_autoresponder)
+                .put(put_autoresponder)
+                .delete(delete_autoresponder),
+        )
+        .route(
+            "/mailboxes/{id}/forwarders",
+            get(list_forwarders).post(add_forwarder),
+        )
+        .route(
+            "/mailboxes/{id}/forwarders/{destination}",
+            axum::routing::delete(delete_forwarder),
+        )
+        .route("/catchall/{domain}", get(get_catchall).put(put_catchall))
+        .route("/lists", get(list_lists).post(upsert_list))
+        .route("/lists/{address}", get(get_list).delete(remove_list))
+        .with_state((filters, mailing_lists))
+}
+
+async fn get_filters(
+    State(state): State<FilterState>,
+    AuthUser(user, _): AuthUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let script = state
+        .0
+        .get_sieve(&user, id)
+        .await
+        .map_err(map_mail_filter)?;
+    Ok(Json(match script {
+        Some(script) => serde_json::json!({"script": script.script}),
+        None => serde_json::json!({"script": null}),
+    }))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PutFiltersInput {
+    script: String,
+}
+
+async fn put_filters(
+    State(state): State<FilterState>,
+    AuthUser(user, _): AuthUser,
+    Path(id): Path<Uuid>,
+    Json(input): Json<PutFiltersInput>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let script = SieveScript::new(id, input.script).map_err(map_mail_filter)?;
+    let saved = state
+        .0
+        .set_sieve(&user, script)
+        .await
+        .map_err(map_mail_filter)?;
+    Ok(Json(serde_json::json!({
+        "script": saved.script,
+        "bytes": saved.script.len(),
+    })))
+}
+
+async fn get_autoresponder(
+    State(state): State<FilterState>,
+    AuthUser(user, _): AuthUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let responder = state
+        .0
+        .get_autoresponder(&user, id)
+        .await
+        .map_err(map_mail_filter)?;
+    Ok(Json(match responder {
+        Some(responder) => serde_json::json!({
+            "enabled": responder.enabled,
+            "body": responder.body,
+            "mode": responder.mode.as_str(),
+            "window_start": responder.window_start.to_rfc3339(),
+            "window_end": responder.window_end.to_rfc3339(),
+        }),
+        None => serde_json::json!(null),
+    }))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PutAutoresponderInput {
+    enabled: bool,
+    body: String,
+    mode: AutoResponderMode,
+    window_start: chrono::DateTime<chrono::Utc>,
+    window_end: chrono::DateTime<chrono::Utc>,
+}
+
+async fn put_autoresponder(
+    State(state): State<FilterState>,
+    AuthUser(user, _): AuthUser,
+    Path(id): Path<Uuid>,
+    Json(input): Json<PutAutoresponderInput>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let responder = AutoResponder {
+        mailbox_id: id,
+        enabled: input.enabled,
+        body: input.body,
+        mode: input.mode,
+        window_start: input.window_start,
+        window_end: input.window_end,
+    };
+    let saved = state
+        .0
+        .set_autoresponder(&user, responder)
+        .await
+        .map_err(map_mail_filter)?;
+    Ok(Json(serde_json::json!({
+        "enabled": saved.enabled,
+        "mode": saved.mode.as_str(),
+    })))
+}
+
+async fn delete_autoresponder(
+    State(state): State<FilterState>,
+    AuthUser(user, _): AuthUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<StatusCode> {
+    state
+        .0
+        .disable_autoresponder(&user, id)
+        .await
+        .map_err(map_mail_filter)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct AddForwarderInput {
+    destination: String,
+    keep_local: bool,
+}
+
+async fn add_forwarder(
+    State(state): State<FilterState>,
+    AuthUser(user, _): AuthUser,
+    Path(id): Path<Uuid>,
+    Query(source): Query<ForwarderSource>,
+    Json(input): Json<AddForwarderInput>,
+) -> ApiResult<Json<Forwarder>> {
+    let forwarder = Forwarder {
+        mailbox_id: id,
+        destination: input.destination,
+        keep_local: input.keep_local,
+    };
+    let saved = state
+        .0
+        .add_forwarder(&user, forwarder, &source.source)
+        .await
+        .map_err(map_mail_filter)?;
+    Ok(Json(saved))
+}
+
+/// Source local-part query parameter for forwarder operations.
+#[derive(Deserialize)]
+pub struct ForwarderSource {
+    /// Local source address used for loop detection.
+    source: String,
+}
+
+async fn list_forwarders(
+    State(state): State<FilterState>,
+    AuthUser(user, _): AuthUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Vec<Forwarder>>> {
+    Ok(Json(
+        state
+            .0
+            .list_forwarders(&user, id)
+            .await
+            .map_err(map_mail_filter)?,
+    ))
+}
+
+async fn delete_forwarder(
+    State(state): State<FilterState>,
+    AuthUser(user, _): AuthUser,
+    Path((id, destination)): Path<(Uuid, String)>,
+    Query(source): Query<ForwarderSource>,
+) -> ApiResult<StatusCode> {
+    state
+        .0
+        .remove_forwarder_for_source(&user, id, &source.source, &destination)
+        .await
+        .map_err(map_mail_filter)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn get_catchall(
+    State(state): State<FilterState>,
+    AuthUser(user, _): AuthUser,
+    Path(domain): Path<String>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let catch_all = state
+        .0
+        .get_catch_all(&user, &domain)
+        .await
+        .map_err(map_mail_filter)?;
+    Ok(Json(match catch_all {
+        Some(catch_all) => serde_json::json!({
+            "domain": catch_all.domain,
+            "destination_mailbox": catch_all.destination_mailbox.to_string(),
+        }),
+        None => serde_json::json!(null),
+    }))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PutCatchallInput {
+    destination_mailbox: Uuid,
+}
+
+async fn put_catchall(
+    State(state): State<FilterState>,
+    AuthUser(user, _): AuthUser,
+    Path(domain): Path<String>,
+    Json(input): Json<PutCatchallInput>,
+) -> ApiResult<Json<CatchAll>> {
+    let catch_all = CatchAll {
+        domain,
+        destination_mailbox: input.destination_mailbox,
+    };
+    let saved = state
+        .0
+        .set_catch_all(&user, catch_all)
+        .await
+        .map_err(map_mail_filter)?;
+    Ok(Json(saved))
+}
+
+async fn list_lists(
+    State(state): State<FilterState>,
+    AuthUser(user, _): AuthUser,
+) -> ApiResult<Json<Vec<MailingList>>> {
+    Ok(Json(
+        state.1.list_all(&user).await.map_err(map_mail_filter)?,
+    ))
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct UpsertListInput {
+    address: String,
+    members: Vec<Uuid>,
+}
+
+async fn upsert_list(
+    State(state): State<FilterState>,
+    AuthUser(user, _): AuthUser,
+    Json(input): Json<UpsertListInput>,
+) -> ApiResult<Json<MailingList>> {
+    let list = MailingList {
+        address: input.address,
+        members: input.members,
+        created_at: chrono::Utc::now(),
+    };
+    let saved = state.1.upsert(&user, list).await.map_err(map_mail_filter)?;
+    Ok(Json(saved))
+}
+
+async fn get_list(
+    State(state): State<FilterState>,
+    AuthUser(user, _): AuthUser,
+    Path(address): Path<String>,
+) -> ApiResult<Json<Option<MailingList>>> {
+    Ok(Json(
+        state
+            .1
+            .get_for_caller(&user, &address)
+            .await
+            .map_err(map_mail_filter)?,
+    ))
+}
+
+async fn remove_list(
+    State(state): State<FilterState>,
+    AuthUser(user, _): AuthUser,
+    Path(address): Path<String>,
+) -> ApiResult<StatusCode> {
+    state
+        .1
+        .remove(&user, &address)
+        .await
+        .map_err(map_mail_filter)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+async fn queue(
+    State(service): State<Arc<MailService>>,
+    AuthUser(_user, _): AuthUser,
+) -> ApiResult<Json<openpanel_domain::MailQueueSnapshot>> {
+    Ok(Json(service.queue_snapshot().await.map_err(map)?))
+}
+
+fn map_mail_filter(error: openpanel_domain::MailFilterError) -> ApiError {
+    use openpanel_domain::MailFilterError as Error;
+    match error {
+        Error::Forbidden => ApiError::Forbidden,
+        Error::SieveTooLarge(_, _) | Error::SieveCompile(_) => {
+            ApiError::Unprocessable("script_too_large".into())
+        }
+        Error::InvalidAutoResponder | Error::ForwarderLoop => {
+            ApiError::Unprocessable(error.to_string())
+        }
+        Error::Persistence(message) => ApiError::Internal(message),
+    }
 }
 async fn readiness(
     State(service): State<Arc<MailService>>,

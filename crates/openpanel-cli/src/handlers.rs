@@ -10,8 +10,9 @@ use openpanel_app::{
     AcmeEndpoint, ApiTokenModule, BackupsModule, CronModule, DatabasesModule, DbPitrModule,
     DnsModule, DockerModule, FilesModule, FtpModule, IdentityModule, InMemoryBinlogSink,
     InMemoryStagingFilesystem, LogService, LogsModule, MailModule, MonitoringModule,
-    NotificationModule, SecurityModule, SecurityService, SiteStagingModule, SitesModule,
-    SoftwareCenterModule, SslModule, SslPaths, StagingService, SystemServicesModule, WafModule,
+    NotificationModule, SecurityModule, SecurityService, SiteHttpControlsModule, SiteStagingModule,
+    SitesModule, SoftwareCenterModule, SslModule, SslPaths, StagingService, SystemServicesModule,
+    WafModule,
     databases::{crypto as db_crypto, repo::SqliteDatabaseRepository},
     sites::repo::SqliteSiteRepository,
 };
@@ -45,6 +46,18 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .map_err(anyhow::Error::msg)?;
     let sites_module = SitesModule::new(&ctx).await;
     let waf_module = WafModule::new(&ctx, sites_module.generator().clone()).await;
+    let site_http_controls_auth_dir = std::env::var("OPENPANEL__SITE_HTTP__AUTH_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("/etc/openpanel/http-auth"));
+    let site_http_controls_module = SiteHttpControlsModule::new(
+        &ctx,
+        sites_module.generator().clone(),
+        site_http_controls_auth_dir,
+    )
+    .await;
+    let web_terminal_module = openpanel_app::WebTerminalModule::new(&ctx).await;
+    let mail_filtering_module = openpanel_app::MailFilteringModule::new(&ctx).await;
+    let sso_module = openpanel_app::SsoModule::new(&ctx, master_key).await;
     let docker_module = DockerModule::new(&ctx, master_key)
         .await
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
@@ -69,6 +82,16 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         Some((cron_module.service(), std::path::PathBuf::from("/var/www"))),
     )
     .await;
+    let snapshots_root = std::env::var("OPENPANEL__SNAPSHOTS__ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or(std::path::PathBuf::from("/var/lib/openpanel/snapshots"));
+    let server_snapshots_svc = std::sync::Arc::new(openpanel_app::ServerSnapshotService::new(
+        backups_module.service(),
+        pool.clone(),
+        snapshots_root,
+        audit.clone(),
+        env!("CARGO_PKG_VERSION").to_owned(),
+    ));
     let log_root = std::env::var("OPENPANEL__LOGS__ROOT")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::path::PathBuf::from("/var/log/openpanel"));
@@ -114,6 +137,31 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .apply_module(waf_module.name(), &waf_module.migrations())
         .await
         .context("apply WAF migrations")?;
+    runner
+        .apply_module(
+            site_http_controls_module.name(),
+            &site_http_controls_module.migrations(),
+        )
+        .await
+        .context("apply site-http-controls migrations")?;
+    runner
+        .apply_module(
+            web_terminal_module.name(),
+            &web_terminal_module.migrations(),
+        )
+        .await
+        .context("apply web-terminal migrations")?;
+    runner
+        .apply_module(
+            mail_filtering_module.name(),
+            &mail_filtering_module.migrations(),
+        )
+        .await
+        .context("apply mail-filtering migrations")?;
+    runner
+        .apply_module(sso_module.name(), &sso_module.migrations())
+        .await
+        .context("apply sso migrations")?;
     runner
         .apply_module(docker_module.name(), &docker_module.migrations())
         .await
@@ -206,6 +254,11 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let software_center_svc = software_center_module.service();
     let two_factor_svc = identity_module.two_factor();
     let waf_svc = waf_module.service();
+    let site_http_controls_svc = site_http_controls_module.service();
+    let web_terminal_svc = web_terminal_module.service();
+    let mail_filters_svc = mail_filtering_module.service();
+    let mailing_lists_svc = mail_filtering_module.mailing_lists();
+    let sso_svc = sso_module.service();
     let docker_svc = docker_module.service();
     let ftp_svc = ftp_module.service();
 
@@ -408,14 +461,20 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         system_services_svc.clone(),
         dns_svc.clone(),
         mail_svc.clone(),
+        mail_filters_svc.clone(),
+        mailing_lists_svc.clone(),
         software_center_svc.clone(),
         two_factor_svc.clone(),
         waf_svc.clone(),
+        site_http_controls_svc.clone(),
+        web_terminal_svc.clone(),
+        sso_svc.clone(),
         docker_svc.clone(),
         ftp_svc.clone(),
         api_token_svc.clone(),
         notification_svc.clone(),
         pitr_svc.clone(),
+        server_snapshots_svc.clone(),
         staging_svc.clone(),
         plugin_svc.clone(),
         marketplace_svc.clone(),
@@ -482,6 +541,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         software_center_svc,
         two_factor_svc,
         waf_svc,
+        site_http_controls_svc.clone(),
         docker_svc,
         ftp_svc,
         api_token_svc,
@@ -2563,6 +2623,245 @@ async fn waf_owner(
         .into_iter()
         .find(|user| user.role() == Role::Owner)
         .ok_or_else(|| anyhow::anyhow!("owner caller not found"))
+}
+
+async fn build_site_http(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::SiteHttpService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config, db, audit);
+    let master_key = load_master_key(&ctx.config)?;
+    let identity_module = IdentityModule::new(&ctx, master_key).await;
+    let sites_module = if let Ok(root) = std::env::var("OPENPANEL_WAF_NGINX_ROOT") {
+        let mut paths = openpanel_app::NginxPaths::under(root.into());
+        if let Ok(binary) = std::env::var("OPENPANEL_WAF_NGINX_BINARY") {
+            paths.nginx_binary = binary.into();
+        }
+        SitesModule::with_paths(&ctx, paths).await
+    } else {
+        SitesModule::new(&ctx).await
+    };
+    let auth_dir = std::env::var("OPENPANEL__SITE_HTTP__AUTH_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("/etc/openpanel/http-auth"));
+    let module = openpanel_app::SiteHttpControlsModule::new(
+        &ctx,
+        sites_module.generator().clone(),
+        auth_dir,
+    )
+    .await;
+    MigrationRunner::for_sqlite(pool)
+        .apply_module(module.name(), &module.migrations())
+        .await
+        .context("apply site-http-controls migrations")?;
+    Ok((module.service(), identity_module.service()))
+}
+
+/// Print a site's HTTP-controls document as JSON.
+pub async fn site_http_show(config: Arc<Config>, site: String) -> anyhow::Result<()> {
+    let (service, identity) = build_site_http(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&service.get(&owner, site_id).await?)?
+    );
+    Ok(())
+}
+
+/// Replace a site's HTTP-controls document from strict JSON.
+pub async fn site_http_set(
+    config: Arc<Config>,
+    site: String,
+    controls_json: String,
+) -> anyhow::Result<()> {
+    let (service, identity) = build_site_http(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let parsed: openpanel_domain::site_http_controls::SiteHttpControls =
+        serde_json::from_str(&controls_json).context("invalid controls JSON")?;
+    let desired = openpanel_domain::site_http_controls::SiteHttpControls::new(
+        site_id,
+        parsed.version(),
+        openpanel_domain::site_http_controls::SiteHttpControlsInput {
+            error_pages: parsed.error_pages().to_vec(),
+            redirects: parsed.redirects().to_vec(),
+            protected_dirs: parsed.protected_dirs().to_vec(),
+            hotlink: parsed.hotlink().cloned(),
+            ip_rules: parsed.ip_rules().to_vec(),
+            mime_overrides: parsed.mime_overrides().to_vec(),
+            index_policy: parsed.index_policy().cloned(),
+        },
+    )?;
+    let saved = service.put(&owner, desired).await?;
+    println!("{}", serde_json::to_string_pretty(&saved)?);
+    Ok(())
+}
+
+async fn build_web_terminal(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::WebTerminalService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config, db, audit);
+    let master_key = load_master_key(&ctx.config)?;
+    let identity_module = IdentityModule::new(&ctx, master_key).await;
+    let module = openpanel_app::WebTerminalModule::new(&ctx).await;
+    MigrationRunner::for_sqlite(pool)
+        .apply_module(module.name(), &module.migrations())
+        .await
+        .context("apply web-terminal migrations")?;
+    Ok((module.service(), identity_module.service()))
+}
+
+/// Mint a one-time browser-terminal ticket for a site.
+pub async fn terminal_ticket(config: Arc<Config>, site: String) -> anyhow::Result<()> {
+    let (service, identity) = build_web_terminal(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let ticket = service.issue_ticket(&owner, site_id).await?;
+    println!("{}", ticket.token.0);
+    Ok(())
+}
+
+async fn build_mail_filters(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::MailFilterService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config, db, audit);
+    let identity_module = IdentityModule::new(&ctx, load_master_key(&ctx.config)?).await;
+    let module = openpanel_app::MailFilteringModule::new(&ctx).await;
+    MigrationRunner::for_sqlite(pool)
+        .apply_module(module.name(), &module.migrations())
+        .await
+        .context("apply mail-filtering migrations")?;
+    Ok((module.service(), identity_module.service()))
+}
+
+/// Print the outbound-queue snapshot as JSON.
+pub async fn mail_queue(config: Arc<Config>) -> anyhow::Result<()> {
+    let service = build_mail(config).await?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&service.queue_snapshot().await?)?
+    );
+    Ok(())
+}
+
+/// Show or set a mailbox's Sieve filter.
+pub async fn mail_filter(
+    config: Arc<Config>,
+    mailbox: String,
+    script: Option<String>,
+) -> anyhow::Result<()> {
+    let (service, identity) = build_mail_filters(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let mailbox_id = uuid::Uuid::parse_str(&mailbox).context("invalid mailbox id")?;
+    match script {
+        Some(script) => {
+            let saved = service
+                .set_sieve(
+                    &owner,
+                    openpanel_domain::SieveScript::new(mailbox_id, script)?,
+                )
+                .await?;
+            println!("sieve applied ({} bytes)", saved.script.len());
+        }
+        None => {
+            let current = service.get_sieve(&owner, mailbox_id).await?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&current.map(|s| s.script))?
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Set or disable a mailbox's autoresponder.
+pub async fn mail_autoresponder(
+    config: Arc<Config>,
+    mailbox: String,
+    body: String,
+    off: bool,
+) -> anyhow::Result<()> {
+    let (service, identity) = build_mail_filters(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let mailbox_id = uuid::Uuid::parse_str(&mailbox).context("invalid mailbox id")?;
+    if off {
+        service.disable_autoresponder(&owner, mailbox_id).await?;
+        println!("autoresponder disabled");
+        return Ok(());
+    }
+    let now = chrono::Utc::now();
+    let responder = openpanel_domain::AutoResponder {
+        mailbox_id,
+        enabled: true,
+        body,
+        mode: openpanel_domain::AutoResponderMode::Once,
+        window_start: now,
+        window_end: now + chrono::Duration::days(365),
+    };
+    service.set_autoresponder(&owner, responder).await?;
+    println!("autoresponder enabled");
+    Ok(())
+}
+
+async fn build_sso(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::SsoService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config, db, audit);
+    let master_key = load_master_key(&ctx.config)?;
+    let identity_module = IdentityModule::new(&ctx, master_key).await;
+    let module = openpanel_app::SsoModule::new(&ctx, master_key).await;
+    MigrationRunner::for_sqlite(pool)
+        .apply_module(module.name(), &module.migrations())
+        .await
+        .context("apply sso migrations")?;
+    Ok((module.service(), identity_module.service()))
+}
+
+/// List the caller's active sessions as JSON.
+pub async fn auth_sessions(config: Arc<Config>) -> anyhow::Result<()> {
+    let (service, identity) = build_sso(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let sessions = service.list_sessions(&owner).await?;
+    let items: Vec<serde_json::Value> = sessions
+        .iter()
+        .map(|session| {
+            serde_json::json!({
+                "id": session.id.to_string(),
+                "created_at": session.created_at.to_rfc3339(),
+                "last_seen_at": session.last_seen_at.to_rfc3339(),
+                "source_ip": session.source_ip,
+                "user_agent": session.user_agent,
+            })
+        })
+        .collect();
+    println!("{}", serde_json::to_string_pretty(&items)?);
+    Ok(())
+}
+
+/// Revoke one of the caller's sessions by id.
+pub async fn auth_revoke(config: Arc<Config>, session: String) -> anyhow::Result<()> {
+    let (service, identity) = build_sso(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let session_id = uuid::Uuid::parse_str(&session).context("invalid session id")?;
+    service.revoke_own_session(&owner, session_id).await?;
+    println!("session revoked");
+    Ok(())
 }
 
 async fn build_docker(
@@ -5375,5 +5674,163 @@ pub async fn scan_list(config: Arc<Config>, site: String) -> anyhow::Result<()> 
         })
         .collect();
     println!("{}", serde_json::to_string_pretty(&view)?);
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Server snapshot CLI handlers.
+// ---------------------------------------------------------------------------
+
+/// Build the `ServerSnapshotService` for CLI subcommands.
+async fn build_server_snapshots(
+    config: Arc<Config>,
+) -> anyhow::Result<Arc<openpanel_app::ServerSnapshotService>> {
+    let master_key = load_master_key(&config).ok();
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
+    let backup_root = std::env::var("OPENPANEL__BACKUPS__ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| std::path::PathBuf::from("/var/lib/openpanel/backups"));
+    let cron_module = CronModule::with_roots(&ctx, vec![std::env::current_dir()?]).await;
+    let runner = MigrationRunner::for_sqlite(pool.clone());
+    runner
+        .apply_module(cron_module.name(), &cron_module.migrations())
+        .await?;
+    let backups_module = BackupsModule::with_root(
+        &ctx,
+        backup_root,
+        master_key,
+        Some((cron_module.service(), std::env::current_dir()?)),
+    )
+    .await;
+    runner
+        .apply_module(backups_module.name(), &backups_module.migrations())
+        .await?;
+    let snapshots_root = std::env::var("OPENPANEL__SNAPSHOTS__ROOT")
+        .map(std::path::PathBuf::from)
+        .unwrap_or(std::path::PathBuf::from("/var/lib/openpanel/snapshots"));
+    Ok(Arc::new(openpanel_app::ServerSnapshotService::new(
+        backups_module.service(),
+        pool,
+        snapshots_root,
+        audit,
+        env!("CARGO_PKG_VERSION").to_owned(),
+    )))
+}
+
+fn snapshot_caller() -> openpanel_domain::User {
+    use openpanel_domain::{Email, Password, Role, Username};
+    #[allow(clippy::expect_used)] // static test constant — cannot fail
+    openpanel_domain::User::new(
+        uuid::Uuid::nil(),
+        Username::new("admin").expect("static admin username is valid"),
+        Email::new("admin@openpanel.local").expect("static admin email is valid"),
+        Password::hash("admin").expect("static admin password hashes"),
+        Role::Owner,
+    )
+}
+
+/// `openpanel server-snapshot list`.
+pub async fn server_snapshot_list(config: Arc<Config>) -> anyhow::Result<()> {
+    let svc = build_server_snapshots(config).await?;
+    let snapshots = svc
+        .list()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    for (id, manifest) in &snapshots {
+        println!(
+            "{}  {}  {}",
+            id,
+            manifest.created_at.to_rfc3339(),
+            manifest.entries.len()
+        );
+    }
+    if snapshots.is_empty() {
+        println!("(no snapshots)");
+    }
+    Ok(())
+}
+
+/// `openpanel server-snapshot get --id ...`.
+pub async fn server_snapshot_get(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let svc = build_server_snapshots(config).await?;
+    let snapshot_id = uuid::Uuid::parse_str(&id).context("invalid snapshot id")?;
+    let snapshot = svc
+        .get(snapshot_id)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "id": snapshot_id.to_string(),
+            "host_id": snapshot.source_host_id.to_string(),
+            "panel_version": snapshot.panel_version,
+            "created_at": snapshot.created_at.to_rfc3339(),
+            "entries": snapshot.entries.len(),
+        }))?
+    );
+    Ok(())
+}
+
+/// `openpanel server-snapshot create`.
+pub async fn server_snapshot_create(config: Arc<Config>) -> anyhow::Result<()> {
+    let svc = build_server_snapshots(config).await?;
+    let caller = snapshot_caller();
+    let backups_svc = svc.backups();
+    let runs = backups_svc
+        .runs(caller.id(), false)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    use openpanel_domain::backups::BackupRunState;
+    let latest_completed = runs
+        .iter()
+        .filter(|r| r.state() == BackupRunState::Completed)
+        .max_by_key(|r| r.id())
+        .ok_or_else(|| anyhow::anyhow!("no completed backup runs found"))?;
+    let manifest = svc
+        .create_from_run(&caller, latest_completed.id())
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("created snapshot with {} entries", manifest.entries.len());
+    Ok(())
+}
+
+/// `openpanel server-snapshot preflight --id ...`.
+pub async fn server_snapshot_preflight(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let svc = build_server_snapshots(config).await?;
+    let caller = snapshot_caller();
+    let snapshot_id = uuid::Uuid::parse_str(&id).context("invalid snapshot id")?;
+    let (token, report) = svc
+        .preflight(&caller, snapshot_id)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "snapshot_id": snapshot_id.to_string(),
+            "warnings": report.warnings,
+            "blockers": report.blockers,
+            "collisions": report.collisions,
+            "ready": report.ready,
+            "confirm_token": token,
+        }))?
+    );
+    Ok(())
+}
+
+/// `openpanel server-snapshot restore --id ... --confirm ...`.
+pub async fn server_snapshot_restore(
+    config: Arc<Config>,
+    id: String,
+    confirm: String,
+) -> anyhow::Result<()> {
+    let svc = build_server_snapshots(config).await?;
+    let caller = snapshot_caller();
+    let snapshot_id = uuid::Uuid::parse_str(&id).context("invalid snapshot id")?;
+    let applied = svc
+        .restore(&caller, snapshot_id, &confirm, true)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("restored {applied} resources from snapshot {snapshot_id}");
     Ok(())
 }

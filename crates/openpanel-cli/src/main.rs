@@ -2,14 +2,15 @@
 
 use clap::Parser;
 use openpanel_cli::{
-    BackupCommand, BackupPlanCommand, BackupRestoreCommand, BrandingCommand, CdnCommand, Cli,
-    CollaboratorCommand, Command, ContainerRuntimeCommand, CronCommand, DatabaseCommand,
-    DnsCommand, DockerCommand, FileCommand, FtpCommand, IacCommand, LogsCommand, MailCommand,
-    MarketplaceCommand, MonitoringCommand, NotificationChannelCommand, NotificationCommand,
-    NotificationSubscriptionCommand, PitrCommand, PluginCommand, RecoveryCodeCommand,
-    RegistryCommand, ScanCommand, SecurityAllowlistCommand, SecurityCommand, SecurityRuleCommand,
-    ServicesCommand, SiteCacheCommand, SiteCloneCommand, SiteCommand, SiteTemplateCommand,
-    SoftwareCommand, SslCommand, StagingCommand, TokenCommand, TwoFactorCommand, UserCommand,
+    AuthCommand, BackupCommand, BackupPlanCommand, BackupRestoreCommand, BrandingCommand,
+    CdnCommand, Cli, CollaboratorCommand, Command, ContainerRuntimeCommand, CronCommand,
+    DatabaseCommand, DnsCommand, DockerCommand, FileCommand, FtpCommand, IacCommand, LogsCommand,
+    MailCommand, MarketplaceCommand, MonitoringCommand, NotificationChannelCommand,
+    NotificationCommand, NotificationSubscriptionCommand, PitrCommand, PluginCommand,
+    RecoveryCodeCommand, RegistryCommand, ScanCommand, SecurityAllowlistCommand, SecurityCommand,
+    SecurityRuleCommand, ServerSnapshotCommand, ServicesCommand, SiteCacheCommand,
+    SiteCloneCommand, SiteCommand, SiteHttpCommand, SiteTemplateCommand, SoftwareCommand,
+    SslCommand, StagingCommand, TerminalCommand, TokenCommand, TwoFactorCommand, UserCommand,
     WafCommand, WebappCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
@@ -171,6 +172,20 @@ async fn main() -> anyhow::Result<()> {
             CdnCommand::Purge { integration, paths } => {
                 handlers::cdn_purge(config, integration, paths).await
             }
+        },
+        Command::SiteHttp { action } => match action {
+            SiteHttpCommand::Show { site } => handlers::site_http_show(config, site).await,
+            SiteHttpCommand::Set {
+                site,
+                controls_json,
+            } => handlers::site_http_set(config, site, controls_json).await,
+        },
+        Command::Auth { action } => match action {
+            AuthCommand::Sessions => handlers::auth_sessions(config).await,
+            AuthCommand::Revoke { session } => handlers::auth_revoke(config, session).await,
+        },
+        Command::Terminal { action } => match action {
+            TerminalCommand::Ticket { site } => handlers::terminal_ticket(config, site).await,
         },
         Command::Waf { action } => match action {
             WafCommand::Rules { site } => handlers::waf_rules(config, site).await,
@@ -432,6 +447,17 @@ async fn main() -> anyhow::Result<()> {
             },
             BackupCommand::Delete { id } => handlers::backup_delete(config, id).await,
         },
+        Command::ServerSnapshot { action } => match action {
+            ServerSnapshotCommand::List => handlers::server_snapshot_list(config).await,
+            ServerSnapshotCommand::Get { id } => handlers::server_snapshot_get(config, id).await,
+            ServerSnapshotCommand::Create => handlers::server_snapshot_create(config).await,
+            ServerSnapshotCommand::Preflight { id } => {
+                handlers::server_snapshot_preflight(config, id).await
+            }
+            ServerSnapshotCommand::Restore { id, confirm } => {
+                handlers::server_snapshot_restore(config, id, confirm).await
+            }
+        },
         Command::Logs { action } => match action {
             LogsCommand::Sources => handlers::logs_sources(config).await,
             LogsCommand::Tail { source, limit } => handlers::logs_tail(config, source, limit).await,
@@ -554,6 +580,13 @@ async fn main() -> anyhow::Result<()> {
         },
         Command::Mail { action } => match action {
             MailCommand::Readiness => handlers::mail_readiness(config).await,
+            MailCommand::Queue => handlers::mail_queue(config).await,
+            MailCommand::Filter { mailbox, script } => {
+                handlers::mail_filter(config, mailbox, script).await
+            }
+            MailCommand::Autoresponder { mailbox, body, off } => {
+                handlers::mail_autoresponder(config, mailbox, body, off).await
+            }
             MailCommand::DomainAdd { name } => handlers::mail_domain_add(config, name).await,
             MailCommand::Domains => handlers::mail_domains(config).await,
             MailCommand::MailboxAdd {

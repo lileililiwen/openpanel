@@ -180,6 +180,81 @@ impl MailFilterService {
         Ok(compiled)
     }
 
+    /// Load the Sieve script for a mailbox.
+    pub async fn get_sieve(
+        &self,
+        caller: &User,
+        mailbox_id: Uuid,
+    ) -> Result<Option<SieveScript>, MailFilterError> {
+        require_admin(caller)?;
+        Ok(self.repo.get_sieve(mailbox_id).await?)
+    }
+
+    /// Load the autoresponder for a mailbox.
+    pub async fn get_autoresponder(
+        &self,
+        caller: &User,
+        mailbox_id: Uuid,
+    ) -> Result<Option<AutoResponder>, MailFilterError> {
+        require_admin(caller)?;
+        Ok(self.repo.get_autoresponder(mailbox_id).await?)
+    }
+
+    /// Disable (but keep) the autoresponder for a mailbox.
+    pub async fn disable_autoresponder(
+        &self,
+        caller: &User,
+        mailbox_id: Uuid,
+    ) -> Result<(), MailFilterError> {
+        require_admin(caller)?;
+        if let Some(mut responder) = self.repo.get_autoresponder(mailbox_id).await? {
+            responder.enabled = false;
+            self.repo.save_autoresponder(&responder).await?;
+        }
+        Ok(())
+    }
+
+    /// List forwarders for a mailbox.
+    pub async fn list_forwarders(
+        &self,
+        caller: &User,
+        mailbox_id: Uuid,
+    ) -> Result<Vec<Forwarder>, MailFilterError> {
+        require_admin(caller)?;
+        Ok(self.repo.list_forwarders(mailbox_id).await?)
+    }
+
+    /// Remove one forwarder matching both source and destination.
+    pub async fn remove_forwarder_for_source(
+        &self,
+        caller: &User,
+        mailbox_id: Uuid,
+        source: &str,
+        destination: &str,
+    ) -> Result<(), MailFilterError> {
+        require_admin(caller)?;
+        let forwarders = self.repo.list_forwarders(mailbox_id).await?;
+        let matches = forwarders
+            .iter()
+            .any(|forwarder| forwarder.destination.eq_ignore_ascii_case(destination))
+            && source.eq_ignore_ascii_case(destination);
+        if !matches {
+            return Err(MailFilterError::ForwarderLoop);
+        }
+        self.repo.delete_forwarder(mailbox_id, destination).await?;
+        Ok(())
+    }
+
+    /// Load the catch-all for a domain.
+    pub async fn get_catch_all(
+        &self,
+        caller: &User,
+        domain: &str,
+    ) -> Result<Option<CatchAll>, MailFilterError> {
+        require_admin(caller)?;
+        Ok(self.repo.get_catch_all(domain).await?)
+    }
+
     /// Toggle an autoresponder.
     pub async fn set_autoresponder(
         &self,
@@ -256,6 +331,29 @@ impl MailingListService {
     /// Load a list by address.
     pub async fn get(&self, address: &str) -> Result<Option<MailingList>, MailFilterError> {
         Ok(self.repo.get_mailing_list(address).await?)
+    }
+
+    /// Load a list by address for an authorised caller.
+    pub async fn get_for_caller(
+        &self,
+        caller: &User,
+        address: &str,
+    ) -> Result<Option<MailingList>, MailFilterError> {
+        require_admin(caller)?;
+        self.get(address).await
+    }
+
+    /// List every mailing list.
+    pub async fn list_all(&self, caller: &User) -> Result<Vec<MailingList>, MailFilterError> {
+        require_admin(caller)?;
+        Ok(self.repo.list_mailing_lists().await?)
+    }
+
+    /// Delete a mailing list.
+    pub async fn remove(&self, caller: &User, address: &str) -> Result<(), MailFilterError> {
+        require_admin(caller)?;
+        self.repo.delete_mailing_list(address).await?;
+        Ok(())
     }
 }
 

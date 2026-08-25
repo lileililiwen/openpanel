@@ -68,6 +68,8 @@ pub mod site_cache_cdn;
 /// `TemplateArtifact`, `ClonePlan`, `CloneRun`, `PiiPolicy`, and
 /// `AnonymisationToken` records.
 pub mod site_clone_template;
+/// Per-site typed web application firewall rules.
+pub mod site_http_controls;
 pub mod sites;
 /// Trusted software catalog, transaction plans, and job lifecycle invariants.
 pub mod software_center;
@@ -78,12 +80,12 @@ pub mod system_services;
 /// `ThemeOverride`, `Palette` with WCAG-AA contrast enforcement,
 /// `Typography`, `PanelDomain`, and `BrandingScope`.
 pub mod themeable_ui;
-/// Per-site typed web application firewall rules.
 pub mod waf;
 /// Web application installer bounded context: `InstallPlan`,
 /// `InstallRun`, `InstalledWebApp`, `IdempotencyKey`, and
 /// `InstallArtifact` records.
 pub mod web_application_installer;
+pub mod web_terminal;
 /// Webmail client bounded context: short-lived session tokens and
 /// the `MailBridge` contract.
 pub mod webmail_client;
@@ -315,6 +317,10 @@ pub use identity::{
     repository::{SessionRepository, UserRepository},
     role::Role,
     session::{Session, SessionBuilder, SessionToken, SessionTokenError},
+    sso::{
+        ExternalIdentity, OidcClaims, OidcPort, STATE_TTL_SECS, SsoConnection, SsoError,
+        SsoLoginState, SsoRepository,
+    },
     user::User,
 };
 pub use ip_allocation::{
@@ -335,7 +341,8 @@ pub use log_viewer::{
 };
 pub use mail_filtering::{
     AntiSpamPolicy, AutoResponder, AutoResponderMode, CatchAll, Forwarder, GreylistEntry,
-    MailFilterError, MailFilterRepository, MailingList, SIEVE_MAX_BYTES, SieveScript,
+    MailFilterError, MailFilterRepository, MailQueueSnapshot, MailingList, MtaQueuePort,
+    QueueHealth, SIEVE_MAX_BYTES, SieveScript,
 };
 pub use maintenance_windows::{
     DestructiveActionClass, MaintenanceError, MaintenanceOverride, MaintenanceRepository,

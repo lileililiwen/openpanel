@@ -194,6 +194,43 @@ impl MailFilterRepository for SqliteMailFilterRepository {
         .map_err(|e| RepoError::new(e.to_string()))?;
         row.map(decode_mailing_list).transpose()
     }
+
+    async fn delete_mailing_list(&self, address: &str) -> Result<(), RepoError> {
+        sqlx::query("DELETE FROM mailing_lists WHERE address = ?")
+            .bind(address)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| RepoError::new(e.to_string()))?;
+        Ok(())
+    }
+
+    async fn list_mailing_lists(&self) -> Result<Vec<MailingList>, RepoError> {
+        let rows = sqlx::query(
+            "SELECT address, members_json, created_at FROM mailing_lists ORDER BY address",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| RepoError::new(e.to_string()))?;
+        rows.into_iter().map(decode_mailing_list).collect()
+    }
+
+    async fn get_catch_all(&self, domain: &str) -> Result<Option<CatchAll>, RepoError> {
+        let row = sqlx::query_as::<_, (String, String)>(
+            "SELECT domain, destination_mailbox FROM catch_all WHERE domain = ?",
+        )
+        .bind(domain)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| RepoError::new(e.to_string()))?;
+        row.map(|(domain, destination_mailbox)| {
+            Ok(CatchAll {
+                domain,
+                destination_mailbox: Uuid::parse_str(&destination_mailbox)
+                    .map_err(|e| RepoError::new(e.to_string()))?,
+            })
+        })
+        .transpose()
+    }
 }
 
 fn decode_policy(row: sqlx::sqlite::SqliteRow) -> Result<AntiSpamPolicy, RepoError> {

@@ -68,6 +68,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # Auth + crypto
 argon2 = "0.5"
+portable-pty = "0.9"
 bcrypt = "0.17"
 rand = "0.8"
 base64 = "0.22"

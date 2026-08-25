@@ -94,6 +94,10 @@ mock! {
         async fn touch(&self, id: uuid::Uuid) -> Result<(), RepoError>;
         async fn delete(&self, id: uuid::Uuid) -> Result<(), RepoError>;
         async fn delete_for_user(&self, user_id: uuid::Uuid) -> Result<(), RepoError>;
+        async fn list_for_user(
+            &self,
+            user_id: uuid::Uuid,
+        ) -> Result<Vec<openpanel_domain::Session>, RepoError>;
         async fn purge_expired(&self) -> Result<u64, RepoError>;
     }
 }

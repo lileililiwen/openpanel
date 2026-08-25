@@ -6,6 +6,7 @@ license.workspace = true
 description = "HTTP adapter: axum routes, middleware, DTOs."
 
 [dependencies]
+futures-util = { workspace = true }
 tokio = { workspace = true }
 axum = { workspace = true }
 tower = { workspace = true }

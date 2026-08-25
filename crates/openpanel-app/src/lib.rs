@@ -128,6 +128,7 @@ pub mod site_cache_cdn;
 /// Site clone + template export bounded context: clone plans,
 /// clone runs, template export, and PII anonymisation tokens.
 pub mod site_clone_template;
+pub mod site_http_controls;
 /// Per-site staging bounded context: staging slot creation, sync,
 /// and atomic promote.
 pub mod site_staging;
@@ -146,6 +147,7 @@ pub mod waf;
 /// Web application installer bounded context: typed install
 /// plans, install runs, idempotency, and uninstall.
 pub mod web_application_installer;
+pub mod web_terminal;
 /// Webmail client bounded context: session tokens, bridge, and
 /// redaction.
 pub mod webmail_client;
@@ -167,7 +169,10 @@ pub use app_runtimes::{
     AppRuntimesModule, ReverseProxyLayer, RuntimeService, SqliteRuntimeRepository,
     SupervisorUnitBuilder,
 };
-pub use backups::{BackupService, BackupsModule};
+pub use backups::{
+    BackupService, BackupsModule,
+    server_snapshot::{ServerSnapshotError, ServerSnapshotService},
+};
 pub use billing::{
     BillingModule, BillingService, ChargebackEngine, SqliteBillingRepository, UsageExporter,
     WebhookRelay,
@@ -234,7 +239,11 @@ pub use iac::{
     CodegenContract, CommittedArtifacts, DriftOutcome, GeneratedSurface, OpenApiRef, ParsedOpenApi,
     render_go_stub, render_provider_stub, render_rust_stub, render_typescript_stub,
 };
-pub use identity::{IdentityModule, service::IdentityService};
+pub use identity::{
+    IdentityModule,
+    service::IdentityService,
+    sso::{OpenidConnectAdapter, SsoModule, SsoService},
+};
 pub use ip_allocation::{
     Allocator, IpAllocationModule, IpService, SqliteIpRepository, VhostBinder,
 };
@@ -304,6 +313,7 @@ pub use site_clone_template::{
     SiteCloneTemplateModule, SqliteSiteCloneTemplateRepository, TemplateArtifact, TemplateExporter,
     default_deny_patterns,
 };
+pub use site_http_controls::{SiteHttpControlsModule, SiteHttpService};
 /// Per-site staging bounded-context module.
 pub use site_staging::{
     InMemoryStagingFilesystem, SiteStagingModule, StagingFilesystemLayer, StagingService,
@@ -331,6 +341,7 @@ pub use web_application_installer::{
     ArtifactDownloader, InstallerFs, RealInstallerFs, ReqwestArtifactDownloader,
     SqliteWebApplicationInstallerRepository, WebApplicationInstallerService,
 };
+pub use web_terminal::{WebTerminalModule, WebTerminalService};
 pub use webmail_client::{
     InMemoryMailBridge, SqliteWebmailRepository, WebmailService, redact_html, sha256_hex,
 };
@@ -342,3 +353,12 @@ pub use wordpress_toolkit::{
     FakeWpFilesystem, SqliteWpRepository, WordPressToolkitModule, WpCacheLayer, WpScanner,
     WpToolkitService, WpUpdater,
 };
+
+/// Generate a random URL-safe token (32 bytes of entropy).
+pub fn random_token() -> String {
+    use rand::RngCore;
+    let mut bytes = [0u8; 32];
+    rand::rngs::OsRng.fill_bytes(&mut bytes);
+    use base64::Engine;
+    base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes)
+}

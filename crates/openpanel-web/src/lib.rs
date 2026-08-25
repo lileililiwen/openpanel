@@ -53,6 +53,8 @@ pub mod security;
 pub mod settings;
 /// Per-site page cache and CDN integration web pages.
 pub mod site_cache_cdn;
+/// Per-site WAF editor page.
+pub mod site_http_controls;
 /// Per-site staging web pages.
 pub mod site_staging;
 pub mod sites;
@@ -67,7 +69,6 @@ pub mod two_factor;
 /// Reusable empty / no-results / loading / error state components.
 pub mod ui_states;
 pub mod users;
-/// Per-site WAF editor page.
 pub mod waf;
 /// Static-asset contract assertions for the web UI styling
 /// OpenSpec change (token-only styling, mobile-first layout,

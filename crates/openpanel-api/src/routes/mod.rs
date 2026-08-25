@@ -44,26 +44,30 @@ pub mod plugin_extension;
 pub mod plugin_marketplace;
 /// Host firewall and login-abuse routes (`/security`).
 pub mod security;
+/// SSL resource routes (`/ssl`).
+pub mod server_snapshots;
 /// Site cache policy and CDN integration routes
 /// (`/sites/{id}/cache`, `/cdn/integrations`, `/cdn/purge`).
 pub mod site_cache_cdn;
 /// Site clone + template export routes
 /// (`/sites/{id}/clone`, `/sites/{id}/export-template`, `/sites/templates`).
 pub mod site_clone_template;
+/// Per-site web application firewall routes (`/sites/{id}/waf`).
+pub mod site_http_controls;
 /// Per-site staging routes (`/sites/{id}/staging/...`).
 pub mod site_staging;
 /// Sites resource routes (`/sites`).
 pub mod sites;
 /// Curated Software Center routes (`/software`).
 pub mod software_center;
-/// SSL resource routes (`/ssl`).
 pub mod ssl;
+pub mod sso;
 /// Allowlisted system-service routes (`/services`).
 pub mod system_services;
 /// Themeable UI / white-label routes (`/admin/branding`).
 pub mod themeable_ui;
-/// Per-site web application firewall routes (`/sites/{id}/waf`).
 pub mod waf;
 /// Web application installer routes
 /// (`/sites/{id}/web-apps`, `/web-apps/{id}`).
 pub mod web_application_installer;
+pub mod web_terminal;

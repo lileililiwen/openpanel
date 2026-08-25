@@ -85,6 +85,8 @@ pub trait SessionRepository: Send + Sync + 'static {
     async fn delete(&self, id: Uuid) -> Result<(), RepoError>;
     /// Delete all sessions belonging to a user.
     async fn delete_for_user(&self, user_id: Uuid) -> Result<(), RepoError>;
+    /// List a user's sessions, newest first (session inventory).
+    async fn list_for_user(&self, user_id: Uuid) -> Result<Vec<Session>, RepoError>;
     /// Remove expired sessions and return the number removed.
     async fn purge_expired(&self) -> Result<u64, RepoError>;
 }

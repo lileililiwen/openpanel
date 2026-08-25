@@ -32,6 +32,8 @@ mod identity;
 mod logs;
 mod mail;
 /// Malware scanner integration tests.
+/// Mail end-user surface integration tests.
+mod mail_surfaces;
 mod malware_scanner;
 /// Migration importers preview / run / rollback integration tests.
 mod migration_importers;
@@ -44,26 +46,32 @@ mod plugin_extension;
 mod plugin_marketplace;
 mod quality;
 mod security;
+mod server_snapshots;
 /// Site cache and CDN policy / integration / purge integration tests.
 mod site_cache_cdn;
 /// Site clone + template export integration tests.
 mod site_clone_template;
+/// Per-site HTTP-controls REST integration tests.
+mod site_http_controls;
 /// Per-site staging HTTP integration tests.
 mod site_staging;
 mod sites;
 mod smoke;
 mod software_center;
 mod ssl;
+mod sso;
 mod system_services;
 /// Themeable UI / white-label integration tests.
 mod themeable_ui;
 mod waf;
 /// Web application installer integration tests.
 mod web_application_installer;
+/// Webmail client integration tests.
+/// Browser terminal integration tests.
+mod web_terminal;
 mod web_ui;
 /// Web-UI audit route group integration tests.
 mod web_ui_audit;
 /// Web-UI styling + responsive layout integration tests.
 mod web_ui_styling;
-/// Webmail client integration tests.
 mod webmail_client;

@@ -273,6 +273,7 @@ pub struct MailService {
     readiness: Arc<dyn ReadinessPort>,
     backup: Arc<dyn BackupHook>,
     audit: Arc<dyn AuditService>,
+    queue: Arc<dyn openpanel_domain::MtaQueuePort>,
     deletion_tokens: Mutex<HashMap<String, (Uuid, u64)>>,
 }
 impl MailService {
@@ -283,6 +284,7 @@ impl MailService {
         readiness: Arc<dyn ReadinessPort>,
         backup: Arc<dyn BackupHook>,
         audit: Arc<dyn AuditService>,
+        queue: Arc<dyn openpanel_domain::MtaQueuePort>,
     ) -> Self {
         Self {
             repo,
@@ -290,6 +292,7 @@ impl MailService {
             readiness,
             backup,
             audit,
+            queue,
             deletion_tokens: Mutex::new(HashMap::new()),
         }
     }
@@ -612,14 +615,39 @@ impl MailService {
         self.audit(actor, "alias_deleted", alias_id).await
     }
 
+    /// Read-only outbound-queue snapshot; degrades to `unknown` when
+    /// the MTA cannot be queried.
+    pub async fn queue_snapshot(
+        &self,
+    ) -> Result<openpanel_domain::MailQueueSnapshot, MailServiceError> {
+        Ok(self
+            .queue
+            .snapshot()
+            .await
+            .unwrap_or_else(|_| openpanel_domain::MailQueueSnapshot::unknown()))
+    }
+
     /// Aggregate diagnostics only.
     pub async fn status(&self) -> Result<MailStatus, MailServiceError> {
         let (domains, mailboxes) = self.repo.counts().await?;
+        let snapshot = self
+            .queue
+            .snapshot()
+            .await
+            .unwrap_or_else(|_| openpanel_domain::MailQueueSnapshot::unknown());
+        let health = match snapshot.health {
+            openpanel_domain::QueueHealth::Ok => "ok",
+            openpanel_domain::QueueHealth::Unknown => "unknown",
+        };
         Ok(MailStatus {
             domains,
             mailboxes,
-            queue_depth: 0,
-            health: "ready".into(),
+            queue_depth: snapshot.queue_depth,
+            health: if snapshot.queue_depth == 0 && snapshot.oldest_deferred_at.is_none() {
+                format!("{health}/ready")
+            } else {
+                health.to_owned()
+            },
         })
     }
 

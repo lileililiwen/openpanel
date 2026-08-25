@@ -50,6 +50,11 @@ pub const SOFTWARE_CENTER_V002: &str = include_str!("software_center/V002__norma
 /// before the column existed (idempotent on newer installs).
 pub const SOFTWARE_CENTER_V003: &str = include_str!("software_center/V003__platforms_backfill.sql");
 /// Per-site WAF rule sets and aggregated hit rows.
+/// Terminal tickets and session records.
+pub const WEB_TERMINAL_V001: &str = include_str!("web_terminal/V001__init.sql");
+/// Per-site HTTP controls documents.
+pub const SITE_HTTP_CONTROLS_V001: &str = include_str!("site_http_controls/V001__init.sql");
+/// Per-site WAF rules and hit metrics.
 pub const WAF_V001: &str = include_str!("waf/V001__init.sql");
 /// Docker desired state, stacks, and trusted image patterns.
 pub const DOCKER_V001: &str = include_str!("docker/V001__init.sql");

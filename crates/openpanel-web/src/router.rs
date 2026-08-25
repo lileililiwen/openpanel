@@ -110,6 +110,8 @@ pub struct WebState {
     pub two_factor: Arc<TwoFactorService>,
     /// Per-site web application firewall service.
     pub waf: Arc<WafService>,
+    /// Per-site HTTP-controls service.
+    pub site_http_controls: Arc<openpanel_app::SiteHttpService>,
     /// Least-privilege container lifecycle service.
     pub docker: Arc<DockerService>,
     /// Per-site FTP account service.
@@ -249,6 +251,7 @@ pub fn router(
     software_center_service: Arc<SoftwareCenterService>,
     two_factor: Arc<TwoFactorService>,
     waf: Arc<WafService>,
+    site_http_controls: Arc<openpanel_app::SiteHttpService>,
     docker: Arc<DockerService>,
     ftp: Arc<FtpService>,
     api_tokens: Arc<ApiTokenService>,
@@ -284,6 +287,7 @@ pub fn router(
         software_center: software_center_service,
         two_factor,
         waf,
+        site_http_controls,
         docker,
         ftp,
         api_tokens,
@@ -512,6 +516,10 @@ pub fn router(
             get(crate::waf::page).post(crate::waf::save),
         )
         .route("/sites/{id}/waf/test", post(crate::waf::test_rule))
+        .route(
+            "/sites/{id}/http",
+            get(crate::site_http_controls::page).post(crate::site_http_controls::save),
+        )
         .route("/users", get(users::list).post(users::create))
         .route("/users/new", get(users::new_form))
         .route("/users/{id}/role", post(users::change_role))

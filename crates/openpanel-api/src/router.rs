@@ -7,10 +7,11 @@ use openpanel_app::{
     ApiTokenService, BackupService, CollaboratorService, ContainerRegistryService,
     ContainerRuntimeService, CronService, DatabasesService, DnsService, DockerService,
     FilesService, FtpService, GrantResolver, HierarchyService, HostingPlansService,
-    IdentityService, LogService, MailService, MalwareScannerService, MarketplaceService,
-    MonitoringService, NotificationService, PitrService, PluginService, SecurityService,
-    SiteCacheService, SiteCloneService, SitesService, SoftwareCenterService, SslService,
-    StagingService, ThemeableUiService, WafService, WebApplicationInstallerService,
+    IdentityService, LogService, MailFilterService, MailService, MailingListService,
+    MalwareScannerService, MarketplaceService, MonitoringService, NotificationService, PitrService,
+    PluginService, SecurityService, ServerSnapshotService, SiteCacheService, SiteCloneService,
+    SiteHttpService, SitesService, SoftwareCenterService, SslService, SsoService, StagingService,
+    ThemeableUiService, WafService, WebApplicationInstallerService, WebTerminalService,
     identity::TwoFactorService, security::LoginThrottleService,
     site_clone_template::SqliteSiteCloneTemplateRepository, system_services::ServiceManager,
 };
@@ -19,25 +20,42 @@ use crate::{
     middleware::session::{ApiAuthState, api_auth_middleware},
     routes::{
         account_hierarchy::router as account_hierarchy_router,
-        api_tokens::router as api_tokens_router, backups::router as backups_router,
+        api_tokens::router as api_tokens_router,
+        backups::router as backups_router,
         collaborators::router as collaborators_router,
         container_registry::router as container_registry_router,
-        container_runtime::router as container_runtime_router, cron::router as cron_router,
-        databases::router as databases_router, db_pitr::router as db_pitr_router,
-        dns::router as dns_router, docker::router as docker_router, files::router as files_router,
-        ftp::router as ftp_router, hosting_plans::router as hosting_plans_router,
-        identity::router as identity_router, logs::router as logs_router,
-        mail::router as mail_router, malware_scanner::router as malware_scanner_router,
-        monitoring::router as monitoring_router, notifications::router as notifications_router,
+        container_runtime::router as container_runtime_router,
+        cron::router as cron_router,
+        databases::router as databases_router,
+        db_pitr::router as db_pitr_router,
+        dns::router as dns_router,
+        docker::router as docker_router,
+        files::router as files_router,
+        ftp::router as ftp_router,
+        hosting_plans::router as hosting_plans_router,
+        identity::router as identity_router,
+        logs::router as logs_router,
+        mail::router as mail_router,
+        malware_scanner::router as malware_scanner_router,
+        monitoring::router as monitoring_router,
+        notifications::router as notifications_router,
         plugin_extension::router as plugin_extension_router,
         plugin_marketplace::router as plugin_marketplace_router,
-        security::router as security_router, site_cache_cdn::router as site_cache_cdn_router,
+        security::router as security_router,
+        server_snapshots::router as server_snapshots_router,
+        site_cache_cdn::router as site_cache_cdn_router,
         site_clone_template::router as site_clone_template_router,
-        site_staging::router as site_staging_router, sites::router as sites_router,
-        software_center::router as software_center_router, ssl::router as ssl_router,
+        site_http_controls::router as site_http_controls_router,
+        site_staging::router as site_staging_router,
+        sites::router as sites_router,
+        software_center::router as software_center_router,
+        ssl::router as ssl_router,
+        sso::{public_router as sso_public_router, router as sso_router},
         system_services::router as system_services_router,
-        themeable_ui::router as themeable_ui_router, waf::router as waf_router,
+        themeable_ui::router as themeable_ui_router,
+        waf::router as waf_router,
         web_application_installer::router as web_application_installer_router,
+        web_terminal::router as web_terminal_router,
     },
 };
 
@@ -61,14 +79,20 @@ pub fn build_router(
     system_services: Arc<ServiceManager>,
     dns: Arc<DnsService>,
     mail: Arc<MailService>,
+    mail_filters: Arc<MailFilterService>,
+    mailing_lists: Arc<MailingListService>,
     software_center: Arc<SoftwareCenterService>,
     two_factor: Arc<TwoFactorService>,
     waf: Arc<WafService>,
+    site_http_controls: Arc<SiteHttpService>,
+    web_terminal: Arc<WebTerminalService>,
+    sso: Arc<SsoService>,
     docker: Arc<DockerService>,
     ftp: Arc<FtpService>,
     api_tokens: Arc<ApiTokenService>,
     notifications: Arc<NotificationService>,
     pitr: Arc<PitrService>,
+    server_snapshots: Arc<ServerSnapshotService>,
     staging: Arc<StagingService>,
     plugins: Arc<PluginService>,
     marketplace: Arc<MarketplaceService>,
@@ -98,6 +122,9 @@ pub fn build_router(
         )
         .nest("/sites", sites_router(sites))
         .nest("/sites", waf_router(waf))
+        .nest("/sites", site_http_controls_router(site_http_controls))
+        .merge(web_terminal_router(web_terminal))
+        .merge(sso_router(sso.clone()))
         .nest("/sites", ftp_router(ftp))
         .nest("/sites", site_staging_router(staging))
         .nest("/databases", databases_router(databases))
@@ -107,11 +134,12 @@ pub fn build_router(
         .nest("/cron", cron_router(cron))
         .nest("/backups", backups_router(backups))
         .nest("/backups", db_pitr_router(pitr))
+        .nest("/server", server_snapshots_router(server_snapshots))
         .nest("/logs", logs_router(logs))
         .nest("/security", security_router(security))
         .nest("/services", system_services_router(system_services))
         .nest("/dns", dns_router(dns))
-        .nest("/mail", mail_router(mail))
+        .nest("/mail", mail_router(mail, mail_filters, mailing_lists))
         .nest("/software", software_center_router(software_center))
         .nest("/docker", docker_router(docker))
         .nest("/notifications", notifications_router(notifications))
@@ -137,6 +165,7 @@ pub fn build_router(
 
     Router::new()
         .nest("/api/v1", api)
+        .merge(sso_public_router(sso))
         .route("/health", get(health))
 }
 

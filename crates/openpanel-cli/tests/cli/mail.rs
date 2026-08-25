@@ -56,3 +56,16 @@ async fn cli_mail_readiness_domain_mailbox_alias_quota_password_and_status() {
         }
     }
 }
+
+#[tokio::test]
+async fn cli_mail_queue_prints_snapshot() {
+    let runner = CliRunner::new().await;
+    let queue = runner.run(&["mail", "queue"]);
+    assert_eq!(queue.code, 0, "{}", queue.stderr);
+    assert!(queue.stdout.contains("\"queue_depth\""));
+    assert!(
+        queue.stdout.contains("\"health\""),
+        "expected health field: {}",
+        queue.stdout
+    );
+}

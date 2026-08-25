@@ -68,6 +68,12 @@ pub enum Command {
         #[command(subcommand)]
         action: BackupCommand,
     },
+    /// Server snapshot & migration.
+    ServerSnapshot {
+        /// Server snapshot subcommand.
+        #[command(subcommand)]
+        action: ServerSnapshotCommand,
+    },
     /// Browse registered logs and traffic insights.
     Logs {
         /// Log operation.
@@ -127,6 +133,25 @@ pub enum Command {
         /// WAF operation.
         #[command(subcommand)]
         action: WafCommand,
+    },
+    /// Manage per-site HTTP controls (error pages, redirects,
+    /// protected directories, hotlink, IP rules, MIME, index).
+    SiteHttp {
+        /// HTTP-controls operation.
+        #[command(subcommand)]
+        action: SiteHttpCommand,
+    },
+    /// Manage panel sessions.
+    Auth {
+        /// Session-control operation.
+        #[command(subcommand)]
+        action: AuthCommand,
+    },
+    /// Operate the browser terminal.
+    Terminal {
+        /// Terminal operation.
+        #[command(subcommand)]
+        action: TerminalCommand,
     },
     /// Manage per-site page cache and CDN integrations.
     Cdn {
@@ -361,6 +386,48 @@ pub enum DockerCommand {
     },
 }
 
+/// Subcommands for session control.
+#[derive(Debug, clap::Subcommand)]
+#[allow(missing_docs)]
+pub enum AuthCommand {
+    /// List the caller's active sessions.
+    Sessions,
+    /// Revoke one of the caller's sessions.
+    Revoke {
+        #[arg(long)]
+        session: String,
+    },
+}
+
+/// Subcommands for the browser terminal.
+#[derive(Debug, clap::Subcommand)]
+#[allow(missing_docs)]
+pub enum TerminalCommand {
+    /// Mint a one-time terminal ticket for a site and print it.
+    Ticket {
+        #[arg(long)]
+        site: String,
+    },
+}
+
+/// Subcommands for per-site HTTP controls.
+#[derive(Debug, Subcommand)]
+#[allow(missing_docs)]
+pub enum SiteHttpCommand {
+    /// Print the complete controls document as JSON.
+    Show {
+        #[arg(long)]
+        site: String,
+    },
+    /// Replace the controls document from strict JSON.
+    Set {
+        #[arg(long)]
+        site: String,
+        #[arg(long)]
+        controls_json: String,
+    },
+}
+
 /// Per-site WAF operations.
 #[derive(Debug, Subcommand)]
 #[allow(missing_docs)]
@@ -500,6 +567,26 @@ pub enum SoftwareCommand {
 #[allow(missing_docs)]
 pub enum MailCommand {
     Readiness,
+    /// Print the outbound-queue snapshot as JSON.
+    Queue,
+    /// Show or set a mailbox's Sieve filter.
+    Filter {
+        #[arg(long)]
+        mailbox: String,
+        /// Omit to show; provide to set.
+        #[arg(long)]
+        script: Option<String>,
+    },
+    /// Set or disable a mailbox's autoresponder.
+    Autoresponder {
+        #[arg(long)]
+        mailbox: String,
+        #[arg(long)]
+        body: String,
+        /// Omit to disable.
+        #[arg(long)]
+        off: bool,
+    },
     DomainAdd {
         #[arg(long)]
         name: String,
@@ -790,6 +877,36 @@ pub enum LogsCommand {
         /// Destination file.
         #[arg(long)]
         output: std::path::PathBuf,
+    },
+}
+
+/// Server snapshot & migration subcommands.
+#[derive(Debug, Subcommand)]
+pub enum ServerSnapshotCommand {
+    /// List snapshots.
+    List,
+    /// Show snapshot details.
+    Get {
+        /// Snapshot identifier.
+        #[arg(long)]
+        id: String,
+    },
+    /// Create a snapshot from the current host state.
+    Create,
+    /// Run preflight checks for restoring a snapshot.
+    Preflight {
+        /// Snapshot identifier.
+        #[arg(long)]
+        id: String,
+    },
+    /// Restore a snapshot.
+    Restore {
+        /// Snapshot identifier.
+        #[arg(long)]
+        id: String,
+        /// Confirmation token from preflight.
+        #[arg(long)]
+        confirm: String,
     },
 }
 

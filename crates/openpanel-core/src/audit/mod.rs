@@ -207,6 +207,20 @@ pub enum AuditAction {
     DeviceRemembered,
     /// A per-site web application firewall policy changed.
     WafChanged,
+    /// A per-site HTTP-controls document changed.
+    SiteHttpControlsChanged,
+    /// A browser terminal session was opened.
+    TerminalOpened,
+    /// A panel login completed through the external IdP.
+    SsoLogin,
+    /// A whole-server snapshot was created.
+    SnapshotCreated,
+    /// A whole-server snapshot was restored.
+    SnapshotRestored,
+    /// A snapshot beyond retention was pruned.
+    SnapshotPruned,
+    /// A session was revoked by its owner or an admin.
+    SessionRevoked,
     /// A trusted container image was pulled.
     DockerImagePulled,
     /// An unsafe container specification was rejected.
@@ -684,6 +698,13 @@ impl AuditService for SqliteAuditService {
                 "recovery_code_consumed" => AuditAction::RecoveryCodeConsumed,
                 "device_remembered" => AuditAction::DeviceRemembered,
                 "waf_changed" => AuditAction::WafChanged,
+                "site_http_controls_changed" => AuditAction::SiteHttpControlsChanged,
+                "terminal_opened" => AuditAction::TerminalOpened,
+                "sso_login" => AuditAction::SsoLogin,
+                "snapshot_created" => AuditAction::SnapshotCreated,
+                "snapshot_restored" => AuditAction::SnapshotRestored,
+                "snapshot_pruned" => AuditAction::SnapshotPruned,
+                "session_revoked" => AuditAction::SessionRevoked,
                 "docker_image_pulled" => AuditAction::DockerImagePulled,
                 "docker_spec_rejected" => AuditAction::DockerSpecRejected,
                 "docker_capability_denied" => AuditAction::DockerCapabilityDenied,

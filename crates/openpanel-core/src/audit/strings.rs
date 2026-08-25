@@ -219,6 +219,13 @@ impl AuditAction {
             AuditAction::SiteBlockExpired => "site_block_expired",
             AuditAction::WebmailSessionCreated => "webmail_session_created",
             AuditAction::WebmailCsrfRejected => "webmail_csrf_rejected",
+            AuditAction::SiteHttpControlsChanged => "site_http_controls_changed",
+            AuditAction::TerminalOpened => "terminal_opened",
+            AuditAction::SsoLogin => "sso_login",
+            AuditAction::SnapshotCreated => "snapshot_created",
+            AuditAction::SnapshotRestored => "snapshot_restored",
+            AuditAction::SnapshotPruned => "snapshot_pruned",
+            AuditAction::SessionRevoked => "session_revoked",
         }
     }
 }

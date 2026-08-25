@@ -14,3 +14,6 @@ pub use remember_device::{
 };
 pub use service::{IdentityService, LoginOutcome};
 pub use two_factor::{ChallengeView, FactorResponse, TotpEnrollment, TwoFactorService};
+
+/// OpenID Connect login + session-control application layer.
+pub mod sso;

@@ -355,6 +355,17 @@ impl SessionRepository for SqliteSessionRepository {
         Ok(())
     }
 
+    async fn list_for_user(&self, user_id: Uuid) -> Result<Vec<Session>, RepoError> {
+        let rows: Vec<SessionRow> = sqlx::query_as::<_, SessionRow>(
+            "SELECT id, user_id, token_hash, role, created_at, last_seen_at, absolute_expires_at, source_ip, user_agent FROM sessions WHERE user_id = ? ORDER BY last_seen_at DESC",
+        )
+        .bind(user_id.to_string())
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| RepoError::new(e.to_string()))?;
+        rows.into_iter().map(SessionRow::into_session).collect()
+    }
+
     async fn purge_expired(&self) -> Result<u64, RepoError> {
         let now = Utc::now().to_rfc3339();
         let res = sqlx::query("DELETE FROM sessions WHERE absolute_expires_at < ?")

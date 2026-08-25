@@ -13,6 +13,8 @@ pub mod repository;
 pub mod role;
 /// Sessions, session tokens, and session building.
 pub mod session;
+/// OpenID Connect login + session-control types and ports.
+pub mod sso;
 /// The user aggregate.
 pub mod user;
 

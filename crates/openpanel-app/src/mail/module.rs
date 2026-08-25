@@ -89,6 +89,7 @@ impl MailModule {
                 Arc::new(SqliteMailRepository::new(ctx.db.pool().await)),
                 Arc::new(FakeMailConfigurator),
                 Arc::new(Ready),
+                Arc::new(crate::mail_filtering::queue::NullQueueAdapter),
             )
             .await;
         }
@@ -103,6 +104,7 @@ impl MailModule {
                 Arc::new(SystemMailConfigControl),
             )),
             Arc::new(SystemReadiness),
+            Arc::new(crate::mail_filtering::PostfixQueueAdapter::new("postqueue")),
         )
         .await
     }
@@ -114,6 +116,7 @@ impl MailModule {
             Arc::new(MemoryMailRepository::default()),
             Arc::new(FakeMailConfigurator),
             Arc::new(Ready),
+            Arc::new(crate::mail_filtering::queue::NullQueueAdapter),
         )
         .await
     }
@@ -123,6 +126,7 @@ impl MailModule {
         repo: Arc<dyn MailRepository>,
         config: Arc<dyn MailConfigurator>,
         readiness: Arc<dyn ReadinessPort>,
+        queue: Arc<dyn openpanel_domain::MtaQueuePort>,
     ) -> Result<Self, MailServiceError> {
         Ok(Self {
             service: Arc::new(MailService::new(
@@ -131,6 +135,7 @@ impl MailModule {
                 readiness,
                 Arc::new(Backup),
                 ctx.audit.clone(),
+                queue,
             )),
             migrations: vec![Migration {
                 module: "mail",

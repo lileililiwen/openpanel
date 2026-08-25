@@ -224,6 +224,56 @@ pub struct MailingList {
     pub created_at: DateTime<Utc>,
 }
 
+/// Health label for an outbound-queue snapshot.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum QueueHealth {
+    /// The MTA answered and the numbers are real.
+    Ok,
+    /// The MTA could not be queried; numbers are not meaningful.
+    Unknown,
+}
+
+/// Read-only outbound queue snapshot. Contains no message content.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MailQueueSnapshot {
+    /// Total messages sitting in the outbound queue.
+    pub queue_depth: u64,
+    /// Arrival time of the oldest deferred message, when known.
+    pub oldest_deferred_at: Option<DateTime<Utc>>,
+    /// Whether the MTA answered the query.
+    pub health: QueueHealth,
+}
+
+impl MailQueueSnapshot {
+    /// Snapshot from a successful MTA query.
+    pub fn ok(queue_depth: u64, oldest_deferred_at: Option<DateTime<Utc>>) -> Self {
+        Self {
+            queue_depth,
+            oldest_deferred_at,
+            health: QueueHealth::Ok,
+        }
+    }
+
+    /// Degraded snapshot used when the MTA cannot be queried.
+    pub fn unknown() -> Self {
+        Self {
+            queue_depth: 0,
+            oldest_deferred_at: None,
+            health: QueueHealth::Unknown,
+        }
+    }
+}
+
+/// Port for querying the managed MTA's outbound queue. Read-only;
+/// implementations MUST NOT mutate queue state.
+#[async_trait]
+pub trait MtaQueuePort: Send + Sync + 'static {
+    /// Query the current queue snapshot. Errors mean "cannot query",
+    /// which callers degrade to [`MailQueueSnapshot::unknown`].
+    async fn snapshot(&self) -> Result<MailQueueSnapshot, String>;
+}
+
 /// Persistence port for the mail-filtering bounded context.
 #[async_trait]
 pub trait MailFilterRepository: Send + Sync + 'static {
@@ -255,6 +305,13 @@ pub trait MailFilterRepository: Send + Sync + 'static {
 
     /// Persist a catch-all.
     async fn save_catch_all(&self, catch_all: &CatchAll) -> Result<(), RepoError>;
+    /// Load the catch-all for a domain.
+    async fn get_catch_all(&self, domain: &str) -> Result<Option<CatchAll>, RepoError>;
+
+    /// Persist a mailing list.
+    async fn delete_mailing_list(&self, address: &str) -> Result<(), RepoError>;
+    /// List every mailing list.
+    async fn list_mailing_lists(&self) -> Result<Vec<MailingList>, RepoError>;
 
     /// Persist a mailing list.
     async fn save_mailing_list(&self, list: &MailingList) -> Result<(), RepoError>;

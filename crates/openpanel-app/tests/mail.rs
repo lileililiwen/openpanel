@@ -63,6 +63,7 @@ async fn missing_mx_blocks_enable_without_config_reload() {
         Arc::new(ready),
         Arc::new(MockBackup::new()),
         Arc::new(MockAudit::stub()),
+        Arc::new(openpanel_app::mail_filtering::queue::NullQueueAdapter),
     );
     assert!(matches!(
         service
@@ -94,6 +95,7 @@ async fn mailbox_password_is_returned_once_and_never_stored_or_serialized() {
         Arc::new(MockReady::new()),
         Arc::new(MockBackup::new()),
         Arc::new(MockAudit::stub()),
+        Arc::new(openpanel_app::mail_filtering::queue::NullQueueAdapter),
     );
     let created = service
         .create_mailbox(
@@ -126,6 +128,7 @@ async fn destructive_domain_delete_requires_fresh_scoped_token_and_reports_depen
         Arc::new(MockReady::new()),
         Arc::new(backup),
         Arc::new(MockAudit::stub()),
+        Arc::new(openpanel_app::mail_filtering::queue::NullQueueAdapter),
     );
     let actor = Uuid::new_v4();
     let domain = service
@@ -185,6 +188,7 @@ async fn users_can_manage_only_mailboxes_in_their_own_domain() {
         Arc::new(MockReady::new()),
         Arc::new(backup),
         Arc::new(MockAudit::stub()),
+        Arc::new(openpanel_app::mail_filtering::queue::NullQueueAdapter),
     );
     let owner = Uuid::new_v4();
     let domain = service

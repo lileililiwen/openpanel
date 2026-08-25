@@ -27,10 +27,10 @@ use openpanel_app::{
     MonitoringModule, MonitoringService, NotificationModule, NotificationService,
     OffsiteBackupTargetsModule, PitrService, PluginService, RealInstallerFs, RealScannerFs,
     ReqwestArtifactDownloader, SecurityModule, SecurityService, SiteCacheCdnModule,
-    SiteCloneService, SiteCloneTemplateModule, SiteStagingModule, SitesModule, SitesService,
-    SoftwareCenterModule, SoftwareCenterService, SslModule, SslPaths, SslService, StagingService,
-    SystemServicesModule, ThemeableUiService, WafModule, WafService,
-    WebApplicationInstallerService, WebmailService,
+    SiteCloneService, SiteCloneTemplateModule, SiteHttpControlsModule, SiteHttpService,
+    SiteStagingModule, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
+    SslModule, SslPaths, SslService, StagingService, SystemServicesModule, ThemeableUiService,
+    WafModule, WafService, WebApplicationInstallerService, WebmailService,
     identity::two_factor::TwoFactorCrypto,
     security::MemoryFirewall,
     sites::{nginx::NginxPaths, repo::SqliteSiteRepository},
@@ -224,6 +224,8 @@ pub struct TestServer {
     mail: Arc<MailService>,
     software_center: Arc<SoftwareCenterService>,
     waf: Arc<WafService>,
+    site_http_controls: Arc<SiteHttpService>,
+    web_terminal: Arc<openpanel_app::WebTerminalService>,
     docker: Arc<DockerService>,
     container_runtime: Arc<ContainerRuntimeService>,
     ftp: Arc<FtpService>,
@@ -398,6 +400,15 @@ impl TestServer {
             .expect("notification module");
         let sites_module = SitesModule::with_paths(&ctx, paths).await;
         let waf_module = WafModule::new(&ctx, sites_module.generator().clone()).await;
+        let site_http_controls_module = SiteHttpControlsModule::new(
+            &ctx,
+            sites_module.generator().clone(),
+            sandbox.path().join("http-auth"),
+        )
+        .await;
+        let web_terminal_module = openpanel_app::WebTerminalModule::new(&ctx).await;
+        let mail_filtering_module = openpanel_app::MailFilteringModule::new(&ctx).await;
+        let sso_module = openpanel_app::SsoModule::new(&ctx, master_key).await;
         let docker_runtime = Arc::new(MemoryDocker::default());
         let docker_module =
             DockerModule::with_adapters(&ctx, docker_runtime.clone(), docker_runtime, master_key)
@@ -453,7 +464,32 @@ impl TestServer {
         runner
             .apply_module(waf_module.name(), &waf_module.migrations())
             .await
-            .expect("waf migrations");
+            .expect("apply WAF migrations");
+        runner
+            .apply_module(
+                site_http_controls_module.name(),
+                &site_http_controls_module.migrations(),
+            )
+            .await
+            .expect("apply site-http-controls migrations");
+        runner
+            .apply_module(
+                web_terminal_module.name(),
+                &web_terminal_module.migrations(),
+            )
+            .await
+            .expect("apply web-terminal migrations");
+        runner
+            .apply_module(
+                mail_filtering_module.name(),
+                &mail_filtering_module.migrations(),
+            )
+            .await
+            .expect("apply mail-filtering migrations");
+        runner
+            .apply_module(sso_module.name(), &sso_module.migrations())
+            .await
+            .expect("apply sso migrations");
         runner
             .apply_module(docker_module.name(), &docker_module.migrations())
             .await
@@ -612,6 +648,11 @@ impl TestServer {
         let notification_svc = notification_module.service();
         let sites_svc = sites_module.service();
         let waf_svc = waf_module.service();
+        let site_http_controls_svc = site_http_controls_module.service();
+        let web_terminal_svc = web_terminal_module.service();
+        let mail_filters_svc = mail_filtering_module.service();
+        let mailing_lists_svc = mail_filtering_module.mailing_lists();
+        let sso_svc = sso_module.service();
         let docker_svc = docker_module.service();
         let container_runtime_svc = container_runtime_module.service();
         let hosting_plans_svc = hosting_plans_module.service();
@@ -704,6 +745,13 @@ impl TestServer {
         let monitoring_svc = monitoring_module.service();
         let cron_svc = cron_module.service();
         let backups_svc = backups_module.service();
+        let server_snapshots_svc = std::sync::Arc::new(openpanel_app::ServerSnapshotService::new(
+            std::sync::Arc::clone(&backups_svc),
+            pool.clone(),
+            sandbox.path().join("snapshots"),
+            audit.clone(),
+            env!("CARGO_PKG_VERSION").to_owned(),
+        ));
         let logs_svc = logs_module.service();
         let security_svc = security_module.service();
         let login_throttle = security_module.login_service();
@@ -810,14 +858,20 @@ impl TestServer {
             system_services_svc.clone(),
             dns_svc.clone(),
             mail_svc.clone(),
+            mail_filters_svc.clone(),
+            mailing_lists_svc.clone(),
             software_center_svc.clone(),
             two_factor_svc.clone(),
             waf_svc.clone(),
+            site_http_controls_svc.clone(),
+            web_terminal_svc.clone(),
+            sso_svc.clone(),
             docker_svc.clone(),
             ftp_svc.clone(),
             api_token_svc.clone(),
             notification_svc.clone(),
             pitr_svc.clone(),
+            server_snapshots_svc.clone(),
             staging_svc.clone(),
             plugin_svc.clone(),
             mp_svc.clone(),
@@ -862,6 +916,7 @@ impl TestServer {
             software_center_svc.clone(),
             two_factor_svc.clone(),
             waf_svc.clone(),
+            site_http_controls_svc.clone(),
             docker_svc.clone(),
             ftp_svc.clone(),
             api_token_svc.clone(),
@@ -942,6 +997,8 @@ impl TestServer {
             mail: mail_svc,
             software_center: software_center_svc,
             waf: waf_svc,
+            site_http_controls: site_http_controls_svc,
+            web_terminal: web_terminal_svc,
             docker: docker_svc,
             container_runtime: container_runtime_svc,
             hosting_plans: hosting_plans_svc,
@@ -1093,6 +1150,16 @@ impl TestServer {
     /// The per-site WAF service.
     pub fn waf(&self) -> Arc<WafService> {
         self.waf.clone()
+    }
+
+    /// The per-site HTTP-controls service.
+    pub fn site_http_controls(&self) -> Arc<SiteHttpService> {
+        self.site_http_controls.clone()
+    }
+
+    /// The browser-terminal service.
+    pub fn web_terminal(&self) -> Arc<openpanel_app::WebTerminalService> {
+        self.web_terminal.clone()
     }
 
     /// The plugin extension framework service.
