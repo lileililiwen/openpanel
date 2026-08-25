@@ -13,6 +13,7 @@ dist/
 # Editor
 .vscode/
 .idea/
+.qoder/sessions/
 *.swp
 *.swo
 .DS_Store

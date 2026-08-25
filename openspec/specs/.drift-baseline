@@ -1,0 +1,106 @@
+agent	Agent Identity and Mutual TLS
+agent	Agent Read-Only API
+agent	Fleet Aggregation
+agent	Fleet Surfaces
+agent	Signed Recipe Execution
+backups	Backup Plans and Runs
+backups	Backup Surfaces and Retention
+backups	Integrity and Secret Safety
+backups	Per-Plan Schedule Constraints
+backups	Restore Lifecycle
+backups	Typed Restore Scope
+cron	Cron Authorization and Surfaces
+cron	Due Job Execution
+cron	Execution History Retention
+cron	Job Scope and Role Permissions
+cron	Per-User Cron Quotas
+cron	Scheduled Job Aggregate
+cron	User-Cron Surface
+dns	Default Zone Templates
+dns	DNS Automation and Surfaces
+dns	DNS Provider Accounts
+dns	Template Application Lifecycle
+dns	Template Override Per Owner
+dns	Template Re-Apply and Preview
+dns	Typed Record Lifecycle
+dns	Zone Synchronization
+mail	Catch-All Alias
+mail	Default Sending Policy at Enable
+mail	DKIM Auto-Generation on Domain Enable
+mail	DKIM Key Rotation With Grace
+mail	Greylisting
+mail	Mailboxes and Aliases
+mail	Mail Forwarding and Aliases
+mail	Mailing Lists
+mail	Mail Readiness and Domain Lifecycle
+mail	Mail Surfaces and Integration
+mail	Per-Mailbox Autoresponder
+mail	Per-Mailbox Quota Enforcement
+mail	Quotas, Abuse Controls, and Diagnostics
+mail	Safe Mail Service Configuration
+mail	Sieve Filter Management
+mail	Spam Scoring and Spam-Folder Routing
+monitoring	Alert Evaluation
+monitoring	Bandwidth Accounting Types
+monitoring	CLI Surface
+monitoring	Collector Background Task
+monitoring	HTTP Routes
+monitoring	Metric Types
+monitoring	Retention Policy
+monitoring	Snapshot Persistence
+monitoring	Threshold-Crossed Event
+monitoring	Window-Closed Event
+plugin-extension-framework	Marketplace Install Reuses Framework Protocol
+plugin-extension-framework	Ratings and Metadata
+plugin-extension-framework	Remote Catalog Discovery
+quotas	Bandwidth Enforcement
+quotas	Disk Enforcement
+quotas	Inode Enforcement
+quotas	Quota Sampler and Monitoring Integration
+quotas	Quota Surfaces
+sites	Audit Trail for Site Mutations
+sites	Clone Origin and Template Site Fields
+sites	Document Root Provisioning
+sites	nginx Config Generation
+sites	nginx Reload
+sites	Per-Site RBAC
+sites	PhpRuntimeRef Site Field
+sites	Site Aggregate
+sites	Site Clone Helper (Placeholder)
+sites	Site HTTP Routes
+sites	Site Lifecycle CLI
+software-center	Audit trail for every install
+software-center	Background artifact install tasks with live progress
+software-center	Background system install confirmation
+software-center	Better error pages for the install flow
+software-center	Catalog Diagnostics and Staleness
+software-center	Catalog UX
+software-center	Component Kind
+software-center	DNS labels are strict by default
+software-center	Generic artifact placement
+software-center	Host-aware package manager
+software-center	Install Wizard for Applications
+software-center	Least-privilege install path
+software-center	Live progress fragment endpoint
+software-center	Live system job fragment
+software-center	No user input in shell commands
+software-center	One-click install for Web entries
+software-center	One-click Web Application Deployment
+software-center	Per-package progress for system transactions
+software-center	Per-Version Selection and Compatibility Check
+software-center	Placeholder SHA-256 is fail-closed for live installs
+software-center	Production Software Center Storefront
+software-center	Read configuration is owner-only and bounded
+software-center	Remote Catalog Aggregator and Refresh
+software-center	Rich Recipe Schema and Provenance
+software-center	Safe Package Execution and Recovery
+software-center	Save configuration is atomic and validated
+software-center	Schema and stability
+software-center	Search, Categories, and Tags
+software-center	Server-owned config manifest
+software-center	Software Jobs, Surfaces, and Observability
+software-center	Streaming artifact fetch reports progress
+software-center	System Component Planning and Lifecycle
+software-center	Trusted Software Catalog and Discovery
+ssl	Issue Wildcard Certificate via DNS-01
+ssl	Renew Wildcard Certificate via DNS-01

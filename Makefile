@@ -23,9 +23,9 @@
 # Every per-check script prints `step: <name> status: ok | failed` and
 # exits non-zero on failure; `make` short-circuits on the first one.
 
-.PHONY: check fmt clippy docs audit file-length test coverage install-lint-tools ensure-lint-tools split a11y scan-literal tasks-testing-first reuse layering spec-test-drift repo-map
+.PHONY: check fmt clippy docs audit file-length test coverage install-lint-tools ensure-lint-tools split a11y scan-literal tasks-testing-first reuse layering spec-test-drift spec-drift repo-map
 
-check: ensure-lint-tools fmt clippy docs audit file-length scan-literal tasks-testing-first reuse layering spec-test-drift test
+check: ensure-lint-tools fmt clippy docs audit file-length scan-literal tasks-testing-first reuse layering spec-test-drift spec-drift test
 	@echo ""
 	@echo "=== All quality checks passed ==="
 
@@ -61,6 +61,9 @@ layering:
 
 spec-test-drift:
 	@scripts/check-spec-test-drift.sh
+
+spec-drift:
+	@scripts/check-spec-drift.sh
 
 repo-map:
 	@scripts/repo-map.sh
