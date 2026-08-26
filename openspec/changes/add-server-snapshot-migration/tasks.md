@@ -23,7 +23,7 @@
 - [x] 1.6 Integration: tamper one byte of a site entry → restore
       aborts at that resource, result lists applied resources so far,
       exit non-zero.
-- [ ] 1.7 Integration: migrate round-trip between two in-memory hosts
+- [x] 1.7 Integration: migrate round-trip between two in-memory hosts
       sharing a temp offsite target directory.
 - [x] 1.8 CLI E2E: `cli_server_snapshot_create_then_list`,
       `cli_server_restore_requires_confirm`.
@@ -41,7 +41,7 @@
       zstd+tar packaging; per-entry sha256.
 - [x] 3.2 Preflight + single-use confirm tokens; ordered restore with
       per-resource audit events.
-- [ ] 3.3 `SnapshotImporter` implementing the migration-importers
+- [x] 3.3 `SnapshotImporter` implementing the migration-importers
       driver contract; offsite-target export/import glue.
 - [ ] 3.4 Cron job type for scheduled snapshots; plan-aware retention
       pruning with audit.

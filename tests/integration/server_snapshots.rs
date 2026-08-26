@@ -285,3 +285,213 @@ async fn restore_aborts_at_tampered_entry_and_reports_applied() {
         other => panic!("expected partial restore failure, got: {other:?}"),
     }
 }
+
+/// Local-filesystem offsite target used to hand a bundle between two
+/// in-memory hosts.
+struct FsTarget {
+    root: std::path::PathBuf,
+}
+
+#[async_trait::async_trait]
+impl openpanel_domain::offsite_backup_targets::BackupTargetAdapter for FsTarget {
+    type Error = std::io::Error;
+
+    async fn put(&self, key: &str, bytes: &[u8]) -> Result<(), Self::Error> {
+        let path = self.root.join(key);
+        if let Some(parent) = path.parent() {
+            tokio::fs::create_dir_all(parent).await?;
+        }
+        tokio::fs::write(path, bytes).await
+    }
+
+    async fn get(&self, key: &str) -> Result<Vec<u8>, Self::Error> {
+        tokio::fs::read(self.root.join(key)).await
+    }
+
+    async fn list(&self, prefix: &str) -> Result<Vec<String>, Self::Error> {
+        let mut out = Vec::new();
+        let mut stack = vec![self.root.clone()];
+        while let Some(dir) = stack.pop() {
+            let mut entries = tokio::fs::read_dir(&dir).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else if let Ok(rel) = path.strip_prefix(&self.root) {
+                    let key = rel.to_string_lossy().to_string();
+                    if key.starts_with(prefix) {
+                        out.push(key);
+                    }
+                }
+            }
+        }
+        out.sort();
+        Ok(out)
+    }
+
+    async fn delete(&self, key: &str) -> Result<(), Self::Error> {
+        match tokio::fs::remove_file(self.root.join(key)).await {
+            Ok(()) => Ok(()),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+            Err(e) => Err(e),
+        }
+    }
+
+    async fn test(&self) -> Result<(), Self::Error> {
+        tokio::fs::create_dir_all(&self.root).await
+    }
+}
+
+/// Records committed resources and hands out deterministic ref ids.
+struct RecordingTranslator {
+    committed: std::sync::Mutex<Vec<(openpanel_domain::ImportedResourceKind, String)>>,
+}
+
+impl openpanel_app::SnapshotTranslator for RecordingTranslator {
+    fn translate(
+        &self,
+        kind: openpanel_domain::ImportedResourceKind,
+        source_key: &str,
+        _payload: &[u8],
+    ) -> Result<Option<uuid::Uuid>, String> {
+        self.committed
+            .lock()
+            .expect("committed lock")
+            .push((kind, source_key.to_string()));
+        Ok(Some(uuid::Uuid::new_v4()))
+    }
+
+    fn rollback(
+        &self,
+        _kind: openpanel_domain::ImportedResourceKind,
+        _source_key: &str,
+        _ref_id: uuid::Uuid,
+    ) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn migrate_round_trip_between_hosts_via_shared_offsite_target() {
+    use openpanel_app::{SnapshotImporterDriver, export_to_target, import_from_target};
+    use openpanel_domain::{MigrationDriver, MigrationRunId};
+
+    // Host A creates a snapshot from a verified backup run.
+    let host_a = TestServer::new().await;
+    let (token_a, run_id) = owner_and_run(&host_a).await;
+    let auth_a = bearer(&token_a);
+    let base_a = format!("{}/api/v1/server/snapshots", host_a.base_url());
+    let created = host_a
+        .client()
+        .post(&base_a)
+        .header("authorization", &auth_a)
+        .json(&serde_json::json!({ "run_id": run_id }))
+        .send()
+        .await
+        .expect("create");
+    assert_eq!(created.status(), 200);
+    let manifest_a: serde_json::Value = created.json().await.expect("manifest json");
+    let listed = host_a
+        .client()
+        .get(&base_a)
+        .header("authorization", &auth_a)
+        .send()
+        .await
+        .expect("list")
+        .json::<serde_json::Value>()
+        .await
+        .expect("list json");
+    let snapshot_id = listed["snapshots"][0]["id"]
+        .as_str()
+        .expect("id")
+        .to_owned();
+
+    // Export host A's bundle to the shared offsite target.
+    let offsite = tempfile::tempdir().expect("offsite dir");
+    let target = FsTarget {
+        root: offsite.path().to_path_buf(),
+    };
+    let bundle_dir = std::path::PathBuf::from(host_a.sandbox_path("snapshots")).join(&snapshot_id);
+    export_to_target(&target, "migrate/bundle.tar.gz", &bundle_dir)
+        .await
+        .expect("export");
+
+    // The importing side pulls the bundle back through the importer
+    // driver (a fresh host would run exactly this half).
+    let pulled = import_from_target(&target, "migrate/bundle.tar.gz")
+        .await
+        .expect("import");
+
+    // The pulled manifest matches what host A produced.
+    assert_eq!(
+        pulled.manifest().entries.len(),
+        manifest_a["entries"].as_array().expect("entries").len()
+    );
+
+    let driver = SnapshotImporterDriver::new(RecordingTranslator {
+        committed: std::sync::Mutex::new(Vec::new()),
+    });
+
+    // Sniff recognizes the bundle.
+    assert_eq!(
+        driver.sniff(&pulled),
+        Some(openpanel_domain::DriverKind::TarWithJsonManifest)
+    );
+
+    // Preview: one planned resource per manifest entry, same keys and
+    // byte counts.
+    let plan = driver.dry_run(&pulled).await.expect("plan");
+    let planned: Vec<(String, u64)> = plan
+        .resources()
+        .iter()
+        .map(|r| (r.source_key.clone(), r.bytes))
+        .collect();
+    let expected: Vec<(String, u64)> = pulled
+        .manifest()
+        .entries
+        .iter()
+        .map(|e| {
+            (
+                e.reference.clone().unwrap_or_else(|| match e.kind {
+                    openpanel_domain::backups::snapshot::SnapshotEntryKind::PanelMetadata => {
+                        "panel".to_string()
+                    }
+                    _ => e.path.clone(),
+                }),
+                std::fs::metadata(bundle_dir.join(&e.path))
+                    .expect("artifact metadata")
+                    .len(),
+            )
+        })
+        .collect();
+    assert_eq!(planned, expected);
+
+    // Commit: every planned resource is translated with its payload.
+    let imported = driver
+        .run(
+            &pulled,
+            &plan,
+            MigrationRunId::new(),
+            uuid::Uuid::new_v4(),
+            chrono::Utc::now(),
+        )
+        .await
+        .expect("run");
+    assert_eq!(imported.len(), plan.resources().len());
+    for (resource, planned) in imported.iter().zip(plan.resources()) {
+        assert_eq!(resource.source_key, planned.source_key);
+        assert_eq!(resource.kind, planned.kind);
+    }
+
+    // Rollback undoes them in reverse order.
+    let undone = driver
+        .rollback(&imported, MigrationRunId::new(), chrono::Utc::now())
+        .await
+        .expect("rollback");
+    assert_eq!(undone.len(), imported.len());
+    assert!(undone.iter().all(|r| r.rolled_back));
+    assert_eq!(
+        undone.first().expect("last applied").source_key,
+        imported.last().expect("last applied").source_key
+    );
+}

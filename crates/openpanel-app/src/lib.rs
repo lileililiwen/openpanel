@@ -172,6 +172,10 @@ pub use app_runtimes::{
 pub use backups::{
     BackupService, BackupsModule,
     server_snapshot::{ServerSnapshotError, ServerSnapshotService},
+    snapshot_importer::{
+        SkipAll, SnapshotBundleSource, SnapshotImporterDriver, SnapshotTranslator,
+        export_to_target, import_from_target,
+    },
 };
 pub use billing::{
     BillingModule, BillingService, ChargebackEngine, SqliteBillingRepository, UsageExporter,
