@@ -1,3 +1,10 @@
+//! Deliverability service integration tests.
+#![allow(
+    missing_docs,
+    clippy::unwrap_used,
+    clippy::expect_used,
+    clippy::panic
+)]
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -17,7 +24,8 @@ impl ResolverPort for FakeResolver {
 
     async fn resolve_a(&self, name: &str) -> Result<Vec<std::net::IpAddr>, String> {
         if self.listed.iter().any(|n| n == name) {
-            Ok(vec!["127.0.0.2".parse().unwrap()])
+            let ip: std::net::IpAddr = "127.0.0.2".parse().expect("valid ip");
+            Ok(vec![ip])
         } else {
             Ok(vec![])
         }
