@@ -23,11 +23,8 @@
 - [ ] 1.7 Integration: pending-restart flag set on PUT, cleared by the
       existing restart action; app process sees values (mock exec
       records environment).
-- [ ] 1.8 CLI E2E: `cli_runtime_env_set_secret_from_stdin` — value
+- [x] 1.8 CLI E2E: `cli_runtime_env_set_secret_from_stdin` — value
       never appears in argv, output, or terminal echo.
-- [ ] 1.9 Web: Environment tab at 360/768/1280 px; masked secret
-      inputs; screenshots.
-
 ## 2. Domain
 
 - [x] 2.1 Add `EnvVar`/`EnvSet`/`EnvKey` + validation under
@@ -48,7 +45,7 @@
 ## 4. Adapters and UI
 
 - [x] 4.1 REST routes per design.
-- [ ] 4.2 CLI subcommands (secret via stdin).
+- [x] 4.2 CLI subcommands (secret via stdin).
 - [ ] 4.3 Web tab.
 
 ## 5. Validation
@@ -59,3 +56,10 @@
       var + secret, restart, observe both in-app and neither in logs.
 - [ ] 5.4 Archive with
       `openspec archive refine-app-runtimes-with-env-secrets`.
+
+## Deferred (requires browser / live runtime environment)
+
+- 1.9 / 4.3 Web Environment tab at 360/768/1280 px with masked
+  secret inputs and screenshots.
+- 5.3 Smoke-test: deploy an app printing its environment, set a
+  secret, restart, observe the value inside the chroot only.

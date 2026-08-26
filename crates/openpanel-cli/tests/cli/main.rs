@@ -22,6 +22,7 @@ mod logs;
 mod mail;
 mod monitoring;
 mod notifications;
+mod runtime_env;
 mod security;
 mod serve;
 mod server_snapshot;

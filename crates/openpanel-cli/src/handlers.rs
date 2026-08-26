@@ -5797,6 +5797,93 @@ pub async fn db_remote_access(
     Ok(())
 }
 
+/// Build the runtime env service plus identity for callers.
+async fn build_runtime_env(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::RuntimeEnvService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
+    let identity_module = IdentityModule::new(&ctx, load_master_key(&ctx.config)?).await;
+    let module = openpanel_app::AppRuntimesModule::new(&ctx, load_master_key(&ctx.config)?).await;
+    MigrationRunner::for_sqlite(pool.clone())
+        .apply_module(module.name(), &module.migrations())
+        .await?;
+    Ok((module.env(), identity_module.service()))
+}
+
+/// `openpanel runtime-env …`. Secrets arrive via stdin and never
+/// appear in argv or output.
+pub async fn runtime_env(
+    config: Arc<Config>,
+    action: crate::RuntimeEnvAction,
+) -> anyhow::Result<()> {
+    use std::io::Read;
+    let (svc, identity) = build_runtime_env(config).await?;
+    let owner = waf_owner(&identity).await?;
+    match action {
+        crate::RuntimeEnvAction::Set {
+            runtime,
+            secret_marker,
+        } => {
+            let mut stdin = String::new();
+            std::io::stdin().read_to_string(&mut stdin)?;
+            let mut vars = Vec::new();
+            for line in stdin.lines() {
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                let (pair, secret) = match line.strip_suffix(&format!(" {secret_marker}")) {
+                    Some(stripped) => (stripped, true),
+                    None => (line, false),
+                };
+                let (key, value) = pair
+                    .split_once('=')
+                    .ok_or_else(|| anyhow::anyhow!("expected KEY=VALUE line"))?;
+                vars.push(
+                    openpanel_domain::app_runtimes::EnvVar::new(
+                        key.trim().to_string(),
+                        value.to_string(),
+                        secret,
+                    )
+                    .map_err(|e| anyhow::anyhow!(e.to_string()))?,
+                );
+            }
+            let set = openpanel_domain::app_runtimes::EnvSet::new(vars)
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            let id = uuid::Uuid::parse_str(&runtime).context("invalid runtime id")?;
+            svc.set(&owner, id, set)
+                .await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            println!("environment saved");
+        }
+        crate::RuntimeEnvAction::Show { runtime } => {
+            let id = uuid::Uuid::parse_str(&runtime).context("invalid runtime id")?;
+            let views = svc
+                .get(&owner, id)
+                .await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(
+                    &views
+                        .iter()
+                        .map(|v| serde_json::json!({
+                            "key": v.key,
+                            "secret": v.secret,
+                            "value": v.value,
+                        }))
+                        .collect::<Vec<_>>()
+                )?
+            );
+        }
+    }
+    Ok(())
+}
+
 /// Build the admin SSH host-key service plus identity for callers.
 async fn build_ssh_keys(
     config: Arc<Config>,

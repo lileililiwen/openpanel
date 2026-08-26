@@ -68,6 +68,11 @@ pub enum Command {
         #[command(subcommand)]
         action: BackupCommand,
     },
+    /// Per-runtime environment variables and secrets.
+    RuntimeEnv {
+        #[command(subcommand)]
+        action: crate::RuntimeEnvAction,
+    },
     /// Admin SSH host keys for host login.
     SshKeys {
         /// List, add, or remove.
@@ -920,6 +925,28 @@ pub enum LogsCommand {
         /// Destination file.
         #[arg(long)]
         output: std::path::PathBuf,
+    },
+}
+
+/// Per-runtime environment subcommands.
+#[derive(Debug, clap::Subcommand)]
+#[allow(missing_docs)]
+pub enum RuntimeEnvAction {
+    /// Set variables from KEY=VALUE lines on stdin. Lines suffixed
+    /// with the `--secret-marker` are stored as secrets.
+    Set {
+        /// Runtime id.
+        #[arg(long)]
+        runtime: String,
+        /// Lines ending with this marker are treated as secrets.
+        #[arg(long, default_value = "secret")]
+        secret_marker: String,
+    },
+    /// Print the stored variables as JSON (secrets masked).
+    Show {
+        /// Runtime id.
+        #[arg(long)]
+        runtime: String,
     },
 }
 
