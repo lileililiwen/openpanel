@@ -12,4 +12,4 @@ pub use openpanel_domain::identity::sso::{
     ExternalIdentity, OidcClaims, OidcPort, SsoConnection, SsoError, SsoLoginState,
 };
 pub use repo::SqliteSsoRepository;
-pub use service::SsoService;
+pub use service::{CallbackOutcome, SsoService};

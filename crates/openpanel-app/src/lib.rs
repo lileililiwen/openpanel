@@ -242,7 +242,7 @@ pub use iac::{
 pub use identity::{
     IdentityModule,
     service::IdentityService,
-    sso::{OpenidConnectAdapter, SsoModule, SsoService},
+    sso::{CallbackOutcome, OpenidConnectAdapter, SsoModule, SsoService},
 };
 pub use ip_allocation::{
     Allocator, IpAllocationModule, IpService, SqliteIpRepository, VhostBinder,

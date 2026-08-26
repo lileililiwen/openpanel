@@ -43,14 +43,23 @@ impl SsoModule {
         let repo: Arc<dyn SsoRepository> = Arc::new(SqliteSsoRepository::new(pool.clone()));
         let users: Arc<dyn UserRepository> = Arc::new(SqliteUserRepository::new(pool.clone()));
         let sessions: Arc<dyn openpanel_domain::SessionRepository> =
-            Arc::new(SqliteSessionRepository::new(pool));
+            Arc::new(SqliteSessionRepository::new(pool.clone()));
         let key = std::sync::Arc::new(master_key);
+        let factors = Arc::new(crate::identity::factor_repo::SqliteFactorRepository::new(
+            pool,
+        ));
+        let two_factor = Arc::new(crate::identity::two_factor::TwoFactorService::new(
+            factors,
+            master_key,
+            ctx.audit.clone(),
+        ));
         let service = Arc::new(SsoService::new(
             repo,
             users,
             sessions,
             ctx.audit.clone(),
             oidc,
+            two_factor,
             *key,
         ));
         Self {

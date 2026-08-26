@@ -58,15 +58,28 @@ async fn callback(
     State(service): State<Arc<SsoService>>,
     Json(input): Json<CallbackInput>,
 ) -> Result<Response, ApiErrorResponse> {
-    let (token, mfa_satisfied) = service
+    match service
         .callback(&input.code, &input.state, None, None)
         .await
-        .map_err(map)?;
-    Ok(Json(serde_json::json!({
-        "token": token.expose().to_owned(),
-        "mfa_satisfied": mfa_satisfied,
-    }))
-    .into_response())
+        .map_err(map)?
+    {
+        openpanel_app::CallbackOutcome::Session {
+            token,
+            mfa_satisfied,
+        } => Ok(Json(serde_json::json!({
+            "token": token.expose().to_owned(),
+            "mfa_satisfied": mfa_satisfied,
+        }))
+        .into_response()),
+        openpanel_app::CallbackOutcome::FactorRequired { challenge } => {
+            Ok(Json(serde_json::json!({
+                "status": "factor_required",
+                "challenge_id": challenge.challenge_id,
+                "expires_at": challenge.expires_at.to_rfc3339(),
+            }))
+            .into_response())
+        }
+    }
 }
 
 #[derive(Deserialize)]

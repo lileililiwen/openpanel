@@ -23,7 +23,7 @@
       logins of the same user with distinct ids; `DELETE .../{other}`
       then replaying that session's cookie → 401 on next request;
       deleting another user's session as non-Admin → 403.
-- [ ] 1.6 Integration: `trust_idp_mfa = false` → post-callback flow
+- [x] 1.6 Integration: `trust_idp_mfa = false` → post-callback flow
       enters the existing second-factor challenge; `= true` → shell
       directly.
 - [x] 1.7 Property: no DTO, log line, or audit event in the SSO flow

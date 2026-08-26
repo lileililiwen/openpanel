@@ -381,3 +381,133 @@ fn prop_sso_flow_never_leaks_client_secret() {
             .unwrap();
     }
 }
+
+#[tokio::test]
+async fn sso_callback_respects_trust_idp_mfa_and_second_factor() {
+    let server = TestServer::new_with_sso_oidc(
+        Config::default(),
+        std::sync::Arc::new(MockOidc {
+            issuer: "https://idp.example.test".into(),
+            subject: "mfa-subject".into(),
+            email: "mfa@example.test".into(),
+        }),
+    )
+    .await;
+    let owner_token = server
+        .bootstrap_owner("owner", "correct horse battery staple")
+        .await;
+    // auto_provision on, IdP MFA NOT trusted (default).
+    configure_connection(&server, &owner_token, true).await;
+
+    // First login: the provisioned user has no second factor yet, so
+    // a session is issued directly.
+    let (_url, state) = begin_and_extract_state(&server, &owner_token).await;
+    let first = server
+        .client()
+        .post(format!("{}/auth/sso/callback", server.base_url()))
+        .json(&serde_json::json!({ "code": "auth-code", "state": state }))
+        .send()
+        .await
+        .expect("callback");
+    assert_eq!(first.status(), 200);
+    let body: serde_json::Value = first.json().await.expect("json");
+    assert_eq!(body["mfa_satisfied"], serde_json::json!(false));
+    assert!(!body["token"].as_str().expect("token").is_empty());
+
+    // Enroll a TOTP second factor for the provisioned user.
+    let sso_user = server
+        .identity()
+        .list_users()
+        .await
+        .expect("users")
+        .into_iter()
+        .find(|user| user.username().as_str().starts_with("sso-"))
+        .expect("provisioned user");
+    let verification_time = chrono::Utc::now() - chrono::Duration::seconds(60);
+    let enrollment = server
+        .identity()
+        .two_factor()
+        .enroll_totp(sso_user.id(), "test", "sso@example.test", verification_time)
+        .await
+        .expect("enroll totp");
+    let step = u64::try_from(enrollment.secret.current_step(verification_time))
+        .expect("positive TOTP step");
+    let code = enrollment
+        .secret
+        .totp("OpenPanel", "sso@example.test")
+        .generate(step);
+    server
+        .identity()
+        .two_factor()
+        .verify_totp_enrollment(
+            "test",
+            sso_user.id(),
+            enrollment.enrollment_id,
+            &code,
+            verification_time,
+        )
+        .await
+        .expect("verify enrollment");
+    let sessions_before: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE user_id = ?")
+            .bind(sso_user.id().to_string())
+            .fetch_one(&server.database_pool())
+            .await
+            .expect("session count");
+
+    // Second login with an enrolled factor and no IdP trust: the
+    // callback returns the pending challenge and mints NO session.
+    let (_url, state) = begin_and_extract_state(&server, &owner_token).await;
+    let challenged = server
+        .client()
+        .post(format!("{}/auth/sso/callback", server.base_url()))
+        .json(&serde_json::json!({ "code": "auth-code", "state": state }))
+        .send()
+        .await
+        .expect("challenged callback");
+    assert_eq!(challenged.status(), 200);
+    let body: serde_json::Value = challenged.json().await.expect("json");
+    assert_eq!(body["status"], serde_json::json!("factor_required"));
+    assert!(body["challenge_id"].as_str().is_some());
+    assert!(body.get("token").is_none(), "no session may be minted");
+    let sessions_after: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM sessions WHERE user_id = ?")
+        .bind(sso_user.id().to_string())
+        .fetch_one(&server.database_pool())
+        .await
+        .expect("session count");
+    assert_eq!(
+        sessions_after, sessions_before,
+        "challenge must not mint a session"
+    );
+
+    // Trusting the IdP's MFA shells straight through despite the
+    // enrolled panel factor.
+    let trusted = server
+        .client()
+        .put(format!("{}/api/v1/auth/sso/connection", server.base_url()))
+        .bearer_auth(&owner_token)
+        .json(&serde_json::json!({
+            "issuer_url": "https://idp.example.test",
+            "client_id": "panel",
+            "client_secret_cipher": "plaintext-secret-for-encryption",
+            "default_role": "user",
+            "auto_provision": true,
+            "trust_idp_mfa": true,
+        }))
+        .send()
+        .await
+        .expect("reconfigure");
+    assert_eq!(trusted.status(), 200);
+    let (_url, state) = begin_and_extract_state(&server, &owner_token).await;
+    let third = server
+        .client()
+        .post(format!("{}/auth/sso/callback", server.base_url()))
+        .json(&serde_json::json!({ "code": "auth-code", "state": state }))
+        .send()
+        .await
+        .expect("trusted callback");
+    assert_eq!(third.status(), 200);
+    let body: serde_json::Value = third.json().await.expect("json");
+    assert_eq!(body["mfa_satisfied"], serde_json::json!(true));
+    assert!(!body["token"].as_str().expect("token").is_empty());
+}

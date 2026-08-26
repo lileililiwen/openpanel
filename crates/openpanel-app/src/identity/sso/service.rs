@@ -12,6 +12,27 @@ use openpanel_domain::{
 use uuid::Uuid;
 
 use super::OidcPort;
+use crate::identity::two_factor::TwoFactorService;
+
+/// Outcome of completing an SSO callback.
+#[derive(Debug)]
+pub enum CallbackOutcome {
+    /// A session was minted. `mfa_satisfied` reports whether the IdP
+    /// login is trusted to satisfy the panel's second factor.
+    Session {
+        /// The minted session token.
+        token: SessionToken,
+        /// Whether the second factor is satisfied by the IdP.
+        mfa_satisfied: bool,
+    },
+    /// The user has a panel second factor enrolled and the connection
+    /// does not trust the IdP's MFA: the challenge must be completed
+    /// before a session is issued.
+    FactorRequired {
+        /// The pending-login challenge for the second-factor step.
+        challenge: crate::identity::two_factor::ChallengeView,
+    },
+}
 
 /// Owner-only SSO orchestration.
 pub struct SsoService {
@@ -20,18 +41,22 @@ pub struct SsoService {
     sessions: Arc<dyn SessionRepository>,
     audit: Arc<dyn AuditService>,
     oidc: Arc<dyn OidcPort>,
+    two_factor: Arc<TwoFactorService>,
     secret_key: [u8; 32],
 }
 
 impl SsoService {
-    /// Construct with persistence, identity ports, the OIDC port, and
-    /// the master key used to encrypt the client secret at rest.
+    /// Construct with persistence, identity ports, the OIDC port, the
+    /// second-factor service, and the master key used to encrypt the
+    /// client secret at rest.
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         repo: Arc<dyn openpanel_domain::SsoRepository>,
         users: Arc<dyn UserRepository>,
         sessions: Arc<dyn SessionRepository>,
         audit: Arc<dyn AuditService>,
         oidc: Arc<dyn OidcPort>,
+        two_factor: Arc<TwoFactorService>,
         secret_key: [u8; 32],
     ) -> Self {
         Self {
@@ -40,6 +65,7 @@ impl SsoService {
             sessions,
             audit,
             oidc,
+            two_factor,
             secret_key,
         }
     }
@@ -90,17 +116,18 @@ impl SsoService {
         Ok(url)
     }
 
-    /// Complete a login: validate state/nonce, exchange the code,
-    /// link or provision the user, and issue a session token.
-    /// Returns the session token plus whether MFA is satisfied by the
-    /// IdP.
+    /// Complete a login: validate state, exchange the code, link or
+    /// provision the user, then either issue a session token or —
+    /// when the connection does not trust the IdP's MFA and the user
+    /// has a panel second factor enrolled — return the pending
+    /// second-factor challenge.
     pub async fn callback(
         &self,
         code: &str,
         state_param: &str,
         ip: Option<String>,
         user_agent: Option<String>,
-    ) -> Result<(SessionToken, bool), SsoError> {
+    ) -> Result<CallbackOutcome, SsoError> {
         let connection = self
             .repo
             .get_connection()
@@ -184,9 +211,33 @@ impl SsoService {
             .map_err(persistence)?
             .ok_or(SsoError::LinkConflict)?;
 
+        // When the connection does not trust the IdP's MFA, a user
+        // with an enrolled panel second factor must complete the
+        // existing challenge before any session is minted.
+        if !connection.mfa_satisfied() {
+            let has_factor = self
+                .two_factor
+                .has_active_factor(user.id())
+                .await
+                .map_err(|error| SsoError::InvalidConfig(error.to_string()))?;
+            if has_factor {
+                let challenge = self
+                    .two_factor
+                    .issue_login_challenge(user.id(), ip, user_agent, Utc::now())
+                    .await
+                    .map_err(|error| SsoError::InvalidConfig(error.to_string()))?;
+                return Ok(CallbackOutcome::FactorRequired { challenge });
+            }
+        }
+
         let token = SessionToken::generate();
-        let (mut session, session_token) =
-            Session::new(user.id(), user.role(), &token, ip, user_agent);
+        let (mut session, session_token) = Session::new(
+            user.id(),
+            user.role(),
+            &token,
+            ip.clone(),
+            user_agent.clone(),
+        );
         self.sessions.insert(&session).await.map_err(persistence)?;
         session.touch();
         let _ = self
@@ -200,7 +251,10 @@ impl SsoService {
                 .metadata(serde_json::json!({ "issuer": claims.issuer })),
             )
             .await;
-        Ok((session_token, connection.mfa_satisfied()))
+        Ok(CallbackOutcome::Session {
+            token: session_token,
+            mfa_satisfied: connection.mfa_satisfied(),
+        })
     }
 
     /// List a caller's own active sessions.
