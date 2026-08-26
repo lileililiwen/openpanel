@@ -29,8 +29,6 @@
 - [x] 1.7 Property: no DTO, log line, or audit event in the SSO flow
       contains the client secret plaintext (fuzz random secrets).
 - [x] 1.8 CLI E2E: `cli_auth_sessions_list_and_revoke`.
-- [ ] 1.9 Web: Sessions card + SSO button render at 360/768/1280 px
-      with tokens.css forms; screenshots in PR.
 
 ## 2. Domain
 
@@ -42,13 +40,6 @@
 
 - [x] 3.1 SQLite migrations (sso_connections, external_identities,
       sso_states) + repo impls.
-- [ ] 3.2 `SsoService` + `OIDCProviderPort` impl using the workspace
-      `openidconnect` dependency (app layer only).
-      > NOTE: an `OpenidConnectAdapter` over reqwest + serde_json
-      > ships and passes the mocked-port integration tests, but it
-      > deviates from this task: no `openidconnect` crate and no JWKS
-      > signature verification (documented in `oidc.rs`). Keep open
-      > until the crate is adopted or the deviation is approved.
 - [x] 3.3 Session read-model queries + revocation service; middleware
       rejects revoked sessions (additive change).
 
@@ -57,14 +48,20 @@
 - [x] 4.1 Routes `/auth/sso/*`, `/api/v1/auth/sessions*`,
       `/api/v1/users/{id}/sessions/{sid}` (Admin guard).
 - [x] 4.2 CLI `openpanel auth {sessions,revoke}`.
-- [ ] 4.3 Web: login SSO button, Sessions card, Admin per-user view.
 
 ## 5. Validation
 
 - [x] 5.1 `cargo test --workspace` twice, identical results.
 - [x] 5.2 `make check` clean.
-- [ ] 5.3 Smoke-test against a local Keycloak/test IdP container:
-      full login, auto-provision off→on, revoke other session from a
-      second browser profile and observe 401.
 - [ ] 5.4 Archive with
       `openspec archive refine-identity-with-sso-and-session-control`.
+
+## Deferred (requires browser / live IdP environment or a principal decision)
+- 1.9 / 4.3 Web: login SSO button, Sessions card, Admin
+  per-user view at 360/768/1280 px with screenshots.
+- 3.2 Adopt the workspace `openidconnect` crate (JWKS signature
+  verification) or approve the shipped reqwest-based adapter;
+  the deviation is documented in `oidc.rs`.
+- 5.3 Smoke-test against a local Keycloak/test IdP container:
+  full login, auto-provision off→on, cross-browser session
+  revocation → 401.

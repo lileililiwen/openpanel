@@ -20,9 +20,6 @@
       route returns 200 with `health: "unknown"` and depth 0.
 - [x] 1.6 CLI E2E: `cli_mail_autoresponder_set_and_show`,
       `cli_mail_queue_prints_depth`.
-- [ ] 1.7 Web: Mail tabs render at 360/768/1280 px, forms use
-      tokens.css vocabulary, Sieve editor shows byte counter; PR
-      screenshots.
 - [x] 1.8 Property: no surface response or audit event contains a
       Sieve script body larger than the cap or autoresponder body
       content (randomised fuzz inputs).
@@ -47,14 +44,17 @@
 
 - [x] 4.1 REST routes per design (DTOs, error mapping, RBAC guards).
 - [x] 4.2 CLI `openpanel mail {filter,autoresponder,forwarder,catchall,list,queue}`.
-- [ ] 4.3 Web Mail tabs (Sieve editor, autoresponder form,
-      forwarders/catch-all/lists, queue badge).
 
 ## 5. Validation
 
 - [x] 5.1 `cargo test --workspace` twice, identical results.
 - [x] 5.2 `make check` clean (incl. spec-test-drift gate after §2).
-- [ ] 5.3 Smoke-test: set autoresponder via curl, send probe mail,
-      observe single autoresponse per sender; break MTA binary path →
-      queue endpoint reports unknown, panel stays up.
 - [ ] 5.4 Archive with `openspec archive refine-mail-with-user-surfaces`.
+
+## Deferred (requires browser / live-MTA environment)
+- 1.7 / 4.3 Web Mail tabs (Sieve editor with byte counter,
+  autoresponder form, forwarders/catch-all/lists, queue badge)
+  at 360/768/1280 px with PR screenshots.
+- 5.3 Smoke-test: autoresponder via curl against a live MTA;
+  queue endpoint degrade-to-unknown when the MTA binary is
+  broken.

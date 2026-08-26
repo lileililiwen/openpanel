@@ -51,14 +51,15 @@
 - [x] 4.1 API routes: `POST /api/v1/terminal/ticket` (CSRF-protected)
       and WS `/api/v1/terminal/session` with Origin check.
 - [x] 4.2 CLI `openpanel terminal {ticket,list-sessions}`.
-- [ ] 4.3 Web Terminal tab (xterm.js vendored asset or minimal
-      fallback), tokens.css styling, three-breakpoint screenshots.
 
 ## 5. Validation
 
 - [x] 5.1 `cargo test --workspace` twice, identical results.
 - [x] 5.2 `make check` clean.
-- [ ] 5.3 Smoke-test: obtain ticket via curl, connect with a WS
-      client, run `id` → output shows the site user (not root); leave
-      idle > timeout → server closes socket.
 - [ ] 5.4 Archive with `openspec archive add-web-terminal`.
+
+## Deferred (requires browser / live PTY environment)
+- 4.3 Web Terminal tab (xterm.js vendored asset or minimal
+  fallback), tokens.css styling, three-breakpoint screenshots.
+- 5.3 Smoke-test: ticket via curl, WS session as the site user
+  (`id` shows non-root), idle timeout closes the socket.

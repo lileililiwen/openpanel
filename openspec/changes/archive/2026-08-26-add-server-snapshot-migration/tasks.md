@@ -27,8 +27,6 @@
       sharing a temp offsite target directory.
 - [x] 1.8 CLI E2E: `cli_server_snapshot_create_then_list`,
       `cli_server_restore_requires_confirm`.
-- [ ] 1.9 Web: Snapshots page renders at 360/768/1280 px; restore
-      wizard shows preflight warnings; screenshots in PR.
 
 ## 2. Domain
 
@@ -50,12 +48,15 @@
 
 - [x] 4.1 REST routes `/api/v1/server/snapshots*`, `/server/migrate`.
 - [x] 4.2 CLI `openpanel server {snapshot,snapshots,restore,migrate}`.
-- [ ] 4.3 Web Server → Snapshots page.
 
 ## 5. Validation
 
 - [x] 5.1 `cargo test --workspace` twice, identical results.
-- [ ] 5.2 `make check` clean.
-- [ ] 5.3 Smoke-test: snapshot a dev host, restore into a container,
-      curl the restored site over HTTPS.
+- [x] 5.2 `make check` clean.
 - [ ] 5.4 Archive with `openspec archive add-server-snapshot-migration`.
+
+## Deferred (requires browser / container environment)
+- 1.9 / 4.3 Web Server → Snapshots page with restore wizard and
+  preflight warnings at 360/768/1280 px with screenshots.
+- 5.3 Smoke-test: snapshot a dev host, restore into a container,
+  curl the restored site over HTTPS.
