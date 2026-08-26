@@ -2,18 +2,18 @@
 
 ## 1. Testing
 
-- [ ] 1.1 Unit: `EnvKey` validation — accepts `DATABASE_URL`,
+- [x] 1.1 Unit: `EnvKey` validation — accepts `DATABASE_URL`,
       `_X1`; rejects `1BAD`, `A-B`, empty, >128 chars; reserved keys
       (`PATH`,`HOME`,`USER`) rejected with `EnvError::ReservedKey`.
-- [ ] 1.2 Unit: `EnvSet` uniqueness — duplicate keys collapse into an
+- [x] 1.2 Unit: `EnvSet` uniqueness — duplicate keys collapse into an
       error on construction; ordering is insertion-stable.
-- [ ] 1.3 Unit: size caps — set exceeding 64 KiB or 128 vars rejected;
+- [x] 1.3 Unit: size caps — set exceeding 64 KiB or 128 vars rejected;
       single plain value > 8 KiB rejected.
-- [ ] 1.4 Golden test: rendering a runtime with no env produces the
+- [x] 1.4 Golden test: rendering a runtime with no env produces the
       pre-change unit bytes exactly; adding one non-secret var adds
       exactly one `Environment=` line; any secret var switches to
       `EnvironmentFile=` and the unit contains no secret plaintext.
-- [ ] 1.5 Property: for arbitrary valid sets (≥100 cases) the rendered
+- [x] 1.5 Property: for arbitrary valid sets (≥100 cases) the rendered
       unit plus env file never contain a secret value in the unit
       text, and every key appears at most once.
 - [ ] 1.6 Integration (`tests/integration/runtime_env.rs`): PUT set
@@ -30,7 +30,7 @@
 
 ## 2. Domain
 
-- [ ] 2.1 Add `EnvVar`/`EnvSet`/`EnvKey` + validation under
+- [x] 2.1 Add `EnvVar`/`EnvSet`/`EnvKey` + validation under
       `crates/openpanel-domain/src/app_runtimes/`; extend
       `render_supervisor_unit` with env branch.
 

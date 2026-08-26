@@ -6,8 +6,13 @@
 //! Every check is allow-listed: the runtime kind, the version pin,
 //! the app port, and the working directory must all be safe.
 
+pub mod env;
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+pub use env::{
+    EnvError, EnvKey, EnvSet, EnvVar, MAX_PLAIN_VALUE_BYTES, MAX_SET_BYTES, MAX_VARS, RESERVED_KEYS,
+};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -213,6 +218,33 @@ pub fn is_workdir_inside_chroot(workdir: &str) -> bool {
 /// the app as the site user, with `WorkingDirectory` rooted in
 /// the site chroot.
 pub fn render_supervisor_unit(runtime: &SiteRuntime, site_user: &str, home: &str) -> String {
+    render_supervisor_unit_with_env(runtime, site_user, home, None)
+}
+
+/// Render the unit with an explicit environment set. No env (or an
+/// empty set) reproduces the pre-env output byte-for-byte; non-secret
+/// variables add `Environment=` lines; any secret switches to
+/// `EnvironmentFile=` pointing at the 0600 env file inside the
+/// chroot.
+pub fn render_supervisor_unit_with_env(
+    runtime: &SiteRuntime,
+    site_user: &str,
+    home: &str,
+    env: Option<&EnvSet>,
+) -> String {
+    static EMPTY: std::sync::LazyLock<EnvSet> = std::sync::LazyLock::new(EnvSet::empty);
+    let env = env.unwrap_or(&EMPTY);
+    let env_lines = env.render_environment_lines();
+    let env_file_directive = if env.has_secrets() {
+        format!(
+            "EnvironmentFile=-{home}/{workdir}/.openpanel-env
+",
+            home = home,
+            workdir = runtime.workdir
+        )
+    } else {
+        String::new()
+    };
     format!(
         r#"[Unit]
 Description=OpenPanel site runtime {site} ({kind})
@@ -225,8 +257,8 @@ WorkingDirectory={home}/{workdir}
 ExecStart={start}
 Restart=on-failure
 RestartSec=5
-Environment=APP_PORT={port}
-
+{env_file_directive}Environment=APP_PORT={port}
+{env_lines}
 [Install]
 WantedBy=multi-user.target
 "#,
@@ -241,6 +273,8 @@ WantedBy=multi-user.target
             runtime.start_command.as_str()
         },
         port = runtime.app_port,
+        env_file_directive = env_file_directive,
+        env_lines = env_lines,
     )
 }
 
