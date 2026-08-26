@@ -45,10 +45,12 @@
 
 ## 5. Validation
 
-- [ ] 5.1 Prerequisite: `refine-specs-with-drift-repair` archived so
+- [x] 5.1 Prerequisite: `refine-specs-with-drift-repair` archived so
       the MODIFIED deltas apply to merged live text.
-- [ ] 5.2 `cargo test --workspace` twice, identical results.
-- [ ] 5.3 `make check` clean.
+- [x] 5.2 `cargo test --workspace` twice, identical results.
+- [ ] 5.3 `make check` clean. (All gates pass individually; `cargo doc`
+      for `openpanel_cli` is OOM-killed by concurrent agent sessions on
+      this machine — retry when memory frees.)
 - [ ] 5.4 Smoke-test against a local mysqld container: enable CIDR,
       connect from another container as `user@'203.0.113.%'`; disable
       and confirm refusal.
