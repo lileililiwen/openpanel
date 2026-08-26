@@ -359,3 +359,122 @@ fn dkim_private_key_is_encrypted_at_rest_and_materialized_mode_0600() {
         0o600
     );
 }
+
+mod surface_leak_prop {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use std::sync::{Arc, Mutex};
+
+    use openpanel_app::mail_filtering::{
+        MailFilterService, SieveCompiler, SqliteMailFilterRepository,
+    };
+    use openpanel_core::AuditEvent;
+    use openpanel_domain::{
+        Email, Password, Role, SIEVE_MAX_BYTES, User, Username,
+        mail_filtering::{AutoResponder, AutoResponderMode, SieveScript},
+    };
+    use openpanel_test_support::{MockAudit, TestDb};
+    use proptest::prelude::*;
+    use uuid::Uuid;
+
+    type CapturedEvents = Arc<Mutex<Vec<AuditEvent>>>;
+
+    async fn service_with_capturing_audit() -> (MailFilterService, CapturedEvents) {
+        let db = TestDb::new().await;
+        sqlx::raw_sql(openpanel_app::migrations::MAIL_FILTERING_V001)
+            .execute(&db.pool())
+            .await
+            .unwrap();
+        let events: CapturedEvents = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&events);
+        let mut audit = MockAudit::new();
+        audit.expect_record().returning(move |event| {
+            sink.lock().unwrap().push(event);
+            Ok(())
+        });
+        let service = MailFilterService::new(
+            Arc::new(SqliteMailFilterRepository::new(db.pool())),
+            Arc::new(audit),
+            SieveCompiler::new(),
+        );
+        (service, events)
+    }
+
+    fn owner() -> User {
+        User::new(
+            Uuid::new_v4(),
+            Username::new("owner").unwrap(),
+            Email::new("owner@example.test").unwrap(),
+            Password::hash("correct horse battery staple").unwrap(),
+            Role::Owner,
+        )
+    }
+
+    /// Everything the audit log persisted for these calls, flattened
+    /// to one searchable string.
+    fn audit_transcript(events: &[AuditEvent]) -> String {
+        events
+            .iter()
+            .map(|event| serde_json::to_string(event).unwrap())
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn prop_surface_and_audit_never_leak() {
+        // Fast argon2/bcrypt costs for the fixture owner.
+        openpanel_domain::Password::set_test_costs(8, 1);
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        let (service, events) = runtime.block_on(service_with_capturing_audit());
+        let service = Arc::new(service);
+        let owner = owner();
+
+        let strategy = (
+            "[A-Z0-9]{16,32}",
+            "[a-zA-Z0-9 .,!?\\n]{0,512}",
+            "[a-zA-Z0-9]{8,64}",
+        );
+        proptest::test_runner::TestRunner::new(ProptestConfig::with_cases(100))
+            .run(&strategy, |(marker, body, filler)| {
+                // 1. Oversize Sieve scripts are rejected at the gate:
+                // never constructed, never stored, never echoed.
+                let oversize = format!("{{ {marker} {} }}", "x".repeat(SIEVE_MAX_BYTES + 1));
+                assert!(SieveScript::new(Uuid::new_v4(), oversize).is_err());
+
+                // 2. A valid script is stored; the audit event carries
+                // only a byte count — no script fragment.
+                let script_text =
+                    format!("require [\"fileinto\"]; # {marker}\n{filler} {{ keep :all; }}");
+                let script = SieveScript::new(Uuid::new_v4(), script_text.clone()).unwrap();
+                let saved = runtime.block_on(service.set_sieve(&owner, script)).unwrap();
+                assert_eq!(saved.script, script_text);
+                let transcript = audit_transcript(&events.lock().unwrap());
+                prop_assert!(!transcript.contains(&marker));
+                prop_assert!(!transcript.contains(&filler));
+
+                // 3. An autoresponder body is returned to its caller
+                // but never reaches the audit transcript.
+                let responder = AutoResponder {
+                    mailbox_id: Uuid::new_v4(),
+                    enabled: true,
+                    body: body.clone(),
+                    mode: AutoResponderMode::Once,
+                    window_start: chrono::Utc::now(),
+                    window_end: chrono::Utc::now() + chrono::Duration::days(1),
+                };
+                let echoed = runtime
+                    .block_on(service.set_autoresponder(&owner, responder))
+                    .unwrap();
+                assert_eq!(echoed.body, body);
+                let transcript = audit_transcript(&events.lock().unwrap());
+                if !body.is_empty() {
+                    prop_assert!(!transcript.contains(&body));
+                }
+                Ok(())
+            })
+            .unwrap();
+    }
+}

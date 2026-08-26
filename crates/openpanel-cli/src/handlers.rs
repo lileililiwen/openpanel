@@ -2786,11 +2786,11 @@ pub async fn mail_filter(
     Ok(())
 }
 
-/// Set or disable a mailbox's autoresponder.
+/// Set, show, or disable a mailbox's autoresponder.
 pub async fn mail_autoresponder(
     config: Arc<Config>,
     mailbox: String,
-    body: String,
+    body: Option<String>,
     off: bool,
 ) -> anyhow::Result<()> {
     let (service, identity) = build_mail_filters(config).await?;
@@ -2801,6 +2801,11 @@ pub async fn mail_autoresponder(
         println!("autoresponder disabled");
         return Ok(());
     }
+    let Some(body) = body else {
+        let current = service.get_autoresponder(&owner, mailbox_id).await?;
+        println!("{}", serde_json::to_string_pretty(&current)?);
+        return Ok(());
+    };
     let now = chrono::Utc::now();
     let responder = openpanel_domain::AutoResponder {
         mailbox_id,

@@ -69,3 +69,81 @@ async fn cli_mail_queue_prints_snapshot() {
         queue.stdout
     );
 }
+
+#[tokio::test]
+async fn cli_mail_autoresponder_set_and_show() {
+    let runner = CliRunner::new().await;
+    let user = runner.run(&[
+        "user",
+        "create",
+        "--username",
+        "admin",
+        "--email",
+        "admin@example.test",
+        "--password",
+        "correct horse battery staple",
+        "--role",
+        "owner",
+    ]);
+    assert_eq!(user.code, 0, "{}", user.stderr);
+
+    let env = [("OPENPANEL__MAIL__ADAPTER", "fake")];
+    let domain = runner.run_with_env(&["mail", "domain-add", "--name", "auto.example.test"], &env);
+    assert_eq!(domain.code, 0, "{}", domain.stderr);
+    let mailbox = runner.run_with_env(
+        &[
+            "mail",
+            "mailbox-add",
+            "--domain",
+            "auto.example.test",
+            "--local",
+            "bob",
+            "--quota",
+            "1048576",
+            "--password",
+            "cli-autoresponder-secret",
+        ],
+        &env,
+    );
+    assert_eq!(mailbox.code, 0, "{}", mailbox.stderr);
+    let mailbox_id: String =
+        sqlx::query_scalar("SELECT id FROM mail_mailboxes WHERE address = 'bob@auto.example.test'")
+            .fetch_one(&runner.db.pool())
+            .await
+            .expect("mailbox id");
+    let mailbox_id = mailbox_id.as_str();
+
+    // Set.
+    let set = runner.run(&[
+        "mail",
+        "autoresponder",
+        "--mailbox",
+        mailbox_id,
+        "--body",
+        "I am out of office until Monday",
+    ]);
+    assert_eq!(set.code, 0, "{}", set.stderr);
+    assert!(set.stdout.contains("autoresponder enabled"));
+
+    // Show.
+    let show = runner.run(&["mail", "autoresponder", "--mailbox", mailbox_id]);
+    assert_eq!(show.code, 0, "{}", show.stderr);
+    assert!(show.stdout.contains("\"enabled\": true"), "{}", show.stdout);
+    assert!(
+        show.stdout.contains("I am out of office until Monday"),
+        "{}",
+        show.stdout
+    );
+
+    // Disable, then show again — body kept, enabled flipped.
+    let off = runner.run(&["mail", "autoresponder", "--mailbox", mailbox_id, "--off"]);
+    assert_eq!(off.code, 0, "{}", off.stderr);
+    assert!(off.stdout.contains("autoresponder disabled"));
+    let show_off = runner.run(&["mail", "autoresponder", "--mailbox", mailbox_id]);
+    assert_eq!(show_off.code, 0, "{}", show_off.stderr);
+    assert!(
+        show_off.stdout.contains("\"enabled\": false"),
+        "{}",
+        show_off.stdout
+    );
+}

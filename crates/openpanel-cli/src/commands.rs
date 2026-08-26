@@ -577,12 +577,13 @@ pub enum MailCommand {
         #[arg(long)]
         script: Option<String>,
     },
-    /// Set or disable a mailbox's autoresponder.
+    /// Set, show, or disable a mailbox's autoresponder.
     Autoresponder {
         #[arg(long)]
         mailbox: String,
+        /// Omit to show; provide to set.
         #[arg(long)]
-        body: String,
+        body: Option<String>,
         /// Omit to disable.
         #[arg(long)]
         off: bool,

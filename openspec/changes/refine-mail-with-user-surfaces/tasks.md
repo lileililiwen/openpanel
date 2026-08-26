@@ -18,12 +18,12 @@
 - [x] 1.5 Integration: `GET /api/v1/mail/domains/{id}/queue` returns
       the mocked port's snapshot verbatim; when the port errors the
       route returns 200 with `health: "unknown"` and depth 0.
-- [ ] 1.6 CLI E2E: `cli_mail_autoresponder_set_and_show`,
+- [x] 1.6 CLI E2E: `cli_mail_autoresponder_set_and_show`,
       `cli_mail_queue_prints_depth`.
 - [ ] 1.7 Web: Mail tabs render at 360/768/1280 px, forms use
       tokens.css vocabulary, Sieve editor shows byte counter; PR
       screenshots.
-- [ ] 1.8 Property: no surface response or audit event contains a
+- [x] 1.8 Property: no surface response or audit event contains a
       Sieve script body larger than the cap or autoresponder body
       content (randomised fuzz inputs).
 
