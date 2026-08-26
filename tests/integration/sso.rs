@@ -305,3 +305,79 @@ async fn sso_callback_provisions_links_and_audits() {
         .count();
     assert_eq!(logins, 2, "each completed login is audited");
 }
+
+#[test]
+fn prop_sso_flow_never_leaks_client_secret() {
+    use openpanel_core::Config;
+    use proptest::prelude::*;
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .expect("runtime");
+    let (server, owner_token) = runtime.block_on(async {
+        let server = TestServer::new_with_sso_oidc(
+            Config::default(),
+            std::sync::Arc::new(MockOidc {
+                issuer: "https://idp.example.test".into(),
+                subject: "prop-subject".into(),
+                email: "prop@example.test".into(),
+            }),
+        )
+        .await;
+        let owner_token = server
+            .bootstrap_owner("owner", "correct horse battery staple")
+            .await;
+        (server, owner_token)
+    });
+    {
+        proptest::test_runner::TestRunner::new(proptest::prelude::ProptestConfig::with_cases(32))
+            .run(&"[A-Za-z0-9]{24,64}", |secret| {
+                runtime.block_on(async {
+                    // Configure with a fresh plaintext secret.
+                    let configured = server
+                        .client()
+                        .put(format!("{}/api/v1/auth/sso/connection", server.base_url()))
+                        .bearer_auth(&owner_token)
+                        .json(&serde_json::json!({
+                            "issuer_url": "https://idp.example.test",
+                            "client_id": "panel",
+                            "client_secret_cipher": secret,
+                            "default_role": "user",
+                            "auto_provision": false,
+                            "trust_idp_mfa": false,
+                        }))
+                        .send()
+                        .await
+                        .expect("configure");
+                    assert_eq!(configured.status(), 200);
+                    let dto = configured.json::<serde_json::Value>().await.expect("dto");
+
+                    // The read-back DTO redacts the ciphertext too.
+                    let read_back = server
+                        .client()
+                        .get(format!("{}/api/v1/auth/sso/connection", server.base_url()))
+                        .bearer_auth(&owner_token)
+                        .send()
+                        .await
+                        .expect("get connection")
+                        .json::<serde_json::Value>()
+                        .await
+                        .expect("connection json");
+
+                    // No audit event may carry the plaintext (or its
+                    // ciphertext).
+                    let events = server.audit_events().await;
+                    let transcript: String = events
+                        .iter()
+                        .map(|event| serde_json::to_string(event).expect("event json"))
+                        .collect();
+
+                    for surface in [dto.to_string(), read_back.to_string(), transcript] {
+                        prop_assert!(!surface.contains(secret.as_str()), "plaintext leaked");
+                    }
+                    Ok(())
+                })
+            })
+            .unwrap();
+    }
+}
