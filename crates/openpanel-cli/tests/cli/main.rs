@@ -7,6 +7,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 mod api_tokens;
+mod auth;
 mod backup;
 mod common;
 mod container_runtime;
@@ -22,6 +23,7 @@ mod monitoring;
 mod notifications;
 mod security;
 mod serve;
+mod server_snapshot;
 mod site;
 mod site_http;
 mod software_center;

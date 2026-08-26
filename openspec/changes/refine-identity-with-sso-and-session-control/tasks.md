@@ -28,7 +28,7 @@
       directly.
 - [ ] 1.7 Property: no DTO, log line, or audit event in the SSO flow
       contains the client secret plaintext (fuzz random secrets).
-- [ ] 1.8 CLI E2E: `cli_auth_sessions_list_and_revoke`.
+- [x] 1.8 CLI E2E: `cli_auth_sessions_list_and_revoke`.
 - [ ] 1.9 Web: Sessions card + SSO button render at 360/768/1280 px
       with tokens.css forms; screenshots in PR.
 

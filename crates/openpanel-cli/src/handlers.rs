@@ -5725,12 +5725,15 @@ async fn build_server_snapshots(
 
 fn snapshot_caller() -> openpanel_domain::User {
     use openpanel_domain::{Email, Password, Role, Username};
-    #[allow(clippy::expect_used)] // static test constant — cannot fail
+    // The password is never verified: this principal represents the
+    // local root-equivalent CLI operator. It only has to satisfy the
+    // domain's 12-character minimum to hash.
+    #[allow(clippy::expect_used)] // static constant — cannot fail
     openpanel_domain::User::new(
         uuid::Uuid::nil(),
         Username::new("admin").expect("static admin username is valid"),
         Email::new("admin@openpanel.local").expect("static admin email is valid"),
-        Password::hash("admin").expect("static admin password hashes"),
+        Password::hash("openpanel-local-admin").expect("static admin password hashes"),
         Role::Owner,
     )
 }

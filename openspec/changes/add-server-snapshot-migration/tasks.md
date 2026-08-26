@@ -25,7 +25,7 @@
       exit non-zero.
 - [ ] 1.7 Integration: migrate round-trip between two in-memory hosts
       sharing a temp offsite target directory.
-- [ ] 1.8 CLI E2E: `cli_server_snapshot_create_then_list`,
+- [x] 1.8 CLI E2E: `cli_server_snapshot_create_then_list`,
       `cli_server_restore_requires_confirm`.
 - [ ] 1.9 Web: Snapshots page renders at 360/768/1280 px; restore
       wizard shows preflight warnings; screenshots in PR.
