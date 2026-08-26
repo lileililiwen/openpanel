@@ -23,9 +23,7 @@
       `global_access_locked`; with opt-in → applied and audited.
 - [ ] 1.7 Integration: boot reconcile heals a manually emptied
       `mysql.user` mock to match stored ACLs exactly once per boot.
-- [ ] 1.8 CLI E2E: `cli_database_remote_access_add_then_show`.
-- [ ] 1.9 Web: Remote Access card at 360/768/1280 px; screenshots.
-
+- [x] 1.8 CLI E2E: `cli_database_remote_access_add_then_show`.
 ## 2. Domain
 
 - [x] 2.1 Add pure `mysql_host_pattern` + pattern VO under
@@ -42,7 +40,7 @@
 ## 4. Adapters and UI
 
 - [ ] 4.1 REST route `/api/v1/databases/{id}/remote-access`.
-- [ ] 4.2 CLI subcommands.
+- [x] 4.2 CLI subcommands.
 - [ ] 4.3 Web card with opt-in warning copy.
 
 ## 5. Validation
@@ -56,3 +54,11 @@
       and confirm refusal.
 - [ ] 5.5 Archive with
       `openspec archive refine-databases-with-remote-access-enforcement`.
+
+## Deferred (requires browser / live mysqld environment)
+
+- 1.9 / 4.3 Web Remote Access card at 360/768/1280 px with
+  screenshots and opt-in warning copy.
+- 5.3 Smoke-test against a local mysqld container: enable CIDR,
+  connect from a matching host, confirm non-matching hosts are
+  refused.

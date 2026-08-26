@@ -119,6 +119,16 @@ impl DbPrivilegeRepository for SqliteDbPrivilegeRepository {
         row.map(decode_remote).transpose()
     }
 
+    async fn list_remote_access(&self) -> Result<Vec<RemoteAccess>, RepoError> {
+        let rows = sqlx::query(
+            "SELECT database_id, enabled, allow_cidrs_json, wildcard_opt_in FROM remote_access",
+        )
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| RepoError::new(e.to_string()))?;
+        rows.into_iter().map(decode_remote).collect()
+    }
+
     async fn save_sso_session(&self, session: &AdminToolSession) -> Result<(), RepoError> {
         let consumed_at = session.consumed_at.map(|t| t.to_rfc3339());
         sqlx::query(

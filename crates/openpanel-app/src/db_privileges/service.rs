@@ -254,6 +254,53 @@ fn require_admin(caller: &User) -> Result<(), DbPrivilegeError> {
     }
 }
 
+impl RemoteAccessController {
+    /// Boot reconcile: re-apply every stored ACL through the port so
+    /// manually emptied grant tables self-heal. Returns the number of
+    /// databases reconciled.
+    pub async fn reconcile_all(
+        &self,
+        accounts: &[(Uuid, String, String)],
+        port: &dyn MySqlGrantPort,
+    ) -> Result<usize, DbPrivilegeError>
+    where
+        Self: Sized,
+    {
+        let stored = self.repo.list_remote_access().await?;
+        let mut count = 0;
+        for access in &stored {
+            let Some((user, database)) = accounts
+                .iter()
+                .find(|(id, _, _)| *id == access.database_id)
+                .map(|(_, u, d)| (u.clone(), d.clone()))
+            else {
+                continue;
+            };
+            let desired = if access.enabled {
+                openpanel_domain::db_privileges::desired_hosts(
+                    &access.allow_cidrs,
+                    access.wildcard_opt_in,
+                )?
+            } else {
+                continue;
+            };
+            let current = port.current_hosts(&user, &database).await?;
+            for step in openpanel_domain::db_privileges::reconcile_diff(&desired, &current) {
+                match step {
+                    ReconcileStep::Create { host } => {
+                        port.create_user_host(&user, &host, &database).await?;
+                    }
+                    ReconcileStep::Drop { host } => {
+                        port.drop_user_host(&user, &host).await?;
+                    }
+                }
+            }
+            count += 1;
+        }
+        Ok(count)
+    }
+}
+
 /// Shared state for the remote-access REST surface: the controller
 /// plus whichever grant port the composition root chose.
 #[derive(Clone)]

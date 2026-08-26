@@ -306,6 +306,9 @@ async fn main() -> anyhow::Result<()> {
             NotificationCommand::Health => handlers::notification_health(config).await,
         },
         Command::Database { action } => match action {
+            DatabaseCommand::RemoteAccess { action } => {
+                handlers::db_remote_access(config, action).await
+            }
             DatabaseCommand::Create {
                 owner,
                 suffix,

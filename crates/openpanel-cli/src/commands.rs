@@ -1414,9 +1414,46 @@ pub enum CollaboratorCommand {
         collaborator: String,
     },
 }
+
+/// Subcommands for database remote access.
+#[derive(Debug, clap::Subcommand)]
+#[allow(missing_docs)]
+pub enum DbRemoteAccessAction {
+    /// Apply an ACL through the grant port.
+    Add {
+        /// Database id.
+        #[arg(long)]
+        database: String,
+        /// MySQL account user part.
+        #[arg(long)]
+        user: String,
+        /// Database name.
+        #[arg(long)]
+        name: String,
+        /// Allowed CIDRs, comma-separated.
+        #[arg(long, value_delimiter = ',')]
+        cidrs: Vec<String>,
+        /// Explicitly opt in to 0.0.0.0/0.
+        #[arg(long, default_value_t = false)]
+        wildcard_opt_in: bool,
+    },
+    /// Print the stored ACL as JSON.
+    Show {
+        /// Database id.
+        #[arg(long)]
+        database: String,
+    },
+}
+
 /// Subcommands for managing MySQL databases.
 #[derive(Debug, Subcommand)]
 pub enum DatabaseCommand {
+    /// Show or set per-database remote access.
+    RemoteAccess {
+        /// Add or show.
+        #[command(subcommand)]
+        action: crate::DbRemoteAccessAction,
+    },
     /// Provision a new MySQL database + DB user.
     Create {
         /// Username of the site owner the database is for.

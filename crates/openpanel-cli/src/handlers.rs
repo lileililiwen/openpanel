@@ -5702,6 +5702,96 @@ pub async fn scan_list(config: Arc<Config>, site: String) -> anyhow::Result<()> 
 // Server snapshot CLI handlers.
 // ---------------------------------------------------------------------------
 
+/// Build the remote-access context for CLI (memory port when the
+/// stub flag is set, otherwise the mysql shell-out).
+async fn build_db_remote_access(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::DbRemoteAccessContext>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
+    let identity_module = IdentityModule::new(&ctx, load_master_key(&ctx.config)?).await;
+    let port: Arc<dyn openpanel_app::MySqlGrantPort> =
+        if std::env::var("OPENPANEL__DATABASES__GRANT_PORT").as_deref() == Ok("memory") {
+            Arc::new(openpanel_app::MemoryGrantPort::default())
+        } else {
+            Arc::new(openpanel_app::MySqlShellGrantPort::new("/usr/bin/mysql"))
+        };
+    Ok((
+        Arc::new(openpanel_app::DbRemoteAccessContext {
+            controller: Arc::new(openpanel_app::RemoteAccessController::new(
+                Arc::new(openpanel_app::SqliteDbPrivilegeRepository::new(pool)),
+                ctx.audit.clone(),
+            )),
+            port,
+        }),
+        identity_module.service(),
+    ))
+}
+
+/// `openpanel database remote-access …`.
+pub async fn db_remote_access(
+    config: Arc<Config>,
+    action: crate::DbRemoteAccessAction,
+) -> anyhow::Result<()> {
+    let (ctx, identity) = build_db_remote_access(config).await?;
+    let owner = waf_owner(&identity).await?;
+    match action {
+        crate::DbRemoteAccessAction::Add {
+            database,
+            user,
+            name,
+            cidrs,
+            wildcard_opt_in,
+        } => {
+            let id = uuid::Uuid::parse_str(&database).context("invalid database id")?;
+            let access = ctx
+                .controller
+                .apply(
+                    &owner,
+                    id,
+                    &user,
+                    &name,
+                    true,
+                    cidrs,
+                    wildcard_opt_in,
+                    ctx.port.as_ref(),
+                )
+                .await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            println!(
+                "remote access {} for {} (cidrs: {})",
+                if access.enabled {
+                    "enabled"
+                } else {
+                    "disabled"
+                },
+                user,
+                access.allow_cidrs.join(", ")
+            );
+        }
+        crate::DbRemoteAccessAction::Show { database } => {
+            let id = uuid::Uuid::parse_str(&database).context("invalid database id")?;
+            let access = ctx
+                .controller
+                .get(&owner, id)
+                .await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "enabled": access.enabled,
+                    "allow_cidrs": access.allow_cidrs,
+                    "wildcard_opt_in": access.wildcard_opt_in,
+                }))?
+            );
+        }
+    }
+    Ok(())
+}
+
 /// Build the admin SSH host-key service plus identity for callers.
 async fn build_ssh_keys(
     config: Arc<Config>,
