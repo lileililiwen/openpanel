@@ -301,7 +301,7 @@ pub use plugin_marketplace::{
     PluginMarketplaceModule, SqliteCatalogCache,
 };
 pub use quotas::{QuotaService, QuotasModule, SqliteQuotaRepository};
-pub use security::{SecurityModule, SecurityService};
+pub use security::{HostSshKeysService, SecurityModule, SecurityService};
 pub use service_manager::{
     RecordingSystemCtl, ServiceActor, ServiceLister, ServiceManagerModule,
     SqliteServiceManagerRepository,

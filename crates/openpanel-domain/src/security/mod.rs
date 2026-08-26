@@ -10,6 +10,21 @@ use uuid::Uuid;
 /// Validation and lockout failures.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]
 pub enum SecurityError {
+    /// An SSH public key line was rejected.
+    #[error("invalid ssh key: {0}")]
+    InvalidSshKey(String),
+    /// A duplicate key fingerprint already exists.
+    #[error("duplicate ssh key fingerprint")]
+    DuplicateSshKey,
+    /// The operation is not permitted.
+    #[error("forbidden")]
+    Forbidden,
+    /// The referenced entity does not exist.
+    #[error("not found: {0}")]
+    NotFound(String),
+    /// Persistence failed.
+    #[error("persistence failure: {0}")]
+    Persistence(String),
     /// CIDR is malformed or its prefix is out of range.
     #[error("invalid network CIDR")]
     InvalidCidr,
@@ -32,6 +47,9 @@ pub enum SecurityError {
     #[error("invalid temporary block")]
     InvalidBlock,
 }
+
+pub mod ssh_keys;
+pub use ssh_keys::{HostSshKey, KeyAlgo, MANAGED_BEGIN, MANAGED_END, render_authorized_keys};
 
 /// Canonical IPv4 or IPv6 network and prefix.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]

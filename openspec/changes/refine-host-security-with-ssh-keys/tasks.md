@@ -2,17 +2,17 @@
 
 ## 1. Testing
 
-- [ ] 1.1 Unit: key validation — valid ed25519 line accepted;
+- [x] 1.1 Unit: key validation — valid ed25519 line accepted;
       rsa-1024 rejected; multi-line input rejected; embedded options
       in submitted line rejected (`InvalidKey::OptionsEmbedded`);
       duplicate fingerprint rejected.
-- [ ] 1.2 Unit: managed-block rendering — two keys render inside
+- [x] 1.2 Unit: managed-block rendering — two keys render inside
       markers with panel options prepended and label comment appended;
       out-of-band lines preserved verbatim below the block; block hash
       changes when entries change.
 - [ ] 1.3 Unit: atomic write — simulated write failure leaves the
       original file untouched (temp+rename semantics).
-- [ ] 1.4 Property: for arbitrary valid key sets (≥100 cases) rendered
+- [x] 1.4 Property: for arbitrary valid key sets (≥100 cases) rendered
       file contains each fingerprint exactly once, every managed line
       starts with the enforced options, and no private-key material
       can appear (input is structurally incapable of it).
@@ -27,7 +27,7 @@
 
 ## 2. Domain
 
-- [ ] 2.1 Add `HostSshKey`, pure parser/validator, renderer under
+- [x] 2.1 Add `HostSshKey`, pure parser/validator, renderer under
       `crates/openpanel-domain/src/host_security/`.
 
 ## 3. Application

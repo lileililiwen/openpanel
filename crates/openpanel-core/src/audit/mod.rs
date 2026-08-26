@@ -213,6 +213,8 @@ pub enum AuditAction {
     SiteTransportChanged,
     /// A log rotation policy changed or a manual rotation ran.
     LogsPolicyChanged,
+    /// The admin authorized_keys file was rewritten.
+    SshKeyChanged,
     /// A browser terminal session was opened.
     TerminalOpened,
     /// A browser terminal session was closed, with the reason.
@@ -707,6 +709,7 @@ impl AuditService for SqliteAuditService {
                 "site_http_controls_changed" => AuditAction::SiteHttpControlsChanged,
                 "site_transport_changed" => AuditAction::SiteTransportChanged,
                 "logs_policy_changed" => AuditAction::LogsPolicyChanged,
+                "ssh_key_changed" => AuditAction::SshKeyChanged,
                 "terminal_opened" => AuditAction::TerminalOpened,
                 "terminal_closed" => AuditAction::TerminalClosed,
                 "sso_login" => AuditAction::SsoLogin,

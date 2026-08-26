@@ -6,8 +6,8 @@ use openpanel_core::{AppContext, Migration, Module};
 use openpanel_domain::security::{FirewallPolicy, LoginThrottlePolicy};
 
 use super::{
-    FirewallPort, LoginThrottleService, NftFirewallAdapter, SecurityService, SecurityServiceError,
-    SqliteSecurityRepository, SystemClock,
+    FirewallPort, HostSshKeysService, LoginThrottleService, NftFirewallAdapter, SecurityService,
+    SecurityServiceError, SqliteSecurityRepository, SystemClock,
 };
 
 /// Stable module name.
@@ -16,6 +16,7 @@ pub const MODULE_NAME: &str = "host-security";
 pub struct SecurityModule {
     service: Arc<SecurityService>,
     login: Arc<LoginThrottleService>,
+    ssh_keys: Arc<HostSshKeysService>,
     migrations: Vec<Migration>,
 }
 impl SecurityModule {
@@ -43,7 +44,15 @@ impl SecurityModule {
             std::time::Duration::from_secs(30),
             std::time::Duration::from_secs(3600),
         )?;
+        let authorized_keys = std::env::var("OPENPANEL__SECURITY__AUTHORIZED_KEYS")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/root/.ssh/authorized_keys"));
         Ok(Self {
+            ssh_keys: Arc::new(HostSshKeysService::new(
+                ctx.db.pool().await,
+                ctx.audit.clone(),
+                authorized_keys,
+            )),
             service: Arc::new(SecurityService::with_ports(
                 firewall,
                 repo.clone(),
@@ -56,12 +65,20 @@ impl SecurityModule {
                 throttle_policy,
                 Vec::new(),
             )),
-            migrations: vec![Migration {
-                module: MODULE_NAME,
-                version: "001".into(),
-                description: "firewall rules and login abuse state".into(),
-                sql: crate::migrations::SECURITY_V001.into(),
-            }],
+            migrations: vec![
+                Migration {
+                    module: MODULE_NAME,
+                    version: "001".into(),
+                    description: "firewall rules and login abuse state".into(),
+                    sql: crate::migrations::SECURITY_V001.into(),
+                },
+                Migration {
+                    module: MODULE_NAME,
+                    version: "002".into(),
+                    description: "admin ssh host keys".into(),
+                    sql: crate::migrations::SECURITY_V002.into(),
+                },
+            ],
         })
     }
 
@@ -73,6 +90,11 @@ impl SecurityModule {
     /// Shared pre-authentication login-abuse service.
     pub fn login_service(&self) -> Arc<LoginThrottleService> {
         self.login.clone()
+    }
+
+    /// Shared admin SSH host-key service.
+    pub fn ssh_keys(&self) -> Arc<HostSshKeysService> {
+        self.ssh_keys.clone()
     }
 }
 impl Module for SecurityModule {

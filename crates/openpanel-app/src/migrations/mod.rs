@@ -40,6 +40,8 @@ pub const LOGS_V001: &str = include_str!("logs/V001__init.sql");
 pub const LOGS_V002: &str = include_str!("logs/V002__rotation_policies.sql");
 /// SQL for managed firewall drafts, login failures, and temporary blocks.
 pub const SECURITY_V001: &str = include_str!("security/V001__init.sql");
+/// SQL for the host-security v002 migration (admin SSH keys).
+pub const SECURITY_V002: &str = include_str!("security/V002__ssh_keys.sql");
 /// System-service health history schema.
 pub const SYSTEM_SERVICES_V001: &str = include_str!("system_services/V001__init.sql");
 /// Provider accounts, zones, and synchronized records.
