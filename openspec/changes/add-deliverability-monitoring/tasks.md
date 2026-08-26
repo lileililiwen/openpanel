@@ -6,9 +6,10 @@
       yields correct per-source stats; input >10 MiB rejected;
       DOCTYPE/entity-bearing XML rejected before parse; malformed XML
       returns `DeliverabilityError::ReportMalformed` (no panic).
-- [ ] 1.2 Unit: DNSBL query-name construction — IPv4 `192.0.2.5`
+- [x] 1.2 Unit: DNSBL query-name construction — IPv4 `192.0.2.5`
       against zone `zen.spamhaus.org` →
       `5.2.0.192.zen.spamhaus.org`; IPv6 nibble expansion verified.
+      (Listing upsert semantics also landed with this slice.)
 - [ ] 1.3 Unit: listing upsert preserves `first_seen` on repeat
       listings and sets `resolved_at` when the check clears.
 - [ ] 1.4 Unit: auth-audit drift — SPF record missing `all`

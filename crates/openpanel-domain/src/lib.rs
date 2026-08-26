@@ -132,6 +132,7 @@ pub mod db_pitr;
 /// scopes, remote access with an explicit wildcard opt-in, and
 /// short-lived single-use SSO tokens for the admin tool launcher.
 pub mod db_privileges;
+pub mod deliverability;
 /// DNSSEC + secondary DNS bounded context: zone signing keys,
 /// secondary nameserver ACLs, glue records, and DS records.
 pub mod dnssec_secondary;
