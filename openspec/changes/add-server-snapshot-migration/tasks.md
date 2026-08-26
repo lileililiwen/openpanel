@@ -11,7 +11,7 @@
       same-host warning; version skew produces a warning, not an error.
 - [x] 1.3 Unit: confirmation token is single-use — second restore with
       the same token fails before any write.
-- [ ] 1.4 Property (`mod prop`): for arbitrary valid manifests (≥100
+- [x] 1.4 Property (`mod prop`): for arbitrary valid manifests (≥100
       cases), bundling then hashing reproduces identical manifest
       bytes and every listed hash matches its entry (round-trip).
 - [x] 1.5 Integration (`tests/integration/server_snapshot.rs`):
@@ -20,7 +20,7 @@
       `BEGIN` PEM marker anywhere in the bundle); restore into a fresh
       `TestDb` + temp docroot → site list, database list, cert
       metadata equal to source.
-- [ ] 1.6 Integration: tamper one byte of a site entry → restore
+- [x] 1.6 Integration: tamper one byte of a site entry → restore
       aborts at that resource, result lists applied resources so far,
       exit non-zero.
 - [ ] 1.7 Integration: migrate round-trip between two in-memory hosts

@@ -217,6 +217,7 @@ pub struct TestServer {
     monitoring: Arc<MonitoringService>,
     cron: Arc<CronService>,
     backups: Arc<BackupService>,
+    server_snapshots: Arc<openpanel_app::ServerSnapshotService>,
     logs: Arc<LogService>,
     security: Arc<SecurityService>,
     system_services: Arc<openpanel_app::ServiceManager>,
@@ -1023,6 +1024,7 @@ impl TestServer {
             monitoring: monitoring_svc,
             cron: cron_svc,
             backups: backups_svc,
+            server_snapshots: server_snapshots_svc,
             logs: logs_svc,
             security: security_svc,
             system_services: system_services_svc,
@@ -1243,6 +1245,11 @@ impl TestServer {
     /// The backup and restore service handle.
     pub fn backups(&self) -> Arc<BackupService> {
         self.backups.clone()
+    }
+
+    /// The whole-server snapshot service handle.
+    pub fn server_snapshots(&self) -> Arc<openpanel_app::ServerSnapshotService> {
+        self.server_snapshots.clone()
     }
 
     /// The authorized log browsing service handle.

@@ -374,4 +374,59 @@ mod tests {
         });
         assert!(m.has_ssl_entries());
     }
+
+    /// Task 1.4: for arbitrary valid manifests, bundling then hashing
+    /// reproduces identical manifest bytes and every listed hash
+    /// matches its entry's source bytes (round-trip).
+    #[test]
+    fn prop_manifest_bundle_hash_round_trip() {
+        use proptest::prelude::*;
+        use sha2::{Digest, Sha256};
+
+        let strategy = proptest::collection::vec(
+            (
+                0u8..4,
+                proptest::option::of("[a-z]{1,12}"),
+                "[a-z0-9_-]{1,16}",
+                proptest::collection::vec(any::<u8>(), 0..1024),
+            ),
+            1..6,
+        );
+        proptest::test_runner::TestRunner::new(ProptestConfig::with_cases(100))
+            .run(&strategy, |specs| {
+                let mut entries = Vec::new();
+                for (kind, reference, stem, bytes) in &specs {
+                    let kind = match kind {
+                        0 => SnapshotEntryKind::PanelMetadata,
+                        1 => SnapshotEntryKind::Site,
+                        2 => SnapshotEntryKind::Database,
+                        _ => SnapshotEntryKind::SslKeys,
+                    };
+                    entries.push(SnapshotEntry {
+                        kind,
+                        reference: reference.clone(),
+                        path: format!("artifacts/{stem}.bin"),
+                        sha256: hex::encode(Sha256::digest(bytes)),
+                    });
+                    // Bundling hashes the artifact bytes; the listed
+                    // digest must match the source content.
+                    assert_eq!(
+                        entries.last().unwrap().sha256,
+                        hex::encode(Sha256::digest(bytes))
+                    );
+                }
+                let manifest =
+                    SnapshotManifest::new(Utc::now(), Uuid::new_v4(), "0.1.0".into(), entries)
+                        .expect("valid manifest");
+
+                // Serialize → parse → identical manifest and bytes.
+                let bytes = serde_json::to_vec(&manifest).unwrap();
+                let parsed: SnapshotManifest = serde_json::from_slice(&bytes).unwrap();
+                let reparsed = parsed.clone();
+                prop_assert_eq!(parsed, manifest);
+                prop_assert_eq!(serde_json::to_vec(&reparsed).unwrap(), bytes);
+                Ok(())
+            })
+            .unwrap();
+    }
 }

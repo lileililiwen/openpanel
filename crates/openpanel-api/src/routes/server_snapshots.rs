@@ -114,6 +114,7 @@ fn map(error: ServerSnapshotError) -> ApiError {
         ServerSnapshotError::NotFound(message) => ApiError::NotFound(message),
         ServerSnapshotError::Validation(message) => ApiError::Unprocessable(message),
         ServerSnapshotError::Confirmation(_) => ApiError::Unprocessable(error.to_string()),
+        ServerSnapshotError::Partial { .. } => ApiError::Internal(error.to_string()),
         ServerSnapshotError::Failure(message) => ApiError::Internal(message),
     }
 }

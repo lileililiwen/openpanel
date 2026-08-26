@@ -184,3 +184,104 @@ async fn snapshot_create_preflight_and_single_use_restore() {
         422
     );
 }
+
+#[tokio::test]
+async fn restore_aborts_at_tampered_entry_and_reports_applied() {
+    let server = TestServer::new().await;
+    let (token, run_id) = owner_and_run(&server).await;
+    let auth = bearer(&token);
+    let base = format!("{}/api/v1/server/snapshots", server.base_url());
+
+    let created = server
+        .client()
+        .post(&base)
+        .header("authorization", &auth)
+        .json(&serde_json::json!({ "run_id": run_id }))
+        .send()
+        .await
+        .expect("create snapshot");
+    assert_eq!(created.status(), 200);
+    created.json::<serde_json::Value>().await.expect("manifest");
+
+    let listed = server
+        .client()
+        .get(&base)
+        .header("authorization", &auth)
+        .send()
+        .await
+        .expect("list")
+        .json::<serde_json::Value>()
+        .await
+        .expect("list json");
+    let snapshot_id = listed["snapshots"][0]["id"]
+        .as_str()
+        .expect("snapshot id")
+        .to_owned();
+
+    let preflight = server
+        .client()
+        .post(format!("{base}/{snapshot_id}/preflight"))
+        .header("authorization", &auth)
+        .send()
+        .await
+        .expect("preflight")
+        .json::<serde_json::Value>()
+        .await
+        .expect("preflight json");
+    let confirm_token = preflight["confirm_token"]
+        .as_str()
+        .expect("token")
+        .to_owned();
+
+    // Tamper with the LAST bundled entry: every earlier entry should
+    // verify cleanly and count as "applied" when the restore aborts.
+    let snapshot_dir =
+        std::path::PathBuf::from(server.sandbox_path("snapshots")).join(&snapshot_id);
+    let manifest_path = snapshot_dir.join("manifest.json");
+    let manifest: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(&manifest_path).expect("manifest read"))
+            .expect("manifest parse");
+    let entries = manifest["entries"].as_array().expect("entries");
+    let victim = entries.last().expect("entry")["path"]
+        .as_str()
+        .expect("path")
+        .to_owned();
+    let artifact_path = snapshot_dir.join(&victim);
+    let mut bytes = std::fs::read(&artifact_path).expect("artifact read");
+    assert!(!bytes.is_empty(), "tampered entry is empty");
+    let original = bytes[0];
+    bytes[0] ^= 0xff;
+    std::fs::write(&artifact_path, &bytes).expect("artifact write");
+    assert_ne!(std::fs::read(&artifact_path).expect("reread")[0], original);
+
+    // Restore aborts at that resource, listing what was applied.
+    let owner = server
+        .identity()
+        .list_users()
+        .await
+        .expect("users")
+        .into_iter()
+        .find(|user| user.role() == openpanel_domain::Role::Owner)
+        .expect("owner");
+    let result = server
+        .server_snapshots()
+        .restore(
+            &owner,
+            uuid::Uuid::parse_str(&snapshot_id).expect("uuid"),
+            &confirm_token,
+            false,
+        )
+        .await;
+    match result {
+        Err(openpanel_app::ServerSnapshotError::Partial { applied, failed }) => {
+            assert_eq!(failed, victim);
+            assert_eq!(
+                applied.len(),
+                entries.len() - 1,
+                "all entries before the tampered one must be applied: {applied:?}"
+            );
+            assert!(!applied.contains(&victim));
+        }
+        other => panic!("expected partial restore failure, got: {other:?}"),
+    }
+}

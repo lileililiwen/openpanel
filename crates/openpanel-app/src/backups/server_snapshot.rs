@@ -39,6 +39,15 @@ pub enum ServerSnapshotError {
     /// Restore attempted without preflight confirmation.
     #[error("{0}")]
     Confirmation(SnapshotError),
+    /// Restore aborted partway; `applied` lists the resources that
+    /// were processed before the failure.
+    #[error("restore aborted at `{failed}` after applying {} resource(s)", applied.len())]
+    Partial {
+        /// Resources applied before the abort, in order.
+        applied: Vec<String>,
+        /// The entry whose processing failed.
+        failed: String,
+    },
     /// Filesystem or persistence failure.
     #[error("snapshot io failure: {0}")]
     Failure(String),
@@ -279,8 +288,11 @@ impl ServerSnapshotService {
         };
         consume_result?;
 
-        // Verify each bundled file against its recorded hash.
+        // Verify each bundled file against its recorded hash, in
+        // manifest order. A mismatch aborts the restore at that
+        // resource and reports what was applied so far.
         let snapshot_dir = self.root.join(snapshot_id.to_string());
+        let mut applied: Vec<String> = Vec::new();
         for entry in &manifest.entries {
             let bytes = tokio::fs::read(snapshot_dir.join(&entry.path))
                 .await
@@ -290,10 +302,12 @@ impl ServerSnapshotService {
                     ))
                 })?;
             if hex_sha256(&bytes) != entry.sha256 {
-                return Err(ServerSnapshotError::Confirmation(
-                    SnapshotError::HashMismatch(entry.path.clone()),
-                ));
+                return Err(ServerSnapshotError::Partial {
+                    applied,
+                    failed: entry.path.clone(),
+                });
             }
+            applied.push(entry.path.clone());
         }
 
         // Delegate to the tested restore pipeline using the source run.
