@@ -106,7 +106,6 @@ impl HostSshKey {
             )));
         }
         let digest = Sha256::digest(body);
-        use base64::Engine as _;
         let fingerprint = format!(
             "SHA256:{}",
             base64::engine::general_purpose::STANDARD.encode(digest)
@@ -170,6 +169,7 @@ impl HostSshKey {
     }
 
     /// Restore from persistence (including observed last-use).
+    #[allow(clippy::too_many_arguments)]
     pub fn restore(
         id: Uuid,
         label: String,
