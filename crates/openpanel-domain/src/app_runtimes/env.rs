@@ -314,12 +314,12 @@ mod golden_and_prop_tests {
             for var in set.vars().iter().filter(|v| v.secret) {
                 prop_assert!(!unit.contains(var.value.as_str()));
             }
-            // Every key appears at most once in the rendered env lines.
+            // Every key appears at most once among the Environment
+            // lines.
             for var in set.vars() {
-                let marker = format!("{}=", var.key.as_str());
+                let marker = format!("Environment={}=", var.key.as_str());
                 prop_assert!(unit.matches(&marker).count() <= 1);
             }
-            ()
         }
     }
 }
