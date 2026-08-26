@@ -10,12 +10,12 @@
       against zone `zen.spamhaus.org` →
       `5.2.0.192.zen.spamhaus.org`; IPv6 nibble expansion verified.
       (Listing upsert semantics also landed with this slice.)
-- [ ] 1.3 Unit: listing upsert preserves `first_seen` on repeat
+- [x] 1.3 Unit: listing upsert preserves `first_seen` on repeat
       listings and sets `resolved_at` when the check clears.
 - [x] 1.4 Unit: auth-audit drift — SPF record missing `all`
       mechanism, DKIM selector key mismatch, and DMARC rua absent each
       produce exactly one drift entry with a stable code.
-- [ ] 1.5 Property: for arbitrary well-formed report rows (≥100
+- [x] 1.5 Property: for arbitrary well-formed report rows (≥100
       cases) parsed stats sum to the row count per source-day and no
       field retains raw message identifiers beyond IP/day counters.
 - [ ] 1.6 Integration (`tests/integration/deliverability.rs`) with

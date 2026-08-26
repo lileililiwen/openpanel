@@ -432,3 +432,58 @@ mod report_tests {
         assert_eq!(DriftCode::DmarcRuaAbsent.as_str(), "dmarc_rua_absent");
     }
 }
+
+#[cfg(test)]
+mod report_prop_tests {
+    #![allow(clippy::unwrap_used, clippy::panic)]
+    use proptest::prelude::*;
+
+    use super::*;
+
+    proptest! {
+        #![proptest_config(ProptestConfig::with_cases(100))]
+
+        #[test]
+        fn prop_report_rows_sum_to_source_stats(
+            rows in proptest::collection::vec(
+                (
+                    (1u8..=223, 0u8..=255, 0u8..=255, 0u8..=255),
+                    1u64..=500,
+                    any::<bool>(),
+                    any::<bool>(),
+                ),
+                1..12,
+            ),
+        ) {
+            let mut xml = String::from("<feedback>");
+            let mut expected_total = 0u64;
+            for ((a, b, c, d), count, dkim_pass, spf_pass) in &rows {
+                expected_total += count;
+                let dkim_s = if *dkim_pass { "pass" } else { "fail" };
+                let spf_s = if *spf_pass { "pass" } else { "fail" };
+                xml.push_str(&format!(
+                    "<record><row><source_ip>{a}.{b}.{c}.{d}</source_ip><count>{count}</count>\
+                     <policy_evaluated><dkim>{dkim_s}</dkim><spf>{spf_s}</spf></policy_evaluated></row></record>",
+                ));
+            }
+            xml.push_str("</feedback>");
+
+            let stats = parse_dmarc_report(&xml).unwrap();
+            // One stat per row; message counts sum exactly.
+            prop_assert_eq!(stats.len(), rows.len());
+            let total: u64 = stats.iter().map(|s| s.messages()).sum();
+            prop_assert_eq!(total, expected_total);
+            // Per-row fidelity.
+            for (stat, (_, count, dkim_pass, spf_pass)) in stats.iter().zip(rows.iter()) {
+                prop_assert_eq!(stat.messages(), *count);
+                prop_assert_eq!(stat.dkim_pass(), if *dkim_pass { *count } else { 0 });
+                prop_assert_eq!(stat.spf_pass(), if *spf_pass { *count } else { 0 });
+            }
+            // The stat struct retains only ip/counters — no raw
+            // identifiers beyond the source IP.
+            let serialized = serde_json::to_string(&stats).unwrap();
+            prop_assert!(!serialized.contains("record"));
+            prop_assert!(!serialized.contains("policy_evaluated"));
+        }
+    }
+}
