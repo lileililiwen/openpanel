@@ -36,6 +36,13 @@ pub enum DbPrivilegeError {
     /// A remote-access input is malformed.
     #[error("invalid remote-access input: {0}")]
     InvalidPolicy(String),
+    /// Grant application failed at the given 1-based step; earlier
+    /// steps were reverted.
+    #[error("grant failed at step {step}")]
+    GrantFailed {
+        /// The 1-based step that failed.
+        step: usize,
+    },
     /// Persistence failed.
     #[error("persistence failed: {0}")]
     Persistence(String),

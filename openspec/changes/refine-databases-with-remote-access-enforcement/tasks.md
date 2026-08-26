@@ -8,7 +8,7 @@
 - [x] 1.2 Unit: reconcile diff — desired {localhost, p1} vs current
       {localhost, p1, p2} yields exactly one DROP for p2; empty ACL
       desired set is {localhost} only.
-- [ ] 1.3 Unit: all-or-nothing — a failing second statement triggers
+- [x] 1.3 Unit: all-or-nothing — a failing second statement triggers
       revert of the first (mock port records call order) and returns
       `GrantFailed{step: 2}`.
 - [x] 1.4 Property: for arbitrary valid CIDR lists the derived
