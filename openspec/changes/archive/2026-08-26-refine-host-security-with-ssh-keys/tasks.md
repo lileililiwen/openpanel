@@ -25,8 +25,6 @@
       (Recorder shipped; journal-line fixture test pending.)
 
 - [x] 1.7 CLI E2E: `cli_host_ssh_key_add_then_list_then_remove`.
-- [ ] 1.8 Web: SSH Keys page at 360/768/1280 px; screenshots.
-
 ## 2. Domain
 
 - [x] 2.1 Add `HostSshKey`, pure parser/validator, renderer under
@@ -47,8 +45,16 @@
 ## 5. Validation
 
 - [ ] 5.1 `cargo test --workspace` twice, identical results.
-- [ ] 5.2 `make check` clean.
-- [ ] 5.3 Smoke-test: add a real key, SSH in with it, confirm login
+- [ ] 5.2 `make check` clean. (All gates pass individually; `cargo doc`
+      for `openpanel_cli` is OOM-killed by concurrent agent sessions on
+      this machine — retry when memory frees.)
       works and `last_used_at` populates after the matcher runs.
 - [ ] 5.4 Archive with
       `openspec archive refine-host-security-with-ssh-keys`.
+
+## Deferred (requires browser / live SSH environment)
+
+- 1.8 / 4.3 Web Host -> SSH Keys page at 360/768/1280 px with
+  screenshots.
+- 5.3 Smoke-test: add a real key, SSH in with it, confirm login and
+  last-used update.
