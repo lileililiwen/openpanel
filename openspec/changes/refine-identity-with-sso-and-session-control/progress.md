@@ -23,8 +23,19 @@ works; begin without connection → 503; owner configure encrypts secret
 — response redacts it — and begin then reaches discovery → 503).
 fmt/clippy clean; full workspace suite passes.
 
-**Remaining (tasks unchecked):** 1.4 auto-provision/link integration
-test against a mocked OidcPort (service logic implemented; test
-harness pending), 1.6 trust_idp_mfa flow test, 1.8 CLI E2E
-(auth sessions/revoke), 1.9 web Sessions card + SSO button, 5.3
-Keycloak smoke-test, 5.4 archive.
+**Update (session 2026-08-26):** fixed callback bug — empty nonce was
+passed to validate_callback so every SSO login failed NonceMismatch;
+state/expiry now validate via `SsoLoginState::validate_state` and
+nonce binding stays with the OIDC port. Task 1.4 done (mocked-Oidc
+integration: provision off/on, link-not-duplicate, audits). Task 1.6
+done — callback returns `CallbackOutcome::FactorRequired` (existing
+pending-login challenge, no session) when the connection distrusts
+IdP MFA and the user has an enrolled factor; trusted connections
+shell straight through. Task 1.7 done — secret-leak property over
+DTOs + audit trail. Task 1.8 done (`cli_auth_sessions_list_and_revoke`).
+NOTE task 3.2 kept open: shipped `OpenidConnectAdapter` is reqwest-
+based without JWKS verification; openidconnect-crate adoption or
+deviation approval pending.
+
+**Remaining (tasks unchecked):** 3.2 (see note), 1.9 web Sessions
+card + SSO button, 5.3 Keycloak smoke-test, 5.4 archive.

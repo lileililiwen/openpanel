@@ -47,6 +47,20 @@
 5. **`make check`** — full quality gate pass
 6. **Archive** — `openspec archive add-server-snapshot-migration`
 
+**Update (session 2026-08-26):** task 1.4 done —
+`prop_manifest_bundle_hash_round_trip` (100 cases, canonical bytes +
+hash match). Task 1.6 done — restore verifies entries in manifest
+order and aborts with `ServerSnapshotError::Partial { applied,
+failed }`; integration test tampers the last entry end to end.
+Task 1.8 done — CLI E2E create/list/get + preflight/restore confirm
+gating. Fixed: `snapshot_caller()` hashed "admin" (below the 12-char
+minimum) so every snapshot subcommand panicked.
+
+**Remaining (tasks unchecked):** 3.3 SnapshotImporter driver +
+offsite glue (blocks 1.7 migrate round-trip), 3.4 scheduled
+snapshots + retention pruning, 1.9/4.3 web Snapshots page, 5.x
+validation/archive.
+
 ## Key Decisions
 
 - Snapshots stored under `OPENPANEL__SNAPSHOTS__ROOT` (default: `/var/lib/openpanel/snapshots`)
