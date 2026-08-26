@@ -8,9 +8,16 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
+pub mod rotation;
+
+pub use rotation::{RotationPolicy, SourceClass, apply_managed_block, managed_block_markers};
+
 /// Validation and parsing failures for log-domain values.
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum LogError {
+    /// A rotation policy violates its validation bounds.
+    #[error("invalid rotation policy: {0}")]
+    InvalidPolicy(String),
     /// A cursor could reveal or resolve a filesystem path.
     #[error("invalid cursor identity")]
     InvalidCursorIdentity,

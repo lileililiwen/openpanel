@@ -2,16 +2,16 @@
 
 ## 1. Testing
 
-- [ ] 1.1 Unit: `RotationPolicy` bounds — max_age_days 0 or 366
+- [x] 1.1 Unit: `RotationPolicy` bounds — max_age_days 0 or 366
       rejected; max_size_mb 0 rejected; keep_generations 0 or 53
       rejected; valid extremes accepted.
-- [ ] 1.2 Unit: drop-in rendering — policy fields map to exactly the
+- [x] 1.2 Unit: drop-in rendering — policy fields map to exactly the
       documented directives; compress flag toggles
       `compress`/`nocompress`; output is byte-stable for equal input.
-- [ ] 1.3 Unit: managed-block preservation — pre-existing foreign
+- [x] 1.3 Unit: managed-block preservation — pre-existing foreign
       directives in the target file survive a policy update (block
       replace only).
-- [ ] 1.4 Property: for arbitrary valid policies (≥100 cases) rendered
+- [x] 1.4 Property: for arbitrary valid policies (≥100 cases) rendered
       config contains no `su` directive, no absolute path outside the
       known source registry, and parses under a fixture logrotate
       syntax check.
@@ -27,7 +27,7 @@
 
 ## 2. Domain
 
-- [ ] 2.1 Add `RotationPolicy` VO + validation under
+- [x] 2.1 Add `RotationPolicy` VO + validation under
       `crates/openpanel-domain/src/logs/`.
 
 ## 3. Application
