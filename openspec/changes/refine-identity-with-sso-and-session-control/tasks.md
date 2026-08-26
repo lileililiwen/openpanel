@@ -13,7 +13,7 @@
 - [x] 1.3 Unit: `Session::revoke_other` semantics — revoking session A
       while authenticated as A keeps A active when `keep_current`
       flag set; without it A is revoked too.
-- [ ] 1.4 Integration (`tests/integration/sso.rs`) with a mocked
+- [x] 1.4 Integration (`tests/integration/sso.rs`) with a mocked
       `OIDCProviderPort`: happy-path callback issues a session cookie
       and audit `SsoLogin`; unknown identity with
       `auto_provision = false` → redirect to login with error banner;
@@ -44,6 +44,11 @@
       sso_states) + repo impls.
 - [ ] 3.2 `SsoService` + `OIDCProviderPort` impl using the workspace
       `openidconnect` dependency (app layer only).
+      > NOTE: an `OpenidConnectAdapter` over reqwest + serde_json
+      > ships and passes the mocked-port integration tests, but it
+      > deviates from this task: no `openidconnect` crate and no JWKS
+      > signature verification (documented in `oidc.rs`). Keep open
+      > until the crate is adopted or the deviation is approved.
 - [x] 3.3 Session read-model queries + revocation service; middleware
       rejects revoked sessions (additive change).
 

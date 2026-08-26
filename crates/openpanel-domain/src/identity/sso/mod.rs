@@ -161,14 +161,23 @@ impl SsoLoginState {
         now: DateTime<Utc>,
     ) -> Result<(), SsoError> {
         use subtle_constant_time_eq::ct_eq;
+        self.validate_state(state_got, now)?;
+        if !ct_eq(self.nonce.as_bytes(), nonce_got.as_bytes()) {
+            return Err(SsoError::NonceMismatch);
+        }
+        Ok(())
+    }
+
+    /// Validate the state binding and expiry only. The nonce check is
+    /// delegated to the OIDC port, which compares the ID-token claim
+    /// against this outstanding login's nonce during code exchange.
+    pub fn validate_state(&self, state_got: &str, now: DateTime<Utc>) -> Result<(), SsoError> {
+        use subtle_constant_time_eq::ct_eq;
         if !ct_eq(self.state.as_bytes(), state_got.as_bytes()) {
             return Err(SsoError::StateMismatch);
         }
         if now >= self.expires_at {
             return Err(SsoError::StateExpired);
-        }
-        if !ct_eq(self.nonce.as_bytes(), nonce_got.as_bytes()) {
-            return Err(SsoError::NonceMismatch);
         }
         Ok(())
     }

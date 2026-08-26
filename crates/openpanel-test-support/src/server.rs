@@ -334,13 +334,14 @@ impl TestServer {
             Config::default(),
             None,
             None,
+            None,
         )
         .await
     }
 
     /// Boot a real server with an explicit validated configuration.
     pub async fn new_with_config(config: Config) -> Self {
-        Self::new_with_gate_config_and_crypto(false, config, None, None).await
+        Self::new_with_gate_config_and_crypto(false, config, None, None, None).await
     }
 
     /// Boot a real server with an explicit configuration and a
@@ -349,12 +350,22 @@ impl TestServer {
         config: Config,
         pty: Arc<dyn openpanel_domain::web_terminal::PtyPort>,
     ) -> Self {
-        Self::new_with_gate_config_and_crypto(false, config, None, Some(pty)).await
+        Self::new_with_gate_config_and_crypto(false, config, None, Some(pty), None).await
+    }
+
+    /// Boot a real server with an explicit configuration and a
+    /// caller-supplied SSO OIDC port (test double).
+    pub async fn new_with_sso_oidc(
+        config: Config,
+        oidc: Arc<dyn openpanel_domain::identity::sso::OidcPort>,
+    ) -> Self {
+        Self::new_with_gate_config_and_crypto(false, config, None, None, Some(oidc)).await
     }
 
     /// Boot with deterministic two-factor cryptography.
     pub async fn new_with_two_factor_crypto(crypto: Arc<dyn TwoFactorCrypto>) -> Self {
-        Self::new_with_gate_config_and_crypto(false, Config::default(), Some(crypto), None).await
+        Self::new_with_gate_config_and_crypto(false, Config::default(), Some(crypto), None, None)
+            .await
     }
 
     /// Boot with a deterministic per-token bucket configuration.
@@ -364,7 +375,7 @@ impl TestServer {
             "api-tokens".into(),
             serde_json::json!({"burst": burst, "per_minute": per_minute}),
         );
-        Self::new_with_gate_config_and_crypto(false, config, None, None).await
+        Self::new_with_gate_config_and_crypto(false, config, None, None, None).await
     }
 
     async fn new_with_gate_config_and_crypto(
@@ -372,6 +383,7 @@ impl TestServer {
         config: Config,
         two_factor_crypto: Option<Arc<dyn TwoFactorCrypto>>,
         web_terminal_pty: Option<Arc<dyn openpanel_domain::web_terminal::PtyPort>>,
+        sso_oidc: Option<Arc<dyn openpanel_domain::identity::sso::OidcPort>>,
     ) -> Self {
         let db = TestDb::new().await;
         let pool = db.pool();
@@ -426,7 +438,10 @@ impl TestServer {
             None => openpanel_app::WebTerminalModule::new(&ctx).await,
         };
         let mail_filtering_module = openpanel_app::MailFilteringModule::new(&ctx).await;
-        let sso_module = openpanel_app::SsoModule::new(&ctx, master_key).await;
+        let sso_module = match sso_oidc {
+            Some(oidc) => openpanel_app::SsoModule::with_oidc(&ctx, master_key, oidc).await,
+            None => openpanel_app::SsoModule::new(&ctx, master_key).await,
+        };
         let docker_runtime = Arc::new(MemoryDocker::default());
         let docker_module =
             DockerModule::with_adapters(&ctx, docker_runtime.clone(), docker_runtime, master_key)

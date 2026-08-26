@@ -1,5 +1,7 @@
 //! SSO + session-control integration tests.
 
+use openpanel_core::Config;
+
 use crate::common::*;
 
 #[tokio::test]
@@ -134,4 +136,172 @@ async fn sso_configure_requires_owner_and_validates_secret_layout() {
         .await
         .expect("begin");
     assert_eq!(begin.status(), 503);
+}
+
+/// OIDC double: deterministic claims, no network.
+struct MockOidc {
+    issuer: String,
+    subject: String,
+    email: String,
+}
+
+#[async_trait::async_trait]
+impl openpanel_domain::identity::sso::OidcPort for MockOidc {
+    async fn authorize_url(
+        &self,
+        _connection: &openpanel_domain::SsoConnection,
+        state: &openpanel_domain::SsoLoginState,
+    ) -> Result<String, openpanel_domain::SsoError> {
+        Ok(format!(
+            "https://idp.example.test/authorize?state={}",
+            state.state
+        ))
+    }
+
+    async fn exchange(
+        &self,
+        _connection: &openpanel_domain::SsoConnection,
+        _code: &str,
+        _pkce_verifier: &str,
+        _expected_nonce: &str,
+    ) -> Result<openpanel_domain::OidcClaims, openpanel_domain::SsoError> {
+        Ok(openpanel_domain::OidcClaims {
+            issuer: self.issuer.clone(),
+            subject: self.subject.clone(),
+            email: Some(self.email.clone()),
+        })
+    }
+}
+
+async fn configure_connection(server: &TestServer, token: &str, auto_provision: bool) {
+    let response = server
+        .client()
+        .put(format!("{}/api/v1/auth/sso/connection", server.base_url()))
+        .bearer_auth(token)
+        .json(&serde_json::json!({
+            "issuer_url": "https://idp.example.test",
+            "client_id": "panel",
+            "client_secret_cipher": "plaintext-secret-for-encryption",
+            "default_role": "user",
+            "auto_provision": auto_provision,
+            "trust_idp_mfa": false,
+        }))
+        .send()
+        .await
+        .expect("configure");
+    assert_eq!(
+        response.status(),
+        200,
+        "{}",
+        response.text().await.expect("body")
+    );
+}
+
+async fn begin_and_extract_state(server: &TestServer, token: &str) -> (String, String) {
+    let begun = server
+        .client()
+        .post(format!("{}/auth/sso/begin", server.base_url()))
+        .bearer_auth(token)
+        .send()
+        .await
+        .expect("begin");
+    let status = begun.status();
+    let text = begun.text().await.expect("body");
+    assert_eq!(status, 200, "begin failed: {text}");
+    let begun: serde_json::Value = serde_json::from_str(&text).expect("json");
+    let url = begun["authorize_url"].as_str().expect("authorize_url");
+    let state = url.split("state=").nth(1).expect("state query").to_owned();
+    (url.to_owned(), state)
+}
+
+#[tokio::test]
+async fn sso_callback_provisions_links_and_audits() {
+    let server = TestServer::new_with_sso_oidc(
+        Config::default(),
+        std::sync::Arc::new(MockOidc {
+            issuer: "https://idp.example.test".into(),
+            subject: "user-42".into(),
+            email: "jane@example.test".into(),
+        }),
+    )
+    .await;
+    let owner_token = server
+        .bootstrap_owner("owner", "correct horse battery staple")
+        .await;
+
+    // Auto-provisioning off: an unknown identity is refused.
+    configure_connection(&server, &owner_token, false).await;
+    let (_url, state) = begin_and_extract_state(&server, &owner_token).await;
+    let refused = server
+        .client()
+        .post(format!("{}/auth/sso/callback", server.base_url()))
+        .json(&serde_json::json!({ "code": "auth-code", "state": state }))
+        .send()
+        .await
+        .expect("callback");
+    assert_eq!(
+        refused.status(),
+        422,
+        "{}",
+        refused.text().await.expect("body")
+    );
+
+    // Auto-provisioning on: the same identity now provisions a user
+    // and receives a session token.
+    configure_connection(&server, &owner_token, true).await;
+    let (_url, state) = begin_and_extract_state(&server, &owner_token).await;
+    let accepted = server
+        .client()
+        .post(format!("{}/auth/sso/callback", server.base_url()))
+        .json(&serde_json::json!({ "code": "auth-code", "state": state }))
+        .send()
+        .await
+        .expect("callback");
+    assert_eq!(
+        accepted.status(),
+        200,
+        "{}",
+        accepted.text().await.expect("body")
+    );
+    let body: serde_json::Value = accepted.json().await.expect("json");
+    assert_eq!(body["mfa_satisfied"], serde_json::json!(false));
+    let sso_token = body["token"].as_str().expect("session token").to_owned();
+    assert!(!sso_token.is_empty());
+
+    // The issued session authenticates the provisioned user.
+    let sessions = server
+        .client()
+        .get(format!("{}/api/v1/auth/sessions", server.base_url()))
+        .bearer_auth(&sso_token)
+        .send()
+        .await
+        .expect("sessions");
+    assert_eq!(sessions.status(), 200);
+
+    // A second login links the same identity instead of duplicating
+    // the user, and each login is audited.
+    let (_url, state) = begin_and_extract_state(&server, &owner_token).await;
+    let second = server
+        .client()
+        .post(format!("{}/auth/sso/callback", server.base_url()))
+        .json(&serde_json::json!({ "code": "auth-code", "state": state }))
+        .send()
+        .await
+        .expect("second callback");
+    assert_eq!(second.status(), 200);
+
+    let users = server.identity().list_users().await.expect("users");
+    let provisioned = users
+        .iter()
+        .filter(|user| user.username().as_str().starts_with("sso-"))
+        .count();
+    assert_eq!(provisioned, 1, "identity must link, not duplicate");
+
+    let logins = server
+        .audit_events()
+        .await
+        .into_iter()
+        .filter(|event| event.action == openpanel_core::AuditAction::SsoLogin)
+        .count();
+    assert_eq!(logins, 2, "each completed login is audited");
 }

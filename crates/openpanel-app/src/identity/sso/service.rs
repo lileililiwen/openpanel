@@ -113,7 +113,7 @@ impl SsoService {
             .await
             .map_err(persistence)?
             .ok_or(SsoError::StateMismatch)?;
-        outstanding.validate_callback(state_param, "", Utc::now())?;
+        outstanding.validate_state(state_param, Utc::now())?;
 
         let claims = self
             .oidc

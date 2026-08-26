@@ -20,11 +20,6 @@ pub struct SsoModule {
 impl SsoModule {
     /// Compose SQLite persistence and the reqwest OIDC adapter.
     pub async fn new(ctx: &AppContext, master_key: [u8; 32]) -> Self {
-        let pool = ctx.db.pool().await;
-        let repo: Arc<dyn SsoRepository> = Arc::new(SqliteSsoRepository::new(pool.clone()));
-        let users: Arc<dyn UserRepository> = Arc::new(SqliteUserRepository::new(pool.clone()));
-        let sessions: Arc<dyn openpanel_domain::SessionRepository> =
-            Arc::new(SqliteSessionRepository::new(pool));
         let key = std::sync::Arc::new(master_key);
         let resolver_key = std::sync::Arc::clone(&key);
         let oidc = Arc::new(OpenidConnectAdapter::new(
@@ -34,6 +29,22 @@ impl SsoModule {
                     .map_err(|error| openpanel_domain::SsoError::InvalidConfig(error.to_string()))
             }),
         ));
+        Self::with_oidc(ctx, *key, oidc).await
+    }
+
+    /// Compose SQLite persistence with a caller-supplied OIDC port
+    /// (test doubles inject here).
+    pub async fn with_oidc(
+        ctx: &AppContext,
+        master_key: [u8; 32],
+        oidc: Arc<dyn openpanel_domain::identity::sso::OidcPort>,
+    ) -> Self {
+        let pool = ctx.db.pool().await;
+        let repo: Arc<dyn SsoRepository> = Arc::new(SqliteSsoRepository::new(pool.clone()));
+        let users: Arc<dyn UserRepository> = Arc::new(SqliteUserRepository::new(pool.clone()));
+        let sessions: Arc<dyn openpanel_domain::SessionRepository> =
+            Arc::new(SqliteSessionRepository::new(pool));
+        let key = std::sync::Arc::new(master_key);
         let service = Arc::new(SsoService::new(
             repo,
             users,
