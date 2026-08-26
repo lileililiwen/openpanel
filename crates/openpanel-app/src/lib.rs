@@ -166,8 +166,8 @@ pub use ai_ops::{
 };
 pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use app_runtimes::{
-    AppRuntimesModule, ReverseProxyLayer, RuntimeService, SqliteRuntimeRepository,
-    SupervisorUnitBuilder,
+    AppRuntimesModule, ReverseProxyLayer, RuntimeEnvService, RuntimeService,
+    SqliteRuntimeRepository, SupervisorUnitBuilder,
 };
 pub use backups::{
     BackupService, BackupsModule,

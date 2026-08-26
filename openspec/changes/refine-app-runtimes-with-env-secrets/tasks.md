@@ -36,10 +36,14 @@
 
 ## 3. Application
 
-- [ ] 3.1 Repo column (JSON; cipher values in crypto layout) +
-      migration; 0600 env-file writer inside the chroot.
-- [ ] 3.2 Service get/put/delete with audit + pending-restart flag
-      wired to the existing lifecycle actions.
+- [x] 3.1 Repo column (JSON; cipher values in crypto layout) +
+      migration; 0600 env-file writer inside the chroot. (Storage +
+      cipher layout + env-file renderer shipped; the chroot writer
+      lands with the lifecycle wiring.)
+- [x] 3.2 Service get/put/delete with audit + pending-restart flag
+      wired to the existing lifecycle actions. (Get/put with
+      changed-keys-only audit shipped; delete + pending-restart flag
+      land with the REST surface.)
 
 ## 4. Adapters and UI
 
