@@ -369,7 +369,6 @@ mod remote_access_apply_tests {
     #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
     use std::sync::Mutex;
 
-    use openpanel_domain::db_privileges::ReconcileStep;
     use openpanel_test_support::MockAudit;
 
     use super::*;
@@ -479,7 +478,7 @@ mod remote_access_apply_tests {
         let (controller, _db) = controller(&runtime);
         runtime.block_on(async {
             let port = RecordingPort::new(2); // second statement fails
-            let error = controller
+            let error = match controller
                 .apply(
                     &caller,
                     Uuid::new_v4(),
@@ -491,8 +490,10 @@ mod remote_access_apply_tests {
                     &port,
                 )
                 .await
-                .err()
-                .expect("apply must fail");
+            {
+                Err(error) => error,
+                Ok(_) => panic!("apply must fail"),
+            };
             assert!(
                 matches!(error, DbPrivilegeError::GrantFailed { step: 2 }),
                 "expected GrantFailed{{step:2}}, got {error}"
