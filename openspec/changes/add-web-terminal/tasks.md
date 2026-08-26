@@ -18,14 +18,14 @@
 - [x] 1.5 Integration: WS upgrade with mismatched `Origin` header →
       rejected before ticket consumption; with `[web_terminal]
       enabled = false` → route 404s.
-- [ ] 1.6 Integration: PTY output exceeding
+- [x] 1.6 Integration: PTY output exceeding
       `output_buffer_bytes` without reader progress closes the session
       and emits `TerminalClosed{reason: "overflow"}` audit event.
-- [ ] 1.7 Property: audit events for any session sequence contain only
+- [x] 1.7 Property: audit events for any session sequence contain only
       `{user_id, site_id, opened_at, closed_at, reason}` — never bytes
       from the PTY stream (feed random terminal output through the
       bridge and assert absence).
-- [ ] 1.8 CLI E2E: `cli_terminal_ticket_prints_token` —
+- [x] 1.8 CLI E2E: `cli_terminal_ticket_prints_token` —
       `openpanel terminal ticket --site s1` prints a 64-hex token and
       exits 0; unknown site → non-zero exit with error line.
 

@@ -122,9 +122,17 @@ async fn bridge(service: Arc<WebTerminalService>, token: String, socket: WebSock
     };
 
     // Reader thread: PTY output -> bounded channel -> websocket sink.
+    // The reader tracks unread bytes against the configured output
+    // budget; a client that stops reading while the PTY keeps producing
+    // overflows the budget and the session is force-closed.
+    let output_budget = service.output_buffer_bytes();
     let stream = std::sync::Arc::new(std::sync::Mutex::new(stream));
     let (output_tx, mut output_rx) = mpsc::channel::<Vec<u8>>(256);
+    let outstanding = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let overflowed = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
     let reader_stream = Arc::clone(&stream);
+    let reader_outstanding = Arc::clone(&outstanding);
+    let reader_overflowed = Arc::clone(&overflowed);
     let reader_handle = tokio::task::spawn_blocking(move || {
         loop {
             let mut buf = [0u8; 4096];
@@ -139,6 +147,12 @@ async fn bridge(service: Arc<WebTerminalService>, token: String, socket: WebSock
             match read {
                 Ok(0) | Err(_) => break,
                 Ok(n) => {
+                    use std::sync::atomic::Ordering;
+                    let unread = reader_outstanding.fetch_add(n, Ordering::SeqCst) + n;
+                    if unread > output_budget {
+                        reader_overflowed.store(true, Ordering::SeqCst);
+                        break;
+                    }
                     if output_tx.blocking_send(buf[..n].to_vec()).is_err() {
                         break;
                     }
@@ -149,6 +163,9 @@ async fn bridge(service: Arc<WebTerminalService>, token: String, socket: WebSock
 
     let mut idle = tokio::time::interval(std::time::Duration::from_secs(IDLE_TIMEOUT_SECS));
     idle.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+    // `interval` completes its first tick immediately; consume it so a
+    // fresh session is not judged idle before any activity.
+    idle.tick().await;
     let mut closed_reason = CloseReason::ClientClosed;
 
     loop {
@@ -156,6 +173,8 @@ async fn bridge(service: Arc<WebTerminalService>, token: String, socket: WebSock
             maybe_output = output_rx.recv() => {
                 match maybe_output {
                     Some(bytes) => {
+                        use std::sync::atomic::Ordering;
+                        outstanding.fetch_sub(bytes.len(), Ordering::SeqCst);
                         if sink
                             .send(Message::Binary(bytes.into()))
                             .await
@@ -164,7 +183,12 @@ async fn bridge(service: Arc<WebTerminalService>, token: String, socket: WebSock
                             break;
                         }
                     }
-                    None => break,
+                    None => {
+                        if overflowed.load(std::sync::atomic::Ordering::SeqCst) {
+                            closed_reason = CloseReason::Overflow;
+                        }
+                        break;
+                    }
                 }
             }
             maybe_input = client_input.next() => {

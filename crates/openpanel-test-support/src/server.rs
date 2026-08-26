@@ -329,18 +329,32 @@ impl TestServer {
     /// gate. The strict gate is the production default; the lenient
     /// gate is what the existing install tests use.
     pub async fn new_with_gate(require_verified_digests: bool) -> Self {
-        Self::new_with_gate_config_and_crypto(require_verified_digests, Config::default(), None)
-            .await
+        Self::new_with_gate_config_and_crypto(
+            require_verified_digests,
+            Config::default(),
+            None,
+            None,
+        )
+        .await
     }
 
     /// Boot a real server with an explicit validated configuration.
     pub async fn new_with_config(config: Config) -> Self {
-        Self::new_with_gate_config_and_crypto(false, config, None).await
+        Self::new_with_gate_config_and_crypto(false, config, None, None).await
+    }
+
+    /// Boot a real server with an explicit configuration and a
+    /// caller-supplied browser-terminal PTY adapter (test double).
+    pub async fn new_with_web_terminal_pty(
+        config: Config,
+        pty: Arc<dyn openpanel_domain::web_terminal::PtyPort>,
+    ) -> Self {
+        Self::new_with_gate_config_and_crypto(false, config, None, Some(pty)).await
     }
 
     /// Boot with deterministic two-factor cryptography.
     pub async fn new_with_two_factor_crypto(crypto: Arc<dyn TwoFactorCrypto>) -> Self {
-        Self::new_with_gate_config_and_crypto(false, Config::default(), Some(crypto)).await
+        Self::new_with_gate_config_and_crypto(false, Config::default(), Some(crypto), None).await
     }
 
     /// Boot with a deterministic per-token bucket configuration.
@@ -350,13 +364,14 @@ impl TestServer {
             "api-tokens".into(),
             serde_json::json!({"burst": burst, "per_minute": per_minute}),
         );
-        Self::new_with_gate_config_and_crypto(false, config, None).await
+        Self::new_with_gate_config_and_crypto(false, config, None, None).await
     }
 
     async fn new_with_gate_config_and_crypto(
         require_verified_digests: bool,
         config: Config,
         two_factor_crypto: Option<Arc<dyn TwoFactorCrypto>>,
+        web_terminal_pty: Option<Arc<dyn openpanel_domain::web_terminal::PtyPort>>,
     ) -> Self {
         let db = TestDb::new().await;
         let pool = db.pool();
@@ -406,7 +421,10 @@ impl TestServer {
             sandbox.path().join("http-auth"),
         )
         .await;
-        let web_terminal_module = openpanel_app::WebTerminalModule::new(&ctx).await;
+        let web_terminal_module = match web_terminal_pty {
+            Some(pty) => openpanel_app::WebTerminalModule::with_pty(&ctx, pty).await,
+            None => openpanel_app::WebTerminalModule::new(&ctx).await,
+        };
         let mail_filtering_module = openpanel_app::MailFilteringModule::new(&ctx).await;
         let sso_module = openpanel_app::SsoModule::new(&ctx, master_key).await;
         let docker_runtime = Arc::new(MemoryDocker::default());

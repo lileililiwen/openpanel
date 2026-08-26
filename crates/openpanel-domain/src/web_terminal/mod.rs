@@ -141,6 +141,17 @@ pub enum CloseReason {
     Overflow,
 }
 
+impl CloseReason {
+    /// Stable lower-case label used in records and audit metadata.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::ClientClosed => "client_closed",
+            Self::IdleTimeout => "idle_timeout",
+            Self::Overflow => "overflow",
+        }
+    }
+}
+
 /// An audited terminal session record. Never contains stream content.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TerminalSession {
@@ -230,6 +241,8 @@ pub trait WebTerminalRepository: Send + Sync + 'static {
     async fn count_open_sessions(&self, user_id: Uuid) -> Result<u64, RepoError>;
     /// Insert an open-session record.
     async fn insert_session(&self, session: &TerminalSession) -> Result<(), RepoError>;
+    /// Load one session record by id.
+    async fn get_session(&self, id: Uuid) -> Result<Option<TerminalSession>, RepoError>;
     /// Close a session record.
     async fn close_session(
         &self,

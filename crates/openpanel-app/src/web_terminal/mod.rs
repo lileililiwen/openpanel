@@ -13,4 +13,4 @@ pub use openpanel_domain::web_terminal::{
 };
 pub use pty::PortablePtyAdapter;
 pub use repo::SqliteWebTerminalRepository;
-pub use service::WebTerminalService;
+pub use service::{TerminalPolicy, WebTerminalService};

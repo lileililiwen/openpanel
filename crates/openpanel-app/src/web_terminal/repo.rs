@@ -109,6 +109,61 @@ impl WebTerminalRepository for SqliteWebTerminalRepository {
         Ok(())
     }
 
+    async fn get_session(
+        &self,
+        id: Uuid,
+    ) -> Result<Option<openpanel_domain::web_terminal::TerminalSession>, RepoError> {
+        let row = sqlx::query_as::<
+            _,
+            (
+                String,
+                String,
+                String,
+                String,
+                Option<String>,
+                String,
+                Option<String>,
+            ),
+        >(
+            "SELECT id, user_id, site_id, opened_at, closed_at, state, close_reason \
+             FROM web_terminal_sessions WHERE id = ?",
+        )
+        .bind(id.to_string())
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(repo_error)?;
+        row.map(
+            |(id, user_id, site_id, opened_at, closed_at, state, close_reason)| {
+                Ok(openpanel_domain::web_terminal::TerminalSession {
+                    id: Uuid::parse_str(&id).map_err(repo_error)?,
+                    user_id: Uuid::parse_str(&user_id).map_err(repo_error)?,
+                    site_id: Uuid::parse_str(&site_id).map_err(repo_error)?,
+                    opened_at: DateTime::parse_from_rfc3339(&opened_at)
+                        .map_err(repo_error)?
+                        .with_timezone(&Utc),
+                    closed_at: closed_at
+                        .map(|at| {
+                            DateTime::parse_from_rfc3339(&at)
+                                .map_err(repo_error)
+                                .map(|at| at.with_timezone(&Utc))
+                        })
+                        .transpose()?,
+                    state: if state == "open" {
+                        SessionState::Open
+                    } else {
+                        SessionState::Closed
+                    },
+                    close_reason: close_reason.map(|reason| match reason.as_str() {
+                        "idle_timeout" => CloseReason::IdleTimeout,
+                        "overflow" => CloseReason::Overflow,
+                        _ => CloseReason::ClientClosed,
+                    }),
+                })
+            },
+        )
+        .transpose()
+    }
+
     async fn close_session(
         &self,
         id: Uuid,

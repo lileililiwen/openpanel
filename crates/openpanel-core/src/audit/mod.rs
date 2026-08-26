@@ -211,6 +211,8 @@ pub enum AuditAction {
     SiteHttpControlsChanged,
     /// A browser terminal session was opened.
     TerminalOpened,
+    /// A browser terminal session was closed, with the reason.
+    TerminalClosed,
     /// A panel login completed through the external IdP.
     SsoLogin,
     /// A whole-server snapshot was created.
@@ -700,6 +702,7 @@ impl AuditService for SqliteAuditService {
                 "waf_changed" => AuditAction::WafChanged,
                 "site_http_controls_changed" => AuditAction::SiteHttpControlsChanged,
                 "terminal_opened" => AuditAction::TerminalOpened,
+                "terminal_closed" => AuditAction::TerminalClosed,
                 "sso_login" => AuditAction::SsoLogin,
                 "snapshot_created" => AuditAction::SnapshotCreated,
                 "snapshot_restored" => AuditAction::SnapshotRestored,

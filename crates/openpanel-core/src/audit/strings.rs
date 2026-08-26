@@ -221,6 +221,7 @@ impl AuditAction {
             AuditAction::WebmailCsrfRejected => "webmail_csrf_rejected",
             AuditAction::SiteHttpControlsChanged => "site_http_controls_changed",
             AuditAction::TerminalOpened => "terminal_opened",
+            AuditAction::TerminalClosed => "terminal_closed",
             AuditAction::SsoLogin => "sso_login",
             AuditAction::SnapshotCreated => "snapshot_created",
             AuditAction::SnapshotRestored => "snapshot_restored",
