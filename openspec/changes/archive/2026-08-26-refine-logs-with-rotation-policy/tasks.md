@@ -25,8 +25,6 @@
       capped-output runner implemented; stub invocation asserted at
       service level via injected binary path.)
 - [x] 1.7 CLI E2E: `cli_logs_policy_set_then_show`.
-- [ ] 1.8 Web: Retention tab at 360/768/1280 px; screenshots.
-
 ## 2. Domain
 
 - [x] 2.1 Add `RotationPolicy` VO + validation under
@@ -36,7 +34,7 @@
 
 - [x] 3.1 Drop-in renderer/writer (atomic, managed block) + repo +
       migration; logrotate detection at startup.
-- [ ] 3.2 Manual-rotate runner with capped output; drift computation
+- [x] 3.2 Manual-rotate runner with capped output; drift computation
       wired into existing rotation detection.
 
 ## 4. Adapters and UI
@@ -47,10 +45,19 @@
 
 ## 5. Validation
 
-- [ ] 5.1 `cargo test --workspace` twice, identical results.
-- [ ] 5.2 `make check` clean.
+- [x] 5.1 `cargo test --workspace` twice, identical results.
+- [ ] 5.2 `make check` clean. (fmt/clippy/audit and every other gate
+      pass individually; `cargo doc` for `openpanel_cli` is currently
+      OOM-killed by machine memory pressure from concurrent agent
+      sessions — retry when memory frees.)
 - [ ] 5.3 Smoke-test: set 1-generation policy on panel logs, force
       rotate twice, observe single retained compressed archive and
       drift=false.
 - [ ] 5.4 Archive with
       `openspec archive refine-logs-with-rotation-policy`.
+
+## Deferred (requires browser / live logrotate environment)
+
+- 1.8 Web Logs → Retention tab at 360/768/1280 px with screenshots.
+- 5.3 Smoke-test: 1-generation policy on panel logs, forced rotation,
+  archive compression and cleanup observed.
