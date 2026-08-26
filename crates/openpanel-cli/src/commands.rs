@@ -70,6 +70,7 @@ pub enum Command {
     },
     /// Per-runtime environment variables and secrets.
     RuntimeEnv {
+        /// Set or show.
         #[command(subcommand)]
         action: crate::RuntimeEnvAction,
     },
