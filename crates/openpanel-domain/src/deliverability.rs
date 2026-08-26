@@ -487,3 +487,78 @@ mod report_prop_tests {
         }
     }
 }
+
+/// DNS resolution port. The application layer implements it over a
+/// real resolver; tests inject fakes.
+#[async_trait::async_trait]
+pub trait ResolverPort: Send + Sync + 'static {
+    /// TXT records for `name` (used by auth audits).
+    async fn txt(&self, name: &str) -> Result<Vec<String>, String>;
+    /// A/AAAA records for `name`.
+    async fn resolve_a(&self, name: &str) -> Result<Vec<IpAddr>, String>;
+}
+
+/// Query `zone` for `ip`: a non-empty A-record answer means listed.
+pub async fn is_listed(
+    resolver: &dyn ResolverPort,
+    ip: IpAddr,
+    zone: &BlocklistZone,
+) -> Result<bool, String> {
+    let name = dnsbl_query_name(ip, zone);
+    Ok(!resolver.resolve_a(&name).await?.is_empty())
+}
+
+#[cfg(test)]
+mod resolver_tests {
+    #![allow(clippy::unwrap_used, clippy::panic)]
+    use std::{collections::HashMap, net::Ipv4Addr, sync::Mutex};
+
+    use super::*;
+
+    struct FakeResolver {
+        answers: Mutex<HashMap<String, Vec<IpAddr>>>,
+    }
+
+    impl FakeResolver {
+        fn with_a(name: &str, ip: IpAddr) -> Self {
+            let mut m = HashMap::new();
+            m.insert(name.to_string(), vec![ip]);
+            Self {
+                answers: Mutex::new(m),
+            }
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl ResolverPort for FakeResolver {
+        async fn txt(&self, _name: &str) -> Result<Vec<String>, String> {
+            Ok(vec![])
+        }
+
+        async fn resolve_a(&self, name: &str) -> Result<Vec<IpAddr>, String> {
+            Ok(self
+                .answers
+                .lock()
+                .unwrap()
+                .get(name)
+                .cloned()
+                .unwrap_or_default())
+        }
+    }
+
+    #[test]
+    fn is_listed_uses_constructed_query_and_a_record_presence() {
+        let zone = BlocklistZone::new("zen.spamhaus.org").unwrap();
+        let ip = IpAddr::V4(Ipv4Addr::new(192, 0, 2, 5));
+        let query = "5.2.0.192.zen.spamhaus.org";
+
+        // Listed: fake answers the constructed name.
+        let listed_resolver = FakeResolver::with_a(query, "127.0.0.2".parse().unwrap());
+        assert!(pollster::block_on(is_listed(&listed_resolver, ip, &zone)).unwrap());
+
+        // Clear: empty answer.
+        let clean_resolver =
+            FakeResolver::with_a("unrelated.example", "127.0.0.1".parse().unwrap());
+        assert!(!pollster::block_on(is_listed(&clean_resolver, ip, &zone)).unwrap());
+    }
+}
