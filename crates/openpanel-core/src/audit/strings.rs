@@ -220,6 +220,7 @@ impl AuditAction {
             AuditAction::WebmailSessionCreated => "webmail_session_created",
             AuditAction::WebmailCsrfRejected => "webmail_csrf_rejected",
             AuditAction::SiteHttpControlsChanged => "site_http_controls_changed",
+            AuditAction::SiteTransportChanged => "site_transport_changed",
             AuditAction::TerminalOpened => "terminal_opened",
             AuditAction::TerminalClosed => "terminal_closed",
             AuditAction::SsoLogin => "sso_login",

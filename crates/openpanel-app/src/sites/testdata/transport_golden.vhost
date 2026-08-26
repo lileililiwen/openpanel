@@ -1,0 +1,33 @@
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name golden.example.com;
+
+    ssl_certificate     /etc/openpanel/ssl/golden.crt;
+    ssl_certificate_key /etc/openpanel/ssl/golden.key;
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphersuites    TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256;
+    ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    add_header Strict-Transport-Security "max-age=63072000" always;
+
+    root /var/www/golden.example.com/public_html;
+    index index.html index.htm;
+
+    set $openpanel_site_id "00000000-0000-0000-0000-000000000001";
+    access_log /var/log/openpanel/00000000-0000-0000-0000-000000000001.access.log openpanel;
+    error_log  /var/log/openpanel/00000000-0000-0000-0000-000000000001.error.log;
+
+    client_max_body_size 100M;
+
+    location / {
+        try_files $uri $uri/ =404;
+    }
+
+
+    location ~ /\.(?!well-known) { deny all; }
+}

@@ -1200,6 +1200,20 @@ pub enum RecoveryCodeCommand {
     },
 }
 
+/// Subcommands for tuning a site's transport profile.
+#[derive(Debug, clap::Subcommand)]
+#[allow(missing_docs)]
+pub enum TransportAction {
+    /// Print the effective transport policy as JSON.
+    Show,
+    /// Toggle the HTTP/3 QUIC listener.
+    Http3 {
+        /// Enable or disable (`--on <true|false>`).
+        #[arg(long, action = clap::ArgAction::Set, default_value_t = true)]
+        on: bool,
+    },
+}
+
 /// Subcommands for managing hosted sites.
 #[derive(Debug, Subcommand)]
 pub enum SiteCommand {
@@ -1226,6 +1240,16 @@ pub enum SiteCommand {
     },
     /// List all sites.
     List,
+    /// Show or tune the per-site transport policy (HTTP/3, TLS floor,
+    /// HSTS, compression, body cap).
+    Transport {
+        /// Site id.
+        #[arg(long)]
+        site: String,
+        /// Show or toggle HTTP/3.
+        #[command(subcommand)]
+        action: crate::TransportAction,
+    },
     /// Delete a site permanently.
     Delete {
         /// ID of the site to delete.

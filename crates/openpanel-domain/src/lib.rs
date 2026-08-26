@@ -405,7 +405,13 @@ pub use site_staging::{
     PromotionRepository, PromotionRun, PromotionStatus, SiteStagingError, SnapshotId, StagingSlot,
     StagingSlotRepository, StagingSnapshotRepository, SyncMode, SyncPolicy,
 };
-pub use sites::{error::SiteError, repository::SiteRepository, site::Site, status::SiteStatus};
+pub use sites::{
+    error::SiteError,
+    repository::SiteRepository,
+    site::Site,
+    status::SiteStatus,
+    transport::{ByteSize, CompressionPolicy, HstsPolicy, TlsVersion, TransportPolicy},
+};
 pub use ssl::{
     certificate::{Certificate, KeyType},
     error::SslError,

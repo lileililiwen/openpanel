@@ -8,7 +8,10 @@ use std::{
     process::Command,
 };
 
-use openpanel_domain::{SiteError, sites::site::Site};
+use openpanel_domain::{
+    SiteError,
+    sites::{TransportPolicy, site::Site},
+};
 
 /// Nginx `http`-context format used by managed access sources. `$uri` excludes queries.
 pub fn managed_log_format() -> &'static str {
@@ -145,6 +148,22 @@ impl NginxConfigGenerator {
         tls: Option<(&str, &str)>,
         acme_challenge_upstream: Option<&str>,
     ) -> String {
+        Self::render_full_with_policy(
+            site,
+            tls,
+            acme_challenge_upstream,
+            &TransportPolicy::default(),
+        )
+    }
+
+    /// Render with an explicit transport policy. The default policy
+    /// reproduces the pre-tuning output byte-for-byte.
+    pub fn render_full_with_policy(
+        site: &Site,
+        tls: Option<(&str, &str)>,
+        acme_challenge_upstream: Option<&str>,
+        transport: &TransportPolicy,
+    ) -> String {
         let mut server_names = vec![site.primary_domain().to_string()];
         for a in site.aliases() {
             server_names.push(a.clone());
@@ -245,29 +264,25 @@ server {{
 server {{
     listen 443 ssl http2;
     listen [::]:443 ssl http2;
-    server_name {server_names};
+{quic_listen}    server_name {server_names};
 
     ssl_certificate     {cert_path};
     ssl_certificate_key {key_path};
-    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_protocols       {ssl_protocols};
     ssl_ciphersuites    TLS_AES_128_GCM_SHA256:TLS_AES_256_GCM_SHA384:TLS_CHACHA20_POLY1305_SHA256;
     ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305;
     ssl_prefer_server_ciphers on;
     ssl_session_cache   shared:SSL:10m;
     ssl_session_timeout 1d;
     ssl_session_tickets off;
-
-    add_header Strict-Transport-Security "max-age=63072000" always;
-
+{extras}
     root {root};
     index index.html index.htm{php_index};
 
     set $openpanel_site_id "{site_id}";
     access_log {access_log} openpanel;
     error_log  {error_log};
-
-    client_max_body_size 100M;
-
+{limits}
     location / {{
         {application_route}
     }}
@@ -279,6 +294,25 @@ server {{
                 root = site.document_root(),
                 php_index = if site.php_enabled() { " index.php" } else { "" },
                 site_id = site.id(),
+                quic_listen = transport.render_quic_listen(),
+                ssl_protocols = transport.render_ssl_protocols(),
+                extras = {
+                    let mut extras = String::new();
+                    extras.push_str(transport.render_alt_svc());
+                    extras.push_str(&transport.render_hsts());
+                    if !extras.is_empty() {
+                        extras.insert(0, '\n');
+                    }
+                    extras
+                },
+                limits = {
+                    let mut limits = transport.render_compression();
+                    limits.push_str(&transport.render_body_size());
+                    if !limits.is_empty() {
+                        limits.insert(0, '\n');
+                    }
+                    limits
+                },
             ),
             None => String::new(),
         };
@@ -506,7 +540,9 @@ server {{
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
-    use openpanel_domain::{Email, Password, Role, User, Username};
+    use openpanel_domain::{
+        ByteSize, CompressionPolicy, Email, HstsPolicy, Password, Role, TlsVersion, User, Username,
+    };
     use uuid::Uuid;
 
     use super::*;
@@ -612,6 +648,127 @@ mod tests {
         );
         assert!(out.contains("proxy_pass http://127.0.0.1:9080"));
         assert!(out.contains(".well-known/acme-challenge"));
+    }
+
+    #[test]
+    fn golden_default_transport_policy_is_byte_identical_with_pre_tuning_output() {
+        let site = Site::new(
+            uuid::Uuid::from_u128(1),
+            Uuid::new_v4(),
+            "golden.example.com",
+            vec![],
+            "/var/www/golden.example.com/public_html",
+            false,
+            None,
+            "tester",
+        )
+        .unwrap();
+        let out = NginxConfigGenerator::render_full_with_policy(
+            &site,
+            Some((
+                "/etc/openpanel/ssl/golden.crt",
+                "/etc/openpanel/ssl/golden.key",
+            )),
+            None,
+            &TransportPolicy::default(),
+        );
+        // The TLS vhost is the tail of the output.
+        let start = out
+            .find("server {\n    listen 443")
+            .map(|index| &out[index..])
+            .expect("tls vhost");
+        let golden = include_str!("testdata/transport_golden.vhost");
+        assert_eq!(start, golden);
+        // render_full delegates to the default policy.
+        assert_eq!(
+            NginxConfigGenerator::render_full(
+                &site,
+                Some((
+                    "/etc/openpanel/ssl/golden.crt",
+                    "/etc/openpanel/ssl/golden.key"
+                )),
+                None,
+            ),
+            out
+        );
+    }
+
+    #[test]
+    fn http3_policy_emits_single_quic_listen_and_alt_svc_in_vhost() {
+        let site = Site::new(
+            uuid::Uuid::from_u128(2),
+            Uuid::new_v4(),
+            "h3.example.com",
+            vec![],
+            "/var/www/h3.example.com/public_html",
+            false,
+            None,
+            "tester",
+        )
+        .unwrap();
+        let policy = TransportPolicy::new(
+            true,
+            TlsVersion::V1_2,
+            TransportPolicy::default().hsts().cloned(),
+            CompressionPolicy::Off,
+            ByteSize::new(100 * 1024 * 1024).unwrap(),
+        )
+        .unwrap();
+        let out = NginxConfigGenerator::render_full_with_policy(
+            &site,
+            Some(("/tmp/c", "/tmp/k")),
+            None,
+            &policy,
+        );
+        assert_eq!(out.matches("listen 443 quic reuseport;").count(), 1);
+        assert!(out.contains("Alt-Svc 'h3=\":443\"; ma=86400;' always;"));
+        // Disabling removes both again.
+        let off = NginxConfigGenerator::render_full_with_policy(
+            &site,
+            Some(("/tmp/c", "/tmp/k")),
+            None,
+            &TransportPolicy::default(),
+        );
+        assert!(!off.contains("quic"));
+        assert!(!off.contains("Alt-Svc"));
+    }
+
+    #[test]
+    fn transport_overrides_render_into_vhost() {
+        let site = Site::new(
+            uuid::Uuid::from_u128(3),
+            Uuid::new_v4(),
+            "tuned.example.com",
+            vec![],
+            "/var/www/tuned.example.com/public_html",
+            false,
+            None,
+            "tester",
+        )
+        .unwrap();
+        let policy = TransportPolicy::new(
+            false,
+            TlsVersion::V1_3,
+            Some(HstsPolicy::new(31_536_000, true, true).unwrap()),
+            CompressionPolicy::Brotli(5),
+            ByteSize::new(32 * 1024 * 1024).unwrap(),
+        )
+        .unwrap();
+        let out = NginxConfigGenerator::render_full_with_policy(
+            &site,
+            Some(("/tmp/c", "/tmp/k")),
+            None,
+            &policy,
+        );
+        assert!(out.contains("ssl_protocols       TLSv1.3;"));
+        assert!(
+            out.contains(
+                "add_header Strict-Transport-Security \"max-age=31536000; includeSubDomains; preload\" always;"
+            )
+        );
+        assert!(out.contains("brotli on;"));
+        assert!(out.contains("brotli_comp_level 5;"));
+        assert!(out.contains("client_max_body_size 32M;"));
     }
 
     #[test]

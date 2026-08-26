@@ -467,6 +467,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         two_factor_svc.clone(),
         waf_svc.clone(),
         site_http_controls_svc.clone(),
+        sites_module.transport(),
         web_terminal_svc.clone(),
         sso_svc.clone(),
         docker_svc.clone(),
@@ -5685,6 +5686,79 @@ pub async fn scan_list(config: Arc<Config>, site: String) -> anyhow::Result<()> 
 // ---------------------------------------------------------------------------
 // Server snapshot CLI handlers.
 // ---------------------------------------------------------------------------
+
+/// Build the per-site transport service plus identity for callers.
+async fn build_site_transport(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::SiteTransportService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
+    let identity_module = IdentityModule::new(&ctx, load_master_key(&ctx.config)?).await;
+    let sites_module = SitesModule::new(&ctx).await;
+    MigrationRunner::for_sqlite(pool.clone())
+        .apply_module(sites_module.name(), &sites_module.migrations())
+        .await?;
+    Ok((sites_module.transport(), identity_module.service()))
+}
+
+/// `openpanel site transport …`.
+pub async fn site_transport(
+    config: Arc<Config>,
+    site: String,
+    action: crate::TransportAction,
+) -> anyhow::Result<()> {
+    use openpanel_domain::{ByteSize, CompressionPolicy, TransportPolicy};
+    let (svc, identity) = build_site_transport(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    match action {
+        crate::TransportAction::Show => {
+            let policy = svc
+                .get(&owner, site_id)
+                .await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "http3_enabled": policy.http3_enabled(),
+                    "tls_min_version": format!("{:?}", policy.tls_min_version()),
+                    "hsts": policy.hsts().map(|h| serde_json::json!({
+                        "max_age_secs": h.render_value(),
+                    })),
+                    "compression": match policy.compression() {
+                        CompressionPolicy::Off => serde_json::json!("off"),
+                        CompressionPolicy::Gzip(l) => serde_json::json!({"gzip": l}),
+                        CompressionPolicy::Brotli(l) => serde_json::json!({"brotli": l}),
+                    },
+                    "body_size_cap_bytes": policy.body_size_cap().as_u64(),
+                }))?
+            );
+        }
+        crate::TransportAction::Http3 { on } => {
+            let current = svc
+                .get(&owner, site_id)
+                .await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            let updated = TransportPolicy::new(
+                on,
+                current.tls_min_version(),
+                current.hsts().cloned(),
+                current.compression().clone(),
+                ByteSize::new(current.body_size_cap().as_u64())
+                    .map_err(|e| anyhow::anyhow!(e.to_string()))?,
+            )
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            svc.set(&owner, site_id, updated)
+                .await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            println!("http3 {}", if on { "enabled" } else { "disabled" });
+        }
+    }
+    Ok(())
+}
 
 /// Build the `ServerSnapshotService` for CLI subcommands.
 async fn build_server_snapshots(

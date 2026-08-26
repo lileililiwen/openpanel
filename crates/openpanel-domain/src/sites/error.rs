@@ -29,6 +29,10 @@ pub enum SiteError {
     #[error("site not found: {0}")]
     NotFound(String),
 
+    /// A transport-tuning policy violates its validation rules.
+    #[error("invalid transport policy: {0}")]
+    InvalidTransport(String),
+
     /// The operation is not permitted.
     #[error("forbidden")]
     Forbidden,

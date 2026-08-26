@@ -434,6 +434,7 @@ impl TestServer {
             sandbox.path().join("http-auth"),
         )
         .await;
+        let sites_transport_svc = sites_module.transport();
         let web_terminal_module = match web_terminal_pty {
             Some(pty) => openpanel_app::WebTerminalModule::with_pty(&ctx, pty).await,
             None => openpanel_app::WebTerminalModule::new(&ctx).await,
@@ -898,6 +899,7 @@ impl TestServer {
             two_factor_svc.clone(),
             waf_svc.clone(),
             site_http_controls_svc.clone(),
+            sites_transport_svc.clone(),
             web_terminal_svc.clone(),
             sso_svc.clone(),
             docker_svc.clone(),

@@ -8,6 +8,7 @@ use crate::sites::{
     nginx::{NginxConfigGenerator, NginxPaths},
     repo::SqliteSiteRepository,
     service::SitesService,
+    transport_service::SiteTransportService,
 };
 
 /// Stable identifier for the sites module used in migration bookkeeping.
@@ -16,6 +17,7 @@ pub const MODULE_NAME: &str = "sites";
 /// Sites bounded-context module: wires the service + repo + nginx generator.
 pub struct SitesModule {
     service: Arc<SitesService>,
+    transport: Arc<SiteTransportService>,
     migrations: Vec<Migration>,
     generator: NginxConfigGenerator,
 }
@@ -32,24 +34,39 @@ impl SitesModule {
     pub async fn with_paths(ctx: &AppContext, paths: NginxPaths) -> Self {
         let pool = ctx.db.pool().await;
         let repo: Arc<dyn openpanel_domain::SiteRepository> =
-            Arc::new(SqliteSiteRepository::new(pool));
+            Arc::new(SqliteSiteRepository::new(pool.clone()));
         let generator = NginxConfigGenerator::new(paths);
         let service = Arc::new(SitesService::new(
             repo,
             ctx.audit.clone(),
             generator.clone(),
         ));
-        let migrations = vec![Migration {
-            module: MODULE_NAME,
-            version: "001".to_string(),
-            description: "sites initial schema".to_string(),
-            sql: crate::migrations::SITES_V001.to_string(),
-        }];
+        let transport = Arc::new(SiteTransportService::new(pool, ctx.audit.clone()));
+        let migrations = vec![
+            Migration {
+                module: MODULE_NAME,
+                version: "001".to_string(),
+                description: "sites initial schema".to_string(),
+                sql: crate::migrations::SITES_V001.to_string(),
+            },
+            Migration {
+                module: MODULE_NAME,
+                version: "002".to_string(),
+                description: "per-site transport policy column".to_string(),
+                sql: crate::migrations::SITES_V002.to_string(),
+            },
+        ];
         Self {
             service,
+            transport,
             migrations,
             generator,
         }
+    }
+
+    /// Shared transport-tuning service handle.
+    pub fn transport(&self) -> Arc<SiteTransportService> {
+        self.transport.clone()
     }
 
     /// Return a clone of the shared service handle.

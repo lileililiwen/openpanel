@@ -326,6 +326,7 @@ pub use sites::{
     SitesModule,
     nginx::{NginxConfigGenerator, NginxPaths},
     service::SitesService,
+    transport_service::SiteTransportService,
 };
 pub use software_center::{SoftwareCenterModule, SoftwareCenterService};
 pub use ssl::{

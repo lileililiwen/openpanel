@@ -69,6 +69,9 @@ async fn main() -> anyhow::Result<()> {
                 .await
             }
             SiteCommand::List => handlers::list_sites(config).await,
+            SiteCommand::Transport { site, action } => {
+                handlers::site_transport(config, site, action).await
+            }
             SiteCommand::Delete { id } => handlers::delete_site(config, id).await,
             SiteCommand::Enable { id } => handlers::enable_site(config, id).await,
             SiteCommand::Disable { id } => handlers::disable_site(config, id).await,

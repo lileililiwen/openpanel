@@ -11,8 +11,10 @@ pub mod repository;
 pub mod site;
 /// Lifecycle status of a site.
 pub mod status;
+pub mod transport;
 
 pub use error::SiteError;
 pub use repository::SiteRepository;
 pub use site::Site;
 pub use status::SiteStatus;
+pub use transport::{ByteSize, CompressionPolicy, HstsPolicy, TlsVersion, TransportPolicy};

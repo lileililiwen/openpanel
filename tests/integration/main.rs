@@ -55,6 +55,8 @@ mod site_clone_template;
 mod site_http_controls;
 /// Per-site staging HTTP integration tests.
 mod site_staging;
+/// Per-site transport tuning REST integration tests.
+mod site_transport;
 mod sites;
 mod smoke;
 mod software_center;

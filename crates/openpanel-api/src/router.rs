@@ -47,7 +47,7 @@ use crate::{
         site_clone_template::router as site_clone_template_router,
         site_http_controls::router as site_http_controls_router,
         site_staging::router as site_staging_router,
-        sites::router as sites_router,
+        sites::{router as sites_router, transport_router as site_transport_router},
         software_center::router as software_center_router,
         ssl::router as ssl_router,
         sso::{public_router as sso_public_router, router as sso_router},
@@ -85,6 +85,7 @@ pub fn build_router(
     two_factor: Arc<TwoFactorService>,
     waf: Arc<WafService>,
     site_http_controls: Arc<SiteHttpService>,
+    site_transport: Arc<openpanel_app::SiteTransportService>,
     web_terminal: Arc<WebTerminalService>,
     sso: Arc<SsoService>,
     docker: Arc<DockerService>,
@@ -123,6 +124,7 @@ pub fn build_router(
         .nest("/sites", sites_router(sites))
         .nest("/sites", waf_router(waf))
         .nest("/sites", site_http_controls_router(site_http_controls))
+        .nest("/sites", site_transport_router(site_transport))
         .merge(web_terminal_router(web_terminal))
         .merge(sso_router(sso.clone()))
         .nest("/sites", ftp_router(ftp))

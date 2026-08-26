@@ -209,6 +209,8 @@ pub enum AuditAction {
     WafChanged,
     /// A per-site HTTP-controls document changed.
     SiteHttpControlsChanged,
+    /// A per-site transport policy changed.
+    SiteTransportChanged,
     /// A browser terminal session was opened.
     TerminalOpened,
     /// A browser terminal session was closed, with the reason.
@@ -701,6 +703,7 @@ impl AuditService for SqliteAuditService {
                 "device_remembered" => AuditAction::DeviceRemembered,
                 "waf_changed" => AuditAction::WafChanged,
                 "site_http_controls_changed" => AuditAction::SiteHttpControlsChanged,
+                "site_transport_changed" => AuditAction::SiteTransportChanged,
                 "terminal_opened" => AuditAction::TerminalOpened,
                 "terminal_closed" => AuditAction::TerminalClosed,
                 "sso_login" => AuditAction::SsoLogin,

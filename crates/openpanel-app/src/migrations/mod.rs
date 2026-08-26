@@ -22,6 +22,8 @@ pub const IDENTITY_V004: &str = include_str!("identity/V004__webauthn_passkey_js
 pub const IDENTITY_V005: &str = include_str!("identity/V005__hierarchy_and_plan.sql");
 /// SQL for the sites v001 migration (`sites` table).
 pub const SITES_V001: &str = include_str!("sites/V001__init.sql");
+/// SQL for the sites v002 migration (transport-policy column).
+pub const SITES_V002: &str = include_str!("sites/V002__transport.sql");
 /// SQL for the databases v001 migration (`databases` table).
 pub const DATABASES_V001: &str = include_str!("databases/V001__init.sql");
 /// SQL for the ssl v001 migration (`certificates` table).
