@@ -495,3 +495,89 @@ async fn migrate_round_trip_between_hosts_via_shared_offsite_target() {
         imported.last().expect("last applied").source_key
     );
 }
+
+#[tokio::test]
+async fn snapshot_retention_prunes_oldest_and_audits() {
+    use openpanel_core::{AuditAction, Config};
+    let _ = Config::default();
+    let server = TestServer::new().await;
+    let (token, run_id) = owner_and_run(&server).await;
+    let auth = bearer(&token);
+    let base = format!("{}/api/v1/server/snapshots", server.base_url());
+    for _ in 0..3 {
+        let created = server
+            .client()
+            .post(&base)
+            .header("authorization", &auth)
+            .json(&serde_json::json!({ "run_id": run_id }))
+            .send()
+            .await
+            .expect("create");
+        assert_eq!(created.status(), 200);
+        // Ensure distinct created_at ordering between snapshots.
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    }
+    let owner = server
+        .identity()
+        .list_users()
+        .await
+        .expect("users")
+        .into_iter()
+        .find(|user| user.role() == openpanel_domain::Role::Owner)
+        .expect("owner");
+    let svc = server.server_snapshots();
+    assert_eq!(svc.list().await.expect("list").len(), 3);
+
+    // Keep two: the oldest bundle is removed and audited.
+    let pruned = svc.prune_retention(&owner, 2).await.expect("prune");
+    assert_eq!(pruned.len(), 1);
+    let remaining = svc.list().await.expect("list after prune");
+    assert_eq!(remaining.len(), 2);
+    assert!(
+        !remaining.iter().any(|(id, _)| *id == pruned[0]),
+        "the pruned snapshot must be gone"
+    );
+    let events = server.audit_events().await;
+    assert!(
+        events
+            .iter()
+            .any(|event| event.action == AuditAction::SnapshotPruned),
+        "pruning must be audited"
+    );
+
+    // Keeping more than exists is a no-op.
+    assert_eq!(
+        svc.prune_retention(&owner, 10).await.expect("no-op prune"),
+        Vec::<uuid::Uuid>::new()
+    );
+}
+
+#[tokio::test]
+async fn snapshot_schedule_registers_cron_job() {
+    let server = TestServer::new().await;
+    let (_token, _run_id) = owner_and_run(&server).await;
+    let owner = server
+        .identity()
+        .list_users()
+        .await
+        .expect("users")
+        .into_iter()
+        .find(|user| user.role() == openpanel_domain::Role::Owner)
+        .expect("owner");
+    let job_id = server
+        .server_snapshots()
+        .schedule(
+            &owner,
+            &server.cron(),
+            std::path::Path::new(&server.sandbox_path("")),
+            "nightly snapshot".into(),
+            "0 2 * * *".into(),
+            "UTC".into(),
+            5,
+        )
+        .await
+        .expect("schedule");
+    let jobs = server.cron().list(owner.id(), true).await.expect("jobs");
+    let job = jobs.iter().find(|job| job.id() == job_id).expect("job");
+    assert_eq!(job.name(), "nightly snapshot");
+}

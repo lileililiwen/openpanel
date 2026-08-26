@@ -5781,7 +5781,7 @@ pub async fn server_snapshot_get(config: Arc<Config>, id: String) -> anyhow::Res
 }
 
 /// `openpanel server-snapshot create`.
-pub async fn server_snapshot_create(config: Arc<Config>) -> anyhow::Result<()> {
+pub async fn server_snapshot_create(config: Arc<Config>, retain: usize) -> anyhow::Result<()> {
     let svc = build_server_snapshots(config).await?;
     let caller = snapshot_caller();
     let backups_svc = svc.backups();
@@ -5800,6 +5800,41 @@ pub async fn server_snapshot_create(config: Arc<Config>) -> anyhow::Result<()> {
         .await
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     println!("created snapshot with {} entries", manifest.entries.len());
+    if retain > 0 {
+        let pruned = svc
+            .prune_retention(&caller, retain)
+            .await
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+        println!("pruned {} old snapshot(s)", pruned.len());
+    }
+    Ok(())
+}
+
+/// `openpanel server-snapshot schedule ...`.
+pub async fn server_snapshot_schedule(
+    config: Arc<Config>,
+    name: String,
+    schedule: String,
+    timezone: String,
+    retain: usize,
+) -> anyhow::Result<()> {
+    let svc = build_server_snapshots(config.clone()).await?;
+    let caller = snapshot_caller();
+    let working_root = std::env::current_dir()?;
+    let cron = build_cron(config).await?;
+    let job_id = svc
+        .schedule(
+            &caller,
+            &cron,
+            &working_root,
+            name,
+            schedule,
+            timezone,
+            retain,
+        )
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("{job_id}");
     Ok(())
 }
 

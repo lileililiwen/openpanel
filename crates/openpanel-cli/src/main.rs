@@ -450,7 +450,15 @@ async fn main() -> anyhow::Result<()> {
         Command::ServerSnapshot { action } => match action {
             ServerSnapshotCommand::List => handlers::server_snapshot_list(config).await,
             ServerSnapshotCommand::Get { id } => handlers::server_snapshot_get(config, id).await,
-            ServerSnapshotCommand::Create => handlers::server_snapshot_create(config).await,
+            ServerSnapshotCommand::Create { retain } => {
+                handlers::server_snapshot_create(config, retain).await
+            }
+            ServerSnapshotCommand::Schedule {
+                name,
+                schedule,
+                timezone,
+                retain,
+            } => handlers::server_snapshot_schedule(config, name, schedule, timezone, retain).await,
             ServerSnapshotCommand::Preflight { id } => {
                 handlers::server_snapshot_preflight(config, id).await
             }

@@ -893,7 +893,26 @@ pub enum ServerSnapshotCommand {
         id: String,
     },
     /// Create a snapshot from the current host state.
-    Create,
+    Create {
+        /// Keep only this many newest snapshots after creating.
+        #[arg(long, default_value_t = 0)]
+        retain: usize,
+    },
+    /// Register a recurring scheduled snapshot job.
+    Schedule {
+        /// Display name for the cron job.
+        #[arg(long)]
+        name: String,
+        /// Five-field cron expression.
+        #[arg(long)]
+        schedule: String,
+        /// IANA timezone.
+        #[arg(long, default_value = "UTC")]
+        timezone: String,
+        /// Snapshots to keep after each run.
+        #[arg(long, default_value_t = 3)]
+        retain: usize,
+    },
     /// Run preflight checks for restoring a snapshot.
     Preflight {
         /// Snapshot identifier.

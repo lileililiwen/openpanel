@@ -43,7 +43,7 @@
       per-resource audit events.
 - [x] 3.3 `SnapshotImporter` implementing the migration-importers
       driver contract; offsite-target export/import glue.
-- [ ] 3.4 Cron job type for scheduled snapshots; plan-aware retention
+- [x] 3.4 Cron job type for scheduled snapshots; plan-aware retention
       pruning with audit.
 
 ## 4. Adapters and UI

@@ -65,8 +65,17 @@ commit time) over `SnapshotBundleSource`; offsite glue
 `migrate_round_trip_between_hosts_via_shared_offsite_target` proves
 export → pull → preview → commit → rollback across hosts.
 
-**Remaining (tasks unchecked):** 3.4 scheduled snapshots + retention
-pruning, 1.9/4.3 web Snapshots page, 5.x validation/archive.
+**Update (session 2026-08-26, final):** task 3.4 done —
+`ServerSnapshotService::prune_retention` removes the oldest bundles
+beyond a keep-count (auditing `SnapshotPruned` per removal) and
+`schedule()` registers a recurring cron command job that runs
+`server-snapshot create --retain N`, so every scheduled occurrence
+also prunes; CLI gained `create --retain N` and a `schedule`
+subcommand.
+
+**Remaining (tasks unchecked):** 1.9/4.3 web Snapshots page (needs UI
+work + screenshots), 5.2 full `make check`, 5.3 restore smoke-test in
+a container, 5.4 archive.
 
 ## Key Decisions
 

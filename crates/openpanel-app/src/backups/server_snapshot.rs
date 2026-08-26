@@ -196,6 +196,100 @@ impl ServerSnapshotService {
         Ok(manifest)
     }
 
+    /// Delete the oldest snapshots beyond a retention count of
+    /// `keep`, auditing each removal. Returns the pruned ids, oldest
+    /// first.
+    pub async fn prune_retention(
+        &self,
+        caller: &User,
+        keep: usize,
+    ) -> Result<Vec<Uuid>, ServerSnapshotError> {
+        self.require_owner(caller)?;
+        let mut all = self.list().await?;
+        // `list` returns newest first; prune from the tail.
+        let removable = all.len().saturating_sub(keep);
+        let mut pruned = Vec::new();
+        for _ in 0..removable {
+            let Some((id, manifest)) = all.pop() else {
+                break;
+            };
+            let dir = self.root.join(id.to_string());
+            match tokio::fs::remove_dir_all(&dir).await {
+                Ok(()) => {
+                    #[allow(clippy::expect_used)]
+                    // mutex poisoning is an unrecoverable invariant violation
+                    {
+                        self.tokens.lock().expect("snapshot token lock").remove(&id);
+                    }
+                    let _ = self
+                        .audit
+                        .record(
+                            AuditEvent::new(
+                                caller.username().as_str(),
+                                AuditAction::SnapshotPruned,
+                                AuditOutcome::Success,
+                            )
+                            .target(id.to_string())
+                            .metadata(serde_json::json!({
+                                "entries": manifest.entries.len(),
+                                "retention_keep": keep,
+                            })),
+                        )
+                        .await;
+                    pruned.push(id);
+                }
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Err(error) => return Err(io_error(error)),
+            }
+        }
+        Ok(pruned)
+    }
+
+    /// Register a recurring snapshot job on the host's cron
+    /// schedule. The job shells out to this binary's
+    /// `server-snapshot create --retain N`, so each occurrence also
+    /// applies retention pruning.
+    #[allow(clippy::too_many_arguments)]
+    pub async fn schedule(
+        &self,
+        caller: &User,
+        cron: &crate::CronService,
+        working_root: &std::path::Path,
+        name: String,
+        schedule: String,
+        timezone: String,
+        retain: usize,
+    ) -> Result<Uuid, ServerSnapshotError> {
+        self.require_owner(caller)?;
+        let executable =
+            std::env::current_exe().map_err(|e| ServerSnapshotError::Failure(e.to_string()))?;
+        let job = cron
+            .create(
+                caller.id(),
+                crate::cron::CronInput {
+                    name,
+                    schedule,
+                    timezone,
+                    kind: "command".into(),
+                    executable: Some(executable.to_string_lossy().into_owned()),
+                    arguments: vec![
+                        "server-snapshot".into(),
+                        "create".into(),
+                        "--retain".into(),
+                        retain.to_string(),
+                    ],
+                    working_directory: Some(working_root.to_string_lossy().into_owned()),
+                    url: None,
+                    method: None,
+                    timeout_secs: 86_400,
+                    overlap_policy: "skip".into(),
+                },
+            )
+            .await
+            .map_err(|error| ServerSnapshotError::Failure(error.to_string()))?;
+        Ok(job.id())
+    }
+
     /// List available snapshot manifests.
     pub async fn list(&self) -> Result<Vec<(Uuid, SnapshotManifest)>, ServerSnapshotError> {
         let mut out = Vec::new();
