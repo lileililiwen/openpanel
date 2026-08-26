@@ -223,6 +223,7 @@ impl AuditAction {
             AuditAction::SiteTransportChanged => "site_transport_changed",
             AuditAction::LogsPolicyChanged => "logs_policy_changed",
             AuditAction::SshKeyChanged => "ssh_key_changed",
+            AuditAction::DeliverabilityChecked => "deliverability_checked",
             AuditAction::TerminalOpened => "terminal_opened",
             AuditAction::TerminalClosed => "terminal_closed",
             AuditAction::SsoLogin => "sso_login",

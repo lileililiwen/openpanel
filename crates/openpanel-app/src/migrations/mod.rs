@@ -115,6 +115,8 @@ pub const WILDCARD_SSL_V001: &str = include_str!("wildcard_ssl/V001__init.sql");
 pub const APP_RUNTIMES_V001: &str = include_str!("app_runtimes/V001__init.sql");
 /// SQL for the app-runtimes v002 migration (runtime env table).
 pub const APP_RUNTIMES_V002: &str = include_str!("app_runtimes/V002__env.sql");
+/// SQL for the deliverability v001 migration (listings + DMARC stats).
+pub const DELIVERABILITY_V001: &str = include_str!("deliverability/V001__init.sql");
 /// Kernel resource isolation: cgroup limits + namespace + policy.
 pub const KERNEL_ISOLATION_V001: &str = include_str!("kernel_isolation/V001__init.sql");
 /// DNSSEC + secondary DNS: policies, keys, secondaries, glue, DS.

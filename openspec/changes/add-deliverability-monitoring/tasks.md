@@ -22,7 +22,7 @@
       `MockResolver`: listed IP triggers notification event through
       mock dispatcher; clear resolves; on-demand check endpoint
       returns summary; unauthenticated → 401.
-- [ ] 1.7 Integration: 90-day prune removes older `DmarcSourceStat`
+- [x] 1.7 Integration: 90-day prune removes older `DmarcSourceStat`
       rows after ingest.
 - [ ] 1.8 CLI E2E: `cli_mail_deliverability_check_then_show`.
 - [ ] 1.9 Web: Deliverability tab at 360/768/1280 px; screenshots.

@@ -69,6 +69,23 @@ impl Listing {
         }
     }
 
+    /// Restore from persistence.
+    pub fn restore(
+        ip: IpAddr,
+        zone: impl Into<String>,
+        first_seen: DateTime<Utc>,
+        last_seen: DateTime<Utc>,
+        resolved_at: Option<DateTime<Utc>>,
+    ) -> Self {
+        Self {
+            ip,
+            zone: zone.into(),
+            first_seen,
+            last_seen,
+            resolved_at,
+        }
+    }
+
     /// Upsert semantics: a repeat listing keeps `first_seen` and
     /// refreshes `last_seen`; a clear stamps `resolved_at`.
     pub fn upsert(&mut self, listed_now: bool, now: DateTime<Utc>) {

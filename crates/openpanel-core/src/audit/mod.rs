@@ -215,6 +215,8 @@ pub enum AuditAction {
     LogsPolicyChanged,
     /// The admin authorized_keys file was rewritten.
     SshKeyChanged,
+    /// A deliverability blocklist check completed.
+    DeliverabilityChecked,
     /// A browser terminal session was opened.
     TerminalOpened,
     /// A browser terminal session was closed, with the reason.
@@ -712,6 +714,7 @@ impl AuditService for SqliteAuditService {
                 "runtime_changed" => AuditAction::RuntimeChanged,
                 "logs_policy_changed" => AuditAction::LogsPolicyChanged,
                 "ssh_key_changed" => AuditAction::SshKeyChanged,
+                "deliverability_checked" => AuditAction::DeliverabilityChecked,
                 "terminal_opened" => AuditAction::TerminalOpened,
                 "terminal_closed" => AuditAction::TerminalClosed,
                 "sso_login" => AuditAction::SsoLogin,

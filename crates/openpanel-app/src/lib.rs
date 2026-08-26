@@ -48,6 +48,7 @@ pub mod db_pitr;
 /// scopes, remote access with an explicit wildcard opt-in, and
 /// short-lived single-use SSO tokens for the admin tool launcher.
 pub mod db_privileges;
+pub mod deliverability;
 pub mod dns;
 /// DNSSEC + secondary DNS bounded context: zone signing keys,
 /// secondary nameserver ACLs, glue records, and DS records.
@@ -213,6 +214,7 @@ pub use db_privileges::{
     AdminToolSso, DbPrivilegeModule, DbRemoteAccessContext, MemoryGrantPort, MySqlGrantPort,
     MySqlShellGrantPort, PrivilegeService, RemoteAccessController, SqliteDbPrivilegeRepository,
 };
+pub use deliverability::{DeliverabilityModule, DeliverabilityService};
 pub use dns::{DnsModule, DnsService};
 pub use dnssec_secondary::{
     AxfrSender, DnsSecSecondaryModule, DnsSecService, GlueRecordService, KeyRolloverEngine,
