@@ -26,7 +26,7 @@ use crate::{
         container_registry::router as container_registry_router,
         container_runtime::router as container_runtime_router,
         cron::router as cron_router,
-        databases::router as databases_router,
+        databases::{remote_access_router as db_remote_access_router, router as databases_router},
         db_pitr::router as db_pitr_router,
         dns::router as dns_router,
         docker::router as docker_router,
@@ -88,6 +88,7 @@ pub fn build_router(
     site_transport: Arc<openpanel_app::SiteTransportService>,
     log_rotation: Arc<openpanel_app::LogRotationService>,
     host_ssh_keys: Arc<openpanel_app::HostSshKeysService>,
+    db_remote_access: Arc<openpanel_app::DbRemoteAccessContext>,
     web_terminal: Arc<WebTerminalService>,
     sso: Arc<SsoService>,
     docker: Arc<DockerService>,
@@ -132,6 +133,7 @@ pub fn build_router(
         .nest("/sites", ftp_router(ftp))
         .nest("/sites", site_staging_router(staging))
         .nest("/databases", databases_router(databases))
+        .nest("/databases", db_remote_access_router(db_remote_access))
         .nest("/files", files_router(files.clone()))
         .nest("/ssl", ssl_router(ssl))
         .nest("/monitoring", monitoring_router(monitoring))

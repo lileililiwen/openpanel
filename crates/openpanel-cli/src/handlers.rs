@@ -470,6 +470,19 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         sites_module.transport(),
         logs_module.rotation(),
         security_module.ssh_keys(),
+        std::sync::Arc::new(openpanel_app::DbRemoteAccessContext {
+            controller: std::sync::Arc::new(
+                openpanel_app::RemoteAccessController::new(
+                    std::sync::Arc::new(
+                        openpanel_app::SqliteDbPrivilegeRepository::new(pool.clone()),
+                    ),
+                    audit.clone(),
+                ),
+            ),
+            port: std::sync::Arc::new(openpanel_app::MySqlShellGrantPort::new(
+                "/usr/bin/mysql",
+            )),
+        }),
         web_terminal_svc.clone(),
         sso_svc.clone(),
         docker_svc.clone(),

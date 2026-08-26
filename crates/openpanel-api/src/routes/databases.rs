@@ -107,3 +107,91 @@ fn map_db_err(e: DatabaseError) -> ApiError {
         | DatabaseError::Io(_) => ApiError::Internal(e.to_string()),
     }
 }
+
+/// Builds the Axum sub-router for per-database remote access
+/// (own state, nested beside the other `/databases` routers).
+pub fn remote_access_router(ctx: Arc<openpanel_app::DbRemoteAccessContext>) -> Router {
+    Router::new()
+        .route(
+            "/{id}/remote-access",
+            axum::routing::put(put_remote_access).get(get_remote_access),
+        )
+        .with_state(ctx)
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RemoteAccessInput {
+    /// MySQL account user part.
+    user: String,
+    /// Database name.
+    database: String,
+    enabled: bool,
+    allow_cidrs: Vec<String>,
+    wildcard_opt_in: bool,
+}
+
+async fn get_remote_access(
+    State(ctx): State<Arc<openpanel_app::DbRemoteAccessContext>>,
+    AuthUser(caller, _): AuthUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let access = ctx
+        .controller
+        .get(&caller, id)
+        .await
+        .map_err(map_db_privilege)?;
+    // Never echo password material — the ACL carries none.
+    Ok(Json(serde_json::json!({
+        "database_id": access.database_id,
+        "enabled": access.enabled,
+        "allow_cidrs": access.allow_cidrs,
+        "wildcard_opt_in": access.wildcard_opt_in,
+    })))
+}
+
+async fn put_remote_access(
+    State(ctx): State<Arc<openpanel_app::DbRemoteAccessContext>>,
+    AuthUser(caller, _): AuthUser,
+    Path(id): Path<Uuid>,
+    Json(input): Json<RemoteAccessInput>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let access = ctx
+        .controller
+        .apply(
+            &caller,
+            id,
+            &input.user,
+            &input.database,
+            input.enabled,
+            input.allow_cidrs,
+            input.wildcard_opt_in,
+            ctx.port.as_ref(),
+        )
+        .await
+        .map_err(map_db_privilege)?;
+    Ok(Json(serde_json::json!({
+        "database_id": access.database_id,
+        "enabled": access.enabled,
+        "allow_cidrs": access.allow_cidrs,
+        "wildcard_opt_in": access.wildcard_opt_in,
+    })))
+}
+
+fn map_db_privilege(error: openpanel_domain::db_privileges::DbPrivilegeError) -> ApiError {
+    use openpanel_domain::db_privileges::DbPrivilegeError;
+    match error {
+        DbPrivilegeError::Forbidden => ApiError::Forbidden,
+        DbPrivilegeError::NotFound(_) => ApiError::NotFound(error.to_string()),
+        DbPrivilegeError::EmptyAcl | DbPrivilegeError::WildcardAcl => ApiError::GlobalAccessLocked,
+        DbPrivilegeError::PrefixTooBroad | DbPrivilegeError::InvalidPolicy(_) => {
+            ApiError::Unprocessable(error.to_string())
+        }
+        DbPrivilegeError::GrantFailed { step } => {
+            ApiError::Internal(format!("grant failed at step {step}"))
+        }
+        DbPrivilegeError::InvalidSsoToken
+        | DbPrivilegeError::OutsideDatabase(_)
+        | DbPrivilegeError::Persistence(_) => ApiError::Internal(error.to_string()),
+    }
+}

@@ -210,8 +210,8 @@ pub use db_pitr::{DbPitrModule, PitrService};
 /// offline development.
 pub use db_pitr::{InMemoryBinlogSink, InMemoryLogTailer};
 pub use db_privileges::{
-    AdminToolSso, DbPrivilegeModule, PrivilegeService, RemoteAccessController,
-    SqliteDbPrivilegeRepository,
+    AdminToolSso, DbPrivilegeModule, DbRemoteAccessContext, MemoryGrantPort, MySqlGrantPort,
+    MySqlShellGrantPort, PrivilegeService, RemoteAccessController, SqliteDbPrivilegeRepository,
 };
 pub use dns::{DnsModule, DnsService};
 pub use dnssec_secondary::{

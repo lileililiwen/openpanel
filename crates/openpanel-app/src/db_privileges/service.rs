@@ -254,6 +254,17 @@ fn require_admin(caller: &User) -> Result<(), DbPrivilegeError> {
     }
 }
 
+/// Shared state for the remote-access REST surface: the controller
+/// plus whichever grant port the composition root chose.
+#[derive(Clone)]
+pub struct DbRemoteAccessContext {
+    /// The controller executing all-or-nothing applies.
+    pub controller: Arc<RemoteAccessController>,
+    /// The configured grant port (shell-out in production, recorder
+    /// in tests).
+    pub port: Arc<dyn MySqlGrantPort>,
+}
+
 /// Port driving the live MySQL grant table. Implemented by the
 /// mysql shell-out adapter; tests inject recorders.
 #[async_trait::async_trait]

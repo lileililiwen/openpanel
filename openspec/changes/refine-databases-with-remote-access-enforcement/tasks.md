@@ -14,12 +14,12 @@
 - [x] 1.4 Property: for arbitrary valid CIDR lists the derived
       patterns are unique and none equals `%` alone unless the global
       opt-in flag is set.
-- [ ] 1.5 Integration (`tests/integration/db_remote_access.rs`) with
+- [x] 1.5 Integration (`tests/integration/db_remote_access.rs`) with
       mocked grant port: PUT valid ACL → 200 + audit
       `DbRemoteAccessChanged{added:[pattern]}`; DELETE-equivalent
       disable → port received DROP; GET never contains password
       material.
-- [ ] 1.6 Integration: `0.0.0.0/0` without opt-in config → 422
+- [x] 1.6 Integration: `0.0.0.0/0` without opt-in config → 422
       `global_access_locked`; with opt-in → applied and audited.
 - [ ] 1.7 Integration: boot reconcile heals a manually emptied
       `mysql.user` mock to match stored ACLs exactly once per boot.

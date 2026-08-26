@@ -22,6 +22,8 @@ mod cron;
 mod databases;
 /// Database point-in-time recovery HTTP integration tests.
 mod db_pitr;
+/// Database remote-access integration tests.
+mod db_remote_access;
 mod dns;
 mod docker;
 mod files;

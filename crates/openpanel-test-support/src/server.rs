@@ -219,6 +219,7 @@ pub struct TestServer {
     backups: Arc<BackupService>,
     server_snapshots: Arc<openpanel_app::ServerSnapshotService>,
     log_rotation: Arc<openpanel_app::LogRotationService>,
+    db_grant_port: std::sync::Arc<openpanel_app::MemoryGrantPort>,
     logs: Arc<LogService>,
     security: Arc<SecurityService>,
     system_services: Arc<openpanel_app::ServiceManager>,
@@ -436,6 +437,12 @@ impl TestServer {
         )
         .await;
         let sites_transport_svc = sites_module.transport();
+        let db_grant_port_recorder =
+            std::sync::Arc::new(openpanel_app::MemoryGrantPort::new(vec![
+                "localhost".to_string(),
+            ]));
+        let db_grant_port: std::sync::Arc<dyn openpanel_app::MySqlGrantPort> =
+            db_grant_port_recorder.clone();
         let web_terminal_module = match web_terminal_pty {
             Some(pty) => openpanel_app::WebTerminalModule::with_pty(&ctx, pty).await,
             None => openpanel_app::WebTerminalModule::new(&ctx).await,
@@ -911,6 +918,15 @@ impl TestServer {
             sites_transport_svc.clone(),
             logs_module.rotation(),
             security_module.ssh_keys(),
+            std::sync::Arc::new(openpanel_app::DbRemoteAccessContext {
+                controller: std::sync::Arc::new(openpanel_app::RemoteAccessController::new(
+                    std::sync::Arc::new(openpanel_app::SqliteDbPrivilegeRepository::new(
+                        pool.clone(),
+                    )),
+                    audit.clone(),
+                )),
+                port: db_grant_port.clone(),
+            }),
             web_terminal_svc.clone(),
             sso_svc.clone(),
             docker_svc.clone(),
@@ -1039,6 +1055,7 @@ impl TestServer {
             backups: backups_svc,
             server_snapshots: server_snapshots_svc,
             log_rotation: logs_module.rotation(),
+            db_grant_port: db_grant_port_recorder.clone(),
             logs: logs_svc,
             security: security_svc,
             system_services: system_services_svc,
@@ -1269,6 +1286,11 @@ impl TestServer {
     /// The log rotation-policy service handle.
     pub fn log_rotation(&self) -> Arc<openpanel_app::LogRotationService> {
         self.log_rotation.clone()
+    }
+
+    /// The recording database grant port (remote-access tests).
+    pub fn db_grant_port(&self) -> std::sync::Arc<openpanel_app::MemoryGrantPort> {
+        self.db_grant_port.clone()
     }
 
     /// The authorized log browsing service handle.

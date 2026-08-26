@@ -68,6 +68,9 @@ pub enum ApiError {
     /// An unexpected internal failure. Avoid leaking details to clients.
     #[error("internal error: {0}")]
     Internal(String),
+    /// Remote-access wildcard was requested without the global opt-in.
+    #[error("global access locked")]
+    GlobalAccessLocked,
 }
 
 impl IntoResponse for ApiError {
@@ -135,6 +138,9 @@ impl IntoResponse for ApiError {
             ApiError::LoginThrottled(_) => (StatusCode::UNAUTHORIZED, "invalid_credentials"),
             ApiError::Forbidden => (StatusCode::FORBIDDEN, "forbidden"),
             ApiError::Conflict(_) => (StatusCode::CONFLICT, "conflict"),
+            ApiError::GlobalAccessLocked => {
+                (StatusCode::UNPROCESSABLE_ENTITY, "global_access_locked")
+            }
             ApiError::PayloadTooLarge(_) => (StatusCode::PAYLOAD_TOO_LARGE, "payload_too_large"),
             ApiError::ServiceUnavailable(_) => {
                 (StatusCode::SERVICE_UNAVAILABLE, "service_unavailable")
