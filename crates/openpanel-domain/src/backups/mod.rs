@@ -18,6 +18,7 @@ use uuid::Uuid;
 use crate::cron::CronSchedule;
 
 mod refine;
+pub mod drill;
 pub mod snapshot;
 
 /// Domain validation and transition failures.

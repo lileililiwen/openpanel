@@ -2,15 +2,15 @@
 
 ## 1. Testing
 
-- [ ] 1.1 Unit: `RestoreDrill` state machine — a drill is `Running`
+- [x] 1.1 Unit: `RestoreDrill` state machine — a drill is `Running`
       until every assertion completes; outcome flips to
       `Passed`/`Failed` only on finish; finishing twice is rejected.
+- [x] 1.3 Unit: sandbox naming — the suffixed database name and temp
+      docroot are unique per drill and never equal production names.
 - [ ] 1.2 Unit: assertion evaluation — SQL dump executes and row
       counts > 0 passes; site archive extracts and contains a
       manifest/index passes; SSL entry decrypts under the local
       master key passes; each failure records a non-empty detail.
-- [ ] 1.3 Unit: sandbox naming — the suffixed database name and temp
-      docroot are unique per drill and never equal production names.
 - [ ] 1.4 Property: for arbitrary drill reports (≥100 cases) the
       serialized report contains no secret material (passwords,
       cipher text, connection strings) — only paths, ids, outcomes,
@@ -29,13 +29,13 @@
 
 ## 2. Domain
 
-- [ ] 2.1 Add `RestoreDrill`, `DrillAssertion`, `DrillOutcome`,
+- [x] 2.1 Add `RestoreDrill`, `DrillAssertion`, `DrillOutcome`,
       `DrillError` + validation under
       `crates/openpanel-domain/src/backups/`.
 
 ## 3. Application
 
-- [ ] 3.1 `SandboxContext` builder (temp docroot + suffixed throwaway
+- [x] 3.1 `SandboxContext` builder (temp docroot + suffixed throwaway
       database) reusing the provisioning shell path; guaranteed
       teardown even on failure.
 - [ ] 3.2 Drill runner: point the existing restore machinery at the

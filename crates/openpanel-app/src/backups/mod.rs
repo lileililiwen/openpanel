@@ -1,6 +1,7 @@
 //! Backup/restore orchestration, local destination, and module wiring.
 
 pub mod module;
+pub mod sandbox;
 pub mod server_snapshot;
 pub mod service;
 pub mod snapshot_importer;
