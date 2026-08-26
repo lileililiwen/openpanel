@@ -49,7 +49,13 @@ The software-center bounded context SHALL model a `TargetSiteType` enum (`Single
 
 ### Requirement: Behaviour Parity
 
-The refinement introduces the new types without changing the existing `Catalog`, `Plan`, and `Job` lifecycle. The follow-on `add-web-application-installer` change wires the installer around the typed manifest.
+The refinement SHALL introduce the new types without changing the existing `Catalog`, `Plan`, and `Job` lifecycle. The follow-on `add-web-application-installer` change wires the installer around the typed manifest.
+
+
+#### Scenario: Existing behaviour unchanged
+
+- **WHEN** the refined bounded context is exercised through its public API
+- **THEN** behaviour outside the newly added surface is identical to the pre-refinement behaviour.
 
 ### Requirement: Audit and Event Surface
 

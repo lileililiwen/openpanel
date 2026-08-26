@@ -43,7 +43,13 @@ The DNS bounded context SHALL expose `ZoneTemplate::strict(domain)`, `ZoneTempla
 
 ### Requirement: Behaviour Parity
 
-The refinement introduces the new template types without changing the existing zone lifecycle. The follow-on `apply-template` change wires the applier into `DnsService::enable`.
+The refinement SHALL introduce the new template types without changing the existing zone lifecycle. The follow-on `apply-template` change wires the applier into `DnsService::enable`.
+
+
+#### Scenario: Existing behaviour unchanged
+
+- **WHEN** the refined bounded context is exercised through its public API
+- **THEN** behaviour outside the newly added surface is identical to the pre-refinement behaviour.
 
 ### Requirement: Audit and Event Surface
 
