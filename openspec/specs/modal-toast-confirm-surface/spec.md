@@ -1,5 +1,8 @@
-## ADDED Requirements
+# modal-toast-confirm-surface Specification
 
+## Purpose
+TBD - created by archiving change add-admin-interaction-surface. Update Purpose after archive.
+## Requirements
 ### Requirement: Single Layer Surface for All Overlays
 
 The web adapter SHALL provide a single `layer` module at
@@ -79,8 +82,6 @@ plain `DELETE` from a list row.
 - **THEN** each row's delete action renders an `hx-get="/layer/confirm?action=..."`
   link and never a plain destructive button
 
-## MODIFIED Requirements
-
 ### Requirement: Shell Wires HTMX Toast Hook
 
 The shell's vendored `htmx.min.js` SHALL be augmented with a
@@ -94,3 +95,4 @@ the shell. No route SHALL emit toast markup directly.
 - **WHEN** any response carries `HX-Trigger: layer-toast`
 - **THEN** the client-side handler fetches `/layer/toast`, appends it to
   `#layer-root`, and the toast auto-dismisses after 4 seconds
+

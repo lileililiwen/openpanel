@@ -1,5 +1,8 @@
-## ADDED Requirements
+# inline-form-validation Specification
 
+## Purpose
+TBD - created by archiving change add-admin-interaction-surface. Update Purpose after archive.
+## Requirements
 ### Requirement: Per-Field Validation on Blur
 
 The web adapter SHALL validate each form field on the user's first `blur`
@@ -54,8 +57,6 @@ its own error markup.
 - **THEN** the rendered error markup comes from `render_field_error` and is
   structurally identical across routes (same CSS class, same ARIA attributes)
 
-## MODIFIED Requirements
-
 ### Requirement: Shell Mounts Inline-Validation Container
 
 The shell SHALL mount a `<div id="form-errors" hx-swap-oob="true">` root
@@ -70,3 +71,4 @@ stealing focus.
   `hx-swap-oob="true"` and target `#form-errors`
 - **THEN** the fragment is appended to the shell container without a full
   page reload, and assistive technology announces the new error
+
