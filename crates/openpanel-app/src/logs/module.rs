@@ -4,7 +4,7 @@ use std::{path::PathBuf, sync::Arc};
 
 use openpanel_core::{AppContext, Migration, Module};
 
-use super::LogService;
+use super::{LogService, rotation_service::LogRotationService};
 
 /// Stable module name.
 pub const MODULE_NAME: &str = "logs";
@@ -12,6 +12,7 @@ pub const MODULE_NAME: &str = "logs";
 /// Registered logs service and aggregation schema.
 pub struct LogsModule {
     service: Arc<LogService>,
+    rotation: Arc<LogRotationService>,
     migrations: Vec<Migration>,
 }
 
@@ -23,19 +24,43 @@ impl LogsModule {
 
     /// Build with an explicit sandbox root.
     pub async fn with_root(ctx: &AppContext, root: PathBuf) -> Self {
+        let drop_in_root = std::env::var("OPENPANEL__LOGS__DROP_IN_ROOT")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/etc/logrotate.d"));
+        Self::with_roots(ctx, root, drop_in_root).await
+    }
+
+    /// Build with explicit log and logrotate drop-in roots.
+    pub async fn with_roots(ctx: &AppContext, root: PathBuf, drop_in_root: PathBuf) -> Self {
+        let pool = ctx.db.pool().await;
+        let rotation = Arc::new(LogRotationService::new(
+            pool.clone(),
+            ctx.audit.clone(),
+            drop_in_root,
+        ));
         Self {
-            service: Arc::new(LogService::for_root(
-                ctx.db.pool().await,
-                root,
-                ctx.audit.clone(),
-            )),
-            migrations: vec![Migration {
-                module: MODULE_NAME,
-                version: "001".into(),
-                description: "traffic aggregates and source offsets".into(),
-                sql: crate::migrations::LOGS_V001.into(),
-            }],
+            service: Arc::new(LogService::for_root(pool, root, ctx.audit.clone())),
+            rotation,
+            migrations: vec![
+                Migration {
+                    module: MODULE_NAME,
+                    version: "001".into(),
+                    description: "traffic aggregates and source offsets".into(),
+                    sql: crate::migrations::LOGS_V001.into(),
+                },
+                Migration {
+                    module: MODULE_NAME,
+                    version: "002".into(),
+                    description: "log rotation policies".into(),
+                    sql: crate::migrations::LOGS_V002.into(),
+                },
+            ],
         }
+    }
+
+    /// Shared rotation-policy service handle.
+    pub fn rotation(&self) -> Arc<LogRotationService> {
+        self.rotation.clone()
     }
 
     /// Shared service handle.

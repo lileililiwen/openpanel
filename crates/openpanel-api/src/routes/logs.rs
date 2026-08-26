@@ -4,14 +4,17 @@ use std::sync::Arc;
 
 use axum::{
     Json, Router,
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::{HeaderMap, HeaderValue, header},
     response::IntoResponse,
     routing::get,
 };
-use openpanel_app::logs::{
-    LogActor, LogReadQuery, LogService, LogServiceError, MAX_DOWNLOAD_BYTES, MAX_LOG_LINES,
-    MAX_READ_BYTES, TRAFFIC_RETENTION_DAYS,
+use openpanel_app::{
+    LogRotationService,
+    logs::{
+        LogActor, LogReadQuery, LogService, LogServiceError, MAX_DOWNLOAD_BYTES, MAX_LOG_LINES,
+        MAX_READ_BYTES, TRAFFIC_RETENTION_DAYS,
+    },
 };
 use serde::Deserialize;
 use uuid::Uuid;
@@ -146,5 +149,82 @@ fn map(error: LogServiceError) -> ApiError {
         LogServiceError::LimitExceeded => ApiError::PayloadTooLarge(MAX_DOWNLOAD_BYTES),
         LogServiceError::Validation(message) => ApiError::BadRequest(message),
         LogServiceError::Storage(_) => ApiError::Internal("log storage unavailable".into()),
+    }
+}
+
+/// Builds the Axum sub-router for rotation policies (own state,
+/// nested beside the other `/logs` routers).
+pub fn policies_router(svc: Arc<LogRotationService>) -> Router {
+    Router::new()
+        .route(
+            "/policies/{class}",
+            axum::routing::get(get_policy).put(put_policy),
+        )
+        .route("/policies/{class}/rotate", axum::routing::post(post_rotate))
+        .with_state(svc)
+}
+
+async fn get_policy(
+    State(svc): State<Arc<LogRotationService>>,
+    AuthUser(caller, _): AuthUser,
+    Path(class): Path<String>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let class = openpanel_domain::logs::SourceClass::parse(&class)
+        .ok_or_else(|| ApiError::NotFound("log source class".into()))?;
+    let (policy, drift) = svc.get(&caller, class).await.map_err(map)?;
+    Ok(Json(serde_json::json!({
+        "policy": serde_json::to_value(&policy)
+            .map_err(|e| ApiError::Internal(e.to_string()))?,
+        "drift": drift,
+    })))
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PolicyInput {
+    max_age_days: u16,
+    max_size_mb: u32,
+    keep_generations: u8,
+    compress: bool,
+}
+
+async fn put_policy(
+    State(svc): State<Arc<LogRotationService>>,
+    AuthUser(caller, _): AuthUser,
+    Path(class): Path<String>,
+    Json(input): Json<PolicyInput>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let class = openpanel_domain::logs::SourceClass::parse(&class)
+        .ok_or_else(|| ApiError::NotFound("log source class".into()))?;
+    let policy = openpanel_domain::logs::RotationPolicy::new(
+        class,
+        input.max_age_days,
+        input.max_size_mb,
+        input.keep_generations,
+        input.compress,
+    )
+    .map_err(|e| ApiError::Unprocessable(e.to_string()))?;
+    let saved = svc.set(&caller, policy).await.map_err(map)?;
+    Ok(Json(
+        serde_json::to_value(&saved).map_err(|e| ApiError::Internal(e.to_string()))?,
+    ))
+}
+
+async fn post_rotate(
+    State(svc): State<Arc<LogRotationService>>,
+    AuthUser(caller, _): AuthUser,
+    Path(class): Path<String>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let class = openpanel_domain::logs::SourceClass::parse(&class)
+        .ok_or_else(|| ApiError::NotFound("log source class".into()))?;
+    match svc.rotate(&caller, class).await {
+        Ok(output) => Ok(Json(serde_json::json!({
+            "rotated": true,
+            "output": output,
+        }))),
+        Err(LogServiceError::Validation(message)) if message == "logrotate_unavailable" => {
+            Err(ApiError::ServiceUnavailable("logrotate_unavailable".into()))
+        }
+        Err(error) => Err(map(error)),
     }
 }

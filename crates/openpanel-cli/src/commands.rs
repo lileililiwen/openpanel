@@ -846,11 +846,47 @@ pub enum SecurityRuleCommand {
     },
 }
 
+/// Subcommands for log rotation policies.
+#[derive(Debug, clap::Subcommand)]
+#[allow(missing_docs)]
+pub enum LogsPolicyAction {
+    /// Print the stored policy for a class as JSON.
+    Show {
+        /// Source class label (site-access, site-error, managed-service, panel).
+        #[arg(long)]
+        class: String,
+    },
+    /// Set the policy for a class.
+    Set {
+        /// Source class label.
+        #[arg(long)]
+        class: String,
+        /// Maximum age in days (1..=365).
+        #[arg(long)]
+        max_age_days: u16,
+        /// Maximum size in MiB.
+        #[arg(long)]
+        max_size_mb: u32,
+        /// Generations kept (1..=52).
+        #[arg(long)]
+        keep_generations: u8,
+        /// Compress rotated archives.
+        #[arg(long, default_value_t = true)]
+        compress: bool,
+    },
+}
+
 /// Log browsing and export subcommands.
 #[derive(Debug, Subcommand)]
 pub enum LogsCommand {
     /// List authorized registered sources.
     Sources,
+    /// Show or set a source class's rotation policy.
+    Policy {
+        /// Show or set.
+        #[command(subcommand)]
+        action: crate::LogsPolicyAction,
+    },
     /// Tail a registered source.
     Tail {
         /// Source name or id.

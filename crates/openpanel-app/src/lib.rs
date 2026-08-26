@@ -261,7 +261,7 @@ pub use load_balancing::{
 pub use log_viewer::{
     InMemoryLogReader, LogAggregator, LogViewerModule, SqliteLogViewerRepository,
 };
-pub use logs::{LogService, LogsModule};
+pub use logs::{LogRotationService, LogService, LogsModule};
 pub use mail::{MailModule, MailService};
 pub use mail_filtering::{
     MailFilterService, MailFilteringModule, MailingListService, SieveCompiler, SpamScorer,

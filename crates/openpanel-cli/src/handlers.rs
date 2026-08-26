@@ -468,6 +468,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         waf_svc.clone(),
         site_http_controls_svc.clone(),
         sites_module.transport(),
+        logs_module.rotation(),
         web_terminal_svc.clone(),
         sso_svc.clone(),
         docker_svc.clone(),
@@ -5686,6 +5687,80 @@ pub async fn scan_list(config: Arc<Config>, site: String) -> anyhow::Result<()> 
 // ---------------------------------------------------------------------------
 // Server snapshot CLI handlers.
 // ---------------------------------------------------------------------------
+
+/// Build the log rotation service plus identity for callers.
+async fn build_logs_rotation(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::LogRotationService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
+    let identity_module = IdentityModule::new(&ctx, load_master_key(&ctx.config)?).await;
+    let logs_module = LogsModule::with_root(&ctx, std::env::current_dir()?).await;
+    MigrationRunner::for_sqlite(pool.clone())
+        .apply_module(logs_module.name(), &logs_module.migrations())
+        .await?;
+    Ok((logs_module.rotation(), identity_module.service()))
+}
+
+/// `openpanel logs policy …`.
+pub async fn logs_policy(
+    config: Arc<Config>,
+    action: crate::LogsPolicyAction,
+) -> anyhow::Result<()> {
+    let (svc, identity) = build_logs_rotation(config).await?;
+    let owner = waf_owner(&identity).await?;
+    match action {
+        crate::LogsPolicyAction::Show { class } => {
+            let class = openpanel_domain::logs::SourceClass::parse(&class)
+                .ok_or_else(|| anyhow::anyhow!("unknown source class"))?;
+            let (policy, drift) = svc
+                .get(&owner, class)
+                .await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&serde_json::json!({
+                    "policy": serde_json::to_value(&policy)?,
+                    "drift": drift,
+                }))?
+            );
+        }
+        crate::LogsPolicyAction::Set {
+            class,
+            max_age_days,
+            max_size_mb,
+            keep_generations,
+            compress,
+        } => {
+            let class = openpanel_domain::logs::SourceClass::parse(&class)
+                .ok_or_else(|| anyhow::anyhow!("unknown source class"))?;
+            let policy = openpanel_domain::logs::RotationPolicy::new(
+                class,
+                max_age_days,
+                max_size_mb,
+                keep_generations,
+                compress,
+            )
+            .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            let saved = svc
+                .set(&owner, policy)
+                .await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            println!(
+                "rotation policy saved for {} (maxage {}d, {}M, keep {}, compress={})",
+                saved.source_class().as_str(),
+                saved.max_age_days(),
+                saved.max_size_mb(),
+                saved.keep_generations(),
+                saved.compress()
+            );
+        }
+    }
+    Ok(())
+}
 
 /// Build the per-site transport service plus identity for callers.
 async fn build_site_transport(

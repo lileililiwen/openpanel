@@ -29,6 +29,8 @@ mod ftp;
 /// Hosting plans HTTP integration tests.
 mod hosting_plans;
 mod identity;
+/// Log rotation-policy integration tests.
+mod log_policies;
 mod logs;
 mod mail;
 /// Malware scanner integration tests.

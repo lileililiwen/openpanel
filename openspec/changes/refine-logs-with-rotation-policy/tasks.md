@@ -15,14 +15,16 @@
       config contains no `su` directive, no absolute path outside the
       known source registry, and parses under a fixture logrotate
       syntax check.
-- [ ] 1.5 Integration (`tests/integration/log_policies.rs`): PUT valid
+- [x] 1.5 Integration (`tests/integration/log_policies.rs`): PUT valid
       policy → file written with expected mode/owner + audit event;
       GET returns stored values plus drift=false; corrupting the file
       on disk flips drift=true on next GET.
-- [ ] 1.6 Integration: manual rotate endpoint invokes logrotate binary
+- [x] 1.6 Integration: manual rotate endpoint invokes logrotate binary
       stub with `--force` and correct config path; missing binary →
-      503 `logrotate_unavailable`.
-- [ ] 1.7 CLI E2E: `cli_logs_policy_set_then_show`.
+      503 `logrotate_unavailable`. (Endpoint, 503 mapping, and
+      capped-output runner implemented; stub invocation asserted at
+      service level via injected binary path.)
+- [x] 1.7 CLI E2E: `cli_logs_policy_set_then_show`.
 - [ ] 1.8 Web: Retention tab at 360/768/1280 px; screenshots.
 
 ## 2. Domain
@@ -32,7 +34,7 @@
 
 ## 3. Application
 
-- [ ] 3.1 Drop-in renderer/writer (atomic, managed block) + repo +
+- [x] 3.1 Drop-in renderer/writer (atomic, managed block) + repo +
       migration; logrotate detection at startup.
 - [ ] 3.2 Manual-rotate runner with capped output; drift computation
       wired into existing rotation detection.

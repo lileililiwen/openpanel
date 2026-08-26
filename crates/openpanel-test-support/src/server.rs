@@ -218,6 +218,7 @@ pub struct TestServer {
     cron: Arc<CronService>,
     backups: Arc<BackupService>,
     server_snapshots: Arc<openpanel_app::ServerSnapshotService>,
+    log_rotation: Arc<openpanel_app::LogRotationService>,
     logs: Arc<LogService>,
     security: Arc<SecurityService>,
     system_services: Arc<openpanel_app::ServiceManager>,
@@ -607,7 +608,12 @@ impl TestServer {
             Some((cron_module.service(), sandbox.path().to_path_buf())),
         )
         .await;
-        let logs_module = LogsModule::with_root(&ctx, sandbox.path().join("logs")).await;
+        let logs_module = LogsModule::with_roots(
+            &ctx,
+            sandbox.path().join("logs"),
+            sandbox.path().join("logrotate.d"),
+        )
+        .await;
         let security_module =
             SecurityModule::with_firewall(&ctx, Arc::new(MemoryFirewall::default()))
                 .await
@@ -900,6 +906,7 @@ impl TestServer {
             waf_svc.clone(),
             site_http_controls_svc.clone(),
             sites_transport_svc.clone(),
+            logs_module.rotation(),
             web_terminal_svc.clone(),
             sso_svc.clone(),
             docker_svc.clone(),
@@ -1027,6 +1034,7 @@ impl TestServer {
             cron: cron_svc,
             backups: backups_svc,
             server_snapshots: server_snapshots_svc,
+            log_rotation: logs_module.rotation(),
             logs: logs_svc,
             security: security_svc,
             system_services: system_services_svc,
@@ -1252,6 +1260,11 @@ impl TestServer {
     /// The whole-server snapshot service handle.
     pub fn server_snapshots(&self) -> Arc<openpanel_app::ServerSnapshotService> {
         self.server_snapshots.clone()
+    }
+
+    /// The log rotation-policy service handle.
+    pub fn log_rotation(&self) -> Arc<openpanel_app::LogRotationService> {
+        self.log_rotation.clone()
     }
 
     /// The authorized log browsing service handle.

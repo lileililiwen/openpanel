@@ -471,6 +471,7 @@ async fn main() -> anyhow::Result<()> {
         },
         Command::Logs { action } => match action {
             LogsCommand::Sources => handlers::logs_sources(config).await,
+            LogsCommand::Policy { action } => handlers::logs_policy(config, action).await,
             LogsCommand::Tail { source, limit } => handlers::logs_tail(config, source, limit).await,
             LogsCommand::Errors { limit } => {
                 handlers::logs_tail(config, "panel-error".into(), limit).await

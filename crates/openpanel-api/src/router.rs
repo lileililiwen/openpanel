@@ -34,7 +34,7 @@ use crate::{
         ftp::router as ftp_router,
         hosting_plans::router as hosting_plans_router,
         identity::router as identity_router,
-        logs::router as logs_router,
+        logs::{policies_router as logs_policies_router, router as logs_router},
         mail::router as mail_router,
         malware_scanner::router as malware_scanner_router,
         monitoring::router as monitoring_router,
@@ -86,6 +86,7 @@ pub fn build_router(
     waf: Arc<WafService>,
     site_http_controls: Arc<SiteHttpService>,
     site_transport: Arc<openpanel_app::SiteTransportService>,
+    log_rotation: Arc<openpanel_app::LogRotationService>,
     web_terminal: Arc<WebTerminalService>,
     sso: Arc<SsoService>,
     docker: Arc<DockerService>,
@@ -138,6 +139,7 @@ pub fn build_router(
         .nest("/backups", db_pitr_router(pitr))
         .nest("/server", server_snapshots_router(server_snapshots))
         .nest("/logs", logs_router(logs))
+        .nest("/logs", logs_policies_router(log_rotation))
         .nest("/security", security_router(security))
         .nest("/services", system_services_router(system_services))
         .nest("/dns", dns_router(dns))

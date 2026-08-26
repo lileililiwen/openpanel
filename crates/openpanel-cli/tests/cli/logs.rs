@@ -48,3 +48,75 @@ async fn cli_logs_sources_tail_errors_traffic_audit_and_export() {
             .contains("secret")
     );
 }
+
+#[tokio::test]
+async fn cli_logs_policy_set_then_show() {
+    let runner = CliRunner::new().await;
+    let drop_ins = runner.workdir.join("logrotate.d");
+    std::fs::create_dir_all(&drop_ins).unwrap();
+    let env = [("OPENPANEL__LOGS__DROP_IN_ROOT", drop_ins.to_str().unwrap())];
+    let user = runner.run(&[
+        "user",
+        "create",
+        "--username",
+        "admin",
+        "--email",
+        "admin@example.test",
+        "--password",
+        "correct horse battery staple",
+        "--role",
+        "owner",
+    ]);
+    assert_eq!(user.code, 0, "{}", user.stderr);
+
+    // Show before any policy exists is refused.
+    let unset = runner.run_with_env(&["logs", "policy", "show", "--class", "panel"], &env);
+    assert_ne!(unset.code, 0);
+
+    // Set a valid policy.
+    let set = runner.run_with_env(
+        &[
+            "logs",
+            "policy",
+            "set",
+            "--class",
+            "panel",
+            "--max-age-days",
+            "30",
+            "--max-size-mb",
+            "100",
+            "--keep-generations",
+            "4",
+            "--compress",
+        ],
+        &env,
+    );
+    assert_eq!(set.code, 0, "{}", set.stderr);
+    assert!(set.stdout.contains("rotation policy saved for panel"));
+
+    // Show round-trips the stored values.
+    let show = runner.run_with_env(&["logs", "policy", "show", "--class", "panel"], &env);
+    assert_eq!(show.code, 0, "{}", show.stderr);
+    let parsed: serde_json::Value = serde_json::from_str(show.stdout.trim()).expect("json");
+    assert_eq!(parsed["policy"]["max_age_days"], serde_json::json!(30));
+    assert_eq!(parsed["drift"], serde_json::json!(false));
+
+    // Invalid bounds are refused.
+    let invalid = runner.run_with_env(
+        &[
+            "logs",
+            "policy",
+            "set",
+            "--class",
+            "panel",
+            "--max-age-days",
+            "366",
+            "--max-size-mb",
+            "100",
+            "--keep-generations",
+            "4",
+        ],
+        &env,
+    );
+    assert_ne!(invalid.code, 0);
+}
