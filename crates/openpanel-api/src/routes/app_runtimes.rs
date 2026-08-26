@@ -5,7 +5,7 @@ use std::sync::Arc;
 use axum::{
     Json, Router,
     extract::{Path, State},
-    routing::{get, put},
+    routing::get,
 };
 use openpanel_app::RuntimeEnvService;
 use openpanel_domain::app_runtimes::EnvVar;
