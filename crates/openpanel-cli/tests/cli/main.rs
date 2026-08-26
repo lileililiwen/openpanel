@@ -17,6 +17,7 @@ mod dns;
 mod docker;
 mod file;
 mod ftp;
+mod host;
 mod logs;
 mod mail;
 mod monitoring;

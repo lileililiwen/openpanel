@@ -26,6 +26,8 @@ mod dns;
 mod docker;
 mod files;
 mod ftp;
+/// Admin SSH host-key integration tests.
+mod host_ssh_keys;
 /// Hosting plans HTTP integration tests.
 mod hosting_plans;
 mod identity;

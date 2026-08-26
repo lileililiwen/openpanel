@@ -469,6 +469,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         site_http_controls_svc.clone(),
         sites_module.transport(),
         logs_module.rotation(),
+        security_module.ssh_keys(),
         web_terminal_svc.clone(),
         sso_svc.clone(),
         docker_svc.clone(),
@@ -5687,6 +5688,63 @@ pub async fn scan_list(config: Arc<Config>, site: String) -> anyhow::Result<()> 
 // ---------------------------------------------------------------------------
 // Server snapshot CLI handlers.
 // ---------------------------------------------------------------------------
+
+/// Build the admin SSH host-key service plus identity for callers.
+async fn build_ssh_keys(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::HostSshKeysService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
+    let identity_module = IdentityModule::new(&ctx, load_master_key(&ctx.config)?).await;
+    let security_module = SecurityModule::new(&ctx).await?;
+    MigrationRunner::for_sqlite(pool.clone())
+        .apply_module(security_module.name(), &security_module.migrations())
+        .await?;
+    Ok((security_module.ssh_keys(), identity_module.service()))
+}
+
+/// `openpanel ssh-keys …`.
+pub async fn ssh_keys(config: Arc<Config>, action: crate::SshKeysAction) -> anyhow::Result<()> {
+    let (svc, identity) = build_ssh_keys(config).await?;
+    let owner = waf_owner(&identity).await?;
+    match action {
+        crate::SshKeysAction::List => {
+            for key in svc
+                .list(&owner)
+                .await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?
+            {
+                println!(
+                    "{}  {}  {}  last_used={}",
+                    key.id(),
+                    key.fingerprint(),
+                    key.label(),
+                    key.last_used_at()
+                        .map(|t| t.to_rfc3339())
+                        .unwrap_or_else(|| "never".into()),
+                );
+            }
+        }
+        crate::SshKeysAction::Add { label, key } => {
+            let added = svc
+                .add(&owner, label, &key)
+                .await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            println!("{} {}", added.id(), added.fingerprint());
+        }
+        crate::SshKeysAction::Remove { id } => {
+            let uuid = uuid::Uuid::parse_str(&id).context("invalid key id")?;
+            svc.remove(&owner, uuid)
+                .await
+                .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+            println!("removed");
+        }
+    }
+    Ok(())
+}
 
 /// Build the log rotation service plus identity for callers.
 async fn build_logs_rotation(

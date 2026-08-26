@@ -282,3 +282,71 @@ fn map(error: SecurityServiceError) -> ApiError {
         }
     }
 }
+
+/// Builds the Axum sub-router for admin SSH host keys (own state).
+pub fn ssh_keys_router(svc: Arc<openpanel_app::HostSshKeysService>) -> Router {
+    Router::new()
+        .route("/ssh-keys", axum::routing::get(list_keys).post(add_key))
+        .route("/ssh-keys/{id}", axum::routing::delete(remove_key))
+        .with_state(svc)
+}
+
+async fn list_keys(
+    State(svc): State<Arc<openpanel_app::HostSshKeysService>>,
+    AuthUser(caller, _): AuthUser,
+) -> ApiResult<Json<serde_json::Value>> {
+    let keys = svc.list(&caller).await.map_err(map_security)?;
+    Ok(Json(
+        serde_json::to_value(&keys).map_err(|e| ApiError::Internal(e.to_string()))?,
+    ))
+}
+
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SshKeyInput {
+    label: String,
+    /// Single-line public key (`<algo> <base64> [comment]`).
+    public_key: String,
+}
+
+async fn add_key(
+    State(svc): State<Arc<openpanel_app::HostSshKeysService>>,
+    AuthUser(caller, _): AuthUser,
+    Json(input): Json<SshKeyInput>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let key = svc
+        .add(&caller, input.label, &input.public_key)
+        .await
+        .map_err(map_security)?;
+    Ok(Json(
+        serde_json::to_value(&key).map_err(|e| ApiError::Internal(e.to_string()))?,
+    ))
+}
+
+async fn remove_key(
+    State(svc): State<Arc<openpanel_app::HostSshKeysService>>,
+    AuthUser(caller, _): AuthUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<axum::http::StatusCode> {
+    svc.remove(&caller, id).await.map_err(map_security)?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+fn map_security(error: openpanel_domain::security::SecurityError) -> ApiError {
+    use openpanel_domain::security::SecurityError;
+    match error {
+        SecurityError::Forbidden => ApiError::Forbidden,
+        SecurityError::NotFound(_) => ApiError::NotFound(error.to_string()),
+        SecurityError::InvalidSshKey(_)
+        | SecurityError::DuplicateSshKey
+        | SecurityError::InvalidCidr
+        | SecurityError::InvalidPort
+        | SecurityError::InvalidRule
+        | SecurityError::InvalidLoginKey
+        | SecurityError::InvalidThrottlePolicy
+        | SecurityError::InvalidBlock => ApiError::Unprocessable(error.to_string()),
+        SecurityError::LockoutRisk | SecurityError::Persistence(_) => {
+            ApiError::Internal(error.to_string())
+        }
+    }
+}

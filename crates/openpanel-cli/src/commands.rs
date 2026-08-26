@@ -68,6 +68,12 @@ pub enum Command {
         #[command(subcommand)]
         action: BackupCommand,
     },
+    /// Admin SSH host keys for host login.
+    SshKeys {
+        /// List, add, or remove.
+        #[command(subcommand)]
+        action: crate::SshKeysAction,
+    },
     /// Server snapshot & migration.
     ServerSnapshot {
         /// Server snapshot subcommand.
@@ -914,6 +920,29 @@ pub enum LogsCommand {
         /// Destination file.
         #[arg(long)]
         output: std::path::PathBuf,
+    },
+}
+
+/// Admin SSH host-key subcommands.
+#[derive(Debug, clap::Subcommand)]
+#[allow(missing_docs)]
+pub enum SshKeysAction {
+    /// List registered keys.
+    List,
+    /// Add a key.
+    Add {
+        /// Operator-facing label.
+        #[arg(long)]
+        label: String,
+        /// Single-line public key.
+        #[arg(long)]
+        key: String,
+    },
+    /// Remove a key by id.
+    Remove {
+        /// Key id.
+        #[arg(long)]
+        id: String,
     },
 }
 

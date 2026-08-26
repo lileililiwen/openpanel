@@ -41,7 +41,7 @@ use crate::{
         notifications::router as notifications_router,
         plugin_extension::router as plugin_extension_router,
         plugin_marketplace::router as plugin_marketplace_router,
-        security::router as security_router,
+        security::{router as security_router, ssh_keys_router},
         server_snapshots::router as server_snapshots_router,
         site_cache_cdn::router as site_cache_cdn_router,
         site_clone_template::router as site_clone_template_router,
@@ -87,6 +87,7 @@ pub fn build_router(
     site_http_controls: Arc<SiteHttpService>,
     site_transport: Arc<openpanel_app::SiteTransportService>,
     log_rotation: Arc<openpanel_app::LogRotationService>,
+    host_ssh_keys: Arc<openpanel_app::HostSshKeysService>,
     web_terminal: Arc<WebTerminalService>,
     sso: Arc<SsoService>,
     docker: Arc<DockerService>,
@@ -141,6 +142,7 @@ pub fn build_router(
         .nest("/logs", logs_router(logs))
         .nest("/logs", logs_policies_router(log_rotation))
         .nest("/security", security_router(security))
+        .nest("/host", ssh_keys_router(host_ssh_keys))
         .nest("/services", system_services_router(system_services))
         .nest("/dns", dns_router(dns))
         .nest("/mail", mail_router(mail, mail_filters, mailing_lists))

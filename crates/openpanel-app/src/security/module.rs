@@ -36,6 +36,19 @@ impl SecurityModule {
         ctx: &AppContext,
         firewall: Arc<dyn FirewallPort>,
     ) -> Result<Self, SecurityServiceError> {
+        let authorized_keys = std::env::var("OPENPANEL__SECURITY__AUTHORIZED_KEYS")
+            .map(PathBuf::from)
+            .unwrap_or_else(|_| PathBuf::from("/root/.ssh/authorized_keys"));
+        Self::with_firewall_and_keys(ctx, firewall, authorized_keys).await
+    }
+
+    /// Compose with a fake privileged adapter and an explicit
+    /// `authorized_keys` path (tests inject a sandbox path).
+    pub async fn with_firewall_and_keys(
+        ctx: &AppContext,
+        firewall: Arc<dyn FirewallPort>,
+        authorized_keys: PathBuf,
+    ) -> Result<Self, SecurityServiceError> {
         let repo = Arc::new(SqliteSecurityRepository::new(ctx.db.pool().await));
         let policy = FirewallPolicy::new(vec![22, 8443])?;
         let throttle_policy = LoginThrottlePolicy::new(
@@ -44,9 +57,6 @@ impl SecurityModule {
             std::time::Duration::from_secs(30),
             std::time::Duration::from_secs(3600),
         )?;
-        let authorized_keys = std::env::var("OPENPANEL__SECURITY__AUTHORIZED_KEYS")
-            .map(PathBuf::from)
-            .unwrap_or_else(|_| PathBuf::from("/root/.ssh/authorized_keys"));
         Ok(Self {
             ssh_keys: Arc::new(HostSshKeysService::new(
                 ctx.db.pool().await,

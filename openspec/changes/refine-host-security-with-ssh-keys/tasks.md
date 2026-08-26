@@ -16,13 +16,15 @@
       file contains each fingerprint exactly once, every managed line
       starts with the enforced options, and no private-key material
       can appear (input is structurally incapable of it).
-- [ ] 1.5 Integration (`tests/integration/host_ssh_keys.rs`): POST
+- [x] 1.5 Integration (`tests/integration/host_ssh_keys.rs`): POST
       valid key → 201 + GET lists it with fingerprint; DELETE → gone
       and rendered file updated; non-Admin caller → 403; audit events
       present for both mutations.
 - [ ] 1.6 Integration: last-used parser fed a fixture journal line
       updates `last_used_at` for the matching fingerprint only.
-- [ ] 1.7 CLI E2E: `cli_host_ssh_key_add_then_list_then_remove`.
+      (Recorder shipped; journal-line fixture test pending.)
+
+- [x] 1.7 CLI E2E: `cli_host_ssh_key_add_then_list_then_remove`.
 - [ ] 1.8 Web: SSH Keys page at 360/768/1280 px; screenshots.
 
 ## 2. Domain
@@ -32,14 +34,14 @@
 
 ## 3. Application
 
-- [ ] 3.1 Repo + migrations; authorized_keys writer (atomic, 0600,
+- [x] 3.1 Repo + migrations; authorized_keys writer (atomic, 0600,
       post-stat assert); fingerprint shell-out reuse.
-- [ ] 3.2 Service CRUD + audit; background last-used matcher.
+- [x] 3.2 Service CRUD + audit; background last-used matcher.
 
 ## 4. Adapters and UI
 
-- [ ] 4.1 REST routes (Admin-gated).
-- [ ] 4.2 CLI subcommands.
+- [x] 4.1 REST routes (Admin-gated).
+- [x] 4.2 CLI subcommands.
 - [ ] 4.3 Web page.
 
 ## 5. Validation

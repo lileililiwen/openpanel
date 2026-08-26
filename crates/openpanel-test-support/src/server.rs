@@ -614,10 +614,13 @@ impl TestServer {
             sandbox.path().join("logrotate.d"),
         )
         .await;
-        let security_module =
-            SecurityModule::with_firewall(&ctx, Arc::new(MemoryFirewall::default()))
-                .await
-                .expect("security module");
+        let security_module = SecurityModule::with_firewall_and_keys(
+            &ctx,
+            Arc::new(MemoryFirewall::default()),
+            sandbox.path().join("authorized_keys"),
+        )
+        .await
+        .expect("security module");
         let system_services_module = SystemServicesModule::memory(&ctx)
             .await
             .expect("system services module");
@@ -907,6 +910,7 @@ impl TestServer {
             site_http_controls_svc.clone(),
             sites_transport_svc.clone(),
             logs_module.rotation(),
+            security_module.ssh_keys(),
             web_terminal_svc.clone(),
             sso_svc.clone(),
             docker_svc.clone(),

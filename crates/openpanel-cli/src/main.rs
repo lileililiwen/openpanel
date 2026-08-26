@@ -450,6 +450,7 @@ async fn main() -> anyhow::Result<()> {
             },
             BackupCommand::Delete { id } => handlers::backup_delete(config, id).await,
         },
+        Command::SshKeys { action } => handlers::ssh_keys(config, action).await,
         Command::ServerSnapshot { action } => match action {
             ServerSnapshotCommand::List => handlers::server_snapshot_list(config).await,
             ServerSnapshotCommand::Get { id } => handlers::server_snapshot_get(config, id).await,
