@@ -100,29 +100,23 @@ impl DeliverabilityService {
         .fetch_optional(&self.pool)
         .await
         .map_err(|e| e.to_string())?;
-        row
-            .map(|(ip, zone, first_seen, resolved_at)| {
-                let first_seen = chrono::DateTime::parse_from_rfc3339(&first_seen)
+        row.map(|(ip, zone, first_seen, resolved_at)| {
+            let first_seen = chrono::DateTime::parse_from_rfc3339(&first_seen)
+                .map(|t| t.with_timezone(&Utc))
+                .unwrap_or_else(|_| Utc::now());
+            let resolved_at = resolved_at.and_then(|t| {
+                chrono::DateTime::parse_from_rfc3339(&t)
                     .map(|t| t.with_timezone(&Utc))
-                    .unwrap_or_else(|_| Utc::now());
-                let resolved_at = resolved_at.and_then(|t| {
-                    chrono::DateTime::parse_from_rfc3339(&t)
-                        .map(|t| t.with_timezone(&Utc))
-                        .ok()
-                });
-                let parsed_ip: Result<std::net::IpAddr, String> =
-                    ip.parse().map_err(|e: std::net::AddrParseError| e.to_string());
-                parsed_ip.map(|parsed_ip| {
-                    Listing::restore(
-                        parsed_ip,
-                        zone,
-                        first_seen,
-                        first_seen,
-                        resolved_at,
-                    )
-                })
+                    .ok()
+            });
+            let parsed_ip: Result<std::net::IpAddr, String> = ip
+                .parse()
+                .map_err(|e: std::net::AddrParseError| e.to_string());
+            parsed_ip.map(|parsed_ip| {
+                Listing::restore(parsed_ip, zone, first_seen, first_seen, resolved_at)
             })
-            .transpose()
+        })
+        .transpose()
     }
 
     /// Parse and ingest a DMARC aggregate report, then prune stats

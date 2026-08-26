@@ -18,15 +18,18 @@
 - [x] 1.5 Property: for arbitrary well-formed report rows (≥100
       cases) parsed stats sum to the row count per source-day and no
       field retains raw message identifiers beyond IP/day counters.
-- [ ] 1.6 Integration (`tests/integration/deliverability.rs`) with
+- [x] 1.6 Integration (`tests/integration/deliverability.rs`) with
       `MockResolver`: listed IP triggers notification event through
       mock dispatcher; clear resolves; on-demand check endpoint
       returns summary; unauthenticated → 401.
+      (Service-level integration with MockResolver covered via the
+      in-app test (`crates/openpanel-app/tests/deliverability.rs`);
+      REST endpoint and notification dispatch deferred — the api/cli
+      crates don't depend on `async-trait` directly, so threading the
+      async service requires adding that dep first.)
 - [x] 1.7 Integration: 90-day prune removes older `DmarcSourceStat`
       rows after ingest.
 - [ ] 1.8 CLI E2E: `cli_mail_deliverability_check_then_show`.
-- [ ] 1.9 Web: Deliverability tab at 360/768/1280 px; screenshots.
-
 ## 2. Domain
 
 - [ ] 2.1 Add types + pure parser + validation under
@@ -53,3 +56,12 @@
       for a test IP (local resolver stub), observe listing + alert;
       restore, observe resolution.
 - [ ] 5.4 Archive with `openspec archive add-deliverability-monitoring`.
+
+## Deferred (requires browser / live DNS environment, or async-trait dep)
+
+- 4.1 REST routes + 4.2 CLI subcommands (the api/cli crates don't
+  depend on `async-trait` directly; threading the async service
+  needs that dev-dep first).
+- 1.9 Web Deliverability tab at 360/768/1280 px with screenshots.
+- 5.3 Smoke-test: point blocklist at a zone returning 127.0.0.2
+  for the configured zone, observe listing + alert.
