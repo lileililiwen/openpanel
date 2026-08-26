@@ -615,6 +615,7 @@ impl TestServer {
             Some((cron_module.service(), sandbox.path().to_path_buf())),
         )
         .await;
+        let app_runtimes_module = openpanel_app::AppRuntimesModule::new(&ctx, master_key).await;
         let logs_module = LogsModule::with_roots(
             &ctx,
             sandbox.path().join("logs"),
@@ -667,6 +668,13 @@ impl TestServer {
             .apply_module(logs_module.name(), &logs_module.migrations())
             .await
             .expect("logs migrations");
+        runner
+            .apply_module(
+                app_runtimes_module.name(),
+                &app_runtimes_module.migrations(),
+            )
+            .await
+            .expect("app runtimes migrations");
         runner
             .apply_module(security_module.name(), &security_module.migrations())
             .await
@@ -927,6 +935,7 @@ impl TestServer {
                 )),
                 port: db_grant_port.clone(),
             }),
+            app_runtimes_module.env(),
             web_terminal_svc.clone(),
             sso_svc.clone(),
             docker_svc.clone(),

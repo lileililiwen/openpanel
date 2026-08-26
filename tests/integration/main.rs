@@ -51,6 +51,8 @@ mod plugin_extension;
 /// Plugin marketplace HTTP integration tests.
 mod plugin_marketplace;
 mod quality;
+/// Runtime environment integration tests.
+mod runtime_env;
 mod security;
 mod server_snapshots;
 /// Site cache and CDN policy / integration / purge integration tests.

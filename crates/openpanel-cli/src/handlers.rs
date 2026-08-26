@@ -483,6 +483,11 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
                 "/usr/bin/mysql",
             )),
         }),
+        std::sync::Arc::new(openpanel_app::RuntimeEnvService::new(
+            pool.clone(),
+            audit.clone(),
+            master_key,
+        )),
         web_terminal_svc.clone(),
         sso_svc.clone(),
         docker_svc.clone(),

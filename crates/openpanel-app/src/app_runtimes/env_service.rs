@@ -20,7 +20,8 @@ pub struct RuntimeEnvService {
 pub struct EnvVarView {
     /// Variable key.
     pub key: String,
-    /// Plaintext value for non-secrets; `None` for secrets.
+    /// Plaintext value for non-secrets; omitted for secrets.
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub value: Option<String>,
     /// Whether this variable rides the 0600 env file.
     pub secret: bool,
@@ -84,7 +85,8 @@ impl RuntimeEnvService {
 
     /// Validate and persist the set. Secret values are stored only as
     /// AES-256-GCM ciphertext; the audit event lists changed keys.
-    pub async fn put(
+    /// Persist the set (alias mirroring REST vocabulary).
+    pub async fn set(
         &self,
         caller: &openpanel_domain::User,
         runtime_id: uuid::Uuid,

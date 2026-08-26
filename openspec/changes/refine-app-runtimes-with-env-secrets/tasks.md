@@ -16,7 +16,7 @@
 - [x] 1.5 Property: for arbitrary valid sets (≥100 cases) the rendered
       unit plus env file never contain a secret value in the unit
       text, and every key appears at most once.
-- [ ] 1.6 Integration (`tests/integration/runtime_env.rs`): PUT set
+- [x] 1.6 Integration (`tests/integration/runtime_env.rs`): PUT set
       with one secret → GET returns the secret's key + `secret: true`
       but no value; non-secret values round-trip verbatim; audit event
       lists changed keys only.
@@ -47,7 +47,7 @@
 
 ## 4. Adapters and UI
 
-- [ ] 4.1 REST routes per design.
+- [x] 4.1 REST routes per design.
 - [ ] 4.2 CLI subcommands (secret via stdin).
 - [ ] 4.3 Web tab.
 

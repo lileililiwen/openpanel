@@ -709,6 +709,7 @@ impl AuditService for SqliteAuditService {
                 "site_http_controls_changed" => AuditAction::SiteHttpControlsChanged,
                 "site_transport_changed" => AuditAction::SiteTransportChanged,
                 "db_remote_access_changed" => AuditAction::DbRemoteAccessChanged,
+                "runtime_changed" => AuditAction::RuntimeChanged,
                 "logs_policy_changed" => AuditAction::LogsPolicyChanged,
                 "ssh_key_changed" => AuditAction::SshKeyChanged,
                 "terminal_opened" => AuditAction::TerminalOpened,

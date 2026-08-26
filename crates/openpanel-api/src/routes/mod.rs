@@ -3,6 +3,7 @@
 /// Account hierarchy routes (`/users/{id}/children`, `/users/{id}/tree`).
 pub mod account_hierarchy;
 pub mod api_tokens;
+pub mod app_runtimes;
 /// Backup and restore routes (`/backups`).
 pub mod backups;
 /// Per-site collaborator routes (`/sites/{id}/collaborators`).
