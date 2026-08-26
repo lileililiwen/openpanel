@@ -101,5 +101,13 @@ allowed for a `Completed` run within the 24h window.
 
 The service SHALL record `MigrationPreviewed`,
 `MigrationRunCommitted`, `MigrationRunRolledBack`, and
-`MigrationAlreadyImportedRejected` audit events. The cPanel /
+`MigrationAlreadyImportedRejected` audit events.
+
+#### Scenario: Committed run is audited
+
+- **WHEN** an import run commits its planned resources
+- **THEN** an audit `MigrationRunCommitted` event records the run id
+        and driver without source payload content.
+
+The cPanel /
 Baota parser changes keep the same audit surface.

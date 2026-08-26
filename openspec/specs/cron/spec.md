@@ -61,4 +61,11 @@ The cron bounded context SHALL expose `is_under_owned_site(workdir, owned_roots)
 
 ### Requirement: Audit and Event Surface
 
-The follow-on implementation SHALL emit `CronScopeDenied` audit events when `role_allows_scope` returns `false`. The bounded context as archived today owns the typed model and the pure-function helpers.
+The follow-on implementation SHALL emit `CronScopeDenied` audit events when `role_allows_scope` returns `false`.
+
+#### Scenario: Out-of-scope job access is audited
+
+- **WHEN** a caller whose role disallows the job's scope reads or
+        mutates that job
+- **THEN** an audit `CronScopeDenied` event records the caller and job
+        id without the command arguments. The bounded context as archived today owns the typed model and the pure-function helpers.

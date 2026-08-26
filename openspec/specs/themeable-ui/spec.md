@@ -88,9 +88,15 @@ matching is not used.
 ### Requirement: Hosting-Plan BrandingScope
 
 A hosting plan MAY set `BrandingScope=Reseller` to grant the
-user branding capability. `System` is reserved for the panel's
-own themes and is never settable via the API. Users without
-the scope cannot read or write branding endpoints.
+user branding capability; the API SHALL refuse any attempt to set
+`BrandingScope=System`. Users without the scope cannot read or
+write branding endpoints.
+
+#### Scenario: System scope is refused
+
+- **WHEN** an API request assigns `BrandingScope=System` to a plan
+- **THEN** the API rejects the change and the previous scope is
+        preserved.
 
 #### Scenario: Plan grants scope
 

@@ -50,4 +50,10 @@ The service SHALL expose `sample(policy, disk_used, inodes_used, bandwidth_used,
 
 ### Requirement: Enforcement Surface (Ports)
 
-The kernel-level enforcement of disk / bandwidth / CPU limits is owned by the follow-on `add-multi-host-agent` change. The `quotas` bounded context owns the typed ports (`QuotaRepository`) and the policy model; enforcers implement those ports and may report `EnforcerUnavailable` when the host is not prepared (e.g. the FS is not mounted with `usrquota`).
+Kernel-level enforcement of disk / bandwidth / CPU limits SHALL be owned by the follow-on `add-multi-host-agent` change.
+
+#### Scenario: Ports stay enforcement-free
+
+- **WHEN** the quotas bounded context validates usage against policy
+- **THEN** it acts only through its typed ports and performs no
+        kernel-level enforcement itself. The `quotas` bounded context owns the typed ports (`QuotaRepository`) and the policy model; enforcers implement those ports and may report `EnforcerUnavailable` when the host is not prepared (e.g. the FS is not mounted with `usrquota`).

@@ -36,7 +36,13 @@ The bounded context SHALL expose a `BandwidthObserver` trait with `on_byte` and 
 
 ### Requirement: Threshold Detection
 
-The `BandwidthWindow::is_over_80` and `is_over_100` helpers return `true` when the bytes consumed cross 80% / 100% of a given limit. The follow-on `add-bandwidth-accounting` change consumes these helpers to emit `BandwidthThresholdCrossed` events.
+The `BandwidthWindow::is_over_80` and `is_over_100` helpers SHALL return `true` when the bytes consumed cross 80% / 100% of a given limit.
+
+#### Scenario: Window crosses the warning threshold
+
+- **WHEN** consumed bytes reach 80% of the limit
+- **THEN** `is_over_80` returns `true` while `is_over_100` stays
+        `false` until consumption reaches the limit. The follow-on `add-bandwidth-accounting` change consumes these helpers to emit `BandwidthThresholdCrossed` events.
 
 #### Scenario: 80% threshold
 
@@ -50,4 +56,10 @@ The `BandwidthWindow::is_over_80` and `is_over_100` helpers return `true` when t
 
 ### Requirement: Audit and Event Surface
 
-The follow-on `add-bandwidth-accounting` change persists the `BandwidthWindow` rows and emits `BandwidthThresholdCrossed` / `BandwidthWindowClosed` events. The bounded context as archived today owns the typed model and the observer contract.
+The follow-on `add-bandwidth-accounting` change SHALL persist the `BandwidthWindow` rows and emit `BandwidthThresholdCrossed` / `BandwidthWindowClosed` events.
+
+#### Scenario: Window close is audited
+
+- **WHEN** an accounting window closes
+- **THEN** a `BandwidthWindowClosed` event records the window bounds
+        without per-request detail. The bounded context as archived today owns the typed model and the observer contract.

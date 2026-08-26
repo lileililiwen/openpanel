@@ -22,7 +22,7 @@ The bandwidth-accounting bounded context SHALL expose a `BandwidthRepository` tr
 
 ### Requirement: Period Start Calculation
 
-The `BandwidthStorageObserver::period_start_for(period, now)` helper truncates `now` to the period boundary (hour, day, or month). The truncation is idempotent and timezone-aware (UTC).
+The `BandwidthStorageObserver::period_start_for(period, now)` helper SHALL truncate `now` to the period boundary (hour, day, or month). The truncation SHALL be idempotent and timezone-aware (UTC).
 
 #### Scenario: Hourly truncation
 
@@ -40,4 +40,11 @@ The bandwidth-accounting bounded context SHALL expose a `BandwidthReader` trait 
 
 ### Requirement: Audit and Event Surface
 
-The follow-on implementation SHALL emit `BandwidthThresholdCrossed` audit events when the threshold evaluator detects a crossing. The bounded context as archived today owns the typed model, the period-start helper, and the repository trait; the storage layer and the threshold consumer ship in the follow-on change.
+The follow-on implementation SHALL emit `BandwidthThresholdCrossed` audit events when the threshold evaluator detects a crossing.
+
+#### Scenario: Threshold crossing is audited once per period
+
+- **WHEN** consumed bytes first cross a configured threshold within a
+        period
+- **THEN** exactly one `BandwidthThresholdCrossed` event records the
+        threshold and period without per-request payloads. The bounded context as archived today owns the typed model, the period-start helper, and the repository trait; the storage layer and the threshold consumer ship in the follow-on change.

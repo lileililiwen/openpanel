@@ -50,4 +50,10 @@ The bounded context SHALL model `AllowlistOverride` (`Inherit | Bypass`). When `
 
 ### Requirement: Audit and Event Surface
 
-The follow-on implementation SHALL emit `IpAllowlistDenied`, `IpAllowlistBypassed`, `IpAllowlistRoleBypass`, and `IpAllowlistLockoutPrevented` audit events. The bounded context as archived today owns the typed model and the CIDR matcher.
+The follow-on implementation SHALL emit `IpAllowlistDenied`, `IpAllowlistBypassed`, `IpAllowlistRoleBypass`, and `IpAllowlistLockoutPrevented` audit events.
+
+#### Scenario: Denied address is audited
+
+- **WHEN** a request arrives from a non-allowlisted address
+- **THEN** an audit `IpAllowlistDenied` event records the address
+        without session content. The bounded context as archived today owns the typed model and the CIDR matcher.

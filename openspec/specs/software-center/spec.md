@@ -60,3 +60,9 @@ The refinement SHALL introduce the new types without changing the existing `Cata
 ### Requirement: Audit and Event Surface
 
 The follow-on implementation SHALL emit `WebApplicationInstalled`, `WebApplicationUninstalled`, and `WebApplicationInstallKindMismatch` audit events. The bounded context as archived today owns the typed model and the validation rules.
+
+#### Scenario: Install is audited
+
+- **WHEN** a web application install completes
+- **THEN** an audit `WebApplicationInstalled` event records the
+        application kind and site id without credential material.

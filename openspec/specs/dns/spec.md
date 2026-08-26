@@ -53,7 +53,13 @@ The refinement SHALL introduce the new template types without changing the exist
 
 ### Requirement: Audit and Event Surface
 
-The follow-on implementation SHALL emit `DnsTemplateApplied` and `DnsTemplatePreviewed` audit events. The bounded context as archived today owns the typed model and the in-memory template renderers.
+The follow-on implementation SHALL emit `DnsTemplateApplied` and `DnsTemplatePreviewed` audit events.
+
+#### Scenario: Template application is audited
+
+- **WHEN** a template is applied to a zone
+- **THEN** an audit `DnsTemplateApplied` event records the zone and
+        template names without credential material. The bounded context as archived today owns the typed model and the in-memory template renderers.
 
 ### Requirement: Per-Zone DNSSEC Signing
 

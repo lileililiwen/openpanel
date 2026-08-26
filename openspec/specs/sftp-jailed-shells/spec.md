@@ -50,8 +50,20 @@ The `render_sshd_config` function SHALL emit a `Match Group <group_name>` block 
 
 ### Requirement: Ownership Boundaries
 
-The panel SHALL only write under `/etc/ssh/openpanel.d/`. The system `sshd_config` is untouched except for an `Include` line the operator (or the panel installer) adds at first run. The `SSHD_INCLUDE_DIR` constant is the canonical location.
+The panel SHALL only write under `/etc/ssh/openpanel.d/`. The system `sshd_config` SHALL be untouched except for an `Include` line the operator (or the panel installer) adds at first run.
+
+#### Scenario: Writes stay inside the drop-in directory
+
+- **WHEN** the panel persists grant configuration
+- **THEN** every write lands under `/etc/ssh/openpanel.d/` and the
+        base `sshd_config` remains byte-identical. The `SSHD_INCLUDE_DIR` constant is the canonical location.
 
 ### Requirement: Audit and Event Surface
 
-The follow-on implementation SHALL emit audit events for grant creation, key add/remove, and grant disable/remove with the actor, the site id, and the affected grant id. The bounded context as archived today owns the typed model + the config generator; the audit + service layer ships in the follow-on change.
+The follow-on implementation SHALL emit audit events for grant creation, key add/remove, and grant disable/remove with the actor, the site id, and the affected grant id.
+
+#### Scenario: Key removal is audited
+
+- **WHEN** a key is removed from a grant
+- **THEN** the audit event records the grant id, site id, and actor
+        without key material. The bounded context as archived today owns the typed model + the config generator; the audit + service layer ships in the follow-on change.
