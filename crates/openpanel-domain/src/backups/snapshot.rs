@@ -395,7 +395,14 @@ mod tests {
         proptest::test_runner::TestRunner::new(ProptestConfig::with_cases(100))
             .run(&strategy, |specs| {
                 let mut entries = Vec::new();
+                let mut seen_paths = std::collections::HashSet::new();
                 for (kind, reference, stem, bytes) in &specs {
+                    // Random stems may collide; the manifest forbids
+                    // duplicate paths, so skip repeats.
+                    let path = format!("artifacts/{stem}.bin");
+                    if !seen_paths.insert(path.clone()) {
+                        continue;
+                    }
                     let kind = match kind {
                         0 => SnapshotEntryKind::PanelMetadata,
                         1 => SnapshotEntryKind::Site,
@@ -405,7 +412,7 @@ mod tests {
                     entries.push(SnapshotEntry {
                         kind,
                         reference: reference.clone(),
-                        path: format!("artifacts/{stem}.bin"),
+                        path,
                         sha256: hex::encode(Sha256::digest(bytes)),
                     });
                     // Bundling hashes the artifact bytes; the listed

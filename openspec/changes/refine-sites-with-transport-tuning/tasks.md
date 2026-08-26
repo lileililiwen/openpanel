@@ -43,7 +43,7 @@
 ## 5. Validation
 
 - [x] 5.1 `cargo test --workspace` twice, identical results.
-- [ ] 5.2 `make check` clean.
+- [x] 5.2 `make check` clean.
 - [ ] 5.4 Archive with `openspec archive refine-sites-with-transport-tuning`.
 
 ## Deferred (requires browser / live HTTP/3 environment)

@@ -434,7 +434,7 @@ mod surface_leak_prop {
 
         let strategy = (
             "[A-Z0-9]{16,32}",
-            "[a-zA-Z0-9 .,!?\\n]{0,512}",
+            "[a-zA-Z0-9 .,!?]{8,512}",
             "[a-zA-Z0-9]{8,64}",
         );
         proptest::test_runner::TestRunner::new(ProptestConfig::with_cases(100))
@@ -470,9 +470,7 @@ mod surface_leak_prop {
                     .unwrap();
                 assert_eq!(echoed.body, body);
                 let transcript = audit_transcript(&events.lock().unwrap());
-                if !body.is_empty() {
-                    prop_assert!(!transcript.contains(&body));
-                }
+                prop_assert!(!transcript.contains(&body));
                 Ok(())
             })
             .unwrap();

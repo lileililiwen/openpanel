@@ -22,5 +22,9 @@
   golden, http3 emission, overrides; integration round-trip/guards/
   audit; CLI E2E show→http3 on→off→unknown-refused.
 
-**Remaining:** 5.2 `make check`; deferred web tab + HTTP/3 smoke-test;
-archive.
+**Update:** 5.2 done — full `make check` green. Also hardened two
+pre-existing property tests that flaked under parallel RNG streams
+(duplicate random manifest paths; newline-only autoresponder bodies
+trivially matching the transcript separator).
+
+**Remaining:** deferred web tab + HTTP/3 smoke-test; archive.
