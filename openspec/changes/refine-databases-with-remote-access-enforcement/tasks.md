@@ -2,16 +2,16 @@
 
 ## 1. Testing
 
-- [ ] 1.1 Unit: `mysql_host_pattern` — /32 → exact host; /24 →
+- [x] 1.1 Unit: `mysql_host_pattern` — /32 → exact host; /24 →
       `a.b.c.%`; IPv6 /64 → wildcard form; prefix < /16 →
       `Err(PrefixTooBroad)`; stored pattern round-trips through parse.
-- [ ] 1.2 Unit: reconcile diff — desired {localhost, p1} vs current
+- [x] 1.2 Unit: reconcile diff — desired {localhost, p1} vs current
       {localhost, p1, p2} yields exactly one DROP for p2; empty ACL
       desired set is {localhost} only.
 - [ ] 1.3 Unit: all-or-nothing — a failing second statement triggers
       revert of the first (mock port records call order) and returns
       `GrantFailed{step: 2}`.
-- [ ] 1.4 Property: for arbitrary valid CIDR lists the derived
+- [x] 1.4 Property: for arbitrary valid CIDR lists the derived
       patterns are unique and none equals `%` alone unless the global
       opt-in flag is set.
 - [ ] 1.5 Integration (`tests/integration/db_remote_access.rs`) with
@@ -28,7 +28,7 @@
 
 ## 2. Domain
 
-- [ ] 2.1 Add pure `mysql_host_pattern` + pattern VO under
+- [x] 2.1 Add pure `mysql_host_pattern` + pattern VO under
       `crates/openpanel-domain/src/db_privileges/`.
 
 ## 3. Application

@@ -30,10 +30,21 @@ pub enum DbPrivilegeError {
     /// The SSO token is invalid (expired or already consumed).
     #[error("invalid sso token")]
     InvalidSsoToken,
+    /// A CIDR prefix is broader than the policy floor.
+    #[error("cidr prefix too broad")]
+    PrefixTooBroad,
+    /// A remote-access input is malformed.
+    #[error("invalid remote-access input: {0}")]
+    InvalidPolicy(String),
     /// Persistence failed.
     #[error("persistence failed: {0}")]
     Persistence(String),
 }
+
+pub mod remote_access;
+pub use remote_access::{
+    MysqlHostPattern, ReconcileStep, desired_hosts, mysql_host_pattern, reconcile_diff,
+};
 
 impl From<DbPrivilegeError> for RepoError {
     fn from(error: DbPrivilegeError) -> Self {
