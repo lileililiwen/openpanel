@@ -280,6 +280,7 @@ impl RemoteAccessController {
     /// diff against live state, execute all-or-nothing (a failing
     /// step reverts its predecessors in reverse order), persist the
     /// applied patterns, and audit.
+    #[allow(clippy::too_many_arguments)]
     pub async fn apply(
         &self,
         caller: &User,
