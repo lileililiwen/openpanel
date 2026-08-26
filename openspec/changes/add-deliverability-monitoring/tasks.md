@@ -2,7 +2,7 @@
 
 ## 1. Testing
 
-- [ ] 1.1 Unit: DMARC aggregate parser — fixture XML with two rows
+- [x] 1.1 Unit: DMARC aggregate parser — fixture XML with two rows
       yields correct per-source stats; input >10 MiB rejected;
       DOCTYPE/entity-bearing XML rejected before parse; malformed XML
       returns `DeliverabilityError::ReportMalformed` (no panic).
@@ -12,7 +12,7 @@
       (Listing upsert semantics also landed with this slice.)
 - [ ] 1.3 Unit: listing upsert preserves `first_seen` on repeat
       listings and sets `resolved_at` when the check clears.
-- [ ] 1.4 Unit: auth-audit drift — SPF record missing `all`
+- [x] 1.4 Unit: auth-audit drift — SPF record missing `all`
       mechanism, DKIM selector key mismatch, and DMARC rua absent each
       produce exactly one drift entry with a stable code.
 - [ ] 1.5 Property: for arbitrary well-formed report rows (≥100

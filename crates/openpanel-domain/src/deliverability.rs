@@ -167,3 +167,268 @@ mod tests {
         assert_eq!(listing.resolved_at(), Some(t2));
     }
 }
+
+/// Per-source aggregate statistics from one DMARC report row.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct DmarcSourceStat {
+    source_ip: IpAddr,
+    messages: u64,
+    dkim_pass: u64,
+    spf_pass: u64,
+}
+
+impl DmarcSourceStat {
+    /// The source address.
+    pub fn source_ip(&self) -> IpAddr {
+        self.source_ip
+    }
+
+    /// Message count for the day.
+    pub fn messages(&self) -> u64 {
+        self.messages
+    }
+
+    /// Messages passing DKIM.
+    pub fn dkim_pass(&self) -> u64 {
+        self.dkim_pass
+    }
+
+    /// Messages passing SPF.
+    pub fn spf_pass(&self) -> u64 {
+        self.spf_pass
+    }
+}
+
+/// DMARC report parse failures.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum DeliverabilityError {
+    /// The report exceeds the 10 MiB input cap.
+    #[error("report exceeds the 10 MiB cap")]
+    ReportTooLarge,
+    /// The report carries a DOCTYPE or entity declaration.
+    #[error("report contains DOCTYPE/entities")]
+    ReportDoctype,
+    /// The report is not parseable aggregate-report XML.
+    #[error("report malformed")]
+    ReportMalformed,
+}
+
+/// Input cap for uploaded reports.
+pub const REPORT_MAX_BYTES: usize = 10 * 1024 * 1024;
+
+/// Extract the text of the first `<tag>…</tag>` within `xml`.
+fn first_tag(xml: &str, tag: &str) -> Option<String> {
+    let open = format!("<{tag}>");
+    let close = format!("</{tag}>");
+    let start = xml.find(&open)? + open.len();
+    let end = xml[start..].find(&close)? + start;
+    Some(xml[start..end].to_string())
+}
+
+/// Parse a DMARC aggregate report into per-source stats. Pure and
+/// allocation-bounded: rejects oversized input, DOCTYPE/entity
+/// declarations (XXE class), and malformed rows without panicking.
+pub fn parse_dmarc_report(xml: &str) -> Result<Vec<DmarcSourceStat>, DeliverabilityError> {
+    if xml.len() > REPORT_MAX_BYTES {
+        return Err(DeliverabilityError::ReportTooLarge);
+    }
+    let lower = xml.to_ascii_lowercase();
+    if lower.contains("<!doctype") || lower.contains("<!entity") {
+        return Err(DeliverabilityError::ReportDoctype);
+    }
+    let mut stats = Vec::new();
+    for record in xml.split("<record>").skip(1) {
+        let record = match record.split("</record>").next() {
+            Some(r) => r,
+            None => return Err(DeliverabilityError::ReportMalformed),
+        };
+        let source_ip: IpAddr = first_tag(record, "source_ip")
+            .ok_or(DeliverabilityError::ReportMalformed)?
+            .trim()
+            .parse()
+            .map_err(|_| DeliverabilityError::ReportMalformed)?;
+        let count: u64 = first_tag(record, "count")
+            .ok_or(DeliverabilityError::ReportMalformed)?
+            .trim()
+            .parse()
+            .map_err(|_| DeliverabilityError::ReportMalformed)?;
+        let pass = |kind: &str| -> Result<u64, DeliverabilityError> {
+            match first_tag(record, kind).as_deref() {
+                Some(v) if v.trim() == "pass" => Ok(count),
+                Some(_) => Ok(0),
+                None => Err(DeliverabilityError::ReportMalformed),
+            }
+        };
+        stats.push(DmarcSourceStat {
+            source_ip,
+            messages: count,
+            dkim_pass: pass("dkim")?,
+            spf_pass: pass("spf")?,
+        });
+    }
+    if stats.is_empty() {
+        // A report with no records section is malformed by definition.
+        if !xml.contains("<record>") {
+            return Err(DeliverabilityError::ReportMalformed);
+        }
+    }
+    Ok(stats)
+}
+
+/// Stable drift codes emitted by the auth audit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DriftCode {
+    /// SPF record lacks an `all` mechanism.
+    SpfMissingAll,
+    /// DKIM selector key hash does not match the managed key.
+    DkimSelectorMismatch,
+    /// DMARC record has no `rua=` reporting address.
+    DmarcRuaAbsent,
+}
+
+impl DriftCode {
+    /// Stable wire code.
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::SpfMissingAll => "spf_missing_all",
+            Self::DkimSelectorMismatch => "dkim_selector_mismatch",
+            Self::DmarcRuaAbsent => "dmarc_rua_absent",
+        }
+    }
+}
+
+/// Compare live DNS state against managed values and produce exactly
+/// one drift entry per detected problem.
+pub fn auth_audit(
+    spf_record: Option<&str>,
+    dkim_key_matches: bool,
+    dmarc_record: Option<&str>,
+) -> Vec<DriftCode> {
+    let mut drift = Vec::new();
+    match spf_record {
+        Some(record) if !record.contains("all") => {
+            drift.push(DriftCode::SpfMissingAll);
+        }
+        None => drift.push(DriftCode::SpfMissingAll),
+        _ => {}
+    }
+    if !dkim_key_matches {
+        drift.push(DriftCode::DkimSelectorMismatch);
+    }
+    match dmarc_record {
+        Some(record) if !record.contains("rua=") => {
+            drift.push(DriftCode::DmarcRuaAbsent);
+        }
+        None => drift.push(DriftCode::DmarcRuaAbsent),
+        _ => {}
+    }
+    drift
+}
+
+#[cfg(test)]
+mod report_tests {
+    use super::*;
+
+    const FIXTURE_TWO_ROWS: &str = r#"<?xml version="1.0"?>
+<feedback>
+  <record>
+    <row><source_ip>203.0.113.7</source_ip><count>12</count>
+      <policy_evaluated><dkim>pass</dkim><spf>fail</spf></policy_evaluated></row>
+  </record>
+  <record>
+    <row><source_ip>198.51.100.9</source_ip><count>3</count>
+      <policy_evaluated><dkim>fail</dkim><spf>pass</spf></policy_evaluated></row>
+  </record>
+</feedback>"#;
+
+    #[test]
+    fn test_dmarc_parser_two_rows_and_rejections() {
+        let stats = parse_dmarc_report(FIXTURE_TWO_ROWS).unwrap();
+        assert_eq!(stats.len(), 2);
+        assert_eq!(stats[0].source_ip().to_string(), "203.0.113.7");
+        assert_eq!(stats[0].messages(), 12);
+        assert_eq!(stats[0].dkim_pass(), 12);
+        assert_eq!(stats[0].spf_pass(), 0);
+        assert_eq!(stats[1].messages(), 3);
+        assert_eq!(stats[1].dkim_pass(), 0);
+        assert_eq!(stats[1].spf_pass(), 3);
+
+        // Oversize input rejected before any parsing.
+        let big = format!("<feedback>{}</feedback>", "x".repeat(REPORT_MAX_BYTES + 1));
+        assert_eq!(
+            parse_dmarc_report(&big).unwrap_err(),
+            DeliverabilityError::ReportTooLarge
+        );
+
+        // DOCTYPE / entity-bearing input rejected before parse.
+        assert_eq!(
+            parse_dmarc_report(
+                "<!DOCTYPE feedback [<!ENTITY xxe SYSTEM \"file:///etc/passwd\">]><feedback/>"
+            )
+            .unwrap_err(),
+            DeliverabilityError::ReportDoctype
+        );
+        assert_eq!(
+            parse_dmarc_report("<!ENTITY evil 'x'><feedback/>").unwrap_err(),
+            DeliverabilityError::ReportDoctype
+        );
+
+        // Malformed XML → ReportMalformed, never a panic.
+        assert_eq!(
+            parse_dmarc_report("<feedback><record><row></feedback>").unwrap_err(),
+            DeliverabilityError::ReportMalformed
+        );
+        assert_eq!(
+            parse_dmarc_report("not xml at all").unwrap_err(),
+            DeliverabilityError::ReportMalformed
+        );
+    }
+
+    #[test]
+    fn test_auth_audit_drift_codes_are_stable_and_single() {
+        // All healthy → no drift.
+        assert!(
+            auth_audit(
+                Some("v=spf1 include:_spf.example.com -all"),
+                true,
+                Some("v=DMARC1; rua=mailto:dmarc@example.com")
+            )
+            .is_empty()
+        );
+
+        // Each problem yields exactly one stable entry.
+        assert_eq!(
+            auth_audit(
+                Some("v=spf1 include:_spf.example.com"),
+                true,
+                Some("v=DMARC1; rua=mailto:d@e.com")
+            ),
+            vec![DriftCode::SpfMissingAll]
+        );
+        assert_eq!(
+            auth_audit(
+                Some("v=spf1 -all"),
+                false,
+                Some("v=DMARC1; rua=mailto:d@e.com")
+            ),
+            vec![DriftCode::DkimSelectorMismatch]
+        );
+        assert_eq!(
+            auth_audit(Some("v=spf1 -all"), true, Some("v=DMARC1; p=reject")),
+            vec![DriftCode::DmarcRuaAbsent]
+        );
+        // Missing records count as drift too.
+        assert_eq!(
+            auth_audit(None, true, None),
+            vec![DriftCode::SpfMissingAll, DriftCode::DmarcRuaAbsent]
+        );
+        // Wire codes are stable strings.
+        assert_eq!(DriftCode::SpfMissingAll.as_str(), "spf_missing_all");
+        assert_eq!(
+            DriftCode::DkimSelectorMismatch.as_str(),
+            "dkim_selector_mismatch"
+        );
+        assert_eq!(DriftCode::DmarcRuaAbsent.as_str(), "dmarc_rua_absent");
+    }
+}
