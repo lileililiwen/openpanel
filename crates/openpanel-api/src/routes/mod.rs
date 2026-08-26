@@ -19,6 +19,7 @@ pub mod databases;
 /// Database point-in-time recovery routes
 /// (`/backups/databases/{id}/pitr/...`).
 pub mod db_pitr;
+pub mod deliverability;
 /// Provider-backed DNS routes (`/dns`).
 pub mod dns;
 pub mod docker;

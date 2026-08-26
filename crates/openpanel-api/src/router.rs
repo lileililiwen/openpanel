@@ -29,6 +29,7 @@ use crate::{
         cron::router as cron_router,
         databases::{remote_access_router as db_remote_access_router, router as databases_router},
         db_pitr::router as db_pitr_router,
+        deliverability::router as deliverability_router,
         dns::router as dns_router,
         docker::router as docker_router,
         files::router as files_router,
@@ -113,6 +114,7 @@ pub fn build_router(
     site_clone_template_repo: Arc<SqliteSiteCloneTemplateRepository>,
     themeable_ui: Arc<ThemeableUiService>,
     web_application_installer: Arc<WebApplicationInstallerService>,
+    deliverability: Arc<openpanel_app::DeliverabilityService>,
     malware_scanner: Arc<MalwareScannerService>,
 ) -> Router {
     let auth_state = ApiAuthState {
@@ -137,6 +139,7 @@ pub fn build_router(
         .nest("/databases", databases_router(databases))
         .nest("/databases", db_remote_access_router(db_remote_access))
         .nest("/runtimes", app_runtimes_router(runtime_env))
+        .nest("/mail/domains", deliverability_router(deliverability))
         .nest("/files", files_router(files.clone()))
         .nest("/ssl", ssl_router(ssl))
         .nest("/monitoring", monitoring_router(monitoring))

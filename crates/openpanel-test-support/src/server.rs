@@ -37,6 +37,21 @@ use openpanel_app::{
     software_center::ArtifactFetcher,
 };
 
+/// Deliverability test resolver: nothing listed by default.
+#[derive(Default)]
+struct FakeDnsResolver;
+
+#[async_trait::async_trait]
+impl openpanel_domain::deliverability::ResolverPort for FakeDnsResolver {
+    async fn txt(&self, _name: &str) -> Result<Vec<String>, String> {
+        Ok(vec![])
+    }
+
+    async fn resolve_a(&self, _name: &str) -> Result<Vec<std::net::IpAddr>, String> {
+        Ok(vec![])
+    }
+}
+
 #[derive(Default)]
 struct MemoryDocker {
     states: Mutex<HashMap<String, openpanel_app::RuntimeContainerState>>,
@@ -629,6 +644,17 @@ impl TestServer {
         )
         .await
         .expect("security module");
+        let deliverability_resolver: std::sync::Arc<
+            dyn openpanel_domain::deliverability::ResolverPort,
+        > = std::sync::Arc::new(FakeDnsResolver);
+        let deliverability_zones =
+            vec![openpanel_domain::deliverability::BlocklistZone::new("zen.spamhaus.org").unwrap()];
+        let deliverability_module = openpanel_app::DeliverabilityModule::new(
+            &ctx,
+            deliverability_resolver,
+            deliverability_zones,
+        )
+        .await;
         let system_services_module = SystemServicesModule::memory(&ctx)
             .await
             .expect("system services module");
@@ -966,6 +992,7 @@ impl TestServer {
             // same pool + audit; the in-memory install fs keeps
             // tests hermetic.
             web_application_installer_svc.clone(),
+            deliverability_module.service(),
             // Malware scanner: real service over the same pool +
             // audit; the scan fs writes under the sandbox.
             malware_scanner_svc.clone(),

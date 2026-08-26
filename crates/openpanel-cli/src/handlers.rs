@@ -446,6 +446,29 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .context("apply staging migrations")?;
     let staging_svc: Arc<StagingService> = staging_module.service();
     let _ = staging_svc;
+
+    // Deliverability module: DNSBL lookups + DMARC stats.
+    let deliverability_resolver: Arc<dyn openpanel_domain::deliverability::ResolverPort> =
+        Arc::new(FakeDeliverabilityResolver);
+    let deliverability_zones = vec![
+        openpanel_domain::deliverability::BlocklistZone::new("zen.spamhaus.org")
+            .ok_or_else(|| anyhow::anyhow!("invalid deliverability blocklist zone"))?,
+    ];
+    let deliverability_module = openpanel_app::DeliverabilityModule::new(
+        &ctx,
+        deliverability_resolver,
+        deliverability_zones,
+    )
+    .await;
+    runner
+        .apply_module(
+            deliverability_module.name(),
+            &deliverability_module.migrations(),
+        )
+        .await
+        .context("apply deliverability migrations")?;
+    let deliverability_svc = deliverability_module.service();
+
     let app = build_router(
         identity_svc.clone(),
         sites_svc.clone(),
@@ -534,6 +557,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
             master_key,
             None,
         )),
+        deliverability_svc.clone(),
         // Malware scanner: real service over the same pool + audit.
         Arc::new(openpanel_app::MalwareScannerService::new(
             Arc::new(
@@ -5706,6 +5730,20 @@ pub async fn scan_list(config: Arc<Config>, site: String) -> anyhow::Result<()> 
 // ---------------------------------------------------------------------------
 // Server snapshot CLI handlers.
 // ---------------------------------------------------------------------------
+
+/// Deliverability stub resolver: nothing listed by default.
+struct FakeDeliverabilityResolver;
+
+#[async_trait::async_trait]
+impl openpanel_domain::deliverability::ResolverPort for FakeDeliverabilityResolver {
+    async fn txt(&self, _name: &str) -> Result<Vec<String>, String> {
+        Ok(vec![])
+    }
+
+    async fn resolve_a(&self, _name: &str) -> Result<Vec<std::net::IpAddr>, String> {
+        Ok(vec![])
+    }
+}
 
 /// Build the remote-access context for CLI (memory port when the
 /// stub flag is set, otherwise the mysql shell-out).
