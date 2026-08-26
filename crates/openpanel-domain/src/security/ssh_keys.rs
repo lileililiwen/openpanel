@@ -209,7 +209,9 @@ impl HostSshKey {
 }
 
 /// Managed-block markers in `authorized_keys`.
+/// Managed-block opening marker.
 pub const MANAGED_BEGIN: &str = "# BEGIN openpanel-managed (do not edit)\n";
+/// Managed-block closing marker.
 pub const MANAGED_END: &str = "# END openpanel-managed\n";
 
 /// Render `authorized_keys`: managed block first, out-of-band lines
