@@ -1029,6 +1029,7 @@ impl TestServer {
             notification_svc.clone(),
             pitr_svc.clone(),
             staging_svc.clone(),
+            git_deployment_module.preview_service(),
             collaborators_svc.clone(),
             registry_svc.clone(),
             container_runtime_svc.clone(),

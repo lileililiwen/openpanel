@@ -84,9 +84,18 @@ async fn cli_backup_drill_run_then_show() {
     let env = &[("OPENPANEL__BACKUPS__ROOT", root.to_str().unwrap())];
     let created = runner.run_with_env(
         &[
-            "backup", "plan", "create", "--name", "drill",
-            "--schedule", "0 2 * * *", "--timezone", "UTC",
-            "--panel-metadata", "--retention", "3",
+            "backup",
+            "plan",
+            "create",
+            "--name",
+            "drill",
+            "--schedule",
+            "0 2 * * *",
+            "--timezone",
+            "UTC",
+            "--panel-metadata",
+            "--retention",
+            "3",
         ],
         env,
     );
@@ -97,7 +106,14 @@ async fn cli_backup_drill_run_then_show() {
     let run_id = run.stdout.split_whitespace().last().unwrap();
     let drill = runner.run_with_env(&["backup", "drill", "run", "--id", run_id], env);
     assert_eq!(drill.code, 0, "{}", drill.stderr);
-    let drill_id = drill.stdout.lines().last().unwrap().split_whitespace().nth(1).unwrap();
+    let drill_id = drill
+        .stdout
+        .lines()
+        .last()
+        .unwrap()
+        .split_whitespace()
+        .nth(1)
+        .unwrap();
     let list = runner.run_with_env(&["backup", "drill", "list", "--id", run_id], env);
     assert_eq!(list.code, 0, "{}", list.stderr);
     assert!(list.stdout.contains(drill_id));

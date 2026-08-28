@@ -2,16 +2,16 @@
 
 use clap::Parser;
 use openpanel_cli::{
-    AuthCommand, BackupCommand, BackupDrillCommand, BackupPlanCommand, BackupRestoreCommand, BrandingCommand,
-    CdnCommand, Cli, CollaboratorCommand, Command, ContainerRuntimeCommand, CronCommand,
-    DatabaseCommand, DnsCommand, DockerCommand, FileCommand, FtpCommand, IacCommand, LogsCommand,
-    MailCommand, MarketplaceCommand, MonitoringCommand, NotificationChannelCommand,
+    AuthCommand, BackupCommand, BackupDrillCommand, BackupPlanCommand, BackupRestoreCommand,
+    BrandingCommand, CdnCommand, Cli, CollaboratorCommand, Command, ContainerRuntimeCommand,
+    CronCommand, DatabaseCommand, DnsCommand, DockerCommand, FileCommand, FtpCommand, IacCommand,
+    LogsCommand, MailCommand, MarketplaceCommand, MonitoringCommand, NotificationChannelCommand,
     NotificationCommand, NotificationSubscriptionCommand, PitrCommand, PluginCommand,
     RecoveryCodeCommand, RegistryCommand, ScanCommand, SecurityAllowlistCommand, SecurityCommand,
     SecurityRuleCommand, ServerSnapshotCommand, ServicesCommand, SiteCacheCommand,
-    SiteCloneCommand, SiteCommand, SiteHttpCommand, SitePreviewCommand, SiteTemplateCommand, SoftwareCommand,
-    SslCommand, StagingCommand, TerminalCommand, TokenCommand, TwoFactorCommand, UserCommand,
-    WafCommand, WebappCommand, handlers,
+    SiteCloneCommand, SiteCommand, SiteHttpCommand, SitePreviewCommand, SiteTemplateCommand,
+    SoftwareCommand, SslCommand, StagingCommand, TerminalCommand, TokenCommand, TwoFactorCommand,
+    UserCommand, WafCommand, WebappCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 

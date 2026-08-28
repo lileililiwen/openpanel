@@ -406,6 +406,7 @@ pub fn detail_section(site: &Site, owner: &str) -> Markup {
                 a href=(format!("/sites/{}/waf", site.id())) { "WAF" }
                 a href=(format!("/sites/{}/http", site.id())) { "HTTP controls" }
                 a href=(format!("/sites/{}/staging", site.id())) { "Staging" }
+                a href=(format!("/sites/{}/previews", site.id())) { "Previews" }
                 a href=(format!("/sites/{}/cache", site.id())) { "Cache & CDN" }
                 a href=(format!("/sites/{}/collaborators", site.id())) { "Collaborators" }
             }

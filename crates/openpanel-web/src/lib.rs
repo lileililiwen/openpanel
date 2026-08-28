@@ -48,6 +48,8 @@ pub mod notifications;
 pub mod plugin_extension;
 /// Plugin marketplace web page.
 pub mod plugin_marketplace;
+/// PR preview deployments web pages.
+pub mod previews;
 pub mod router;
 pub mod security;
 pub mod settings;

@@ -27,6 +27,7 @@ impl CapabilitySet {
             "monitoring",
             "users",
             "settings",
+            "previews",
         ]))
     }
 

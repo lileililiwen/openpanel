@@ -609,6 +609,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         notification_svc,
         pitr_svc,
         staging_svc,
+        previews_svc.clone(),
         collaborators_svc,
         registry_svc,
         container_runtime_svc,

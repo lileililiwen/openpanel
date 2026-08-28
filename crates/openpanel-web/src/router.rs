@@ -20,9 +20,9 @@ use openpanel_app::{
     ApiTokenService, BackupService, CollaboratorService, ContainerRegistryService,
     ContainerRuntimeService, CronService, DatabasesService, DnsService, DockerService,
     FeedbackService, FilesService, FtpService, IdentityService, LogService, MailService,
-    MonitoringService, NotificationService, PitrService, SecurityService, SitesService,
-    SoftwareCenterService, SslService, StagingService, WafService, identity::TwoFactorService,
-    security::LoginThrottleService, system_services::ServiceManager,
+    MonitoringService, NotificationService, PitrService, PreviewService, SecurityService,
+    SitesService, SoftwareCenterService, SslService, StagingService, WafService,
+    identity::TwoFactorService, security::LoginThrottleService, system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
 use openpanel_domain::{Session, SessionToken, User};
@@ -32,7 +32,7 @@ use crate::{
     csrf::{CsrfStore, ValidateCsrf},
     dashboard, databases, feedback, files, forms, layer,
     layout::CapabilitySet,
-    login, logs, monitoring, security, settings,
+    login, logs, monitoring, previews, security, settings,
     settings::{InstallationInfo, PanelPreferences, SettingsStore},
     sites, ssl, users,
 };
@@ -126,6 +126,8 @@ pub struct WebState {
     pub pitr: Arc<PitrService>,
     /// Per-site staging service.
     pub staging: Arc<StagingService>,
+    /// PR preview deployment service.
+    pub previews: Arc<PreviewService>,
     /// Per-site collaborator service.
     pub collaborators: Arc<CollaboratorService>,
     /// Container registry service.
@@ -261,6 +263,7 @@ pub fn router(
     notifications: Arc<NotificationService>,
     pitr: Arc<PitrService>,
     staging: Arc<StagingService>,
+    previews: Arc<PreviewService>,
     collaborators: Arc<CollaboratorService>,
     registry: Arc<ContainerRegistryService>,
     container_runtime: Arc<ContainerRuntimeService>,
@@ -298,6 +301,7 @@ pub fn router(
         notifications,
         pitr,
         staging,
+        previews,
         collaborators,
         registry,
         container_runtime,
@@ -571,6 +575,8 @@ pub fn router(
         .route("/databases/{id}/reveal", post(databases::reveal))
         .route("/databases/{id}/pitr", get(crate::db_pitr::page))
         .route("/sites/{id}/staging", get(crate::site_staging::page))
+        .route("/sites/{id}/previews", get(previews::site_previews))
+        .route("/previews", get(previews::page))
         .route("/sites/{id}/cache", get(crate::site_cache_cdn::page))
         .route(
             "/cdn/integrations/{id}/purge",

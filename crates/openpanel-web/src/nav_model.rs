@@ -145,6 +145,13 @@ const OPERATIONS: &[NavItem] = &[
         icon: "archive",
     },
     NavItem {
+        href: "/previews",
+        label: "Previews",
+        capability: "previews",
+        role: RequiredRole::Authenticated,
+        icon: "git-pull-request",
+    },
+    NavItem {
         href: "/cron",
         label: "Cron",
         capability: "cron",
@@ -318,6 +325,9 @@ pub fn icon_path(name: &str) -> Option<&'static str> {
         "sliders" => "M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6",
         "plug" => "M12 22v-5M9 8V2M15 8V2M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z",
         "store" => "M3 9l1-5h16l1 5M5 9v11h14V9M9 20v-6h6v6M3 9h18",
+        "git-pull-request" => {
+            "M6 9V3a2 2 0 1 1 4 0v6a2 2 0 1 1-4 0zM6 9v12M18 21v-6a3 3 0 0 0-3-3h-3M15 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"
+        }
         _ => return None,
     })
 }

@@ -9,7 +9,7 @@ use std::{
 };
 
 use openpanel_domain::{
-    SiteError,
+    PreviewEnvironment, SiteError,
     sites::{TransportPolicy, site::Site},
 };
 
@@ -328,6 +328,179 @@ server {{
     fn force_https_for(_site: &Site) -> bool {
         // A future enhancement: let `Site` carry `force_https: bool`.
         true
+    }
+
+    /// Render the nginx server block for a single PR preview.
+    ///
+    /// Each preview gets its own file under
+    /// `conf_d_active/pr-<pr>.<base_domain>.conf`. The block proxies
+    /// to the slot's runtime port and reuses the wildcard certificate
+    /// covering `*.pr.<base_domain>` so per-PR HTTP-01 issuance is
+    /// never attempted.
+    ///
+    /// `tls` enables a `:443` vhost when supplied (cert, key); the
+    /// `:80` vhost always redirects to HTTPS for live previews.
+    pub fn render_preview(
+        preview: &PreviewEnvironment,
+        runtime_port: u16,
+        tls: Option<(&str, &str)>,
+    ) -> String {
+        let site_id = preview.site_id();
+        let access_log = format!("/var/log/openpanel/preview-{}.access.log", preview.id());
+        let error_log = format!("/var/log/openpanel/preview-{}.error.log", preview.id());
+        let hostname = preview.hostname();
+        let force_https = tls.is_some();
+
+        let http_vhost = if force_https {
+            format!(
+                r#"# Managed by OpenPanel preview pipeline. PR {pr}.
+server {{
+    listen 80;
+    listen [::]:80;
+    server_name {hostname};
+
+    set $openpanel_site_id "{site_id}";
+    set $openpanel_preview "1";
+    access_log {access_log} openpanel;
+    error_log  {error_log};
+
+    location / {{
+        return 301 https://$host$request_uri;
+    }}
+}}
+"#,
+                pr = preview.pr_number(),
+            )
+        } else {
+            format!(
+                r#"# Managed by OpenPanel preview pipeline. PR {pr}.
+server {{
+    listen 80;
+    listen [::]:80;
+    server_name {hostname};
+
+    set $openpanel_site_id "{site_id}";
+    set $openpanel_preview "1";
+    access_log {access_log} openpanel;
+    error_log  {error_log};
+
+    location / {{
+        proxy_pass http://127.0.0.1:{port};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }}
+}}
+"#,
+                pr = preview.pr_number(),
+                port = runtime_port,
+            )
+        };
+
+        let tls_vhost = match tls {
+            Some((cert_path, key_path)) => format!(
+                r#"
+server {{
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name {hostname};
+
+    ssl_certificate     {cert_path};
+    ssl_certificate_key {key_path};
+    ssl_protocols       TLSv1.2 TLSv1.3;
+    ssl_ciphers         ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache   shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    set $openpanel_site_id "{site_id}";
+    set $openpanel_preview "1";
+    access_log {access_log} openpanel;
+    error_log  {error_log};
+
+    location / {{
+        proxy_pass http://127.0.0.1:{port};
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }}
+}}
+"#,
+                port = runtime_port,
+            ),
+            None => String::new(),
+        };
+
+        format!("{http_vhost}{tls_vhost}")
+    }
+
+    /// Apply a preview server block. Writes
+    /// `conf_d_active/pr-<pr>.<hostname>.conf` (atomic write + nginx
+    /// `-t` + reload). When nginx is unavailable, the file is still
+    /// written and a warning is logged.
+    pub fn apply_preview(
+        &self,
+        preview: &PreviewEnvironment,
+        runtime_port: u16,
+        tls: Option<(&str, &str)>,
+    ) -> Result<(), SiteError> {
+        self.ensure_dirs()?;
+        let target = self.preview_active_path(preview);
+        let rendered = Self::render_preview(preview, runtime_port, tls);
+
+        if !self.nginx_available() {
+            tracing::warn!(
+                pr = preview.pr_number(),
+                "nginx binary not found; writing preview config but skipping -t and reload"
+            );
+            return self.write_only(&target, &rendered);
+        }
+
+        self.write_with_test(&target, &rendered)?;
+        self.reload()
+    }
+
+    /// Remove a preview config file (active or disabled), test nginx, reload.
+    pub fn remove_preview(&self, preview: &PreviewEnvironment) -> Result<(), SiteError> {
+        self.ensure_dirs()?;
+        let active = self.preview_active_path(preview);
+        if !active.exists() {
+            if self.nginx_available() {
+                self.test_and_reload()?;
+            }
+            return Ok(());
+        }
+        let previous = fs::read_to_string(&active).map_err(|e| SiteError::Io(e.to_string()))?;
+        fs::remove_file(&active).map_err(|e| SiteError::Io(e.to_string()))?;
+
+        if !self.nginx_available() {
+            tracing::warn!(pr = preview.pr_number(), "nginx missing; skipping -t");
+            fs::write(&active, previous).map_err(|e| SiteError::Io(e.to_string()))?;
+            return Ok(());
+        }
+
+        if !self.test()? {
+            fs::write(&active, previous).map_err(|e| SiteError::Io(e.to_string()))?;
+            return Err(SiteError::NginxTest(
+                "nginx -t failed after preview removal".into(),
+            ));
+        }
+        self.reload()?;
+        Ok(())
+    }
+
+    /// Path to the active config file for a preview.
+    pub fn preview_active_path(&self, preview: &PreviewEnvironment) -> PathBuf {
+        self.paths.conf_d_active.join(format!(
+            "pr-{}-{}.conf",
+            preview.pr_number(),
+            preview.hostname()
+        ))
     }
 
     /// Apply the rendered config (active site), test nginx, reload on success.
@@ -790,5 +963,61 @@ mod tests {
             Some("http://127.0.0.1:9080"),
         );
         assert!(out.contains("return 301 https://$host$request_uri"));
+    }
+
+    fn dummy_preview(now: chrono::DateTime<chrono::Utc>) -> PreviewEnvironment {
+        PreviewEnvironment::new(
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            Uuid::new_v4(),
+            42,
+            "pr.example.com",
+            now,
+        )
+        .unwrap()
+    }
+
+    #[test]
+    fn render_preview_http_only_proxies_to_runtime_port() {
+        let now = Utc::now();
+        let p = dummy_preview(now);
+        let out = NginxConfigGenerator::render_preview(&p, 19042, None);
+        assert!(out.contains("server_name 42.pr.example.com"));
+        assert!(out.contains("proxy_pass http://127.0.0.1:19042;"));
+        assert!(out.contains("set $openpanel_preview \"1\";"));
+        assert!(!out.contains("listen 443"));
+        assert!(!out.contains("return 301 https://"));
+    }
+
+    #[test]
+    fn render_preview_with_tls_emits_force_https_and_wildcard_cert() {
+        let now = Utc::now();
+        let p = dummy_preview(now);
+        let out = NginxConfigGenerator::render_preview(
+            &p,
+            19042,
+            Some((
+                "/etc/ssl/openpanel/wildcard.pem",
+                "/etc/ssl/openpanel/wildcard.key",
+            )),
+        );
+        assert!(out.contains("server_name 42.pr.example.com"));
+        assert!(out.contains("ssl_certificate     /etc/ssl/openpanel/wildcard.pem;"));
+        assert!(out.contains("ssl_certificate_key /etc/ssl/openpanel/wildcard.key;"));
+        assert!(out.contains("return 301 https://$host$request_uri"));
+        assert!(out.contains("proxy_pass http://127.0.0.1:19042;"));
+    }
+
+    #[test]
+    fn render_preview_path_uses_pr_number_and_hostname() {
+        let now = Utc::now();
+        let p = dummy_preview(now);
+        let generator =
+            NginxConfigGenerator::new(NginxPaths::under(std::path::PathBuf::from("/tmp/op")));
+        let path = generator.preview_active_path(&p);
+        assert!(
+            path.ends_with("pr-42-42.pr.example.com.conf"),
+            "got {path:?}"
+        );
     }
 }
