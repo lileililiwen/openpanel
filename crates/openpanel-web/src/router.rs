@@ -92,6 +92,8 @@ pub struct WebState {
     pub cron: Arc<CronService>,
     /// Backup and restore service.
     pub backups: Arc<BackupService>,
+    /// Backup restore drill service.
+    pub backup_drills: Arc<openpanel_app::backups::DrillService>,
     /// Authorized log browsing service.
     pub logs: Arc<LogService>,
     /// Host firewall and login-abuse service.
@@ -242,6 +244,7 @@ pub fn router(
     monitoring: Arc<MonitoringService>,
     cron: Arc<CronService>,
     backups: Arc<BackupService>,
+    backup_drills: Arc<openpanel_app::backups::DrillService>,
     logs: Arc<LogService>,
     security_service: Arc<SecurityService>,
     login_throttle: Arc<LoginThrottleService>,
@@ -278,6 +281,7 @@ pub fn router(
         monitoring,
         cron,
         backups,
+        backup_drills,
         logs,
         security: security_service,
         login_throttle,
@@ -409,6 +413,8 @@ pub fn router(
         .route("/backups", get(backups::page))
         .route("/backups/new", get(backups::new_form))
         .route("/backups/plans", post(backups::create))
+        .route("/backups/drills", get(backups::drills_page))
+        .route("/backups/drills/{id}/run", post(backups::drill_run))
         .route("/logs", get(logs::page))
         .route("/logs/entries", get(logs::entries))
         .route("/security", get(security::page))

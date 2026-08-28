@@ -10,18 +10,19 @@ use axum::{
     routing::{get, post},
 };
 use openpanel_app::backups::{
-    BackupPlanInput, BackupPlanUpdate, BackupService, BackupServiceError, RestoreInput,
+    BackupPlanInput, BackupPlanUpdate, BackupService, BackupServiceError, DrillService,
+    DrillServiceError, RestoreInput,
 };
 use openpanel_domain::{
     Role,
-    backups::{BackupPlan, BackupRun},
+    backups::{BackupPlan, BackupRun, drill::RestoreDrill},
 };
 use uuid::Uuid;
 
 use crate::{ApiError, ApiResult, AuthUser};
 
 /// Build `/backups` routes.
-pub fn router(service: Arc<BackupService>) -> Router {
+pub fn router(service: Arc<BackupService>, drills: Arc<DrillService>) -> Router {
     Router::new()
         .route("/plans", get(plans).post(create))
         .route("/plans/{id}", get(plan).put(update).delete(delete_plan))
@@ -33,13 +34,15 @@ pub fn router(service: Arc<BackupService>) -> Router {
         .route("/runs/{id}/verify", post(verify))
         .route("/runs/{id}/restore/preview", post(preview))
         .route("/runs/{id}/restore", post(restore))
-        .with_state(service)
+        .route("/runs/{id}/drills", post(run_drill).get(list_drills))
+        .route("/runs/{id}/drills/{drill_id}", get(show_drill))
+        .with_state((service, drills))
 }
 fn scope(user: &openpanel_domain::User) -> (Uuid, bool) {
     (user.id(), matches!(user.role(), Role::Owner))
 }
 async fn create(
-    State(svc): State<Arc<BackupService>>,
+    State((svc, _drills)): State<(Arc<BackupService>, Arc<DrillService>)>,
     AuthUser(user, _): AuthUser,
     Json(input): Json<BackupPlanInput>,
 ) -> ApiResult<impl IntoResponse> {
@@ -49,14 +52,14 @@ async fn create(
     ))
 }
 async fn plans(
-    State(svc): State<Arc<BackupService>>,
+    State((svc, _drills)): State<(Arc<BackupService>, Arc<DrillService>)>,
     AuthUser(user, _): AuthUser,
 ) -> ApiResult<Json<Vec<BackupPlan>>> {
     let (owner, all) = scope(&user);
     Ok(Json(svc.plans(owner, all).await.map_err(map)?))
 }
 async fn plan(
-    State(svc): State<Arc<BackupService>>,
+    State((svc, _drills)): State<(Arc<BackupService>, Arc<DrillService>)>,
     AuthUser(user, _): AuthUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<BackupPlan>> {
@@ -64,7 +67,7 @@ async fn plan(
     Ok(Json(svc.plan(owner, all, id).await.map_err(map)?))
 }
 async fn update(
-    State(svc): State<Arc<BackupService>>,
+    State((svc, _drills)): State<(Arc<BackupService>, Arc<DrillService>)>,
     AuthUser(user, _): AuthUser,
     Path(id): Path<Uuid>,
     Json(input): Json<BackupPlanUpdate>,
@@ -75,14 +78,14 @@ async fn update(
     ))
 }
 async fn enable(
-    State(svc): State<Arc<BackupService>>,
+    State((svc, _drills)): State<(Arc<BackupService>, Arc<DrillService>)>,
     AuthUser(user, _): AuthUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<BackupPlan>> {
     status(svc, user, id, true).await
 }
 async fn disable(
-    State(svc): State<Arc<BackupService>>,
+    State((svc, _drills)): State<(Arc<BackupService>, Arc<DrillService>)>,
     AuthUser(user, _): AuthUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<BackupPlan>> {
@@ -102,7 +105,7 @@ async fn status(
     ))
 }
 async fn delete_plan(
-    State(svc): State<Arc<BackupService>>,
+    State((svc, _drills)): State<(Arc<BackupService>, Arc<DrillService>)>,
     AuthUser(user, _): AuthUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
@@ -111,7 +114,7 @@ async fn delete_plan(
     Ok(StatusCode::NO_CONTENT)
 }
 async fn run_plan(
-    State(svc): State<Arc<BackupService>>,
+    State((svc, _drills)): State<(Arc<BackupService>, Arc<DrillService>)>,
     AuthUser(user, _): AuthUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<impl IntoResponse> {
@@ -122,14 +125,14 @@ async fn run_plan(
     ))
 }
 async fn runs(
-    State(svc): State<Arc<BackupService>>,
+    State((svc, _drills)): State<(Arc<BackupService>, Arc<DrillService>)>,
     AuthUser(user, _): AuthUser,
 ) -> ApiResult<Json<Vec<BackupRun>>> {
     let (owner, all) = scope(&user);
     Ok(Json(svc.runs(owner, all).await.map_err(map)?))
 }
 async fn run(
-    State(svc): State<Arc<BackupService>>,
+    State((svc, _drills)): State<(Arc<BackupService>, Arc<DrillService>)>,
     AuthUser(user, _): AuthUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<BackupRun>> {
@@ -137,7 +140,7 @@ async fn run(
     Ok(Json(svc.run(owner, all, id).await.map_err(map)?))
 }
 async fn verify(
-    State(svc): State<Arc<BackupService>>,
+    State((svc, _drills)): State<(Arc<BackupService>, Arc<DrillService>)>,
     AuthUser(user, _): AuthUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<BackupRun>> {
@@ -145,7 +148,7 @@ async fn verify(
     Ok(Json(svc.verify(owner, all, id).await.map_err(map)?))
 }
 async fn preview(
-    State(svc): State<Arc<BackupService>>,
+    State((svc, _drills)): State<(Arc<BackupService>, Arc<DrillService>)>,
     AuthUser(user, _): AuthUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<Json<openpanel_app::backups::RestorePreview>> {
@@ -155,7 +158,7 @@ async fn preview(
     ))
 }
 async fn restore(
-    State(svc): State<Arc<BackupService>>,
+    State((svc, _drills)): State<(Arc<BackupService>, Arc<DrillService>)>,
     AuthUser(user, _): AuthUser,
     Path(id): Path<Uuid>,
     Json(input): Json<RestoreInput>,
@@ -167,7 +170,7 @@ async fn restore(
     ))
 }
 async fn delete_run(
-    State(svc): State<Arc<BackupService>>,
+    State((svc, _drills)): State<(Arc<BackupService>, Arc<DrillService>)>,
     AuthUser(user, _): AuthUser,
     Path(id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
@@ -175,11 +178,43 @@ async fn delete_run(
     svc.delete_run(owner, all, id).await.map_err(map)?;
     Ok(StatusCode::NO_CONTENT)
 }
+async fn run_drill(
+    State((_svc, drills)): State<(Arc<BackupService>, Arc<DrillService>)>,
+    AuthUser(_user, _): AuthUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<impl IntoResponse> {
+    Ok((
+        StatusCode::ACCEPTED,
+        Json(drills.run_drill(id).await.map_err(map_drill)?),
+    ))
+}
+async fn list_drills(
+    State((_svc, drills)): State<(Arc<BackupService>, Arc<DrillService>)>,
+    AuthUser(_user, _): AuthUser,
+    Path(id): Path<Uuid>,
+) -> ApiResult<Json<Vec<RestoreDrill>>> {
+    Ok(Json(drills.list_drills(id).await.map_err(map_drill)?))
+}
+async fn show_drill(
+    State((_svc, drills)): State<(Arc<BackupService>, Arc<DrillService>)>,
+    AuthUser(_user, _): AuthUser,
+    Path((_id, drill_id)): Path<(Uuid, Uuid)>,
+) -> ApiResult<Json<RestoreDrill>> {
+    Ok(Json(drills.get_drill(drill_id).await.map_err(map_drill)?))
+}
 fn map(error: BackupServiceError) -> ApiError {
     match error {
         BackupServiceError::Validation(message) => ApiError::Unprocessable(message),
         BackupServiceError::NotFound => ApiError::NotFound("backup record".into()),
         BackupServiceError::Corrupt => ApiError::Conflict("backup artifact is corrupt".into()),
         BackupServiceError::Internal(message) => ApiError::Internal(message),
+    }
+}
+fn map_drill(error: DrillServiceError) -> ApiError {
+    match error {
+        DrillServiceError::Validation(message) => ApiError::Unprocessable(message),
+        DrillServiceError::NotFound => ApiError::NotFound("drill record".into()),
+        DrillServiceError::RunNotFound => ApiError::NotFound("backup run".into()),
+        DrillServiceError::Internal(message) => ApiError::Internal(message),
     }
 }

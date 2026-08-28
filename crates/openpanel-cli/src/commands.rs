@@ -1064,6 +1064,35 @@ pub enum BackupCommand {
         #[arg(long)]
         id: String,
     },
+    /// Run or inspect restore drills.
+    Drill {
+        /// Drill action.
+        #[command(subcommand)]
+        action: BackupDrillCommand,
+    },
+}
+
+/// Restore drill actions.
+#[derive(Debug, Subcommand)]
+pub enum BackupDrillCommand {
+    /// Run a drill over a completed backup run.
+    Run {
+        /// Run identifier.
+        #[arg(long)]
+        id: String,
+    },
+    /// List drills for a backup run.
+    List {
+        /// Run identifier.
+        #[arg(long)]
+        id: String,
+    },
+    /// Show a single drill report.
+    Show {
+        /// Drill identifier.
+        #[arg(long)]
+        id: String,
+    },
 }
 
 /// Backup plan CRUD.

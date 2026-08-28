@@ -82,6 +82,9 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         Some((cron_module.service(), std::path::PathBuf::from("/var/www"))),
     )
     .await;
+    backups_module
+        .drill_service()
+        .attach_notifications(notification_module.service());
     let snapshots_root = std::env::var("OPENPANEL__SNAPSHOTS__ROOT")
         .map(std::path::PathBuf::from)
         .unwrap_or(std::path::PathBuf::from("/var/lib/openpanel/snapshots"));
@@ -478,6 +481,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         monitoring_svc.clone(),
         cron_svc.clone(),
         backups_svc.clone(),
+        backups_module.drill_service(),
         logs_svc.clone(),
         security_svc.clone(),
         login_throttle.clone(),
@@ -577,6 +581,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         monitoring_svc,
         cron_svc,
         backups_svc,
+        backups_module.drill_service(),
         logs_svc,
         security_svc,
         login_throttle,
@@ -704,6 +709,13 @@ fn cron_owner() -> uuid::Uuid {
 }
 
 async fn build_backups(config: Arc<Config>) -> anyhow::Result<Arc<openpanel_app::BackupService>> {
+    Ok(build_backups_module(config).await?.service())
+}
+
+/// Build the backups module (service + drill service) with migrations applied.
+async fn build_backups_module(
+    config: Arc<Config>,
+) -> anyhow::Result<Arc<openpanel_app::BackupsModule>> {
     let master_key = load_master_key(&config).ok();
     let (pool, audit, db) = bootstrap_persistence(&config).await?;
     let ctx = AppContext::new(config, db, audit);
@@ -715,17 +727,19 @@ async fn build_backups(config: Arc<Config>) -> anyhow::Result<Arc<openpanel_app:
     runner
         .apply_module(cron_module.name(), &cron_module.migrations())
         .await?;
-    let module = BackupsModule::with_root(
-        &ctx,
-        root,
-        master_key,
-        Some((cron_module.service(), std::env::current_dir()?)),
-    )
-    .await;
+    let module = Arc::new(
+        BackupsModule::with_root(
+            &ctx,
+            root,
+            master_key,
+            Some((cron_module.service(), std::env::current_dir()?)),
+        )
+        .await,
+    );
     runner
         .apply_module(module.name(), &module.migrations())
         .await?;
-    Ok(module.service())
+    Ok(module)
 }
 fn backup_owner() -> uuid::Uuid {
     uuid::Uuid::nil()
@@ -1983,6 +1997,50 @@ pub async fn backup_delete(config: Arc<Config>, id: String) -> anyhow::Result<()
         .await
         .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     println!("deleted {id}");
+    Ok(())
+}
+
+/// Run a restore drill over a completed backup run.
+pub async fn backup_drill_run(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let drill = build_backups_module(config)
+        .await?
+        .drill_service()
+        .run_drill(uuid::Uuid::parse_str(&id)?)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "drill {}  {:?}  assertions={}",
+        drill.id,
+        drill.state,
+        drill.assertions.len()
+    );
+    Ok(())
+}
+/// List drills for a backup run.
+pub async fn backup_drill_list(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let drills = build_backups_module(config)
+        .await?
+        .drill_service()
+        .list_drills(uuid::Uuid::parse_str(&id)?)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    for drill in drills {
+        println!("{}  {:?}", drill.id, drill.state);
+    }
+    Ok(())
+}
+/// Show a single drill report.
+pub async fn backup_drill_show(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let drill = build_backups_module(config)
+        .await?
+        .drill_service()
+        .get_drill(uuid::Uuid::parse_str(&id)?)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("drill {}  {:?}", drill.id, drill.state);
+    for a in &drill.assertions {
+        println!("  {:?}  passed={}  {}", a.kind, a.passed, a.detail);
+    }
     Ok(())
 }
 

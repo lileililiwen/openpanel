@@ -46,8 +46,7 @@ impl SandboxContext {
     pub fn create(base_name: &str) -> Result<Self, DrillError> {
         let suffix = random_suffix(DRILL_DB_SUFFIX_LEN);
         let db_name = format!("{base_name}_drill_{suffix}");
-        let docroot =
-            tempfile::TempDir::new().map_err(|e| DrillError::Invalid(e.to_string()))?;
+        let docroot = tempfile::TempDir::new().map_err(|e| DrillError::Invalid(e.to_string()))?;
         Ok(Self {
             docroot,
             db_name: db_name.clone(),
@@ -59,8 +58,7 @@ impl SandboxContext {
     #[cfg(test)]
     pub fn create_with_names(base_name: &str, suffix: &str) -> Result<Self, DrillError> {
         let db_name = format!("{base_name}_drill_{suffix}");
-        let docroot =
-            tempfile::TempDir::new().map_err(|e| DrillError::Invalid(e.to_string()))?;
+        let docroot = tempfile::TempDir::new().map_err(|e| DrillError::Invalid(e.to_string()))?;
         Ok(Self {
             docroot,
             db_name: db_name.clone(),
@@ -77,21 +75,22 @@ impl SandboxContext {
         // Drop database (best-effort)
         if let Some(binary) = mysql_binary {
             let drop_db = std::process::Command::new(binary)
-                .args(["-e", &format!("DROP DATABASE IF EXISTS `{}`;", self.db_name)])
+                .args([
+                    "-e",
+                    &format!("DROP DATABASE IF EXISTS `{}`;", self.db_name),
+                ])
                 .output();
             if let Err(e) = drop_db {
                 warn!(db = %self.db_name, error = %e, "failed to drop drill database");
             }
 
             // Drop user (best-effort)
-            let drop_user = std::process::Command::new(binary).args([
-                "-e",
-                &format!(
-                    "DROP USER IF EXISTS `{}`@`localhost`;",
-                    self.db_user
-                ),
-            ])
-            .output();
+            let drop_user = std::process::Command::new(binary)
+                .args([
+                    "-e",
+                    &format!("DROP USER IF EXISTS `{}`@`localhost`;", self.db_user),
+                ])
+                .output();
             if let Err(e) = drop_user {
                 warn!(user = %self.db_user, error = %e, "failed to drop drill user");
             }
@@ -106,21 +105,14 @@ impl SandboxContext {
     }
 
     /// Ensure the throwaway database and user are provisioned.
-    pub async fn provision(
-        &self,
-        mysql_binary: &str,
-        admin_user: &str,
-    ) -> Result<(), DrillError> {
+    pub async fn provision(&self, mysql_binary: &str, admin_user: &str) -> Result<(), DrillError> {
         // Create database
         let output = std::process::Command::new(mysql_binary)
             .args([
                 "-u",
                 admin_user,
                 "-e",
-                &format!(
-                    "CREATE DATABASE `{}` CHARACTER SET utf8mb4;",
-                    self.db_name
-                ),
+                &format!("CREATE DATABASE `{}` CHARACTER SET utf8mb4;", self.db_name),
             ])
             .output()
             .map_err(|e| DrillError::Invalid(format!("mysql binary not found: {e}")))?;
@@ -203,7 +195,10 @@ mod tests {
     fn sandbox_names_contain_suffix() {
         let ctx = SandboxContext::create("production").unwrap();
         assert!(ctx.db_name.starts_with("production_drill_"));
-        assert_eq!(ctx.db_name.len(), "production_drill_".len() + DRILL_DB_SUFFIX_LEN);
+        assert_eq!(
+            ctx.db_name.len(),
+            "production_drill_".len() + DRILL_DB_SUFFIX_LEN
+        );
     }
 
     #[test]

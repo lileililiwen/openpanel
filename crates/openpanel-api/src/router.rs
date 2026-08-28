@@ -12,7 +12,7 @@ use openpanel_app::{
     PluginService, SecurityService, ServerSnapshotService, SiteCacheService, SiteCloneService,
     SiteHttpService, SitesService, SoftwareCenterService, SslService, SsoService, StagingService,
     ThemeableUiService, WafService, WebApplicationInstallerService, WebTerminalService,
-    identity::TwoFactorService, security::LoginThrottleService,
+    backups::DrillService, identity::TwoFactorService, security::LoginThrottleService,
     site_clone_template::SqliteSiteCloneTemplateRepository, system_services::ServiceManager,
 };
 
@@ -75,6 +75,7 @@ pub fn build_router(
     monitoring: Arc<MonitoringService>,
     cron: Arc<CronService>,
     backups: Arc<BackupService>,
+    backup_drills: Arc<DrillService>,
     logs: Arc<LogService>,
     security: Arc<SecurityService>,
     login_throttle: Arc<LoginThrottleService>,
@@ -144,7 +145,7 @@ pub fn build_router(
         .nest("/ssl", ssl_router(ssl))
         .nest("/monitoring", monitoring_router(monitoring))
         .nest("/cron", cron_router(cron))
-        .nest("/backups", backups_router(backups))
+        .nest("/backups", backups_router(backups, backup_drills))
         .nest("/backups", db_pitr_router(pitr))
         .nest("/server", server_snapshots_router(server_snapshots))
         .nest("/logs", logs_router(logs))

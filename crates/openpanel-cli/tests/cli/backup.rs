@@ -75,3 +75,33 @@ async fn cli_backup_plan_run_verify_restore_lifecycle() {
         0
     );
 }
+
+#[tokio::test]
+async fn cli_backup_drill_run_then_show() {
+    let runner = CliRunner::new().await;
+    let root = runner.workdir.join("backups");
+    std::fs::create_dir_all(&root).unwrap();
+    let env = &[("OPENPANEL__BACKUPS__ROOT", root.to_str().unwrap())];
+    let created = runner.run_with_env(
+        &[
+            "backup", "plan", "create", "--name", "drill",
+            "--schedule", "0 2 * * *", "--timezone", "UTC",
+            "--panel-metadata", "--retention", "3",
+        ],
+        env,
+    );
+    assert_eq!(created.code, 0, "{}", created.stderr);
+    let plan_id = created.stdout.split_whitespace().last().unwrap();
+    let run = runner.run_with_env(&["backup", "run", "--plan-id", plan_id], env);
+    assert_eq!(run.code, 0, "{}", run.stderr);
+    let run_id = run.stdout.split_whitespace().last().unwrap();
+    let drill = runner.run_with_env(&["backup", "drill", "run", "--id", run_id], env);
+    assert_eq!(drill.code, 0, "{}", drill.stderr);
+    let drill_id = drill.stdout.lines().last().unwrap().split_whitespace().nth(1).unwrap();
+    let list = runner.run_with_env(&["backup", "drill", "list", "--id", run_id], env);
+    assert_eq!(list.code, 0, "{}", list.stderr);
+    assert!(list.stdout.contains(drill_id));
+    let show = runner.run_with_env(&["backup", "drill", "show", "--id", drill_id], env);
+    assert_eq!(show.code, 0, "{}", show.stderr);
+    assert!(show.stdout.contains("passed"));
+}

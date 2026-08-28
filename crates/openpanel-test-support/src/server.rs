@@ -630,6 +630,9 @@ impl TestServer {
             Some((cron_module.service(), sandbox.path().to_path_buf())),
         )
         .await;
+        backups_module
+            .drill_service()
+            .attach_notifications(notification_module.service());
         let app_runtimes_module = openpanel_app::AppRuntimesModule::new(&ctx, master_key).await;
         let logs_module = LogsModule::with_roots(
             &ctx,
@@ -937,6 +940,7 @@ impl TestServer {
             monitoring_svc.clone(),
             cron_svc.clone(),
             backups_svc.clone(),
+            backups_module.drill_service(),
             logs_svc.clone(),
             security_svc.clone(),
             login_throttle.clone(),
@@ -1006,6 +1010,7 @@ impl TestServer {
             monitoring_svc.clone(),
             cron_svc.clone(),
             backups_svc.clone(),
+            backups_module.drill_service(),
             logs_svc.clone(),
             security_svc.clone(),
             login_throttle,

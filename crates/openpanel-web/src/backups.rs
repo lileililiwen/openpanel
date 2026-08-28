@@ -2,7 +2,7 @@
 
 use axum::{
     Form,
-    extract::State,
+    extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Redirect, Response},
 };
@@ -10,6 +10,7 @@ use maud::html;
 use openpanel_app::backups::BackupPlanInput;
 use openpanel_domain::{Role, backups::BackupResource};
 use serde::Deserialize;
+use uuid::Uuid;
 
 use crate::router::{WebState, WebUser};
 
@@ -95,4 +96,76 @@ pub async fn create(
         Ok(_) => Redirect::to("/backups").into_response(),
         Err(error) => (StatusCode::UNPROCESSABLE_ENTITY, error.to_string()).into_response(),
     }
+}
+
+/// Render the restore-drills tab: history, last report, run action.
+pub async fn drills_page(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+) -> Response {
+    let csrf = state.csrf.token_for(session.id());
+    let all = matches!(user.role(), Role::Owner);
+    let runs = state.backups.runs(user.id(), all).await.unwrap_or_default();
+    let mut drills = Vec::new();
+    for run in runs.iter().take(5) {
+        if let Ok(list) = state.backup_drills.list_drills(run.id()).await {
+            drills.extend(list);
+        }
+    }
+    let content = html! {
+        h1 { "Backup Drills" }
+        a href="/backups" { "Back to Backups" }
+        h2 { "Drill history" }
+        @if drills.is_empty() {
+            (crate::ui_states::EmptyState::new("No drills yet", "Run a drill over a completed backup to verify its integrity.").render())
+        } @else {
+            ul { @for drill in drills {
+                li {
+                    (format!("{:?}", drill.state))
+                    " — " (drill.id)
+                    " — " (drill.assertions.len()) " assertions"
+                }
+            } }
+        }
+        h2 { "Run a drill" }
+        @if runs.is_empty() {
+            (crate::ui_states::EmptyState::new("No completed backups", "Complete a backup run before drilling.").render())
+        } @else {
+            ul { @for run in runs {
+                li {
+                    (run.id())
+                    form method="post" action={("/backups/drills/".to_string() + &run.id().to_string() + "/run")} {
+                        (crate::layout::csrf_field(&csrf))
+                        button type="submit" { "Run drill" }
+                    }
+                }
+            } }
+        }
+    };
+    state
+        .render_shell(&user, &csrf, "/backups/drills", content)
+        .await
+        .into_response()
+}
+
+/// Run a drill for a backup run (CSRF validated).
+pub async fn drill_run(
+    State(state): State<WebState>,
+    WebUser(_user, session): WebUser,
+    Path(id): Path<Uuid>,
+    Form(form): Form<DrillRunForm>,
+) -> Response {
+    if !state.csrf.verify(session.id(), &form._csrf) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    match state.backup_drills.run_drill(id).await {
+        Ok(_) => Redirect::to("/backups/drills").into_response(),
+        Err(error) => (StatusCode::UNPROCESSABLE_ENTITY, error.to_string()).into_response(),
+    }
+}
+#[derive(Default, Deserialize)]
+#[serde(default)]
+/// CSRF token for drill run.
+pub struct DrillRunForm {
+    _csrf: String,
 }

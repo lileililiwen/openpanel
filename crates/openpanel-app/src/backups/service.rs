@@ -120,6 +120,11 @@ impl BackupService {
         }
     }
 
+    /// Backup storage root.
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
     /// Create a plan.
     pub async fn create_plan(
         &self,

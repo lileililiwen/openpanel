@@ -2,7 +2,7 @@
 
 use clap::Parser;
 use openpanel_cli::{
-    AuthCommand, BackupCommand, BackupPlanCommand, BackupRestoreCommand, BrandingCommand,
+    AuthCommand, BackupCommand, BackupDrillCommand, BackupPlanCommand, BackupRestoreCommand, BrandingCommand,
     CdnCommand, Cli, CollaboratorCommand, Command, ContainerRuntimeCommand, CronCommand,
     DatabaseCommand, DnsCommand, DockerCommand, FileCommand, FtpCommand, IacCommand, LogsCommand,
     MailCommand, MarketplaceCommand, MonitoringCommand, NotificationChannelCommand,
@@ -452,6 +452,11 @@ async fn main() -> anyhow::Result<()> {
                 }
             },
             BackupCommand::Delete { id } => handlers::backup_delete(config, id).await,
+            BackupCommand::Drill { action } => match action {
+                BackupDrillCommand::Run { id } => handlers::backup_drill_run(config, id).await,
+                BackupDrillCommand::List { id } => handlers::backup_drill_list(config, id).await,
+                BackupDrillCommand::Show { id } => handlers::backup_drill_show(config, id).await,
+            },
         },
         Command::SshKeys { action } => handlers::ssh_keys(config, action).await,
         Command::RuntimeEnv { action } => handlers::runtime_env(config, action).await,
