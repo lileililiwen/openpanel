@@ -233,8 +233,8 @@ pub use ftp::{
     UpdateFtpAccount,
 };
 pub use git_deployment::{
-    DeployService, GitDeploymentModule, SqliteDeployRepository, WebhookVerifier,
-    verify_webhook_with_secret,
+    DeployService, GitDeploymentModule, PreviewService, SqliteDeployRepository,
+    SqlitePreviewRepository, WebhookVerifier, verify_webhook_with_secret,
 };
 pub use hosting_plans::{HostingPlansModule, HostingPlansService, SqliteHostingPlanRepository};
 pub use i18n::{

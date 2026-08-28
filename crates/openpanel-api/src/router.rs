@@ -43,6 +43,7 @@ use crate::{
         notifications::router as notifications_router,
         plugin_extension::router as plugin_extension_router,
         plugin_marketplace::router as plugin_marketplace_router,
+        previews::router as previews_router,
         security::{router as security_router, ssh_keys_router},
         server_snapshots::router as server_snapshots_router,
         site_cache_cdn::router as site_cache_cdn_router,
@@ -117,6 +118,7 @@ pub fn build_router(
     web_application_installer: Arc<WebApplicationInstallerService>,
     deliverability: Arc<openpanel_app::DeliverabilityService>,
     malware_scanner: Arc<MalwareScannerService>,
+    previews: Arc<openpanel_app::PreviewService>,
 ) -> Router {
     let auth_state = ApiAuthState {
         identity: identity.clone(),
@@ -176,6 +178,7 @@ pub fn build_router(
         .merge(themeable_ui_router(themeable_ui))
         .merge(web_application_installer_router(web_application_installer))
         .merge(malware_scanner_router(malware_scanner))
+        .merge(previews_router(previews))
         .layer(from_fn_with_state(auth_state, api_auth_middleware));
 
     Router::new()

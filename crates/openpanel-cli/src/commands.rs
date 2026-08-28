@@ -1414,6 +1414,12 @@ pub enum SiteCommand {
         #[command(subcommand)]
         action: SiteCloneCommand,
     },
+    /// Per-site preview deployment subcommands (PR throwaway environments).
+    Preview {
+        /// Preview subcommand.
+        #[command(subcommand)]
+        action: SitePreviewCommand,
+    },
     /// Per-site template export subcommands.
     Template {
         /// Template subcommand.
@@ -2039,6 +2045,35 @@ pub enum SiteTemplateCommand {
     },
     /// List stored templates.
     List,
+}
+
+/// Per-site preview deployment subcommands.
+#[derive(Debug, Subcommand)]
+pub enum SitePreviewCommand {
+    /// List previews for a site.
+    List {
+        /// Site id.
+        #[arg(long)]
+        site: String,
+    },
+    /// Redeploy an existing preview by PR number.
+    Redeploy {
+        /// Site id.
+        #[arg(long)]
+        site: String,
+        /// Pull request number.
+        #[arg(long)]
+        pr: u32,
+    },
+    /// Destroy a preview by PR number.
+    Destroy {
+        /// Site id.
+        #[arg(long)]
+        site: String,
+        /// Pull request number.
+        #[arg(long)]
+        pr: u32,
+    },
 }
 
 /// Themeable UI / white-label subcommands.

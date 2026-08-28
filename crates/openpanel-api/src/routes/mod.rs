@@ -44,6 +44,8 @@ pub mod notifications;
 pub mod plugin_extension;
 /// Plugin marketplace discovery routes (`/marketplace`).
 pub mod plugin_marketplace;
+/// Per-PR preview deployment routes (`/sites/{id}/previews`).
+pub mod previews;
 /// Host firewall and login-abuse routes (`/security`).
 pub mod security;
 /// SSL resource routes (`/ssl`).

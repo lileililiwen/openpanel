@@ -472,6 +472,16 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .context("apply deliverability migrations")?;
     let deliverability_svc = deliverability_module.service();
 
+    let git_deployment_module = openpanel_app::GitDeploymentModule::new(&ctx).await;
+    runner
+        .apply_module(
+            git_deployment_module.name(),
+            &git_deployment_module.migrations(),
+        )
+        .await
+        .context("apply git_deployment migrations")?;
+    let previews_svc = git_deployment_module.preview_service();
+
     let app = build_router(
         identity_svc.clone(),
         sites_svc.clone(),
@@ -571,6 +581,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
             Arc::new(openpanel_app::RealScannerFs),
             None,
         )),
+        previews_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -5457,6 +5468,99 @@ pub async fn site_template_list(config: Arc<Config>) -> anyhow::Result<()> {
         .collect();
     println!("{}", serde_json::to_string_pretty(&view)?);
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// preview CLI handlers.
+// ---------------------------------------------------------------------------
+
+/// Build the preview service for CLI subcommands.
+async fn build_preview_service(
+    config: Arc<Config>,
+) -> anyhow::Result<Arc<openpanel_app::PreviewService>> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config.clone(), db, audit);
+    let module = openpanel_app::GitDeploymentModule::new(&ctx).await;
+    let runner = MigrationRunner::for_sqlite(pool);
+    runner
+        .apply_module(module.name(), &module.migrations())
+        .await
+        .context("apply git_deployment migrations")?;
+    Ok(module.preview_service())
+}
+
+/// `openpanel site preview list`.
+pub async fn site_preview_list(config: Arc<Config>, site: String) -> anyhow::Result<()> {
+    let svc = build_preview_service(config).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let rows = svc
+        .list(&admin_user(), site_id)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let view: Vec<_> = rows
+        .iter()
+        .map(|p| {
+            serde_json::json!({
+                "id": p.id().to_string(),
+                "site_id": p.site_id().to_string(),
+                "pr": p.pr_number(),
+                "state": p.state().as_str(),
+                "hostname": p.hostname(),
+                "expires_at": p.expires_at().map(|t| t.to_rfc3339()),
+            })
+        })
+        .collect();
+    println!("{}", serde_json::to_string_pretty(&view)?);
+    Ok(())
+}
+
+/// `openpanel site preview redeploy`.
+pub async fn site_preview_redeploy(
+    config: Arc<Config>,
+    site: String,
+    pr: u32,
+) -> anyhow::Result<()> {
+    let svc = build_preview_service(config).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let preview = svc
+        .redeploy(&admin_user(), site_id, pr)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "preview {}  state={}  hostname={}",
+        preview.id(),
+        preview.state().as_str(),
+        preview.hostname()
+    );
+    Ok(())
+}
+
+/// `openpanel site preview destroy`.
+pub async fn site_preview_destroy(
+    config: Arc<Config>,
+    site: String,
+    pr: u32,
+) -> anyhow::Result<()> {
+    let svc = build_preview_service(config).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    svc.destroy(&admin_user(), site_id, pr)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!("destroyed preview pr {pr} on site {site_id}");
+    Ok(())
+}
+
+/// Build an admin `User` for CLI subcommands that require it.
+#[allow(clippy::unwrap_used)]
+fn admin_user() -> openpanel_domain::User {
+    use openpanel_domain::{Email, Password, Role, Username};
+    openpanel_domain::User::new(
+        uuid::Uuid::nil(),
+        Username::new("admin").unwrap(),
+        Email::new("admin@example.test").unwrap(),
+        Password::hash("cli-placeholder").unwrap(),
+        Role::Admin,
+    )
 }
 
 // ---------------------------------------------------------------------------

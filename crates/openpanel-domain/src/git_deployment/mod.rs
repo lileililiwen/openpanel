@@ -12,6 +12,8 @@ use uuid::Uuid;
 
 use crate::RepoError;
 
+pub mod preview;
+
 /// Errors raised by the git-deployment bounded context.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum DeployError {

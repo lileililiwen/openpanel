@@ -311,6 +311,12 @@ pub enum AuditAction {
     StagingPromoted,
     /// A staging promotion was rolled back.
     StagingPromotionRolledBack,
+    /// A preview deployment was created.
+    PreviewCreated,
+    /// A preview deployment became ready.
+    PreviewReady,
+    /// A preview deployment was destroyed.
+    PreviewDestroyed,
     /// A plugin manifest was installed.
     PluginInstalled,
     /// An installed plugin was enabled.
@@ -762,6 +768,9 @@ impl AuditService for SqliteAuditService {
                 "staging_snapshot_taken" => AuditAction::StagingSnapshotTaken,
                 "staging_promoted" => AuditAction::StagingPromoted,
                 "staging_promotion_rolled_back" => AuditAction::StagingPromotionRolledBack,
+                "preview_created" => AuditAction::PreviewCreated,
+                "preview_ready" => AuditAction::PreviewReady,
+                "preview_destroyed" => AuditAction::PreviewDestroyed,
                 "container_start_quota_blocked" => AuditAction::ContainerStartQuotaBlocked,
                 "container_quota_plan_override" => AuditAction::ContainerQuotaPlanOverride,
                 "container_image_pulled" => AuditAction::ContainerImagePulled,

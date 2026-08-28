@@ -165,6 +165,10 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("git_deployment migration");
+        sqlx::query(include_str!("migrations/git_deployment/V002__previews.sql"))
+            .execute(&self.pool)
+            .await
+            .expect("git_deployment previews migration");
         sqlx::query(include_str!(
             "migrations/maintenance_windows/V001__init.sql"
         ))

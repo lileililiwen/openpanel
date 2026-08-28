@@ -658,6 +658,7 @@ impl TestServer {
             deliverability_zones,
         )
         .await;
+        let git_deployment_module = openpanel_app::GitDeploymentModule::new(&ctx).await;
         let system_services_module = SystemServicesModule::memory(&ctx)
             .await
             .expect("system services module");
@@ -1000,6 +1001,7 @@ impl TestServer {
             // Malware scanner: real service over the same pool +
             // audit; the scan fs writes under the sandbox.
             malware_scanner_svc.clone(),
+            git_deployment_module.preview_service(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),

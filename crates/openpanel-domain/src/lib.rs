@@ -297,7 +297,12 @@ pub use files::{
 };
 pub use git_deployment::{
     DeployError, DeployRepo, DeployRepository, DeployRun, DeployStatus, WebhookSecret,
-    commit_placeholder, verify_webhook,
+    commit_placeholder,
+    preview::{
+        PreviewEnvironment, PreviewError, PreviewRepository, PreviewState, derive_hostname,
+        expires_at,
+    },
+    verify_webhook,
 };
 pub use hosting::HostingPlanId;
 pub use hosting_plans::{

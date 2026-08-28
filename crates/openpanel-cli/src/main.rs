@@ -9,7 +9,7 @@ use openpanel_cli::{
     NotificationCommand, NotificationSubscriptionCommand, PitrCommand, PluginCommand,
     RecoveryCodeCommand, RegistryCommand, ScanCommand, SecurityAllowlistCommand, SecurityCommand,
     SecurityRuleCommand, ServerSnapshotCommand, ServicesCommand, SiteCacheCommand,
-    SiteCloneCommand, SiteCommand, SiteHttpCommand, SiteTemplateCommand, SoftwareCommand,
+    SiteCloneCommand, SiteCommand, SiteHttpCommand, SitePreviewCommand, SiteTemplateCommand, SoftwareCommand,
     SslCommand, StagingCommand, TerminalCommand, TokenCommand, TwoFactorCommand, UserCommand,
     WafCommand, WebappCommand, handlers,
 };
@@ -131,6 +131,17 @@ async fn main() -> anyhow::Result<()> {
                     handlers::site_template_export(config, site, name).await
                 }
                 SiteTemplateCommand::List => handlers::site_template_list(config).await,
+            },
+            SiteCommand::Preview { action } => match action {
+                SitePreviewCommand::List { site } => {
+                    handlers::site_preview_list(config, site).await
+                }
+                SitePreviewCommand::Redeploy { site, pr } => {
+                    handlers::site_preview_redeploy(config, site, pr).await
+                }
+                SitePreviewCommand::Destroy { site, pr } => {
+                    handlers::site_preview_destroy(config, site, pr).await
+                }
             },
             SiteCommand::Branding { action } => match action {
                 BrandingCommand::Show => handlers::branding_show(config).await,

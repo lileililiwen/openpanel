@@ -105,3 +105,12 @@ async fn cli_backup_drill_run_then_show() {
     assert_eq!(show.code, 0, "{}", show.stderr);
     assert!(show.stdout.contains("passed"));
 }
+
+#[tokio::test]
+async fn cli_site_preview_list_shows_pr_and_state() {
+    let runner = CliRunner::new().await;
+    let site = uuid::Uuid::new_v4().to_string();
+    let list = runner.run(&["site", "preview", "list", "--site", &site]);
+    assert_eq!(list.code, 0, "{}", list.stderr);
+    assert!(list.stdout.contains("[]"));
+}
