@@ -99,6 +99,8 @@ pub const SERVICE_MANAGER_V001: &str = include_str!("service_manager/V001__init.
 pub const OS_UPDATES_V001: &str = include_str!("os_updates/V001__init.sql");
 /// Synthetic monitoring: checks and per-run results.
 pub const SYNTHETIC_MONITORING_V001: &str = include_str!("synthetic_monitoring/V001__init.sql");
+/// Status page policy + entry labels.
+pub const SYNTHETIC_MONITORING_V002: &str = include_str!("synthetic_monitoring/V002__status_page.sql");
 /// Log viewer: download audit rows.
 pub const LOG_VIEWER_V001: &str = include_str!("log_viewer/V001__init.sql");
 /// Database privilege management: grants, remote access, SSO.

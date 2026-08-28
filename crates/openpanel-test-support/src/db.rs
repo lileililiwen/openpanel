@@ -117,6 +117,12 @@ impl TestDb {
         .execute(&self.pool)
         .await
         .expect("synthetic_monitoring migration");
+        sqlx::query(include_str!(
+            "migrations/synthetic_monitoring/V002__status_page.sql"
+        ))
+        .execute(&self.pool)
+        .await
+        .expect("status_page migration");
         sqlx::query(include_str!("migrations/log_viewer/V001__init.sql"))
             .execute(&self.pool)
             .await

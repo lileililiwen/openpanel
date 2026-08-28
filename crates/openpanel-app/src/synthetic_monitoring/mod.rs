@@ -1,9 +1,11 @@
 //! Synthetic monitoring application layer: SQLite repository,
-//! probe runner, scheduler, and SSL inspector.
+//! probe runner, scheduler, SSL inspector, and public status page.
 
 mod module;
 mod repo;
 mod service;
+mod status_page_repo;
+mod status_page_service;
 #[cfg(test)]
 mod tests;
 
@@ -13,3 +15,5 @@ pub use service::{
     CheckOutcome, CheckRunner, HttpProbe, ProbeScheduler, RecordingProbe, SslExpiryInspector,
     TcpProbe,
 };
+pub use status_page_repo::SqliteStatusPageRepository;
+pub use status_page_service::{EntryView, PublicStatusView, StatusPageService, random_slug};

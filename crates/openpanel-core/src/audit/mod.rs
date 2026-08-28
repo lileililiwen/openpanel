@@ -317,6 +317,9 @@ pub enum AuditAction {
     PreviewReady,
     /// A preview deployment was destroyed.
     PreviewDestroyed,
+    /// A status page policy mutation (enable/disable, slug rotation,
+    /// publish/unpublish, label edit).
+    StatusPagePolicyChanged,
     /// A plugin manifest was installed.
     PluginInstalled,
     /// An installed plugin was enabled.

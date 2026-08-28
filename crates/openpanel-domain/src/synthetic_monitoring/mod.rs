@@ -7,6 +7,13 @@
 //! emission pipeline; the runner itself never raises a raw
 //! network error to the user.
 
+pub mod status_page;
+
+pub use status_page::{
+    DailyBar, Incident, Slug, StatusEntry, StatusPage, StatusPageError, StatusPageRepository,
+    derive_incidents, uptime_bars_90d,
+};
+
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};

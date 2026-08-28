@@ -98,6 +98,7 @@ impl AuditAction {
             AuditAction::PreviewCreated => "preview_created",
             AuditAction::PreviewReady => "preview_ready",
             AuditAction::PreviewDestroyed => "preview_destroyed",
+            AuditAction::StatusPagePolicyChanged => "status_page_policy_changed",
             AuditAction::PluginInstalled => "plugin_installed",
             AuditAction::PluginEnabled => "plugin_enabled",
             AuditAction::PluginDisabled => "plugin_disabled",
