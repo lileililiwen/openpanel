@@ -578,6 +578,276 @@ pub trait AuditService: Send + Sync + 'static {
     async fn record(&self, event: AuditEvent) -> CoreResult<()>;
     /// Return the most recent events, newest first, up to `limit`.
     async fn recent(&self, limit: i64) -> CoreResult<Vec<AuditEvent>>;
+    /// Query the audit log with typed filters and cursor pagination.
+    ///
+    /// Returns a page of redacted, render-safe event views ordered
+    /// newest-first with a deterministic next cursor.
+    async fn query(&self, query: AuditQuery) -> CoreResult<AuditPage>;
+}
+
+/// Opaque, URL-safe pagination cursor encoding the last returned row's
+/// `(ts, id)` so the next page continues deterministically, even when
+/// many events share a timestamp.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct AuditCursor {
+    /// Timestamp of the boundary row.
+    pub ts: DateTime<Utc>,
+    /// Primary-key id of the boundary row.
+    pub id: i64,
+}
+
+impl AuditCursor {
+    /// Encode the cursor into a stable, non-sensitive string.
+    pub fn encode(&self) -> String {
+        encode_base64(format!("{}|{}", self.ts.to_rfc3339(), self.id).as_bytes())
+    }
+
+    /// Decode a cursor previously produced by [`AuditCursor::encode`].
+    pub fn decode(s: &str) -> Option<Self> {
+        let raw = decode_base64(s).ok()?;
+        let text = String::from_utf8(raw).ok()?;
+        let (ts_part, id_part) = text.split_once('|')?;
+        let ts = DateTime::parse_from_rfc3339(ts_part)
+            .ok()?
+            .with_timezone(&Utc);
+        let id = id_part.parse::<i64>().ok()?;
+        Some(Self { ts, id })
+    }
+}
+
+/// Filters applied to the audit log query.
+#[derive(Debug, Clone, Default)]
+pub struct AuditQuery {
+    /// Exact actor (user or service) identifier.
+    pub actor: Option<String>,
+    /// Exact action value (stored snake_case string, e.g. `site_created`).
+    pub action: Option<String>,
+    /// Substring match on the target the action was performed on.
+    pub target: Option<String>,
+    /// Exact outcome value (`success` / `failure` / `denied`).
+    pub outcome: Option<String>,
+    /// Inclusive lower bound on event timestamp.
+    pub from: Option<DateTime<Utc>>,
+    /// Inclusive upper bound on event timestamp.
+    pub to: Option<DateTime<Utc>>,
+    /// Cursor returned by a previous page; continues after it.
+    pub cursor: Option<AuditCursor>,
+    /// Maximum number of events to return (clamped to 1..=200).
+    pub limit: usize,
+}
+
+impl AuditQuery {
+    /// A fresh query returning the default page size.
+    pub fn new() -> Self {
+        Self {
+            limit: 50,
+            ..Default::default()
+        }
+    }
+
+    /// Attach a decoded cursor, ignoring an unparseable value.
+    pub fn with_cursor(mut self, cursor: Option<&str>) -> Self {
+        self.cursor = cursor.and_then(AuditCursor::decode);
+        self
+    }
+
+    /// Clamp `limit` into the supported `1..=200` range.
+    pub fn effective_limit(&self) -> i64 {
+        (self.limit.clamp(1, 200) as i64) + 1
+    }
+}
+
+/// A page of audit events plus the cursor for the next page (if any).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditPage {
+    /// Render-safe event views for this page.
+    pub events: Vec<AuditView>,
+    /// Cursor for the next page, or `None` when this is the last page.
+    pub next_cursor: Option<AuditCursor>,
+}
+
+/// A render-safe projection of an [`AuditEvent`].
+///
+/// The `metadata` field has already passed through the central
+/// redaction allowlist, so it is safe to serialize to HTML or JSON.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditView {
+    /// When the event occurred.
+    pub ts: DateTime<Utc>,
+    /// The actor (user or service) that performed the action.
+    pub actor: String,
+    /// The action that was performed (snake_case string).
+    pub action: String,
+    /// Optional target the action was performed on.
+    pub target: Option<String>,
+    /// Optional source IP address of the request.
+    pub source_ip: Option<String>,
+    /// Whether the action succeeded, failed, or was denied.
+    pub outcome: String,
+    /// Redacted, render-safe metadata attached to the event.
+    pub metadata: Value,
+}
+
+impl AuditView {
+    /// Build a redacted, render-safe projection of an [`AuditEvent`].
+    pub fn from_event(event: &AuditEvent) -> Self {
+        Self {
+            ts: event.ts,
+            actor: event.actor.clone(),
+            action: event.action.as_str().to_string(),
+            target: event.target.clone(),
+            source_ip: event.source_ip.clone(),
+            outcome: event.outcome.as_str().to_string(),
+            metadata: redact_metadata(&event.metadata),
+        }
+    }
+}
+
+/// Metadata keys that are never rendered, regardless of value.
+const SECRET_KEYS: &[&str] = &[
+    "password",
+    "passwd",
+    "pwd",
+    "token",
+    "secret",
+    "key",
+    "api_key",
+    "apikey",
+    "private",
+    "pem",
+    "cert",
+    "certificate",
+    "csr",
+    "credential",
+    "credentials",
+    "body",
+    "passphrase",
+    "auth",
+    "authorization",
+    "session",
+    "cookie",
+    "bearer",
+    "otp",
+    "signature",
+    "salt",
+    "webhook",
+    "hook",
+    "ssh",
+    "private_key",
+];
+
+/// Whether a metadata key names a secret and must be dropped.
+fn is_secret_key(key: &str) -> bool {
+    let k = key.to_lowercase();
+    SECRET_KEYS.iter().any(|s| k.contains(s))
+}
+
+/// Whether a string value looks like a secret (PEM, JWT, or a long
+/// high-entropy blob) and should be replaced.
+fn looks_like_secret(value: &str) -> bool {
+    let v = value.trim();
+    if v.starts_with("-----BEGIN") {
+        return true;
+    }
+    if v.starts_with("eyJ") && v.split('.').count() == 3 {
+        return true;
+    }
+    let all_alnum = v
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '/' | '=' | '-' | '_'));
+    if v.len() >= 40 && all_alnum {
+        return true;
+    }
+    let all_hex = !v.is_empty() && v.chars().all(|c| c.is_ascii_hexdigit());
+    if v.len() >= 64 && all_hex {
+        return true;
+    }
+    false
+}
+
+/// Recursively redact secret-shaped keys and values from an audit
+/// metadata document. Secret keys are dropped; secret-looking string
+/// values are replaced with a redaction marker; everything else is kept.
+pub fn redact_metadata(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut out = serde_json::Map::new();
+            for (k, v) in map {
+                if is_secret_key(k) {
+                    continue;
+                }
+                out.insert(k.clone(), redact_metadata(v));
+            }
+            Value::Object(out)
+        }
+        Value::Array(arr) => Value::Array(arr.iter().map(redact_metadata).collect()),
+        Value::String(s) => {
+            if looks_like_secret(s) {
+                Value::String("***redacted***".to_string())
+            } else {
+                Value::String(s.clone())
+            }
+        }
+        other => other.clone(),
+    }
+}
+
+const B64: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+/// Minimal standard-base64 encoder (no external dependency).
+fn encode_base64(input: &[u8]) -> String {
+    let mut out = String::new();
+    for chunk in input.chunks(3) {
+        let b = [
+            chunk[0],
+            *chunk.get(1).unwrap_or(&0),
+            *chunk.get(2).unwrap_or(&0),
+        ];
+        let n = ((b[0] as u32) << 16) | ((b[1] as u32) << 8) | (b[2] as u32);
+        out.push(B64[((n >> 18) & 63) as usize] as char);
+        out.push(B64[((n >> 12) & 63) as usize] as char);
+        if chunk.len() > 1 {
+            out.push(B64[((n >> 6) & 63) as usize] as char);
+        } else {
+            out.push('=');
+        }
+        if chunk.len() > 2 {
+            out.push(B64[(n & 63) as usize] as char);
+        } else {
+            out.push('=');
+        }
+    }
+    out
+}
+
+/// Minimal standard-base64 decoder (no external dependency).
+fn decode_base64(input: &str) -> Result<Vec<u8>, ()> {
+    let mut groups: Vec<u8> = Vec::new();
+    for c in input.trim().chars() {
+        if c == '=' {
+            continue;
+        }
+        let v = B64.iter().position(|&x| x == c as u8).ok_or(())?;
+        groups.push(v as u8);
+    }
+    let mut out = Vec::new();
+    for chunk in groups.chunks(4) {
+        if chunk.len() < 2 {
+            break;
+        }
+        let n = ((chunk[0] as u32) << 18)
+            | ((chunk.get(1).copied().unwrap_or(0) as u32) << 12)
+            | ((chunk.get(2).copied().unwrap_or(0) as u32) << 6)
+            | (chunk.get(3).copied().unwrap_or(0) as u32);
+        out.push((n >> 16) as u8);
+        if chunk.len() > 2 {
+            out.push((n >> 8) as u8);
+        }
+        if chunk.len() > 3 {
+            out.push(n as u8);
+        }
+    }
+    Ok(out)
 }
 
 /// No-op audit used in tests when the SQLite pool is not available.
@@ -592,6 +862,13 @@ impl AuditService for NoopAuditService {
 
     async fn recent(&self, _limit: i64) -> CoreResult<Vec<AuditEvent>> {
         Ok(Vec::new())
+    }
+
+    async fn query(&self, _query: AuditQuery) -> CoreResult<AuditPage> {
+        Ok(AuditPage {
+            events: Vec::new(),
+            next_cursor: None,
+        })
     }
 }
 
@@ -632,6 +909,242 @@ impl SqliteAuditService {
             .await?;
         Ok(())
     }
+}
+
+/// Parse a stored action string into its typed enumeration.
+///
+/// Returns `None` for unknown actions so callers can skip rows that the
+/// running binary does not recognise (forwards-compatible storage).
+fn parse_action(s: &str) -> Option<AuditAction> {
+    Some(match s {
+        "login" => AuditAction::Login,
+        "logout" => AuditAction::Logout,
+        "user_created" => AuditAction::UserCreated,
+        "user_updated" => AuditAction::UserUpdated,
+        "user_disabled" => AuditAction::UserDisabled,
+        "user_enabled" => AuditAction::UserEnabled,
+        "user_deleted" => AuditAction::UserDeleted,
+        "role_changed" => AuditAction::RoleChanged,
+        "password_changed" => AuditAction::PasswordChanged,
+        "permission_denied" => AuditAction::PermissionDenied,
+        "site_created" => AuditAction::SiteCreated,
+        "site_deleted" => AuditAction::SiteDeleted,
+        "site_enabled" => AuditAction::SiteEnabled,
+        "site_disabled" => AuditAction::SiteDisabled,
+        "site_owner_changed" => AuditAction::SiteOwnerChanged,
+        "ssl_issued" => AuditAction::SslIssued,
+        "ssl_manual_uploaded" => AuditAction::SslManualUploaded,
+        "ssl_self_signed_generated" => AuditAction::SslSelfSignedGenerated,
+        "ssl_revoked" => AuditAction::SslRevoked,
+        "ssl_deleted" => AuditAction::SslDeleted,
+        "ssl_force_https_changed" => AuditAction::SslForceHttpsChanged,
+        "database_created" => AuditAction::DatabaseCreated,
+        "database_deleted" => AuditAction::DatabaseDeleted,
+        "database_password_changed" => AuditAction::DatabasePasswordChanged,
+        "file_uploaded" => AuditAction::FileUploaded,
+        "file_updated" => AuditAction::FileUpdated,
+        "file_renamed" => AuditAction::FileRenamed,
+        "file_mode_changed" => AuditAction::FileModeChanged,
+        "file_deleted" => AuditAction::FileDeleted,
+        "alert_fired" => AuditAction::AlertFired,
+        "settings_changed" => AuditAction::SettingsChanged,
+        "cron_changed" => AuditAction::CronChanged,
+        "cron_run" => AuditAction::CronRun,
+        "backup_changed" => AuditAction::BackupChanged,
+        "backup_run" => AuditAction::BackupRun,
+        "backup_restore" => AuditAction::BackupRestore,
+        "log_downloaded" => AuditAction::LogDownloaded,
+        "firewall_changed" => AuditAction::FirewallChanged,
+        "security_block_changed" => AuditAction::SecurityBlockChanged,
+        "service_changed" => AuditAction::ServiceChanged,
+        "dns_changed" => AuditAction::DnsChanged,
+        "mail_changed" => AuditAction::MailChanged,
+        "software_changed" => AuditAction::SoftwareChanged,
+        "software_artifact_installed" => AuditAction::SoftwareArtifactInstalled,
+        "two_factor_enrolled" => AuditAction::TwoFactorEnrolled,
+        "two_factor_verified" => AuditAction::TwoFactorVerified,
+        "two_factor_failed" => AuditAction::TwoFactorFailed,
+        "two_factor_revoked" => AuditAction::TwoFactorRevoked,
+        "recovery_code_consumed" => AuditAction::RecoveryCodeConsumed,
+        "device_remembered" => AuditAction::DeviceRemembered,
+        "waf_changed" => AuditAction::WafChanged,
+        "site_http_controls_changed" => AuditAction::SiteHttpControlsChanged,
+        "site_transport_changed" => AuditAction::SiteTransportChanged,
+        "db_remote_access_changed" => AuditAction::DbRemoteAccessChanged,
+        "runtime_changed" => AuditAction::RuntimeChanged,
+        "logs_policy_changed" => AuditAction::LogsPolicyChanged,
+        "ssh_key_changed" => AuditAction::SshKeyChanged,
+        "deliverability_checked" => AuditAction::DeliverabilityChecked,
+        "terminal_opened" => AuditAction::TerminalOpened,
+        "terminal_closed" => AuditAction::TerminalClosed,
+        "sso_login" => AuditAction::SsoLogin,
+        "snapshot_created" => AuditAction::SnapshotCreated,
+        "snapshot_restored" => AuditAction::SnapshotRestored,
+        "snapshot_pruned" => AuditAction::SnapshotPruned,
+        "session_revoked" => AuditAction::SessionRevoked,
+        "docker_image_pulled" => AuditAction::DockerImagePulled,
+        "docker_spec_rejected" => AuditAction::DockerSpecRejected,
+        "docker_capability_denied" => AuditAction::DockerCapabilityDenied,
+        "docker_oom_killed" => AuditAction::DockerOomKilled,
+        "docker_changed" => AuditAction::DockerChanged,
+        "docker_egress_denied" => AuditAction::DockerEgressDenied,
+        "ftp_changed" => AuditAction::FtpChanged,
+        "ftp_login" => AuditAction::FtpLogin,
+        "ftp_login_denied" => AuditAction::FtpLoginDenied,
+        "ftp_chroot_escape" => AuditAction::FtpChrootEscape,
+        "ftp_tls_required" => AuditAction::FtpTlsRequired,
+        "ftp_concurrent_limit" => AuditAction::FtpConcurrentLimit,
+        "ftp_transfer_limit" => AuditAction::FtpTransferLimit,
+        "ftp_bind_failed" => AuditAction::FtpBindFailed,
+        "ftp_listener_restart" => AuditAction::FtpListenerRestart,
+        "token_created" => AuditAction::TokenCreated,
+        "token_rotated" => AuditAction::TokenRotated,
+        "token_revoked" => AuditAction::TokenRevoked,
+        "token_request" => AuditAction::TokenRequest,
+        "token_expired" => AuditAction::TokenExpired,
+        "token_scope_rejected" => AuditAction::TokenScopeRejected,
+        "token_cidr_rejected" => AuditAction::TokenCidrRejected,
+        "token_rate_limited" => AuditAction::TokenRateLimited,
+        "notification_changed" => AuditAction::NotificationChanged,
+        "delivery_rejected" => AuditAction::DeliveryRejected,
+        "delivery_succeeded" => AuditAction::DeliverySucceeded,
+        "delivery_failed" => AuditAction::DeliveryFailed,
+        "pitr_stream_enabled" => AuditAction::PitrStreamEnabled,
+        "pitr_stream_paused" => AuditAction::PitrStreamPaused,
+        "pitr_stream_resumed" => AuditAction::PitrStreamResumed,
+        "pitr_stream_broken" => AuditAction::PitrStreamBroken,
+        "pitr_restore_requested" => AuditAction::PitrRestoreRequested,
+        "pitr_restore_promoted" => AuditAction::PitrRestorePromoted,
+        "pitr_restore_failed" => AuditAction::PitrRestoreFailed,
+        "pitr_incremental_captured" => AuditAction::PitrIncrementalCaptured,
+        "staging_slot_created" => AuditAction::StagingSlotCreated,
+        "staging_slot_deleted" => AuditAction::StagingSlotDeleted,
+        "staging_snapshot_taken" => AuditAction::StagingSnapshotTaken,
+        "staging_promoted" => AuditAction::StagingPromoted,
+        "staging_promotion_rolled_back" => AuditAction::StagingPromotionRolledBack,
+        "preview_created" => AuditAction::PreviewCreated,
+        "preview_ready" => AuditAction::PreviewReady,
+        "preview_destroyed" => AuditAction::PreviewDestroyed,
+        "container_start_quota_blocked" => AuditAction::ContainerStartQuotaBlocked,
+        "container_quota_plan_override" => AuditAction::ContainerQuotaPlanOverride,
+        "container_image_pulled" => AuditAction::ContainerImagePulled,
+        "container_egress_limit_raised" => AuditAction::ContainerEgressLimitRaised,
+        "bandwidth_threshold_crossed" => AuditAction::BandwidthThresholdCrossed,
+        "plan_created" => AuditAction::PlanCreated,
+        "plan_updated" => AuditAction::PlanUpdated,
+        "plan_disabled" => AuditAction::PlanDisabled,
+        "plan_enabled" => AuditAction::PlanEnabled,
+        "plan_cloned" => AuditAction::PlanCloned,
+        "plan_deleted" => AuditAction::PlanDeleted,
+        "plan_delete_blocked" => AuditAction::PlanDeleteBlocked,
+        "plan_assigned" => AuditAction::PlanAssigned,
+        "plan_reassigned" => AuditAction::PlanReassigned,
+        "plan_unassigned" => AuditAction::PlanUnassigned,
+        "account_hierarchy_child_created" => AuditAction::AccountHierarchyChildCreated,
+        "account_hierarchy_attached" => AuditAction::AccountHierarchyAttached,
+        "account_hierarchy_detached" => AuditAction::AccountHierarchyDetached,
+        "account_hierarchy_pool_set" => AuditAction::AccountHierarchyPoolSet,
+        "account_hierarchy_pool_claimed" => AuditAction::AccountHierarchyPoolClaimed,
+        "account_hierarchy_pool_released" => AuditAction::AccountHierarchyPoolReleased,
+        "quota_policy_changed" => AuditAction::QuotaPolicyChanged,
+        "quota_policy_deleted" => AuditAction::QuotaPolicyDeleted,
+        "quota_soft_limit_reached" => AuditAction::QuotaSoftLimitReached,
+        "quota_hard_limit_reached" => AuditAction::QuotaHardLimitReached,
+        "agent_registered" => AuditAction::AgentRegistered,
+        "agent_revoked" => AuditAction::AgentRevoked,
+        "fleet_token_issued" => AuditAction::FleetTokenIssued,
+        "fleet_token_revoked" => AuditAction::FleetTokenRevoked,
+        "recipe_manifest_stored" => AuditAction::RecipeManifestStored,
+        "cluster_node_declared" => AuditAction::ClusterNodeDeclared,
+        "cluster_node_role_changed" => AuditAction::ClusterNodeRoleChanged,
+        "cluster_storage_declared" => AuditAction::ClusterStorageDeclared,
+        "cluster_replicated_database_declared" => AuditAction::ClusterReplicatedDatabaseDeclared,
+        "migration_previewed" => AuditAction::MigrationPreviewed,
+        "migration_run_committed" => AuditAction::MigrationRunCommitted,
+        "migration_run_rolled_back" => AuditAction::MigrationRunRolledBack,
+        "migration_rollback_completed" => AuditAction::MigrationRollbackCompleted,
+        "migration_already_imported_rejected" => AuditAction::MigrationAlreadyImportedRejected,
+        "backup_credential_created" => AuditAction::BackupCredentialCreated,
+        "backup_credential_deleted" => AuditAction::BackupCredentialDeleted,
+        "backup_credential_in_use_rejected" => AuditAction::BackupCredentialInUseRejected,
+        "backup_remote_target_attached" => AuditAction::BackupRemoteTargetAttached,
+        "backup_remote_tested" => AuditAction::BackupRemoteTested,
+        "site_cache_policy_updated" => AuditAction::SiteCachePolicyUpdated,
+        "site_cache_policy_applied" => AuditAction::SiteCachePolicyApplied,
+        "site_cache_policy_rolled_back" => AuditAction::SiteCachePolicyRolledBack,
+        "cdn_integration_created" => AuditAction::CdnIntegrationCreated,
+        "cdn_integration_deleted" => AuditAction::CdnIntegrationDeleted,
+        "cdn_purged" => AuditAction::CdnPurged,
+        "cdn_purge_partial" => AuditAction::CdnPurgePartial,
+        "cdn_credential_decrypt_failed" => AuditAction::CdnCredentialDecryptFailed,
+        "site_cloned" => AuditAction::SiteCloned,
+        "site_cloned_from_template" => AuditAction::SiteClonedFromTemplate,
+        "clone_pii_anonymised" => AuditAction::ClonePiiAnonymised,
+        "clone_kept_pii" => AuditAction::CloneKeptPii,
+        "site_template_exported" => AuditAction::SiteTemplateExported,
+        "template_signature_failed" => AuditAction::TemplateSignatureFailed,
+        "theme_override_updated" => AuditAction::ThemeOverrideUpdated,
+        "theme_override_cleared" => AuditAction::ThemeOverrideCleared,
+        "web_app_install_planned" => AuditAction::WebAppInstallPlanned,
+        "web_app_installed" => AuditAction::WebAppInstalled,
+        "install_artifact_rejected" => AuditAction::InstallArtifactRejected,
+        "web_app_uninstalled" => AuditAction::WebAppUninstalled,
+        "web_app_uninstalled_dropped_db" => AuditAction::WebAppUninstalledDroppedDb,
+        "scan_profile_created" => AuditAction::ScanProfileCreated,
+        "scan_completed" => AuditAction::ScanCompleted,
+        "quarantine_record_created" => AuditAction::QuarantineRecordCreated,
+        "quarantine_record_restored" => AuditAction::QuarantineRecordRestored,
+        "site_blocked_quarantined" => AuditAction::SiteBlockedQuarantined,
+        "site_block_expired" => AuditAction::SiteBlockExpired,
+        "webmail_session_created" => AuditAction::WebmailSessionCreated,
+        "webmail_csrf_rejected" => AuditAction::WebmailCsrfRejected,
+        _ => return None,
+    })
+}
+
+/// Parse a stored outcome string into its typed enumeration.
+fn parse_outcome(s: &str) -> AuditOutcome {
+    match s {
+        "success" => AuditOutcome::Success,
+        "failure" => AuditOutcome::Failure,
+        "denied" => AuditOutcome::Denied,
+        _ => AuditOutcome::Failure,
+    }
+}
+
+/// Reconstruct a typed [`AuditEvent`] from raw stored columns, returning
+/// `None` (and skipping the row) when the action is unrecognised.
+#[allow(clippy::too_many_arguments)]
+fn parse_audit_row(
+    id: Option<i64>,
+    ts: String,
+    actor: String,
+    action: String,
+    target: Option<String>,
+    source_ip: Option<String>,
+    outcome: String,
+    metadata: Option<String>,
+) -> Option<(AuditEvent, Option<i64>)> {
+    let action = parse_action(&action)?;
+    let outcome = parse_outcome(&outcome);
+    let md = metadata
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or(Value::Null);
+    let ts = DateTime::parse_from_rfc3339(&ts)
+        .map(|d| d.with_timezone(&Utc))
+        .unwrap_or_else(|_| Utc::now());
+    Some((
+        AuditEvent {
+            ts,
+            actor,
+            action,
+            target,
+            source_ip,
+            outcome,
+            metadata: md,
+        },
+        id,
+    ))
 }
 
 #[async_trait]
@@ -879,6 +1392,118 @@ impl AuditService for SqliteAuditService {
         }
         Ok(events)
     }
+
+    async fn query(&self, q: AuditQuery) -> CoreResult<AuditPage> {
+        // Fetch one extra row to detect whether a next page exists.
+        let fetch = q.effective_limit();
+        let mut sql = String::from(
+            "SELECT id, ts, actor, action, target, source_ip, outcome, metadata FROM audit_log",
+        );
+        let mut conds: Vec<&str> = Vec::new();
+        if q.actor.is_some() {
+            conds.push("actor = ?");
+        }
+        if q.action.is_some() {
+            conds.push("action = ?");
+        }
+        if q.target.is_some() {
+            conds.push("target LIKE ? ESCAPE '\\'");
+        }
+        if q.outcome.is_some() {
+            conds.push("outcome = ?");
+        }
+        if q.from.is_some() {
+            conds.push("ts >= ?");
+        }
+        if q.to.is_some() {
+            conds.push("ts <= ?");
+        }
+        if q.cursor.is_some() {
+            conds.push("(ts < ? OR (ts = ? AND id < ?))");
+        }
+        if !conds.is_empty() {
+            sql.push_str(" WHERE ");
+            sql.push_str(&conds.join(" AND "));
+        }
+        sql.push_str(" ORDER BY ts DESC, id DESC LIMIT ?");
+
+        let mut query = sqlx::query_as::<
+            _,
+            (
+                i64,
+                String,
+                String,
+                String,
+                Option<String>,
+                Option<String>,
+                String,
+                Option<String>,
+            ),
+        >(&sql);
+        if let Some(v) = &q.actor {
+            query = query.bind(v);
+        }
+        if let Some(v) = &q.action {
+            query = query.bind(v);
+        }
+        if let Some(v) = &q.target {
+            query = query.bind(format!("%{}%", v.replace('\\', "\\\\")));
+        }
+        if let Some(v) = &q.outcome {
+            query = query.bind(v);
+        }
+        if let Some(v) = &q.from {
+            query = query.bind(v.to_rfc3339());
+        }
+        if let Some(v) = &q.to {
+            query = query.bind(v.to_rfc3339());
+        }
+        if let Some(c) = &q.cursor {
+            query = query.bind(c.ts.to_rfc3339());
+            query = query.bind(c.ts.to_rfc3339());
+            query = query.bind(c.id);
+        }
+        query = query.bind(fetch);
+
+        let rows = query.fetch_all(&self.pool).await?;
+        let has_more = rows.len() as i64 == fetch;
+        let (rows, extra) = if has_more {
+            let n = rows.len();
+            (rows[..n - 1].to_vec(), Some(rows[n - 1].clone()))
+        } else {
+            (rows.clone(), rows.last().cloned())
+        };
+
+        let mut events = Vec::with_capacity(rows.len());
+        for (id, ts, actor, action, target, source_ip, outcome, metadata) in rows {
+            if let Some((ev, _)) = parse_audit_row(
+                Some(id),
+                ts,
+                actor,
+                action,
+                target,
+                source_ip,
+                outcome,
+                metadata,
+            ) {
+                events.push(AuditView::from_event(&ev));
+            }
+        }
+
+        let next_cursor = if has_more {
+            extra.and_then(|(id, ts, _, _, _, _, _, _)| {
+                let parsed = DateTime::parse_from_rfc3339(&ts).ok()?.with_timezone(&Utc);
+                Some(AuditCursor { ts: parsed, id })
+            })
+        } else {
+            None
+        };
+
+        Ok(AuditPage {
+            events,
+            next_cursor,
+        })
+    }
 }
 
 /// Convenience wrapper for `Arc<dyn AuditService>` callers.
@@ -887,4 +1512,97 @@ pub type SharedAudit = Arc<dyn AuditService>;
 /// Build a shared no-op audit service.
 pub fn noop() -> SharedAudit {
     Arc::new(NoopAuditService)
+}
+
+#[cfg(test)]
+#[allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+mod tests {
+    use super::*;
+
+    fn sample(action: AuditAction, outcome: AuditOutcome, meta: Value) -> AuditEvent {
+        AuditEvent::new("admin", action, outcome)
+            .target("site.example")
+            .metadata(meta)
+    }
+
+    #[test]
+    fn redaction_drops_secret_keys() {
+        let md = serde_json::json!({
+            "password": "hunter2",
+            "token": "abc.def.ghi",
+            "target_id": "1234",
+            "note": "hello",
+        });
+        let view =
+            AuditView::from_event(&sample(AuditAction::UserCreated, AuditOutcome::Success, md));
+        assert!(!view.metadata.as_object().unwrap().contains_key("password"));
+        assert!(!view.metadata.as_object().unwrap().contains_key("token"));
+        assert_eq!(view.metadata["target_id"], "1234");
+        assert_eq!(view.metadata["note"], "hello");
+    }
+
+    #[test]
+    fn redaction_scrubs_secret_values() {
+        let md = serde_json::json!({
+            "note": "normal text",
+            "body": "-----BEGIN PRIVATE KEY-----\nMIIE...\n-----END PRIVATE KEY-----",
+            "jwt": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+        });
+        let view = AuditView::from_event(&sample(
+            AuditAction::SettingsChanged,
+            AuditOutcome::Success,
+            md,
+        ));
+        // Secret-shaped keys are dropped entirely.
+        assert!(!view.metadata.as_object().unwrap().contains_key("body"));
+        // Non-secret keys holding secret-shaped values are redacted in place.
+        assert_eq!(view.metadata["note"], "normal text");
+        assert_eq!(view.metadata["jwt"], "***redacted***");
+    }
+
+    #[test]
+    fn redaction_recurses_into_nested_objects() {
+        let md = serde_json::json!({
+            "outer": { "api_key": "secret", "ok": "kept" },
+        });
+        let view =
+            AuditView::from_event(&sample(AuditAction::SslIssued, AuditOutcome::Success, md));
+        let outer = view.metadata["outer"].as_object().unwrap();
+        assert!(!outer.contains_key("api_key"));
+        assert_eq!(outer["ok"], "kept");
+    }
+
+    #[test]
+    fn cursor_round_trips() {
+        let c = AuditCursor {
+            ts: Utc::now(),
+            id: 42,
+        };
+        let encoded = c.encode();
+        let decoded = AuditCursor::decode(&encoded).expect("decode");
+        assert_eq!(decoded, c);
+    }
+
+    #[test]
+    fn cursor_is_stable_across_round_trip_with_millis() {
+        let c = AuditCursor {
+            ts: DateTime::parse_from_rfc3339("2026-08-29T12:34:56.789Z")
+                .unwrap()
+                .with_timezone(&Utc),
+            id: 7,
+        };
+        assert_eq!(AuditCursor::decode(&c.encode()), Some(c));
+    }
+
+    #[test]
+    fn query_default_limit_is_positive() {
+        let q = AuditQuery::new();
+        assert!(q.effective_limit() > 1);
+    }
+
+    #[test]
+    fn query_with_cursor_ignores_garbage() {
+        let q = AuditQuery::new().with_cursor(Some("not-a-cursor"));
+        assert!(q.cursor.is_none());
+    }
 }

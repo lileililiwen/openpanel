@@ -1,16 +1,16 @@
 # OpenPanel UI/UX Gap Roadmap Handoff
 
 Updated: 2026-08-29  
-Scope: planning artifacts only; no application-code implementation performed.
+Scope: change #1 (repair-ui-discoverability) and #2 (add-audit-activity-center) now have application-code implementations.
 
 ## Progress
 
-Overall: `[█░░░░░░░░░] 1/7 implemented`
+Overall: `[█░░░░░░░░░] 2/7 implemented`
 
 | Order | Change | Status | Depends on |
 |---:|---|---|---|
 | 1 | `repair-ui-discoverability` | `[x] implemented; archived & committed` | none |
-| 2 | `add-audit-activity-center` | `[ ] proposed; design approval required` | 1 |
+| 2 | `add-audit-activity-center` | `[x] implemented; archived & committed` | 1 |
 | 3 | `redesign-operations-dashboard` | `[ ] proposed; design approval required` | 1; audit links optional |
 | 4 | `add-site-workspace-ux` | `[ ] proposed; design approval required` | 1 |
 | 5 | `complete-file-database-backup-workflows` | `[ ] proposed; design approval required` | 1 |
@@ -32,10 +32,10 @@ Overall: `[█░░░░░░░░░] 1/7 implemented`
 
 ## Known baseline evidence
 
-- `cargo test -p openpanel-web --lib` currently has a failing test: `nav_model::tests::every_nav_item_has_a_builtin_icon`; `Status page` references missing icon `pulse`.
-- Current audit UI is intentionally a 501 stub in `crates/openpanel-web/src/audit.rs`.
-- `CapabilitySet::shipped()` currently exposes only a limited set of capabilities in `crates/openpanel-web/src/layout.rs`.
-- Existing UI styling tests cover token presence, forms, labels, breakpoints, and some shell behavior, but they do not prove complete route discoverability or full WCAG 2.2 behavior.
+- `cargo test -p openpanel-web --lib` `nav_model::tests::every_nav_item_has_a_builtin_icon` was resolved (the `pulse` icon is present in `icon_path`); no longer a known failure.
+- Audit center is now implemented: owner-only `/audit` page + `/audit/events` (JSON API and HTMX fragment), backed by `openpanel_core::audit::AuditService::query` with redaction allowlist + cursor pagination. Replaces the former 501 stub in `crates/openpanel-web/src/audit.rs`.
+- `CapabilitySet::shipped()` now includes the `audit` capability (`crates/openpanel-web/src/layout.rs`); nav item `Audit` under Operations (Owner role) in `crates/openpanel-web/src/nav_model.rs`.
+- Pre-existing gate blockers unrelated to this change (present on HEAD, not introduced here): `cargo clippy --workspace --all-targets` fails in `crates/openpanel-app/src/synthetic_monitoring/{service,status_page_repo,status_page_service}.rs` (3 `expect`/`unwrap` lints); `make docs` fails on missing docs for `UnpublishForm` in `crates/openpanel-web/src/status_page_admin.rs`. These should be fixed in a separate change; this commit leaves them untouched.
 - The worktree already contains unrelated staged/untracked changes. Preserve them; stage only the selected change and its implementation paths.
 
 ## Competitor evidence to retain

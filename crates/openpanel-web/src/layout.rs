@@ -49,6 +49,7 @@ impl CapabilitySet {
             "users",
             "themeable-ui",
             "settings",
+            "audit",
         ]))
     }
 
@@ -630,7 +631,15 @@ mod tests {
             );
         }
         // Authenticated (non-owner-only) workflows remain visible.
-        for href in ["/mail", "/webmail", "/dns", "/cron", "/backups", "/logs", "/services"] {
+        for href in [
+            "/mail",
+            "/webmail",
+            "/dns",
+            "/cron",
+            "/backups",
+            "/logs",
+            "/services",
+        ] {
             assert!(
                 out.contains(&format!("href=\"{href}\"")),
                 "authenticated workflow hidden from user: {href}: {out}"

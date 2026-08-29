@@ -1080,7 +1080,8 @@ impl TestServer {
                     .with("container-registry")
                     .with("plugins")
                     .with("marketplace")
-                    .with("themeable-ui"),
+                    .with("themeable-ui")
+                    .with("audit"),
             ),
         ))
         .merge(openpanel_web::public_router(status_page_svc.clone()));
@@ -1378,6 +1379,11 @@ impl TestServer {
     /// Return recent audit events, newest first.
     pub async fn audit_events(&self) -> Vec<AuditEvent> {
         self.audit.recent(100).await.expect("recent audit events")
+    }
+
+    /// Append a single audit event to the shared log (test seeding).
+    pub async fn seed_audit(&self, event: AuditEvent) {
+        self.audit.record(event).await.expect("seed audit event");
     }
 
     /// Resolve a sandboxed absolute path under this server's temp directory.

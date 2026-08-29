@@ -14,17 +14,24 @@ mock! {
     impl AuditService for Audit {
         async fn record(&self, event: AuditEvent) -> CoreResult<()>;
         async fn recent(&self, limit: i64) -> CoreResult<Vec<AuditEvent>>;
+        async fn query(&self, _query: openpanel_core::audit::AuditQuery) -> CoreResult<openpanel_core::audit::AuditPage>;
     }
 }
 
 impl MockAudit {
-    /// Build a mock whose `record`/`recent` are stubbed to accept any
-    /// input and return `Ok`. Use when a test only cares about another
-    /// port's calls.
+    /// Build a mock whose `record`/`recent`/`query` are stubbed to
+    /// accept any input and return `Ok`. Use when a test only cares
+    /// about another port's calls.
     pub fn stub() -> Self {
         let mut mock = Self::new();
         mock.expect_record().returning(|_| Ok(()));
         mock.expect_recent().returning(|_| Ok(vec![]));
+        mock.expect_query().returning(|_| {
+            Ok(openpanel_core::audit::AuditPage {
+                events: vec![],
+                next_cursor: None,
+            })
+        });
         mock
     }
 }

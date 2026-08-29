@@ -241,7 +241,7 @@ fn utc_date(ts: DateTime<Utc>) -> NaiveDate {
             let y = ts.year();
             let m = ts.month();
             let d = ts.day();
-            NaiveDate::from_ymd_opt(y, m, d).unwrap_or_else(|| NaiveDate::from_ymd_opt(1970, 1, 1).expect("epoch"))
+            NaiveDate::from_ymd_opt(y, m, d).unwrap_or(NaiveDate::MIN)
         })
 }
 

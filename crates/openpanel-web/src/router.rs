@@ -21,8 +21,7 @@ use openpanel_app::{
     ContainerRuntimeService, CronService, DatabasesService, DnsService, DockerService,
     FeedbackService, FilesService, FtpService, IdentityService, LogService, MailService,
     MonitoringService, NotificationService, PitrService, PreviewService, SecurityService,
-    SitesService, SoftwareCenterService, SslService, StagingService, StatusPageService,
-    WafService,
+    SitesService, SoftwareCenterService, SslService, StagingService, StatusPageService, WafService,
     identity::TwoFactorService, security::LoginThrottleService, system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
@@ -151,6 +150,8 @@ pub struct WebState {
     pub installation: Arc<InstallationInfo>,
     /// Capabilities registered in this router composition.
     pub capabilities: CapabilitySet,
+    /// Append-only audit log read service (owner-only audit center).
+    pub audit: Arc<dyn AuditService>,
 }
 
 impl WebState {
@@ -317,10 +318,11 @@ pub fn router(
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
             initial_preferences,
-            runtime.audit,
+            runtime.audit.clone(),
         )),
         installation: Arc::new(installation),
         capabilities: runtime.capabilities,
+        audit: runtime.audit.clone(),
     };
     Router::new()
         .route("/", get(dashboard::home))

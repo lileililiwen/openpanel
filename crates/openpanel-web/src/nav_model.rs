@@ -159,6 +159,13 @@ const OPERATIONS: &[NavItem] = &[
         icon: "pulse",
     },
     NavItem {
+        href: "/audit",
+        label: "Audit",
+        capability: "audit",
+        role: RequiredRole::Owner,
+        icon: "list",
+    },
+    NavItem {
         href: "/cron",
         label: "Cron",
         capability: "cron",
@@ -335,6 +342,7 @@ pub fn icon_path(name: &str) -> Option<&'static str> {
         "git-pull-request" => {
             "M6 9V3a2 2 0 1 1 4 0v6a2 2 0 1 1-4 0zM6 9v12M18 21v-6a3 3 0 0 0-3-3h-3M15 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"
         }
+        "list" => "M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01",
         "pulse" => "M22 12h-4l-3 9L9 3l-3 9H2",
         _ => return None,
     })
