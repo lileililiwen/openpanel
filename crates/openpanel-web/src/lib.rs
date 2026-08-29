@@ -43,6 +43,9 @@ pub mod mail;
 pub mod monitoring;
 /// Navigation model and icon set for the shell sidebar.
 pub mod nav_model;
+/// Shared operational-workflow building blocks (file-action validation,
+/// capacity-aware backup decisions, secret-safe rows, task-state banners).
+pub mod ops_workflows;
 pub mod notifications;
 /// Plugin extension framework web page.
 pub mod plugin_extension;

@@ -21,6 +21,7 @@ use uuid::Uuid;
 use crate::{
     csrf::ValidateCsrf,
     layout::csrf_field,
+    ops_workflows::{DatabaseRowView, render_database_row},
     router::{WebState, WebUser},
 };
 
@@ -323,28 +324,17 @@ pub fn list_fragment(rows: &[DbRow], can_manage: bool, csrf: &str) -> Markup {
                     }
                     tbody {
                         @for row in rows {
-                            tr {
-                                td { a href=(format!("/databases/{}", row.id)) { (row.name) } }
-                                td { (row.owner) }
-                                td { (row.charset) }
-                                td { span class="status" { (row.status) } }
-                                @if can_manage {
-                                    td class="actions" {
-                                        form class="inline" hx-post=(format!("/databases/{}/password", row.id)) hx-target="#password-panel" hx-swap="outerHTML" {
-                                            (csrf_field(csrf))
-                                            button type="submit" { "Rotate password" }
-                                        }
-                                        a class="btn danger" hx-get=(format!("/layer/confirm?action=reveal-database-password&id={}", row.id))
-                                            hx-target="#layer-root" href=(format!("/layer/confirm?action=reveal-database-password&id={}", row.id)) {
-                                            "Reveal"
-                                        }
-                                        a class="btn danger" hx-get=(format!("/layer/confirm?action=delete-database&id={}", row.id))
-                                            hx-target="#layer-root" href=(format!("/layer/confirm?action=delete-database&id={}", row.id)) {
-                                            "Delete"
-                                        }
-                                    }
-                                }
-                            }
+                            (render_database_row(
+                                &DatabaseRowView {
+                                    id: row.id,
+                                    name: &row.name,
+                                    owner: &row.owner,
+                                    charset: &row.charset,
+                                    status: &row.status,
+                                },
+                                can_manage,
+                                csrf,
+                            ))
                         }
                     }
                 }
