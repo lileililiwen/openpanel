@@ -17,6 +17,12 @@ pub struct CapabilitySet(BTreeSet<&'static str>);
 
 impl CapabilitySet {
     /// Capabilities currently shipped by the OpenPanel composition root.
+    ///
+    /// Every first-class web workflow that has a sidebar navigation item
+    /// is registered here so the shell can derive navigation from the same
+    /// inventory as the router. Owner-only gating is enforced separately by
+    /// [`crate::nav_model::RequiredRole`]; this set reflects what is
+    /// installed/mounted, not who may see it.
     pub fn shipped() -> Self {
         Self(BTreeSet::from([
             "dashboard",
@@ -24,11 +30,25 @@ impl CapabilitySet {
             "files",
             "databases",
             "ssl",
+            "mail",
+            "webmail",
+            "dns",
+            "host-security",
             "monitoring",
-            "users",
-            "settings",
+            "logs",
+            "backups",
             "previews",
             "status-page",
+            "cron",
+            "system-services",
+            "software-center",
+            "marketplace",
+            "plugins",
+            "docker",
+            "container-registry",
+            "users",
+            "themeable-ui",
+            "settings",
         ]))
     }
 
@@ -38,8 +58,14 @@ impl CapabilitySet {
         self
     }
 
-    fn contains(&self, capability: &str) -> bool {
+    /// Whether a capability is part of the shipped inventory.
+    pub fn contains(&self, capability: &str) -> bool {
         self.0.contains(capability)
+    }
+
+    /// Iterate the shipped capability keys.
+    pub fn iter(&self) -> impl Iterator<Item = &'static str> {
+        self.0.iter().copied()
     }
 }
 
@@ -417,27 +443,39 @@ mod tests {
     }
 
     #[test]
-    fn navigation_is_grouped_active_and_omits_unavailable_capabilities() {
+    fn navigation_is_grouped_active_and_exposes_shipped_capabilities() {
         let out = Shell::new("admin", "tok123", html! { p { "sites" } })
             .with_navigation(Role::Owner, "/sites", CapabilitySet::shipped())
             .render()
             .into_string();
 
-        for group in ["Overview", "Websites", "Operations", "System"] {
+        for group in [
+            "Overview",
+            "Websites",
+            "Mail &amp; Network",
+            "Operations",
+            "Apps",
+            "System",
+        ] {
             assert!(out.contains(group), "missing group {group}: {out}");
-        }
-        for group in ["Mail &amp; Network", "Apps"] {
-            assert!(!out.contains(group), "empty group rendered: {out}");
         }
         assert!(
             out.contains("href=\"/sites\" data-label=\"Sites\" aria-current=\"page\""),
             "sites active state: {out}"
         );
         assert!(out.contains("class=\"breadcrumbs\""), "breadcrumbs: {out}");
+        // Cron is a shipped capability and must be reachable from nav.
         assert!(
-            !out.contains("href=\"/cron\""),
-            "unregistered cron link: {out}"
+            out.contains("href=\"/cron\""),
+            "shipped cron link missing: {out}"
         );
+        // Mail & Network workflows are shipped and discoverable.
+        for href in ["/mail", "/webmail", "/dns", "/security"] {
+            assert!(
+                out.contains(&format!("href=\"{href}\"")),
+                "shipped link missing: {href}: {out}"
+            );
+        }
     }
 
     #[test]
@@ -505,14 +543,16 @@ mod tests {
     }
 
     #[test]
-    fn webmail_item_is_hidden_without_webmail_capability() {
+    fn webmail_item_is_visible_for_user_when_capability_shipped() {
         let out = Shell::new("alice", "tok123", html! {})
             .with_navigation(Role::User, "/", CapabilitySet::shipped())
             .render()
             .into_string();
+        // Webmail is an Authenticated (non-owner-only) workflow that is now
+        // part of the shipped capability inventory, so it must be discoverable.
         assert!(
-            !out.contains("href=\"/webmail\""),
-            "webmail link leaked without capability: {out}"
+            out.contains("href=\"/webmail\""),
+            "webmail link hidden despite shipped capability: {out}"
         );
     }
 
@@ -529,6 +569,73 @@ mod tests {
             "settings link leaked: {out}"
         );
         assert!(out.contains("href=\"/sites\""), "sites link missing: {out}");
+    }
+
+    #[test]
+    fn owner_sees_all_shipped_workflows_in_navigation() {
+        let out = Shell::new("admin", "tok123", html! {})
+            .with_navigation(Role::Owner, "/", CapabilitySet::shipped())
+            .render()
+            .into_string();
+
+        // Representative first-class owner workflows must be reachable.
+        for href in [
+            "/mail",
+            "/webmail",
+            "/dns",
+            "/security",
+            "/logs",
+            "/backups",
+            "/cron",
+            "/services",
+            "/software",
+            "/marketplace",
+            "/plugins",
+            "/docker",
+            "/registry",
+            "/users",
+            "/admin/branding",
+            "/settings",
+            "/status-page",
+        ] {
+            assert!(
+                out.contains(&format!("href=\"{href}\"")),
+                "owner workflow missing from nav: {href}: {out}"
+            );
+        }
+    }
+
+    #[test]
+    fn user_sees_only_authenticated_workflows() {
+        let out = Shell::new("alice", "tok123", html! {})
+            .with_navigation(Role::User, "/", CapabilitySet::shipped())
+            .render()
+            .into_string();
+
+        // Owner-only items stay hidden for a user principal.
+        for href in [
+            "/security",
+            "/software",
+            "/marketplace",
+            "/plugins",
+            "/docker",
+            "/registry",
+            "/users",
+            "/admin/branding",
+            "/settings",
+        ] {
+            assert!(
+                !out.contains(&format!("href=\"{href}\"")),
+                "owner-only link leaked to user: {href}: {out}"
+            );
+        }
+        // Authenticated (non-owner-only) workflows remain visible.
+        for href in ["/mail", "/webmail", "/dns", "/cron", "/backups", "/logs", "/services"] {
+            assert!(
+                out.contains(&format!("href=\"{href}\"")),
+                "authenticated workflow hidden from user: {href}: {out}"
+            );
+        }
     }
 
     #[test]

@@ -335,6 +335,7 @@ pub fn icon_path(name: &str) -> Option<&'static str> {
         "git-pull-request" => {
             "M6 9V3a2 2 0 1 1 4 0v6a2 2 0 1 1-4 0zM6 9v12M18 21v-6a3 3 0 0 0-3-3h-3M15 3a2 2 0 1 0 0 4 2 2 0 0 0 0-4z"
         }
+        "pulse" => "M22 12h-4l-3 9L9 3l-3 9H2",
         _ => return None,
     })
 }
@@ -409,5 +410,41 @@ mod tests {
         let out = icon_svg("globe", "Sites").into_string();
         assert!(out.contains("<title>Sites</title>"), "title missing: {out}");
         assert!(out.contains("class=\"nav-icon\""), "icon class: {out}");
+    }
+
+    #[test]
+    fn every_nav_item_capability_is_registered() {
+        // The shell hides nav items whose capability is absent from the
+        // shipped inventory; regression guard against the original bug where
+        // mail/dns/cron/backups/logs/security/etc. were undiscoverable.
+        let shipped = crate::layout::CapabilitySet::shipped();
+        for section in NAV_SECTIONS {
+            for item in section.items {
+                assert!(
+                    shipped.contains(item.capability),
+                    "nav item `{}` capability `{}` is not in shipped()",
+                    item.label,
+                    item.capability
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn every_shipped_capability_has_a_nav_item() {
+        // Drift guard: a capability in the shipped inventory must correspond
+        // to a real navigation entry, otherwise it is registered but hidden.
+        let shipped = crate::layout::CapabilitySet::shipped();
+        let nav_caps: Vec<&str> = NAV_SECTIONS
+            .iter()
+            .flat_map(|section| section.items)
+            .map(|item| item.capability)
+            .collect();
+        for cap in shipped.iter() {
+            assert!(
+                nav_caps.contains(&cap),
+                "shipped capability `{cap}` has no navigation item"
+            );
+        }
     }
 }
