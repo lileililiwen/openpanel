@@ -55,8 +55,9 @@ pub use source::{
 };
 use sqlx::SqlitePool;
 pub use store::{
-    CatalogActivation, CatalogDiagnostics, CompatibilityHost, CompatibilityReport, RefreshOutcome,
-    SoftwareCatalogStore, StorefrontEntry, StorefrontVersion, WizardState, default_catalog_url,
+    CatalogActivation, CatalogDiagnostics, CompatibilityHost, CompatibilityIssue,
+    CompatibilityReport, RefreshOutcome, SoftwareCatalogStore, StorefrontEntry, StorefrontVersion,
+    WizardState, default_catalog_url,
 };
 use thiserror::Error;
 use tokio::sync::{Mutex as AsyncMutex, OnceCell, Semaphore};

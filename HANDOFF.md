@@ -1,11 +1,11 @@
 # OpenPanel UI/UX Gap Roadmap Handoff
 
 Updated: 2026-08-29  
-Scope: changes #1 (repair-ui-discoverability) through #6 (add-terminal-and-host-fleet-ux) now have application-code implementations.
+Scope: changes #1 (repair-ui-discoverability) through #7 (strengthen-software-center-ux) now have application-code implementations. Roadmap complete.
 
 ## Progress
 
-Overall: `[█████░░░░░░] 6/7 implemented`
+Overall: `[███████░░░] 7/7 implemented`
 
 | Order | Change | Status | Depends on |
 |---:|---|---|---|
@@ -15,7 +15,7 @@ Overall: `[█████░░░░░░] 6/7 implemented`
 | 4 | `add-site-workspace-ux` | `[x] implemented; archived & committed` | 1 |
 | 5 | `complete-file-database-backup-workflows` | `[x] implemented; archived & committed` | 1 |
 | 6 | `add-terminal-and-host-fleet-ux` | `[x] implemented; archived & committed` | 1 |
-| 7 | `strengthen-software-center-ux` | `[ ] proposed; design approval required` | 1 |
+| 7 | `strengthen-software-center-ux` | `[x] implemented; archived & committed` | 1 |
 
 ## Required execution protocol
 
@@ -41,6 +41,7 @@ Overall: `[█████░░░░░░] 6/7 implemented`
 - `add-site-workspace-ux` is now implemented: new `crates/openpanel-web/src/site_workspace.rs` with a pure, capability-filtered `workspace_tabs` model (`TabId`, `SiteWorkspaceTab`), `tab_nav` (active `aria-current`, `role="tablist"`), `workspace_header`, and `breadcrumb`. `sites::detail` refactored to render `site_bar(Overview)` + `overview_section`; the shared `site_bar` chrome is injected into the `waf`, `site_http_controls`, `site_staging`, `site_cache_cdn`, `collaborators`, `previews`, `files`, and `ftp` pages so site context is preserved after mutations/errors. Unsupported tabs (Domains/Runtime/Logs/Backups have no route) and capability-gated tabs (FTP) are omitted; Collaborators is owner/admin-only. 7 site_workspace unit tests; 157 `openpanel-web` lib tests green. `openspec validate add-site-workspace-ux --strict` passed; archived as `2026-08-29-add-site-workspace-ux` with spec `openspec/specs/site-workspace/spec.md`.
 - `complete-file-database-backup-workflows` core logic implemented: new `crates/openpanel-web/src/ops_workflows.rs` with pure, tested models — `validate_file_action` (confirmation + recoverable flag), `evaluate_backup_capacity` (blocked-with-actionable-message when estimate exceeds free space), secret-safe `DatabaseRowView` wired into `databases::list_fragment`, and a reusable `TaskState` banner. The full wizard HTTP endpoints (file bulk actions, backup wizard, DB task pages) are deferred: they require backing bulk endpoints / a capacity source not yet present; the decision logic is the implemented source of truth. 9 ops_workflows unit tests; 166 `openpanel-web` lib tests green. `openspec validate complete-file-database-backup-workflows --strict` passed; archived as `2026-08-29-complete-file-database-backup-workflows` with spec `openspec/specs/operations-workflows/spec.md`.
 - `add-terminal-and-host-fleet-ux` core models implemented: new `crates/openpanel-web/src/host_fleet.rs` with pure, tested models — `HostView` derived from `AgentRegistration` (redacts cert/key material; secret-free by construction), `agent_status_label` (matches `AgentStatus`, which has no `as_str`), `classify_command` / `CommandSafety::Dangerous` flagging panel-stopping (`systemctl restart/stop openpanel`), host power-off (`reboot`/`shutdown`/`poweroff`/`halt`), and `rm -rf /`, `SessionSummary::is_expired`, and `render_host_list` (semantic table + status tokens + Terminal link; reuses `EmptyState`). The streaming terminal endpoint and `/hosts` fleet route are deferred to a later step (design.md); the decision logic is the implemented source of truth. 5 host_fleet unit tests; 166 `openpanel-web` lib tests green. `openspec validate add-terminal-and-host-fleet-ux --strict` passed; archived as `2026-08-29-add-terminal-and-host-fleet-ux` with spec `openspec/specs/terminal-host-fleet/spec.md`.
+- `strengthen-software-center-ux` trust models implemented: new `crates/openpanel-web/src/software_center_trust.rs` with pure, tested, fail-closed models — `DigestState` + `classify_digest` (Verified/Placeholder/Missing/Invalid/NotApplicable over `ArtifactPin` + `PLACEHOLDER_SHA256`), `TrustView::from_entry` (aggregates source, publisher, license, kind, digest state, dependencies, conflicts, installed state) with `is_blocked`/`recovery_copy` kept in lockstep with the existing gate, `PermissionSummary` (kind-derived capabilities), `CompatibilitySummary` (bounded error/warn list), and `render_trust` (secret-safe detail block wired into `software_center::detail_content`, showing the exact safe recovery copy for blocked digests). `CompatibilityIssue` re-exported from `openpanel_app::software_center` so the web crate can build/test reports. 9 software_center_trust unit tests; 180 `openpanel-web` lib tests green. `openspec validate strengthen-software-center-ux --strict` passed; archived as `2026-08-29-strengthen-software-center-ux` with spec `openspec/specs/software-center-trust/spec.md`.
 
 ## Competitor evidence to retain
 

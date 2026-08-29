@@ -72,6 +72,10 @@ pub mod sites;
 pub mod status_page;
 /// Admin settings page for the status page (`/status-page`).
 pub mod status_page_admin;
+/// Software Center trust + provenance building blocks (fail-closed digest
+/// classification, aggregated trust view, compatibility + permission
+/// summaries, secret-safe recovery copy).
+pub mod software_center_trust;
 pub mod software_center;
 pub mod ssl;
 pub mod system_services;

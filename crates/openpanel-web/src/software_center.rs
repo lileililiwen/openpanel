@@ -933,6 +933,7 @@ fn detail_content(
                 span class="badge" { (entry.license) }
             }
             p class="detail__lead" { (entry.description) }
+            (crate::software_center_trust::render_trust(entry, require_verified_digests))
             @if let Some(badge) = badge {
                 div class="detail__last-install" aria-label="Last install" {
                     "Last install: " (badge.display())
