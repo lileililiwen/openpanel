@@ -59,6 +59,8 @@ pub mod site_cache_cdn;
 pub mod site_http_controls;
 /// Per-site staging web pages.
 pub mod site_staging;
+/// Site workspace: capability-filtered tabbed navigation shared by site pages.
+pub mod site_workspace;
 pub mod sites;
 /// Public, unauthenticated status page (`/status/{slug}`).
 pub mod status_page;

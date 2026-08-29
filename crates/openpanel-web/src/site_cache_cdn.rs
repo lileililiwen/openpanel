@@ -13,6 +13,7 @@ use maud::{Markup, html};
 use uuid::Uuid;
 
 use crate::router::{WebState, WebUser};
+use crate::site_workspace::TabId;
 
 /// Cache editor + purge dialog page for a single site.
 ///
@@ -30,6 +31,7 @@ pub async fn page(
     // stored yet), the form still renders with the defaults.
     let _ = state.identity.list_users().await;
     let body: Markup = html! {
+        (crate::site_workspace::site_bar(&state, &user, site_id, TabId::Cache).await)
         section class="card" {
             h2 { "Cache policy" }
             p { "Configure the per-site page cache (nginx microcache)." }

@@ -12,6 +12,7 @@ use maud::{Markup, html};
 use uuid::Uuid;
 
 use crate::router::{WebState, WebUser};
+use crate::site_workspace::TabId;
 
 const COLLAB_UI_HEADER: &str = "collaborators-ui-pending";
 
@@ -28,8 +29,12 @@ pub async fn page(
         .unwrap_or_default();
     let csrf = state.csrf.token_for(session.id());
     let path = format!("/sites/{site_id}/collaborators");
+    let body = html! {
+        (crate::site_workspace::site_bar(&state, &user, site_id, TabId::Collaborators).await)
+        (render(&site_id, &grants))
+    };
     state
-        .render_shell(&user, &csrf, &path, render(&site_id, &grants))
+        .render_shell(&user, &csrf, &path, body)
         .await
         .into_response()
 }

@@ -20,6 +20,7 @@ use crate::{
     csrf::ValidateCsrf,
     layout::csrf_field,
     router::{WebState, WebUser},
+    site_workspace::TabId,
 };
 
 /// One row in the sites table (all fields pre-resolved for rendering).
@@ -165,9 +166,10 @@ pub async fn detail(
     match state.sites.get_site(id).await {
         Ok(site) => {
             let owner = owner_name(&state, site.owner_id()).await;
+            let bar = crate::site_workspace::site_bar(&state, &user, id, TabId::Overview).await;
             let content = html! {
-                h1 { (site.primary_domain()) }
-                (detail_section(&site, &owner))
+                (bar)
+                (overview_section(&site, &owner))
             };
             state
                 .render_shell(&user, &csrf, "/sites", content)
@@ -372,7 +374,10 @@ async fn managed_php_versions(state: &WebState, user: &User) -> Vec<String> {
 
 /// Render the site detail section: domain, aliases, document root, PHP, status,
 /// and links to the site's files and SSL pages.
-pub fn detail_section(site: &Site, owner: &str) -> Markup {
+/// Render the site overview body (status, owner, runtime, aliases). The
+/// workspace header and tab navigation are rendered by `site_bar`; this is the
+/// overview-specific content shown under the tabs.
+pub fn overview_section(site: &Site, owner: &str) -> Markup {
     let status = site.status().as_str();
     let php = match site.php_version() {
         Some(v) => {
@@ -386,29 +391,29 @@ pub fn detail_section(site: &Site, owner: &str) -> Markup {
     };
     html! {
         section class="detail" {
-            p { strong { "Status:" } " " (status) }
-            p { strong { "Owner:" } " " (owner) }
-            p { strong { "Document root:" } " " (site.document_root()) }
-            p { strong { "PHP:" } " " (php) }
-            p { strong { "Aliases:" } }
-            @if site.aliases().is_empty() {
-                p class="empty" { "none" }
-            } @else {
-                ul {
-                    @for alias in site.aliases() {
-                        li { (alias) }
+            dl class="site-overview" {
+                dt { "Domain" }
+                dd { (site.primary_domain()) }
+                dt { "Status" }
+                dd { (status) }
+                dt { "Owner" }
+                dd { (owner) }
+                dt { "Document root" }
+                dd { code { (site.document_root()) } }
+                dt { "PHP" }
+                dd { (php) }
+                dt { "Aliases" }
+                dd {
+                    @if site.aliases().is_empty() {
+                        span class="empty" { "none" }
+                    } @else {
+                        ul {
+                            @for alias in site.aliases() {
+                                li { (alias) }
+                            }
+                        }
                     }
                 }
-            }
-            nav class="links" {
-                a href=(format!("/files/{}", site.id())) { "Files" }
-                a href="/ssl" { "SSL" }
-                a href=(format!("/sites/{}/waf", site.id())) { "WAF" }
-                a href=(format!("/sites/{}/http", site.id())) { "HTTP controls" }
-                a href=(format!("/sites/{}/staging", site.id())) { "Staging" }
-                a href=(format!("/sites/{}/previews", site.id())) { "Previews" }
-                a href=(format!("/sites/{}/cache", site.id())) { "Cache & CDN" }
-                a href=(format!("/sites/{}/collaborators", site.id())) { "Collaborators" }
             }
         }
     }
@@ -458,7 +463,7 @@ async fn owner_options(state: &WebState) -> Vec<(Uuid, String)> {
 }
 
 /// Resolve a user id to its username (or the raw id when unknown).
-async fn owner_name(state: &WebState, id: Uuid) -> String {
+pub(crate) async fn owner_name(state: &WebState, id: Uuid) -> String {
     state
         .identity
         .list_users()
@@ -575,15 +580,13 @@ mod tests {
             "admin",
         )
         .expect("valid site");
-        let out = detail_section(&site, "admin").into_string();
+        let out = overview_section(&site, "admin").into_string();
         for needle in [
             "example.com",
             "www.example.com",
             "/var/www/example.com/public_html",
             "8.3",
             "active",
-            format!("/files/{}", site.id()).as_str(),
-            "/ssl",
         ] {
             assert!(out.contains(needle), "missing {needle}: {out}");
         }

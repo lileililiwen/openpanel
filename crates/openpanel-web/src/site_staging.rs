@@ -12,6 +12,7 @@ use maud::{Markup, html};
 use uuid::Uuid;
 
 use crate::router::{WebState, WebUser};
+use crate::site_workspace::TabId;
 
 /// Page for a single site's staging status, recent promotions, and
 /// a snapshot/promote/destroy form set.
@@ -21,6 +22,7 @@ pub async fn page(
     Path(site_id): Path<Uuid>,
 ) -> Response {
     let body: Markup = html! {
+        (crate::site_workspace::site_bar(&state, &user, site_id, TabId::Staging).await)
         section class="card" {
             h2 { "Site staging" }
             p { "The staging slot is at "

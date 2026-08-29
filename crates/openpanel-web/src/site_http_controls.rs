@@ -14,6 +14,7 @@ use uuid::Uuid;
 use crate::{
     layout::csrf_field,
     router::{WebState, WebUser},
+    site_workspace::TabId,
 };
 
 /// Render the controls document editor.
@@ -105,6 +106,7 @@ async fn render(
 ) -> Response {
     let controls_json = serde_json::to_string_pretty(controls).unwrap_or_else(|_| "{}".to_owned());
     let content = html! {
+        (crate::site_workspace::site_bar(state, user, id, TabId::Http).await)
         h1 { "HTTP controls" }
         p { "Error pages, redirects, protected directories, hotlink protection, client-IP rules, MIME overrides, and index policy are compiled into the managed nginx site configuration and validated before activation." }
         @if let Some(notice) = notice { p class="banner banner--ok" { (notice) } }

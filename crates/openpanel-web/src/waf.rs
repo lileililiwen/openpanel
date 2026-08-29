@@ -17,6 +17,7 @@ use uuid::Uuid;
 use crate::{
     layout::csrf_field,
     router::{WebState, WebUser},
+    site_workspace::TabId,
 };
 
 /// Render the rule document, hit totals, and dry-run form.
@@ -139,6 +140,7 @@ async fn render(
     let rules_json = serde_json::to_string_pretty(set.rules()).unwrap_or_else(|_| "[]".to_owned());
     let hits = state.waf.hits(user, id).await.unwrap_or_default();
     let content = html! {
+        (crate::site_workspace::site_bar(state, user, id, TabId::Waf).await)
         h1 { "Web application firewall" }
         p { "Typed rules are compiled into the managed nginx site configuration and validated before activation." }
         @if let Some(notice) = notice { p class="banner banner--ok" { (notice) } }

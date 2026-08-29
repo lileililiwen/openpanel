@@ -26,6 +26,7 @@ use uuid::Uuid;
 use crate::{
     layout::csrf_field,
     router::{WebState, WebUser},
+    site_workspace::TabId,
 };
 
 /// One row in the file listing, pre-resolved for rendering.
@@ -154,6 +155,7 @@ pub async fn list(
             error,
         } => {
             let content = html! {
+                (crate::site_workspace::site_bar(&state, &user, site_id, TabId::Files).await)
                 h1 { "Files" }
                 (breadcrumb(site_id, &current, &parent))
                 @if let Some(msg) = error {

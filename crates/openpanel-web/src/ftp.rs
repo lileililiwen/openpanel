@@ -15,6 +15,7 @@ use uuid::Uuid;
 use crate::{
     layout::csrf_field,
     router::{WebState, WebUser},
+    site_workspace::TabId,
 };
 
 /// Render a site's FTP accounts and creation form.
@@ -28,10 +29,16 @@ pub async fn page(
     }
     let csrf = state.csrf.token_for(session.id());
     match state.ftp.list(&user, id).await {
-        Ok(accounts) => state
-            .render_shell(&user, &csrf, "/sites", content(id, &accounts, &csrf, None))
-            .await
-            .into_response(),
+        Ok(accounts) => {
+            let body = html! {
+                (crate::site_workspace::site_bar(&state, &user, id, TabId::Ftp).await)
+                (content(id, &accounts, &csrf, None))
+            };
+            state
+                .render_shell(&user, &csrf, "/sites", body)
+                .await
+                .into_response()
+        }
         Err(error) => (StatusCode::BAD_REQUEST, error.to_string()).into_response(),
     }
 }

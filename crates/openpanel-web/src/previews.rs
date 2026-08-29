@@ -19,6 +19,7 @@ use openpanel_domain::User;
 use uuid::Uuid;
 
 use crate::router::{WebState, WebUser};
+use crate::site_workspace::TabId;
 
 /// Top-level `/previews` directory page: every visible site with its
 /// live preview count.
@@ -83,6 +84,7 @@ pub async fn site_previews(
         }
     };
     let content = html! {
+        (crate::site_workspace::site_bar(&state, &user, site_id, TabId::Previews).await)
         h1 { "Previews" }
         a href=(format!("/sites/{}", site_id)) { "Back to site" }
         h2 { "History" }
