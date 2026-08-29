@@ -10,7 +10,7 @@ use maud::{Markup, html};
 use uuid::Uuid;
 
 use crate::layout::csrf_field;
-use crate::ui_states::{EmptyState, ErrorState, LoadingState};
+use crate::ui_states::{ErrorState, LoadingState};
 
 /// Lifecycle state of a long-running task (import/export/backup/restore).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -263,6 +263,7 @@ fn format_bytes(bytes: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ui_states::EmptyState;
 
     #[test]
     fn empty_selection_is_rejected() {

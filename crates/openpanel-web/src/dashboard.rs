@@ -17,7 +17,7 @@ use openpanel_domain::{
     backups::BackupRunState,
     files::path::Path as FilePath,
     identity::Role,
-    monitoring::{DiskReading, MetricKind, MetricSample, SystemSnapshot},
+    monitoring::{MetricKind, MetricSample, SystemSnapshot},
 };
 
 use crate::monitoring::sparkline;
@@ -793,6 +793,7 @@ mod tests {
     use openpanel_core::{AuditAction, AuditOutcome, AuditEvent};
 
     use super::*;
+    use openpanel_domain::DiskReading;
 
     fn snapshot() -> SystemSnapshot {
         SystemSnapshot::new(
