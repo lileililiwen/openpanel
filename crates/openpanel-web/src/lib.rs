@@ -33,6 +33,9 @@ pub mod feedback;
 pub mod files;
 pub mod forms;
 pub mod ftp;
+/// Host-fleet and terminal-safety building blocks (command classification,
+/// session expiry, secret-safe host views).
+pub mod host_fleet;
 pub mod layer;
 pub mod layout;
 /// Named `hx-indicator` loading elements.
