@@ -4067,6 +4067,7 @@ dependencies = [
  "tempfile",
  "thiserror 1.0.69",
  "tokio",
+ "tokio-rustls",
  "totp-rs",
  "tracing",
  "unftp-core",
@@ -4076,6 +4077,7 @@ dependencies = [
  "uuid",
  "walkdir",
  "webauthn-rs",
+ "webpki-roots 0.26.11",
  "x509-parser 0.16.0",
 ]
 

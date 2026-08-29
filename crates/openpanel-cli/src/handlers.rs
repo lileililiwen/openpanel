@@ -71,6 +71,13 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     monitoring_module
         .service()
         .attach_notifications(notification_module.service());
+    let synthetic_monitoring_module = openpanel_app::SyntheticMonitoringModule::new(
+        &ctx,
+        Arc::new(openpanel_app::ReqwestHttpProbe::new()),
+        Arc::new(openpanel_app::TokioTcpProbe::new()),
+        Arc::new(openpanel_app::NativeTlsSslInspector::new()),
+    )
+    .await;
     let cron_module = CronModule::new(&ctx).await;
     let backup_root = std::env::var("OPENPANEL__BACKUPS__ROOT")
         .map(std::path::PathBuf::from)
@@ -186,6 +193,13 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .await
         .context("apply monitoring migrations")?;
     runner
+        .apply_module(
+            synthetic_monitoring_module.name(),
+            &synthetic_monitoring_module.migrations(),
+        )
+        .await
+        .context("apply synthetic monitoring migrations")?;
+    runner
         .apply_module(cron_module.name(), &cron_module.migrations())
         .await
         .context("apply cron migrations")?;
@@ -246,6 +260,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let files_svc = files_module.service();
     let ssl_svc = ssl_module.service();
     let monitoring_svc = monitoring_module.service();
+    let status_page_svc = synthetic_monitoring_module.status_page();
     let cron_svc = cron_module.service();
     let backups_svc = backups_module.service();
     let logs_svc = logs_module.service();
@@ -582,6 +597,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
             None,
         )),
         previews_svc.clone(),
+        status_page_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -616,6 +632,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         themeable_ui_svc.clone(),
         webmail_svc.clone(),
         feedback_svc,
+        status_page_svc.clone(),
         web_runtime(&config, audit).with_capabilities(
             openpanel_web::layout::CapabilitySet::shipped()
                 .with("cron")
@@ -635,7 +652,9 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
                 .with("audit")
                 .with("themeable-ui"),
         ),
-    ));
+    ))
+    .merge(openpanel_web::public_router(status_page_svc.clone()));
+
 
     let addr = format!("{}:{}", config.server().bind, config.server().port);
     let listener = TcpListener::bind(&addr)
@@ -4432,6 +4451,162 @@ pub async fn monitoring_history(
         println!("{}  {} {metric}", s.ts.to_rfc3339(), s.value);
     }
     Ok(())
+}
+
+// ---- Status page handlers ----
+
+async fn build_status_page(config: Arc<Config>) -> anyhow::Result<Arc<openpanel_app::StatusPageService>> {
+    use openpanel_app::synthetic_monitoring::{
+        SqliteStatusPageRepository, SqliteSyntheticRepository, StatusPageService,
+    };
+    use openpanel_core::{AppContext, SqliteAuditService};
+    use openpanel_domain::SyntheticRepository;
+
+    let (pool, _audit_sink, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config.clone(), db, Arc::new(SqliteAuditService::new(pool.clone())));
+    let sql_repo: Arc<dyn SyntheticRepository> = Arc::new(SqliteSyntheticRepository::new(pool.clone()));
+    let status_repo = Arc::new(SqliteStatusPageRepository::new(pool.clone()));
+    Ok(Arc::new(StatusPageService::new(
+        status_repo,
+        sql_repo,
+        ctx.audit.clone(),
+    )))
+}
+
+/// `openpanel status-page show`.
+pub async fn status_page_show(config: Arc<Config>) -> anyhow::Result<()> {
+    let svc = build_status_page(config).await?;
+    let page = svc
+        .get()
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "slug": page.slug.as_str(),
+            "enabled": page.enabled,
+            "url": format!("/status/{}", page.slug.as_str()),
+            "entries": page.entries.iter().map(|e| serde_json::json!({
+                "check_id": e.check_id.to_string(),
+                "label": e.label,
+            })).collect::<Vec<_>>(),
+        }))?
+    );
+    Ok(())
+}
+
+/// `openpanel status-page enable`.
+pub async fn status_page_enable(config: Arc<Config>) -> anyhow::Result<()> {
+    let svc = build_status_page(config).await?;
+    let page = enable_as_owner(svc.clone()).await?;
+    println!("enabled slug={}", page.slug.as_str());
+    Ok(())
+}
+
+/// `openpanel status-page disable`.
+pub async fn status_page_disable(config: Arc<Config>) -> anyhow::Result<()> {
+    let svc = build_status_page(config).await?;
+    let page = disable_as_owner(svc.clone()).await?;
+    println!("disabled slug={}", page.slug.as_str());
+    Ok(())
+}
+
+/// `openpanel status-page regenerate-slug`.
+pub async fn status_page_regenerate_slug(config: Arc<Config>) -> anyhow::Result<()> {
+    let svc = build_status_page(config).await?;
+    let page = regenerate_slug_as_owner(svc.clone()).await?;
+    println!("new slug={}", page.slug.as_str());
+    Ok(())
+}
+
+/// `openpanel status-page publish --check <id> --label <label>`.
+pub async fn status_page_publish(
+    config: Arc<Config>,
+    check: String,
+    label: String,
+) -> anyhow::Result<()> {
+    let svc = build_status_page(config).await?;
+    let check_id = uuid::Uuid::parse_str(&check)
+        .map_err(|e| anyhow::anyhow!("invalid check id: {e}"))?;
+    let page = publish_as_owner(svc.clone(), check_id, label).await?;
+    println!(
+        "published {} entries; slug={}",
+        page.entries.len(),
+        page.slug.as_str()
+    );
+    Ok(())
+}
+
+/// `openpanel status-page unpublish --check <id>`.
+pub async fn status_page_unpublish(config: Arc<Config>, check: String) -> anyhow::Result<()> {
+    let svc = build_status_page(config).await?;
+    let check_id = uuid::Uuid::parse_str(&check)
+        .map_err(|e| anyhow::anyhow!("invalid check id: {e}"))?;
+    let page = unpublish_as_owner(svc.clone(), check_id).await?;
+    println!(
+        "{} entries remain; slug={}",
+        page.entries.len(),
+        page.slug.as_str()
+    );
+    Ok(())
+}
+
+async fn enable_as_owner(
+    svc: Arc<openpanel_app::StatusPageService>,
+) -> anyhow::Result<openpanel_domain::synthetic_monitoring::StatusPage> {
+    svc.enable(&owner_user())
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))
+}
+
+async fn disable_as_owner(
+    svc: Arc<openpanel_app::StatusPageService>,
+) -> anyhow::Result<openpanel_domain::synthetic_monitoring::StatusPage> {
+    svc.disable(&owner_user())
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))
+}
+
+async fn regenerate_slug_as_owner(
+    svc: Arc<openpanel_app::StatusPageService>,
+) -> anyhow::Result<openpanel_domain::synthetic_monitoring::StatusPage> {
+    svc.regenerate_slug(&owner_user())
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))
+}
+
+async fn publish_as_owner(
+    svc: Arc<openpanel_app::StatusPageService>,
+    check_id: uuid::Uuid,
+    label: String,
+) -> anyhow::Result<openpanel_domain::synthetic_monitoring::StatusPage> {
+    svc.publish(&owner_user(), check_id, label)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))
+}
+
+async fn unpublish_as_owner(
+    svc: Arc<openpanel_app::StatusPageService>,
+    check_id: uuid::Uuid,
+) -> anyhow::Result<openpanel_domain::synthetic_monitoring::StatusPage> {
+    svc.unpublish(&owner_user(), check_id)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))
+}
+
+fn owner_user() -> openpanel_domain::User {
+    use openpanel_domain::{Email, Password, Role, Username};
+    openpanel_domain::User::new(
+        uuid::Uuid::nil(),
+        Username::new("owner").expect("username"),
+        Email::new(format!(
+            "owner-{}@example.test",
+            uuid::Uuid::new_v4()
+        ))
+        .expect("email"),
+        Password::hash("system-credential-for-cli").expect("hash"),
+        Role::Owner,
+    )
 }
 
 // ---- Plugin marketplace handlers ----

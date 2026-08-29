@@ -7,7 +7,7 @@ use std::sync::Arc;
 use chrono::{NaiveDate, Utc};
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::{
-    CheckResult, CheckStatus, Role, SyntheticRepository, User,
+    CheckResult, CheckStatus, Role, SyntheticCheck, SyntheticRepository, User,
     synthetic_monitoring::{
         DailyBar, Incident, Slug, StatusEntry, StatusPage, StatusPageError,
         StatusPageRepository, derive_incidents, uptime_bars_90d,
@@ -48,16 +48,28 @@ pub struct EntryView {
 impl EntryView {
     /// Worst (highest-severity) status across the entry's daily bars.
     pub fn worst(&self) -> CheckStatus {
+        let rank = |s: CheckStatus| match s {
+            CheckStatus::Ok => 0,
+            CheckStatus::Warn => 1,
+            CheckStatus::Fail => 2,
+        };
         self.uptime_bars
             .iter()
             .filter_map(|b| b.uptime)
-            .fold(CheckStatus::Ok, |acc, up| {
+            .map(|up| {
                 if up >= 0.999 {
                     CheckStatus::Ok
-                } else if acc == CheckStatus::Fail {
-                    CheckStatus::Fail
-                } else {
+                } else if up >= 0.5 {
                     CheckStatus::Warn
+                } else {
+                    CheckStatus::Fail
+                }
+            })
+            .fold(CheckStatus::Ok, |acc, s| {
+                if rank(s) > rank(acc) {
+                    s
+                } else {
+                    acc
                 }
             })
     }
@@ -88,6 +100,11 @@ impl StatusPageService {
     /// Load the page aggregate.
     pub async fn get(&self) -> Result<StatusPage, StatusPageError> {
         self.repo.load().await
+    }
+
+    /// List all configured synthetic checks (admin UI dropdown).
+    pub async fn list_available_checks(&self) -> Result<Vec<SyntheticCheck>, StatusPageError> {
+        self.synth.list_checks().await.map_err(map_repo)
     }
 
     /// Enable the page (audited).

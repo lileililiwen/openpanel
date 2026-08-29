@@ -10,8 +10,8 @@ use openpanel_cli::{
     RecoveryCodeCommand, RegistryCommand, ScanCommand, SecurityAllowlistCommand, SecurityCommand,
     SecurityRuleCommand, ServerSnapshotCommand, ServicesCommand, SiteCacheCommand,
     SiteCloneCommand, SiteCommand, SiteHttpCommand, SitePreviewCommand, SiteTemplateCommand,
-    SoftwareCommand, SslCommand, StagingCommand, TerminalCommand, TokenCommand, TwoFactorCommand,
-    UserCommand, WafCommand, WebappCommand, handlers,
+    SoftwareCommand, SslCommand, StagingCommand, StatusPageCommand, TerminalCommand, TokenCommand,
+    TwoFactorCommand, UserCommand, WafCommand, WebappCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -383,6 +383,18 @@ async fn main() -> anyhow::Result<()> {
             MonitoringCommand::Overview => handlers::monitoring_overview(config).await,
             MonitoringCommand::History { metric, range } => {
                 handlers::monitoring_history(config, metric, range).await
+            }
+        },
+        Command::StatusPage { action } => match action {
+            StatusPageCommand::Show => handlers::status_page_show(config).await,
+            StatusPageCommand::Enable => handlers::status_page_enable(config).await,
+            StatusPageCommand::Disable => handlers::status_page_disable(config).await,
+            StatusPageCommand::RegenerateSlug => handlers::status_page_regenerate_slug(config).await,
+            StatusPageCommand::Publish { check, label } => {
+                handlers::status_page_publish(config, check, label).await
+            }
+            StatusPageCommand::Unpublish { check } => {
+                handlers::status_page_unpublish(config, check).await
             }
         },
         Command::Cron { action } => match action {

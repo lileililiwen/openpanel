@@ -11,7 +11,8 @@ use openpanel_app::{
     MalwareScannerService, MarketplaceService, MonitoringService, NotificationService, PitrService,
     PluginService, SecurityService, ServerSnapshotService, SiteCacheService, SiteCloneService,
     SiteHttpService, SitesService, SoftwareCenterService, SslService, SsoService, StagingService,
-    ThemeableUiService, WafService, WebApplicationInstallerService, WebTerminalService,
+    StatusPageService, ThemeableUiService, WafService, WebApplicationInstallerService,
+    WebTerminalService,
     backups::DrillService, identity::TwoFactorService, security::LoginThrottleService,
     site_clone_template::SqliteSiteCloneTemplateRepository, system_services::ServiceManager,
 };
@@ -54,6 +55,7 @@ use crate::{
         software_center::router as software_center_router,
         ssl::router as ssl_router,
         sso::{public_router as sso_public_router, router as sso_router},
+        status_page::router as status_page_router,
         system_services::router as system_services_router,
         themeable_ui::router as themeable_ui_router,
         waf::router as waf_router,
@@ -119,6 +121,7 @@ pub fn build_router(
     deliverability: Arc<openpanel_app::DeliverabilityService>,
     malware_scanner: Arc<MalwareScannerService>,
     previews: Arc<openpanel_app::PreviewService>,
+    status_page: Arc<StatusPageService>,
 ) -> Router {
     let auth_state = ApiAuthState {
         identity: identity.clone(),
@@ -179,6 +182,7 @@ pub fn build_router(
         .merge(web_application_installer_router(web_application_installer))
         .merge(malware_scanner_router(malware_scanner))
         .merge(previews_router(previews))
+        .merge(status_page_router(status_page))
         .layer(from_fn_with_state(auth_state, api_auth_middleware));
 
     Router::new()

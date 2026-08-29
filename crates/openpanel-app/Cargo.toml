@@ -51,6 +51,8 @@ rcgen = { workspace = true }
 rustls = { workspace = true }
 rustls-acme = { workspace = true }
 rustls-pemfile = { workspace = true }
+tokio-rustls = { workspace = true }
+webpki-roots = { workspace = true }
 x509-parser = { workspace = true }
 sysinfo = { workspace = true }
 tempfile = "3"

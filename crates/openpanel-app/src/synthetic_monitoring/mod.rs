@@ -12,8 +12,8 @@ mod tests;
 pub use module::{MODULE_NAME, SyntheticMonitoringModule};
 pub use repo::SqliteSyntheticRepository;
 pub use service::{
-    CheckOutcome, CheckRunner, HttpProbe, ProbeScheduler, RecordingProbe, SslExpiryInspector,
-    TcpProbe,
+    CheckOutcome, CheckRunner, HttpProbe, NativeTlsSslInspector, ProbeScheduler, RecordingProbe,
+    ReqwestHttpProbe, SslExpiryInspector, TcpProbe, TokioTcpProbe,
 };
 pub use status_page_repo::SqliteStatusPageRepository;
 pub use status_page_service::{EntryView, PublicStatusView, StatusPageService, random_slug};

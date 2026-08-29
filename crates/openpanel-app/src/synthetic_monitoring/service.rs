@@ -343,3 +343,154 @@ fn require_admin(caller: &User) -> Result<(), SyntheticError> {
         _ => Err(SyntheticError::Forbidden),
     }
 }
+
+// ---------------------------------------------------------------------------
+// Concrete probe implementations
+// ---------------------------------------------------------------------------
+
+/// HTTP probe backed by `reqwest`.
+pub struct ReqwestHttpProbe {
+    client: reqwest::Client,
+}
+
+impl ReqwestHttpProbe {
+    /// Create a new reqwest-backed HTTP probe.
+    pub fn new() -> Self {
+        let client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
+            .timeout(std::time::Duration::from_secs(30))
+            .build()
+            .expect("reqwest client");
+        Self { client }
+    }
+}
+
+impl Default for ReqwestHttpProbe {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait::async_trait]
+impl HttpProbe for ReqwestHttpProbe {
+    async fn get(&self, url: &str, timeout_secs: u32) -> Result<(u16, u32), SyntheticError> {
+        let start = std::time::Instant::now();
+        let resp = tokio::time::timeout(
+            std::time::Duration::from_secs(timeout_secs as u64),
+            self.client.get(url).send(),
+        )
+        .await
+        .map_err(|_| SyntheticError::Probe("http request timed out".into()))?
+        .map_err(|e| SyntheticError::Probe(format!("http request failed: {e}")))?;
+        let latency_ms = start.elapsed().as_millis() as u32;
+        Ok((resp.status().as_u16(), latency_ms))
+    }
+}
+
+/// TCP connect probe backed by `tokio::net::TcpStream`.
+pub struct TokioTcpProbe;
+
+impl TokioTcpProbe {
+    /// Create a new tokio-backed TCP probe.
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for TokioTcpProbe {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait::async_trait]
+impl TcpProbe for TokioTcpProbe {
+    async fn connect(
+        &self,
+        host: &str,
+        port: u16,
+        timeout_secs: u32,
+    ) -> Result<u32, SyntheticError> {
+        let addr = format!("{host}:{port}");
+        let start = std::time::Instant::now();
+        tokio::time::timeout(
+            std::time::Duration::from_secs(timeout_secs as u64),
+            tokio::net::TcpStream::connect(&addr),
+        )
+        .await
+        .map_err(|_| SyntheticError::Probe("tcp connect timed out".into()))?
+        .map_err(|e| SyntheticError::Probe(format!("tcp connect failed: {e}")))?;
+        Ok(start.elapsed().as_millis() as u32)
+    }
+}
+
+/// SSL certificate expiry inspector using `tokio-rustls` and `x509-parser`.
+pub struct NativeTlsSslInspector;
+
+impl NativeTlsSslInspector {
+    /// Create a new TLS-based SSL inspector.
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+impl Default for NativeTlsSslInspector {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait::async_trait]
+impl SslExpiryInspector for NativeTlsSslInspector {
+    async fn days_remaining(&self, host: &str, timeout_secs: u32) -> Result<u32, SyntheticError> {
+        use std::sync::Arc;
+
+        use rustls::pki_types::ServerName;
+        use tokio_rustls::{TlsConnector, client::TlsStream};
+        use x509_parser::prelude::FromDer;
+
+        let domain = ServerName::try_from(host.to_string())
+            .map_err(|e| SyntheticError::Probe(format!("invalid domain: {e}")))?;
+
+        let mut root_store = rustls::RootCertStore::empty();
+        root_store.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+
+        let config = rustls::ClientConfig::builder()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
+
+        let connector = TlsConnector::from(Arc::new(config));
+
+        let tcp = tokio::net::TcpStream::connect(format!("{host}:443"))
+            .await
+            .map_err(|e| SyntheticError::Probe(format!("tcp connect failed: {e}")))?;
+
+        let tls: TlsStream<tokio::net::TcpStream> = tokio::time::timeout(
+            std::time::Duration::from_secs(timeout_secs as u64),
+            connector.connect(domain, tcp),
+        )
+        .await
+        .map_err(|_| SyntheticError::Probe("tls handshake timed out".into()))?
+        .map_err(|e| SyntheticError::Probe(format!("tls handshake failed: {e}")))?;
+
+        let (_, session) = tls.get_ref();
+        let certs = session
+            .peer_certificates()
+            .ok_or_else(|| SyntheticError::Probe("no peer certificates".into()))?;
+
+        let leaf_der = certs
+            .first()
+            .ok_or_else(|| SyntheticError::Probe("peer certificate chain empty".into()))?;
+
+        let (_, x509) = x509_parser::prelude::X509Certificate::from_der(leaf_der.as_ref())
+            .map_err(|e| SyntheticError::Probe(format!("cert parse failed: {e}")))?;
+
+        let not_after = x509.validity().not_after;
+        let expiry_ts = not_after.timestamp();
+        let expiry = chrono::DateTime::from_timestamp(expiry_ts, 0)
+            .ok_or_else(|| SyntheticError::Probe("invalid cert expiry".into()))?;
+        let now = chrono::Utc::now();
+        let days = (expiry - now).num_days().max(0) as u32;
+        Ok(days)
+    }
+}

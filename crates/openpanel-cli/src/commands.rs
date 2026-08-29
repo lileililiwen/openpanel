@@ -56,6 +56,12 @@ pub enum Command {
         #[command(subcommand)]
         action: MonitoringCommand,
     },
+    /// Manage the public status page.
+    StatusPage {
+        /// Status-page subcommand to execute.
+        #[command(subcommand)]
+        action: StatusPageCommand,
+    },
     /// Scheduled command management.
     Cron {
         /// Cron subcommand to execute.
@@ -1691,6 +1697,34 @@ pub enum MonitoringCommand {
         /// Look-back window in seconds (default 3600).
         #[arg(long, default_value_t = 3600)]
         range: i64,
+    },
+}
+
+/// Subcommands for the public status page.
+#[derive(Debug, Subcommand)]
+pub enum StatusPageCommand {
+    /// Show the current status-page policy (slug, enabled, entries).
+    Show,
+    /// Enable the public page.
+    Enable,
+    /// Disable the public page.
+    Disable,
+    /// Rotate the public slug (invalidates the previous URL).
+    RegenerateSlug,
+    /// Publish a synthetic check on the page with a label.
+    Publish {
+        /// Synthetic check id to publish.
+        #[arg(long)]
+        check: String,
+        /// Label shown on the public page.
+        #[arg(long)]
+        label: String,
+    },
+    /// Remove a synthetic check from the page.
+    Unpublish {
+        /// Synthetic check id to remove.
+        #[arg(long)]
+        check: String,
     },
 }
 

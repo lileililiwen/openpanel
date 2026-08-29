@@ -60,6 +60,10 @@ pub mod site_http_controls;
 /// Per-site staging web pages.
 pub mod site_staging;
 pub mod sites;
+/// Public, unauthenticated status page (`/status/{slug}`).
+pub mod status_page;
+/// Admin settings page for the status page (`/status-page`).
+pub mod status_page_admin;
 pub mod software_center;
 pub mod ssl;
 pub mod system_services;
@@ -79,4 +83,4 @@ pub mod web_ui_styling;
 /// Webmail client web pages.
 pub mod webmail;
 
-pub use router::{WebRuntime, WebState, router};
+pub use router::{WebRuntime, WebState, public_router, router};

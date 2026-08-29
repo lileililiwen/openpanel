@@ -66,6 +66,8 @@ pub mod sites;
 pub mod software_center;
 pub mod ssl;
 pub mod sso;
+/// Status page policy + public read routes (`/status-page`).
+pub mod status_page;
 /// Allowlisted system-service routes (`/services`).
 pub mod system_services;
 /// Themeable UI / white-label routes (`/admin/branding`).

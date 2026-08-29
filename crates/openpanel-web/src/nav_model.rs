@@ -152,6 +152,13 @@ const OPERATIONS: &[NavItem] = &[
         icon: "git-pull-request",
     },
     NavItem {
+        href: "/status-page",
+        label: "Status page",
+        capability: "status-page",
+        role: RequiredRole::Authenticated,
+        icon: "pulse",
+    },
+    NavItem {
         href: "/cron",
         label: "Cron",
         capability: "cron",

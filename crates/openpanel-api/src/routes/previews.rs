@@ -70,8 +70,8 @@ fn system_user() -> openpanel_domain::User {
     openpanel_domain::User::new(
         Uuid::nil(),
         Username::new("system").unwrap(),
-        Email::new("system@example.test").unwrap(),
-        Password::hash("system").unwrap(),
+        Email::new(format!("system-{}@example.test", Uuid::new_v4())).unwrap(),
+        Password::hash("system-credential-for-api").unwrap(),
         Role::Admin,
     )
 }

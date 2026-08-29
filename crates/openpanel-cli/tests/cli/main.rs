@@ -30,6 +30,7 @@ mod site;
 mod site_http;
 mod software_center;
 mod ssl;
+mod status_page;
 mod system_services;
 mod user;
 mod waf;

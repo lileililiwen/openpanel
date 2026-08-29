@@ -622,6 +622,13 @@ impl TestServer {
         monitoring_module
             .service()
             .attach_notifications(notification_module.service());
+        let synthetic_monitoring_module = openpanel_app::SyntheticMonitoringModule::new(
+            &ctx,
+            Arc::new(openpanel_app::RecordingProbe::default()),
+            Arc::new(openpanel_app::RecordingProbe::default()),
+            Arc::new(openpanel_app::RecordingProbe::default()),
+        )
+        .await;
         let cron_module = CronModule::with_roots(&ctx, vec![sandbox.path().to_path_buf()]).await;
         let backups_module = BackupsModule::with_root(
             &ctx,
@@ -686,6 +693,13 @@ impl TestServer {
             .apply_module(monitoring_module.name(), &monitoring_module.migrations())
             .await
             .expect("monitoring migrations");
+        runner
+            .apply_module(
+                synthetic_monitoring_module.name(),
+                &synthetic_monitoring_module.migrations(),
+            )
+            .await
+            .expect("synthetic monitoring migrations");
         runner
             .apply_module(cron_module.name(), &cron_module.migrations())
             .await
@@ -832,6 +846,7 @@ impl TestServer {
         let files_svc = files_module.service();
         let ssl_svc = ssl_module.service();
         let monitoring_svc = monitoring_module.service();
+        let status_page_svc = synthetic_monitoring_module.status_page();
         let cron_svc = cron_module.service();
         let backups_svc = backups_module.service();
         let server_snapshots_svc = std::sync::Arc::new(openpanel_app::ServerSnapshotService::new(
@@ -1002,6 +1017,7 @@ impl TestServer {
             // audit; the scan fs writes under the sandbox.
             malware_scanner_svc.clone(),
             git_deployment_module.preview_service(),
+            status_page_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -1036,6 +1052,7 @@ impl TestServer {
             themeable_ui_svc.clone(),
             webmail_svc.clone(),
             feedback_svc.clone(),
+            status_page_svc.clone(),
             openpanel_web::WebRuntime::new(
                 config,
                 audit.clone(),
@@ -1065,7 +1082,8 @@ impl TestServer {
                     .with("marketplace")
                     .with("themeable-ui"),
             ),
-        ));
+        ))
+        .merge(openpanel_web::public_router(status_page_svc.clone()));
 
         let listener = TcpListener::bind("127.0.0.1:0")
             .await

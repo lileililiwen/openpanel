@@ -28,6 +28,7 @@ impl CapabilitySet {
             "users",
             "settings",
             "previews",
+            "status-page",
         ]))
     }
 

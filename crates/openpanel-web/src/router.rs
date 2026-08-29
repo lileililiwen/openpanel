@@ -21,7 +21,8 @@ use openpanel_app::{
     ContainerRuntimeService, CronService, DatabasesService, DnsService, DockerService,
     FeedbackService, FilesService, FtpService, IdentityService, LogService, MailService,
     MonitoringService, NotificationService, PitrService, PreviewService, SecurityService,
-    SitesService, SoftwareCenterService, SslService, StagingService, WafService,
+    SitesService, SoftwareCenterService, SslService, StagingService, StatusPageService,
+    WafService,
     identity::TwoFactorService, security::LoginThrottleService, system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
@@ -142,6 +143,8 @@ pub struct WebState {
     pub csrf: Arc<CsrfStore>,
     /// Feedback widget submission service.
     pub feedback: Arc<FeedbackService>,
+    /// Status page service for admin settings + public read view.
+    pub status_page: Arc<StatusPageService>,
     /// Atomically persisted allowlisted panel preferences.
     pub settings: Arc<SettingsStore>,
     /// Redacted installation metadata for the Owner settings page.
@@ -270,6 +273,7 @@ pub fn router(
     themeable_ui: Arc<openpanel_app::ThemeableUiService>,
     webmail: Arc<openpanel_app::WebmailService>,
     feedback: Arc<FeedbackService>,
+    status_page: Arc<StatusPageService>,
     runtime: WebRuntime,
 ) -> Router {
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
@@ -309,6 +313,7 @@ pub fn router(
         webmail,
         csrf: Arc::new(CsrfStore::new()),
         feedback,
+        status_page,
         settings: Arc::new(SettingsStore::new(
             runtime.preferences_path,
             initial_preferences,
@@ -613,11 +618,43 @@ pub fn router(
         .route("/layer/load", get(layer::load))
         .route("/forms/validate", post(forms::validate))
         .route("/feedback", post(feedback::submit))
+        .route("/status-page", get(crate::status_page_admin::page))
+        .route(
+            "/status-page/enable",
+            post(crate::status_page_admin::enable),
+        )
+        .route(
+            "/status-page/disable",
+            post(crate::status_page_admin::disable),
+        )
+        .route(
+            "/status-page/regenerate-slug",
+            post(crate::status_page_admin::regenerate_slug),
+        )
+        .route(
+            "/status-page/publish",
+            post(crate::status_page_admin::publish),
+        )
+        .route(
+            "/status-page/unpublish",
+            post(crate::status_page_admin::unpublish),
+        )
         .route("/assets/htmx.min.js", get(assets::htmx_min_js))
         .route("/assets/app.css", get(assets::app_css))
         .route("/assets/tokens.css", get(assets::tokens_css))
         .layer(from_fn(audit_role_guard))
         .layer(from_fn_with_state(identity, session_middleware))
+        .with_state(state)
+}
+
+/// Build the unauthenticated public routes (no session middleware).
+/// Currently exposes the public status page.
+pub fn public_router(state: Arc<StatusPageService>) -> Router {
+    Router::new()
+        .route(
+            "/status/{slug}",
+            get(crate::status_page::page_with_status_page),
+        )
         .with_state(state)
 }
 

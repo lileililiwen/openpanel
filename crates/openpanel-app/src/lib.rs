@@ -336,8 +336,9 @@ pub use ssl::{
     module::CHALLENGE_SERVER_PORT,
 };
 pub use synthetic_monitoring::{
-    CheckRunner, ProbeScheduler, RecordingProbe, SqliteSyntheticRepository,
-    SyntheticMonitoringModule,
+    CheckRunner, NativeTlsSslInspector, ProbeScheduler, RecordingProbe, ReqwestHttpProbe,
+    SqliteStatusPageRepository, SqliteSyntheticRepository, StatusPageService,
+    SyntheticMonitoringModule, TokioTcpProbe,
 };
 pub use system_services::{ServiceManager, SystemServicesModule};
 pub use themeable_ui::{
