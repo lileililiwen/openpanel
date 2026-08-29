@@ -1,17 +1,17 @@
 # OpenPanel UI/UX Gap Roadmap Handoff
 
 Updated: 2026-08-29  
-Scope: change #1 (repair-ui-discoverability) and #2 (add-audit-activity-center) now have application-code implementations.
+Scope: change #1 (repair-ui-discoverability), #2 (add-audit-activity-center), and #3 (redesign-operations-dashboard) now have application-code implementations.
 
 ## Progress
 
-Overall: `[█░░░░░░░░░] 2/7 implemented`
+Overall: `[██░░░░░░░░] 3/7 implemented`
 
 | Order | Change | Status | Depends on |
 |---:|---|---|---|
 | 1 | `repair-ui-discoverability` | `[x] implemented; archived & committed` | none |
 | 2 | `add-audit-activity-center` | `[x] implemented; archived & committed` | 1 |
-| 3 | `redesign-operations-dashboard` | `[ ] proposed; design approval required` | 1; audit links optional |
+| 3 | `redesign-operations-dashboard` | `[x] implemented; archived & committed` | 1; audit links optional |
 | 4 | `add-site-workspace-ux` | `[ ] proposed; design approval required` | 1 |
 | 5 | `complete-file-database-backup-workflows` | `[ ] proposed; design approval required` | 1 |
 | 6 | `add-terminal-and-host-fleet-ux` | `[ ] proposed; design approval required` | 1 |
@@ -37,6 +37,7 @@ Overall: `[█░░░░░░░░░] 2/7 implemented`
 - `CapabilitySet::shipped()` now includes the `audit` capability (`crates/openpanel-web/src/layout.rs`); nav item `Audit` under Operations (Owner role) in `crates/openpanel-web/src/nav_model.rs`.
 - Pre-existing gate blockers unrelated to this change (present on HEAD, not introduced here): `cargo clippy --workspace --all-targets` fails in `crates/openpanel-app/src/synthetic_monitoring/{service,status_page_repo,status_page_service}.rs` (3 `expect`/`unwrap` lints); `make docs` fails on missing docs for `UnpublishForm` in `crates/openpanel-web/src/status_page_admin.rs`. These should be fixed in a separate change; this commit leaves them untouched.
 - The worktree already contains unrelated staged/untracked changes. Preserve them; stage only the selected change and its implementation paths.
+- `redesign-operations-dashboard` is now implemented: `crates/openpanel-web/src/dashboard.rs` rebuilt into a role-aware `DashboardModel` with server-identity header + last-updated/stale flag, `#host-gauges` gauges carrying text status, per-mount disk-capacity and per-interface network widgets, an attention queue (security blocks / degraded services / failed backups, owner-scoped), role-scoped quick actions, and a CPU trend sparkline reusing `crate::monitoring::sparkline`. Failed monitoring collection now renders an `ErrorState` instead of the former silent-zero `fallback_snapshot`. 17 dashboard unit tests; 150 `openpanel-web` lib tests green. `openspec validate redesign-operations-dashboard --strict` passed; archived as `2026-08-29-redesign-operations-dashboard` with spec `openspec/specs/operations-dashboard/spec.md`.
 
 ## Competitor evidence to retain
 
