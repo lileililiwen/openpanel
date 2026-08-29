@@ -1,0 +1,48 @@
+# Agent context exclusions.
+# These paths are generated, machine-local, or too noisy for repository
+# reasoning. Source, tests, OpenSpec artifacts, and documentation remain
+# visible to agents.
+
+# Git/build metadata
+.git/
+.codegraph/
+target/
+**/target/
+release/
+
+# Dependency and frontend build output
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+.vite/
+**/.vite/
+
+# Local runtime and test data
+data/
+**/data/
+*.sqlite
+*.sqlite-journal
+*.db
+certs/
+**/certs/
+tmp/
+**/tmp/
+.tmp/
+**/.tmp/
+proptest-regressions/
+**/proptest-regressions/
+
+# Machine/editor noise
+.vscode/
+.idea/
+.qoder/sessions/
+*.swp
+*.swo
+.DS_Store
+*.log
+
+# Secrets and local configuration
+.env
+.env.*
+!.env.example
