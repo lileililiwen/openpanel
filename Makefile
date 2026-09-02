@@ -4,7 +4,7 @@
 # what order they run, but the actual work lives in one small script per
 # concern under `scripts/` (fmt, clippy, docs, audit, file-length, tests,
 # coverage, and the agent-quality gates: tasks-testing-first, reuse,
-# layering, spec-test-drift).
+# layering, spec-test-drift, spec-drift, and the gate self-test).
 #
 # Entry points:
 #   make check     — run every quality gate in order (CI entry point)
@@ -14,18 +14,27 @@
 #   make audit     — dependency audit gate only (skipped if tool absent)
 #   make file-length — per-file line-count gate only (skipped if tool absent)
 #   make test      — full test suite (delegates to scripts/check-tests.sh)
+#   make test-gates — run scripts/test-gates.sh (the governance self-test)
 #   make coverage  — informational coverage report
 #   make install-lint-tools — install the optional file-length tools
 #   make split FILE=<path>  — auto-refactor preview for one file
 #   make repo-map  — print a structural map of public APIs (agent aid)
-#   make reuse | layering | tasks-testing-first | spec-test-drift — gates only
+#   make reuse | layering | tasks-testing-first | spec-test-drift | spec-drift — gates only
+#
+# `make check` gate order (the canonical chain — keep in sync with
+# AGENTS.md "Quality gate" line):
+#   ensure-lint-tools
+#   → fmt → clippy → docs → audit → file-length → scan-literal
+#   → tasks-testing-first → reuse → layering
+#   → spec-test-drift → spec-drift → test-gates
+#   → test
 #
 # Every per-check script prints `step: <name> status: ok | failed` and
 # exits non-zero on failure; `make` short-circuits on the first one.
 
-.PHONY: check fmt clippy docs audit file-length test coverage install-lint-tools ensure-lint-tools split a11y scan-literal tasks-testing-first reuse layering spec-test-drift spec-drift repo-map
+.PHONY: check fmt clippy docs audit file-length test coverage install-lint-tools ensure-lint-tools split a11y scan-literal tasks-testing-first reuse layering spec-test-drift spec-drift repo-map test-gates
 
-check: ensure-lint-tools fmt clippy docs audit file-length scan-literal tasks-testing-first reuse layering spec-test-drift spec-drift test
+check: ensure-lint-tools fmt clippy docs audit file-length scan-literal tasks-testing-first reuse layering spec-test-drift spec-drift test-gates test
 	@echo ""
 	@echo "=== All quality checks passed ==="
 
@@ -74,6 +83,9 @@ a11y:
 
 test:
 	@scripts/check-tests.sh
+
+test-gates:
+	@scripts/test-gates.sh
 
 coverage:
 	@scripts/coverage.sh

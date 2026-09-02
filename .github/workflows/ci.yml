@@ -16,7 +16,8 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check --workspace --all-targets
+      - name: Required quality gate (make check)
+        run: make check
 
   fmt:
     name: Format
@@ -77,6 +78,7 @@ jobs:
         run: make tasks-testing-first
       - name: Spec-to-test drift gate
         run: make spec-test-drift
-      - name: OpenSpec validation
-        run: npx -y @fission-ai/openspec-cli@latest validate --all || openspec validate --all
-        continue-on-error: true
+      - name: Gate self-tests
+        run: make test-gates
+      - name: OpenSpec validation (strict)
+        run: openspec validate --all --strict --no-interactive

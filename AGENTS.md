@@ -35,8 +35,10 @@
 ## Quick reference
 
 - Workflow: `propose → validate → implement (apply) → archive`.
-- Quality gate: `make check` (fmt, clippy, docs, audit, reuse, layering,
-  spec-test-drift, literal-scan, tests).
+- Quality gate: `make check` (fmt, clippy, docs, audit, file-length,
+  scan-literal, tasks-testing-first, reuse, layering, spec-test-drift,
+  spec-drift, test-gates, tests). `make test-gates` runs the
+  governance self-test in isolation.
 - Architecture: strict DDD, four layers; domain is I/O-free; adding a
   bounded context is one `app.register(XModule)` call.
 - Repo map: `scripts/repo-map.sh`.
