@@ -14,7 +14,7 @@ use openpanel_app::synthetic_monitoring::{
 };
 use openpanel_core::AuditService;
 use openpanel_domain::{
-    CheckResult, CheckStatus, CheckType, Email, Password, Role, SyntheticCheck, SyntheticError,
+    CheckResult, CheckStatus, CheckType, Email, Password, Role, SyntheticCheck,
     SyntheticRepository, User, Username,
 };
 use openpanel_test_support::{MockAudit, TestDb};

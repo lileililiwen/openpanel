@@ -7,11 +7,7 @@
 //! as dead links.
 
 use maud::{Markup, html};
-use openpanel_domain::{
-    User,
-    identity::Role,
-    sites::site::Site,
-};
+use openpanel_domain::{User, identity::Role, sites::site::Site};
 use uuid::Uuid;
 
 use crate::layout::CapabilitySet;
@@ -201,15 +197,14 @@ pub struct SiteWorkspaceTab {
 pub fn workspace_tabs(site: &Site, caps: &CapabilitySet, role: Role) -> Vec<SiteWorkspaceTab> {
     TAB_DEFS
         .iter()
-        .filter(|d| {
-            d.href.is_some()
-                && d.capability.map_or(true, |c| caps.contains(c))
-                && role <= d.min_role
-        })
-        .map(|d| SiteWorkspaceTab {
-            id: d.id,
-            label: d.label,
-            href: d.href.unwrap()(site),
+        .filter(|d| d.capability.is_none_or(|c| caps.contains(c)) && role <= d.min_role)
+        // A tab without a backing route is omitted rather than unwrapped.
+        .filter_map(|d| {
+            d.href.map(|href| SiteWorkspaceTab {
+                id: d.id,
+                label: d.label,
+                href: href(site),
+            })
         })
         .collect()
 }
@@ -310,8 +305,8 @@ pub async fn site_bar(state: &WebState, user: &User, site_id: Uuid, active: TabI
 
 #[cfg(test)]
 mod tests {
-    use openpanel_domain::sites::site::Site;
     use openpanel_domain::identity::Role;
+    use openpanel_domain::sites::site::Site;
     use uuid::Uuid;
 
     use super::*;
@@ -372,10 +367,16 @@ mod tests {
     #[test]
     fn route_less_tabs_are_never_shown() {
         // Domains / Runtime / Logs / Backups have no site-scoped route.
-        let caps = CapabilitySet::shipped().with("ftp").with("logs").with("backups");
+        let caps = CapabilitySet::shipped()
+            .with("ftp")
+            .with("logs")
+            .with("backups");
         let ids = tab_ids(&workspace_tabs(&site(), &caps, Role::Owner));
         for absent in [TabId::Domains, TabId::Runtime, TabId::Logs, TabId::Backups] {
-            assert!(!ids.contains(&absent), "{absent:?} must be omitted (no route)");
+            assert!(
+                !ids.contains(&absent),
+                "{absent:?} must be omitted (no route)"
+            );
         }
     }
 
@@ -398,7 +399,10 @@ mod tests {
     fn tab_nav_marks_active_with_aria_current() {
         let tabs = workspace_tabs(&site(), &CapabilitySet::shipped(), Role::Owner);
         let out = tab_nav(TabId::Files, &tabs).into_string();
-        assert!(out.contains("aria-current=\"page\""), "active aria-current: {out}");
+        assert!(
+            out.contains("aria-current=\"page\""),
+            "active aria-current: {out}"
+        );
         assert!(out.contains("site-tab--active"), "active class: {out}");
         assert!(out.contains("role=\"tablist\""), "tablist role: {out}");
         // The active tab's label is still present exactly once as a link.
@@ -408,8 +412,8 @@ mod tests {
     #[test]
     fn header_renders_site_identity_and_meta() {
         let s = site();
-        let out = workspace_header(&s, "admin", Some("2099-01-01"), Some("2099-01-02"))
-            .into_string();
+        let out =
+            workspace_header(&s, "admin", Some("2099-01-01"), Some("2099-01-02")).into_string();
         assert!(out.contains("example.com"), "domain: {out}");
         assert!(out.contains("8.3"), "php version: {out}");
         assert!(out.contains("admin"), "owner: {out}");

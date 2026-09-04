@@ -192,7 +192,11 @@ pub fn capacity_banner(verdict: &CapacityVerdict) -> Markup {
             free_bytes,
         } => ErrorState::new(
             "Not enough space",
-            &format!("{reason}: need {}, have {}", format_bytes(*estimated_bytes), format_bytes(*free_bytes)),
+            &format!(
+                "{reason}: need {}, have {}",
+                format_bytes(*estimated_bytes),
+                format_bytes(*free_bytes)
+            ),
             "",
         )
         .render(),
@@ -362,15 +366,28 @@ mod tests {
         assert!(out.contains("appdb"), "name present");
         assert!(out.contains("/databases/"), "detail link");
         // A password must never be rendered in the list row.
-        assert!(!out.contains("secret-password-xyz"), "no secret leaked: {out}");
+        assert!(
+            !out.contains("secret-password-xyz"),
+            "no secret leaked: {out}"
+        );
     }
 
     #[test]
     fn task_state_banners_render() {
         assert!(TaskState::Queued.banner().into_string().contains("Queued"));
-        assert!(TaskState::Running(42).banner().into_string().contains("42%"));
+        assert!(
+            TaskState::Running(42)
+                .banner()
+                .into_string()
+                .contains("42%")
+        );
         assert!(TaskState::Success.banner().into_string().contains("Done"));
-        assert!(TaskState::Failed("boom").banner().into_string().contains("boom"));
+        assert!(
+            TaskState::Failed("boom")
+                .banner()
+                .into_string()
+                .contains("boom")
+        );
     }
 
     #[test]

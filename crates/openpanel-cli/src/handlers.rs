@@ -655,7 +655,6 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     ))
     .merge(openpanel_web::public_router(status_page_svc.clone()));
 
-
     let addr = format!("{}:{}", config.server().bind, config.server().port);
     let listener = TcpListener::bind(&addr)
         .await
@@ -4455,7 +4454,9 @@ pub async fn monitoring_history(
 
 // ---- Status page handlers ----
 
-async fn build_status_page(config: Arc<Config>) -> anyhow::Result<Arc<openpanel_app::StatusPageService>> {
+async fn build_status_page(
+    config: Arc<Config>,
+) -> anyhow::Result<Arc<openpanel_app::StatusPageService>> {
     use openpanel_app::synthetic_monitoring::{
         SqliteStatusPageRepository, SqliteSyntheticRepository, StatusPageService,
     };
@@ -4463,8 +4464,13 @@ async fn build_status_page(config: Arc<Config>) -> anyhow::Result<Arc<openpanel_
     use openpanel_domain::SyntheticRepository;
 
     let (pool, _audit_sink, db) = bootstrap_persistence(&config).await?;
-    let ctx = AppContext::new(config.clone(), db, Arc::new(SqliteAuditService::new(pool.clone())));
-    let sql_repo: Arc<dyn SyntheticRepository> = Arc::new(SqliteSyntheticRepository::new(pool.clone()));
+    let ctx = AppContext::new(
+        config.clone(),
+        db,
+        Arc::new(SqliteAuditService::new(pool.clone())),
+    );
+    let sql_repo: Arc<dyn SyntheticRepository> =
+        Arc::new(SqliteSyntheticRepository::new(pool.clone()));
     let status_repo = Arc::new(SqliteStatusPageRepository::new(pool.clone()));
     Ok(Arc::new(StatusPageService::new(
         status_repo,
@@ -4526,8 +4532,8 @@ pub async fn status_page_publish(
     label: String,
 ) -> anyhow::Result<()> {
     let svc = build_status_page(config).await?;
-    let check_id = uuid::Uuid::parse_str(&check)
-        .map_err(|e| anyhow::anyhow!("invalid check id: {e}"))?;
+    let check_id =
+        uuid::Uuid::parse_str(&check).map_err(|e| anyhow::anyhow!("invalid check id: {e}"))?;
     let page = publish_as_owner(svc.clone(), check_id, label).await?;
     println!(
         "published {} entries; slug={}",
@@ -4540,8 +4546,8 @@ pub async fn status_page_publish(
 /// `openpanel status-page unpublish --check <id>`.
 pub async fn status_page_unpublish(config: Arc<Config>, check: String) -> anyhow::Result<()> {
     let svc = build_status_page(config).await?;
-    let check_id = uuid::Uuid::parse_str(&check)
-        .map_err(|e| anyhow::anyhow!("invalid check id: {e}"))?;
+    let check_id =
+        uuid::Uuid::parse_str(&check).map_err(|e| anyhow::anyhow!("invalid check id: {e}"))?;
     let page = unpublish_as_owner(svc.clone(), check_id).await?;
     println!(
         "{} entries remain; slug={}",
@@ -4554,7 +4560,7 @@ pub async fn status_page_unpublish(config: Arc<Config>, check: String) -> anyhow
 async fn enable_as_owner(
     svc: Arc<openpanel_app::StatusPageService>,
 ) -> anyhow::Result<openpanel_domain::synthetic_monitoring::StatusPage> {
-    svc.enable(&owner_user())
+    svc.enable(&owner_user()?)
         .await
         .map_err(|e| anyhow::anyhow!(e.to_string()))
 }
@@ -4562,7 +4568,7 @@ async fn enable_as_owner(
 async fn disable_as_owner(
     svc: Arc<openpanel_app::StatusPageService>,
 ) -> anyhow::Result<openpanel_domain::synthetic_monitoring::StatusPage> {
-    svc.disable(&owner_user())
+    svc.disable(&owner_user()?)
         .await
         .map_err(|e| anyhow::anyhow!(e.to_string()))
 }
@@ -4570,7 +4576,7 @@ async fn disable_as_owner(
 async fn regenerate_slug_as_owner(
     svc: Arc<openpanel_app::StatusPageService>,
 ) -> anyhow::Result<openpanel_domain::synthetic_monitoring::StatusPage> {
-    svc.regenerate_slug(&owner_user())
+    svc.regenerate_slug(&owner_user()?)
         .await
         .map_err(|e| anyhow::anyhow!(e.to_string()))
 }
@@ -4580,7 +4586,7 @@ async fn publish_as_owner(
     check_id: uuid::Uuid,
     label: String,
 ) -> anyhow::Result<openpanel_domain::synthetic_monitoring::StatusPage> {
-    svc.publish(&owner_user(), check_id, label)
+    svc.publish(&owner_user()?, check_id, label)
         .await
         .map_err(|e| anyhow::anyhow!(e.to_string()))
 }
@@ -4589,24 +4595,30 @@ async fn unpublish_as_owner(
     svc: Arc<openpanel_app::StatusPageService>,
     check_id: uuid::Uuid,
 ) -> anyhow::Result<openpanel_domain::synthetic_monitoring::StatusPage> {
-    svc.unpublish(&owner_user(), check_id)
+    svc.unpublish(&owner_user()?, check_id)
         .await
         .map_err(|e| anyhow::anyhow!(e.to_string()))
 }
 
-fn owner_user() -> openpanel_domain::User {
+/// Identity the CLI acts as: the local on-host operator.
+///
+/// The CLI runs on the managed host and carries no panel session, so it
+/// authorises as the owner. Construction is fallible because the domain
+/// types validate their inputs — callers propagate instead of panicking.
+fn owner_user() -> anyhow::Result<openpanel_domain::User> {
     use openpanel_domain::{Email, Password, Role, Username};
-    openpanel_domain::User::new(
+    let username = Username::new("owner").map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let email = Email::new(format!("owner-{}@example.test", uuid::Uuid::new_v4()))
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    let password =
+        Password::hash("system-credential-for-cli").map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    Ok(openpanel_domain::User::new(
         uuid::Uuid::nil(),
-        Username::new("owner").expect("username"),
-        Email::new(format!(
-            "owner-{}@example.test",
-            uuid::Uuid::new_v4()
-        ))
-        .expect("email"),
-        Password::hash("system-credential-for-cli").expect("hash"),
+        username,
+        email,
+        password,
         Role::Owner,
-    )
+    ))
 }
 
 // ---- Plugin marketplace handlers ----

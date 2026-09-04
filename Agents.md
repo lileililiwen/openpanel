@@ -221,14 +221,64 @@ calls `.unwrap()` on input it never received will still panic in
 production. Static analysis catches what tests don't.
 
 **Workflow gate:** every PR must exit 0 from `make check`.
-Local invocation runs the same gates as CI:
+Local invocation runs the same gates as CI, in this order:
+
 1. `make fmt` — `cargo fmt --all -- --check`
 2. `make clippy` — `cargo clippy --workspace --all-targets -- -D warnings`
 3. `make docs` — `cargo doc --workspace --no-deps`
 4. `make audit` — `cargo audit` (optional, skipped if tool absent)
-5. `make test` — full test suite
+5. `make file-length` — per-file line-count lint (optional)
+6. `make scan-literal` — literal colour / string scan
+7. `make tasks-testing-first` — `## 1. Testing` comes first in `tasks.md`
+8. `make reuse` — no duplicated public item across crates
+9. `make layering` — domain MUST NOT import app/api
+10. `make spec-test-drift` — every spec has a covering test
+11. `make spec-drift` — every archived delta exists in the live spec
+12. `make agent-governance` — OpenSpec context + runtime contract integrity
+13. `make governance-contract` — archived governance content ratchet
+14. `make test-gates` — the governance gates' own positive/negative fixtures
+15. `make test` — full test suite
 
 `add-quality-engineering-infrastructure` defines the full policy.
+
+### 5.1 Archived governance ratchet
+
+`make spec-drift` only proves that an archived delta's requirement
+*heading* still exists in the live spec. It does not prove the text, the
+scenarios, or the executable protection survived — and governance is
+exactly what gets weakened while ordinary product tests stay green.
+
+`make governance-contract` (`scripts/check-governance-contract.sh`) is
+the focused ratchet for the four governance capabilities
+(`agent-quality`, `quality`, `testing`, `architecture`):
+
+- **Manifest** — `openspec/governance/manifest.yaml` pins each protected
+  requirement by archive path, capability, requirement name, content
+  digest (normalized) and scenario count.
+- **Executable protection** — every entry names at least one checker ID,
+  and that ID MUST be registered in `scripts/test-gates.sh` with BOTH a
+  positive and a negative fixture (`# checker: <id> positive` /
+  `# checker: <id> negative`). A checker with only a happy-path fixture
+  is treated as orphaned, i.e. unprotected.
+- **Disposition** — every archived governance requirement is either
+  protected (manifest entry) or recorded as tracked debt in
+  `openspec/governance/unprotected-baseline.txt`. A newly archived
+  governance requirement with neither fails the build until a human
+  reviews it. The baseline is debt, not a waiver: it only shrinks.
+- **Read-only** — the gate never rewrites the manifest, the baseline or
+  any spec, and its diagnostics name the archive/capability/requirement
+  without printing requirement contents.
+
+**How to update a protected requirement (reviewed procedure):**
+
+1. Propose an OpenSpec change whose delta edits the live requirement.
+2. Run `scripts/check-governance-contract.sh --report`.
+3. In the same reviewed change, update that entry's `digest` and
+   `scenarios` from the report. `make check` is red until you do.
+4. To give an unprotected requirement real protection, add positive +
+   negative fixtures for it in `scripts/test-gates.sh`, add the manifest
+   entry, then regenerate the baseline with
+   `scripts/check-governance-contract.sh --write-baseline`.
 
 ---
 
@@ -315,7 +365,12 @@ When asked to implement a feature or spec:
     principal. Reviewing the research and plan catches architectural
     drift and hallucinated assumptions *before* they reach the tree.
 11. **Archive** via `openspec archive <name>`. The delta is folded
-    into `openspec/specs/<cap>/spec.md`.
+    into `openspec/specs/<cap>/spec.md`. If the change touches one of
+    the four governance capabilities (`agent-quality`, `quality`,
+    `testing`, `architecture`), the archive step makes
+    `make governance-contract` red until you give the new requirement a
+    reviewed disposition — a manifest entry with a checker, or a
+    baseline entry (see §5.1).
 12. **Commit** with a message that follows the existing convention
     (short title on the first line, blank line, detailed body
     explaining *why* and *what*, not just *what*).

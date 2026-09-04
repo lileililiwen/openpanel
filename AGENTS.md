@@ -27,6 +27,10 @@
   `design.md`. Duplicating existing logic fails `make check` (reuse gate).
 - **Specs are the source of truth.** Code that drifts from a spec is a
   bug. Every `tasks.md` starts with `## 1. Testing` (enforced).
+- **Governance cannot be softened silently.** Archived requirements in
+  `agent-quality` / `quality` / `testing` / `architecture` are pinned by
+  `openspec/governance/manifest.yaml`; changing one requires updating
+  its digest in the same reviewed change (see `Agents.md` §5.1).
 - **Compaction.** Distill progress to a short status after each phase so
   the context window stays focused.
 - **Human review gate.** No change is implemented until its `design.md`
@@ -37,8 +41,12 @@
 - Workflow: `propose → validate → implement (apply) → archive`.
 - Quality gate: `make check` (fmt, clippy, docs, audit, file-length,
   scan-literal, tasks-testing-first, reuse, layering, spec-test-drift,
-  spec-drift, test-gates, tests). `make test-gates` runs the
-  governance self-test in isolation.
+  spec-drift, agent-governance, governance-contract, test-gates, tests).
+  `make test-gates` runs the governance self-test in isolation.
+  `make agent-governance` re-verifies the OpenSpec context and every
+  runtime contract link. `make governance-contract` re-verifies the
+  archived-governance manifest (content digest, scenario count, checker
+  mapping); see `Agents.md` §5.1 for the reviewed update procedure.
 - Architecture: strict DDD, four layers; domain is I/O-free; adding a
   bounded context is one `app.register(XModule)` call.
 - Repo map: `scripts/repo-map.sh`.

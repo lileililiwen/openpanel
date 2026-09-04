@@ -18,10 +18,7 @@ use axum::{
     routing::{delete, get, post, put},
 };
 use openpanel_app::StatusPageService;
-use openpanel_domain::{
-    Email, Password, Role, User, Username,
-    synthetic_monitoring::{Slug, StatusPage, StatusPageError},
-};
+use openpanel_domain::synthetic_monitoring::{Slug, StatusPage, StatusPageError};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -32,15 +29,9 @@ pub fn router(service: Arc<StatusPageService>) -> Router {
     Router::new()
         .route("/status-page", get(get_policy))
         .route("/status-page", put(set_enabled))
-        .route(
-            "/status-page/regenerate-slug",
-            post(regenerate_slug),
-        )
+        .route("/status-page/regenerate-slug", post(regenerate_slug))
         .route("/status-page/entries/{check_id}", put(publish_entry))
-        .route(
-            "/status-page/entries/{check_id}",
-            delete(unpublish_entry),
-        )
+        .route("/status-page/entries/{check_id}", delete(unpublish_entry))
         .route("/status-page/incidents", get(list_incidents))
         .with_state(service)
 }
@@ -109,9 +100,9 @@ async fn set_enabled(
     Json(body): Json<SetEnabledBody>,
 ) -> ApiResult<Json<StatusPageView>> {
     let page = if body.enabled {
-        svc.enable(&owner_user(&user)).await.map_err(map)?
+        svc.enable(&user).await.map_err(map)?
     } else {
-        svc.disable(&owner_user(&user)).await.map_err(map)?
+        svc.disable(&user).await.map_err(map)?
     };
     Ok(Json(StatusPageView::from(&page)))
 }
@@ -120,7 +111,7 @@ async fn regenerate_slug(
     State(svc): State<Arc<StatusPageService>>,
     AuthUser(user, _): AuthUser,
 ) -> ApiResult<Json<StatusPageView>> {
-    let page = svc.regenerate_slug(&owner_user(&user)).await.map_err(map)?;
+    let page = svc.regenerate_slug(&user).await.map_err(map)?;
     Ok(Json(StatusPageView::from(&page)))
 }
 
@@ -131,7 +122,7 @@ async fn publish_entry(
     Json(body): Json<PublishBody>,
 ) -> ApiResult<Json<StatusPageView>> {
     let page = svc
-        .publish(&owner_user(&user), check_id, body.label)
+        .publish(&user, check_id, body.label)
         .await
         .map_err(map)?;
     Ok(Json(StatusPageView::from(&page)))
@@ -142,9 +133,7 @@ async fn unpublish_entry(
     AuthUser(user, _): AuthUser,
     Path(check_id): Path<Uuid>,
 ) -> ApiResult<StatusCode> {
-    svc.unpublish(&owner_user(&user), check_id)
-        .await
-        .map_err(map)?;
+    svc.unpublish(&user, check_id).await.map_err(map)?;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -174,9 +163,7 @@ async fn list_incidents(
 fn map(error: StatusPageError) -> ApiError {
     match error {
         StatusPageError::InvalidSlug => ApiError::Unprocessable("invalid slug".into()),
-        StatusPageError::CheckNotFound(id) => {
-            ApiError::NotFound(format!("check not found: {id}"))
-        }
+        StatusPageError::CheckNotFound(id) => ApiError::NotFound(format!("check not found: {id}")),
         StatusPageError::Disabled => ApiError::NotFound("status page disabled".into()),
         StatusPageError::Persistence(message) => {
             if message == "forbidden" {
@@ -188,16 +175,6 @@ fn map(error: StatusPageError) -> ApiError {
             }
         }
     }
-}
-
-fn owner_user(caller: &User) -> User {
-    User::new(
-        caller.id(),
-        Username::new("admin").expect("username"),
-        Email::new(format!("admin-{}@example.test", uuid::Uuid::new_v4())).expect("email"),
-        Password::hash("admin-credential-for-api").expect("hash"),
-        Role::Admin,
-    )
 }
 
 #[allow(dead_code)]

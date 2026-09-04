@@ -1,0 +1,38 @@
+openspec/changes/archive/2026-08-06-bootstrap-ddd-architecture/specs/architecture/spec.md	architecture	Audit Trail of Cross-Cutting Events
+openspec/changes/archive/2026-08-06-bootstrap-ddd-architecture/specs/architecture/spec.md	architecture	Config Layering
+openspec/changes/archive/2026-08-06-bootstrap-ddd-architecture/specs/architecture/spec.md	architecture	Database Per-Module Migrations
+openspec/changes/archive/2026-08-06-bootstrap-ddd-architecture/specs/architecture/spec.md	architecture	Error Handling Conventions
+openspec/changes/archive/2026-08-06-bootstrap-ddd-architecture/specs/architecture/spec.md	architecture	Extension Points for Future Domains
+openspec/changes/archive/2026-08-06-bootstrap-ddd-architecture/specs/architecture/spec.md	architecture	Module Registry via Trait
+openspec/changes/archive/2026-08-08-add-quality-engineering-infrastructure/specs/quality/spec.md	quality	CI Workflow
+openspec/changes/archive/2026-08-08-add-quality-engineering-infrastructure/specs/quality/spec.md	quality	Coverage Baseline (Informational)
+openspec/changes/archive/2026-08-08-add-quality-engineering-infrastructure/specs/quality/spec.md	quality	Dependency Audit
+openspec/changes/archive/2026-08-08-add-quality-engineering-infrastructure/specs/quality/spec.md	quality	Documentation Link Check
+openspec/changes/archive/2026-08-08-add-quality-engineering-infrastructure/specs/quality/spec.md	quality	Format Policy
+openspec/changes/archive/2026-08-08-add-quality-engineering-infrastructure/specs/quality/spec.md	quality	Lint Policy — No `unwrap` / `expect` / `panic` in Production Code
+openspec/changes/archive/2026-08-08-add-quality-engineering-infrastructure/specs/quality/spec.md	quality	Quality Script
+openspec/changes/archive/2026-08-08-add-quality-engineering-infrastructure/specs/quality/spec.md	quality	Unsafe Code is Forbidden in Production
+openspec/changes/archive/2026-08-08-add-tdd-infrastructure/specs/testing/spec.md	testing	E2E CLI Tests
+openspec/changes/archive/2026-08-08-add-tdd-infrastructure/specs/testing/spec.md	testing	Fixture Library (`openpanel-test-support`)
+openspec/changes/archive/2026-08-08-add-tdd-infrastructure/specs/testing/spec.md	testing	Integration Test Harness
+openspec/changes/archive/2026-08-08-add-tdd-infrastructure/specs/testing/spec.md	testing	Mocks at Port Boundaries
+openspec/changes/archive/2026-08-08-add-tdd-infrastructure/specs/testing/spec.md	testing	No `unwrap` / `expect` / `panic` in Production Code
+openspec/changes/archive/2026-08-08-add-tdd-infrastructure/specs/testing/spec.md	testing	Property-Based Tests for Domain Invariants
+openspec/changes/archive/2026-08-08-add-tdd-infrastructure/specs/testing/spec.md	testing	Repeatability Across Environments
+openspec/changes/archive/2026-08-08-add-tdd-infrastructure/specs/testing/spec.md	testing	Repeatability and DB Isolation
+openspec/changes/archive/2026-08-08-add-tdd-infrastructure/specs/testing/spec.md	testing	Test Categories and File Locations
+openspec/changes/archive/2026-08-14-2026-08-13-add-file-length-pipeline/specs/quality/spec.md	quality	Configurable File-Length Thresholds
+openspec/changes/archive/2026-08-14-2026-08-13-add-file-length-pipeline/specs/quality/spec.md	quality	Exclude Glob Configuration
+openspec/changes/archive/2026-08-14-2026-08-13-add-file-length-pipeline/specs/quality/spec.md	quality	File-Length CI Workflow
+openspec/changes/archive/2026-08-14-2026-08-13-add-file-length-pipeline/specs/quality/spec.md	quality	File-Length Check Shell Gate
+openspec/changes/archive/2026-08-14-2026-08-13-add-file-length-pipeline/specs/quality/spec.md	quality	Goal — Maintainability and Readability
+openspec/changes/archive/2026-08-14-2026-08-13-add-file-length-pipeline/specs/quality/spec.md	quality	Tiered Lint and Refactor Toolchain
+openspec/changes/archive/2026-08-14-2026-08-13-add-file-length-pipeline/specs/quality/spec.md	quality	make check Integration
+openspec/changes/archive/2026-08-14-2026-08-13-add-file-length-pipeline/specs/quality/spec.md	quality	splitrs Configuration and Dry-Run Default
+openspec/changes/archive/2026-08-14-2026-08-13-refine-quality-with-i18n-and-theme-policy/specs/quality/spec.md	quality	Accessibility Gate
+openspec/changes/archive/2026-08-14-2026-08-13-refine-quality-with-i18n-and-theme-policy/specs/quality/spec.md	quality	i18n Disallowed Formatters
+openspec/changes/archive/2026-08-15-refine-agent-context-engineering/specs/agent-quality/spec.md	agent-quality	Context Compaction Discipline
+openspec/changes/archive/2026-08-15-refine-agent-context-engineering/specs/agent-quality/spec.md	agent-quality	Explore And Reuse Before Implement
+openspec/changes/archive/2026-08-15-refine-agent-context-engineering/specs/agent-quality/spec.md	agent-quality	Human Review Of Design Before Apply
+openspec/changes/archive/2026-08-15-refine-agent-context-engineering/specs/agent-quality/spec.md	agent-quality	Repo-Map Tooling Available
+openspec/changes/archive/2026-09-02-enforce-governance-gate-ci/specs/quality/spec.md	quality	CI Enforces The Single Quality Entry Point

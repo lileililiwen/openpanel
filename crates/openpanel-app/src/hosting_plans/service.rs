@@ -536,6 +536,10 @@ mod test_mocks {
         impl openpanel_core::AuditService for AuditLike {
             async fn record(&self, _event: openpanel_core::AuditEvent) -> openpanel_core::CoreResult<()>;
             async fn recent(&self, _limit: i64) -> openpanel_core::CoreResult<Vec<openpanel_core::AuditEvent>>;
+            async fn query(
+                &self,
+                _query: openpanel_core::audit::AuditQuery,
+            ) -> openpanel_core::CoreResult<openpanel_core::audit::AuditPage>;
         }
     }
 
@@ -544,6 +548,12 @@ mod test_mocks {
             let mut mock = Self::new();
             mock.expect_record().returning(|_| Ok(()));
             mock.expect_recent().returning(|_| Ok(vec![]));
+            mock.expect_query().returning(|_| {
+                Ok(openpanel_core::audit::AuditPage {
+                    events: Vec::new(),
+                    next_cursor: None,
+                })
+            });
             mock
         }
     }

@@ -10,9 +10,7 @@
 //! consistent so the UI and the fail-closed gate cannot drift.
 
 use maud::{Markup, html};
-use openpanel_app::software_center::{
-    CompatibilityReport, PLACEHOLDER_SHA256, StorefrontEntry,
-};
+use openpanel_app::software_center::{CompatibilityReport, PLACEHOLDER_SHA256, StorefrontEntry};
 use openpanel_domain::software_center::EntryKind;
 
 /// Fail-closed classification of an entry's artifact digest.
@@ -332,8 +330,7 @@ mod tests {
         }
     }
 
-    const REAL_SHA: &str =
-        "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+    const REAL_SHA: &str = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
 
     #[test]
     fn verified_web_digest_is_not_blocking() {
@@ -350,8 +347,13 @@ mod tests {
         let view = TrustView::from_entry(&e);
         assert_eq!(view.digest_state, DigestState::Placeholder);
         assert!(view.is_blocked(true));
-        let copy = view.recovery_copy(true).expect("blocked must carry recovery");
-        assert!(copy.contains("software refresh"), "recovery must name the action");
+        let copy = view
+            .recovery_copy(true)
+            .expect("blocked must carry recovery");
+        assert!(
+            copy.contains("software refresh"),
+            "recovery must name the action"
+        );
         // Lenient mode (gate off) does not block.
         assert!(!view.is_blocked(false));
         assert!(view.recovery_copy(false).is_none());

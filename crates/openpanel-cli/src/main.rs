@@ -389,7 +389,9 @@ async fn main() -> anyhow::Result<()> {
             StatusPageCommand::Show => handlers::status_page_show(config).await,
             StatusPageCommand::Enable => handlers::status_page_enable(config).await,
             StatusPageCommand::Disable => handlers::status_page_disable(config).await,
-            StatusPageCommand::RegenerateSlug => handlers::status_page_regenerate_slug(config).await,
+            StatusPageCommand::RegenerateSlug => {
+                handlers::status_page_regenerate_slug(config).await
+            }
             StatusPageCommand::Publish { check, label } => {
                 handlers::status_page_publish(config, check, label).await
             }

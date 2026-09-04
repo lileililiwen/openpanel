@@ -46,10 +46,10 @@ pub mod mail;
 pub mod monitoring;
 /// Navigation model and icon set for the shell sidebar.
 pub mod nav_model;
+pub mod notifications;
 /// Shared operational-workflow building blocks (file-action validation,
 /// capacity-aware backup decisions, secret-safe rows, task-state banners).
 pub mod ops_workflows;
-pub mod notifications;
 /// Plugin extension framework web page.
 pub mod plugin_extension;
 /// Plugin marketplace web page.
@@ -68,16 +68,16 @@ pub mod site_staging;
 /// Site workspace: capability-filtered tabbed navigation shared by site pages.
 pub mod site_workspace;
 pub mod sites;
-/// Public, unauthenticated status page (`/status/{slug}`).
-pub mod status_page;
-/// Admin settings page for the status page (`/status-page`).
-pub mod status_page_admin;
+pub mod software_center;
 /// Software Center trust + provenance building blocks (fail-closed digest
 /// classification, aggregated trust view, compatibility + permission
 /// summaries, secret-safe recovery copy).
 pub mod software_center_trust;
-pub mod software_center;
 pub mod ssl;
+/// Public, unauthenticated status page (`/status/{slug}`).
+pub mod status_page;
+/// Admin settings page for the status page (`/status-page`).
+pub mod status_page_admin;
 pub mod system_services;
 /// String-table stub used by every template.
 pub mod t;

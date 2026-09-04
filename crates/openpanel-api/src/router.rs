@@ -12,9 +12,9 @@ use openpanel_app::{
     PluginService, SecurityService, ServerSnapshotService, SiteCacheService, SiteCloneService,
     SiteHttpService, SitesService, SoftwareCenterService, SslService, SsoService, StagingService,
     StatusPageService, ThemeableUiService, WafService, WebApplicationInstallerService,
-    WebTerminalService,
-    backups::DrillService, identity::TwoFactorService, security::LoginThrottleService,
-    site_clone_template::SqliteSiteCloneTemplateRepository, system_services::ServiceManager,
+    WebTerminalService, backups::DrillService, identity::TwoFactorService,
+    security::LoginThrottleService, site_clone_template::SqliteSiteCloneTemplateRepository,
+    system_services::ServiceManager,
 };
 
 use crate::{

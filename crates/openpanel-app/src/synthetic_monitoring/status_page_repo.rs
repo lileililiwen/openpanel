@@ -3,9 +3,7 @@ use uuid::Uuid;
 
 use openpanel_domain::{
     RepoError,
-    synthetic_monitoring::{
-        Slug, StatusEntry, StatusPage, StatusPageError, StatusPageRepository,
-    },
+    synthetic_monitoring::{Slug, StatusEntry, StatusPage, StatusPageError, StatusPageRepository},
 };
 
 /// SQLite-backed single-row status page repository.
@@ -49,14 +47,12 @@ impl StatusPageRepository for SqliteStatusPageRepository {
             .await
             .map_err(|e| StatusPageError::Persistence(e.to_string()))?;
         for entry in &page.entries {
-            sqlx::query(
-                "INSERT INTO status_page_entries (check_id, label) VALUES (?, ?)",
-            )
-            .bind(entry.check_id.to_string())
-            .bind(&entry.label)
-            .execute(&mut *tx)
-            .await
-            .map_err(|e| StatusPageError::Persistence(e.to_string()))?;
+            sqlx::query("INSERT INTO status_page_entries (check_id, label) VALUES (?, ?)")
+                .bind(entry.check_id.to_string())
+                .bind(&entry.label)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| StatusPageError::Persistence(e.to_string()))?;
         }
         tx.commit()
             .await
@@ -70,7 +66,7 @@ impl StatusPageRepository for SqliteStatusPageRepository {
             .await
             .map_err(|e| StatusPageError::Persistence(e.to_string()))?;
         let Some(row) = row else {
-            return Ok(StatusPage::empty(Slug::new("default").unwrap()));
+            return Ok(StatusPage::empty(Slug::new("default")?));
         };
         let slug: String = row.try_get("slug").map_err(map_sqlx)?;
         let enabled: i64 = row.try_get("enabled").map_err(map_sqlx)?;
@@ -88,7 +84,8 @@ impl StatusPageRepository for SqliteStatusPageRepository {
             })
             .collect::<Result<Vec<_>, _>>()?;
         Ok(StatusPage {
-            slug: Slug::new(slug).map_err(|_| StatusPageError::Persistence("invalid slug".into()))?,
+            slug: Slug::new(slug)
+                .map_err(|_| StatusPageError::Persistence("invalid slug".into()))?,
             enabled: enabled != 0,
             entries,
         })

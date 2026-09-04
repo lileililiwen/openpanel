@@ -42,10 +42,18 @@ async fn owner_sees_audit_page_with_nav_and_summary() {
         .expect("get");
     assert_eq!(resp.status(), 200);
     let body = resp.text().await.expect("body");
-    assert!(body.contains("Audit &amp; activity") || body.contains("Audit & activity"), "heading: {body}");
+    assert!(
+        body.contains("Audit &amp; activity") || body.contains("Audit & activity"),
+        "heading: {body}"
+    );
     // Navigation exposes the owner-only Audit link.
     assert!(body.contains("href=\"/audit\""), "nav link missing: {body}");
-    assert!(body.contains("op-empty-state") || body.contains("op-no-results") || body.contains("audit-table"), "a UI state must render: {body}");
+    assert!(
+        body.contains("op-empty-state")
+            || body.contains("op-no-results")
+            || body.contains("audit-table"),
+        "a UI state must render: {body}"
+    );
 }
 
 #[tokio::test]
@@ -174,7 +182,10 @@ async fn no_results_state_when_filter_matches_nothing() {
         .await;
     let resp = server
         .client()
-        .get(format!("{}/audit?target=zzzzz-no-such-target", server.base_url()))
+        .get(format!(
+            "{}/audit?target=zzzzz-no-such-target",
+            server.base_url()
+        ))
         .header("authorization", bearer(&token))
         .send()
         .await
@@ -209,5 +220,8 @@ async fn reading_audit_does_not_create_audit_events() {
         .expect("get");
 
     let after = server.audit_events().await.len();
-    assert_eq!(before, after, "reading the audit log must not append events");
+    assert_eq!(
+        before, after,
+        "reading the audit log must not append events"
+    );
 }

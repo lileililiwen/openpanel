@@ -671,6 +671,16 @@ impl openpanel_core::AuditService for CountingAudit {
     ) -> openpanel_core::CoreResult<Vec<openpanel_core::AuditEvent>> {
         Ok(Vec::new())
     }
+
+    async fn query(
+        &self,
+        _query: openpanel_core::audit::AuditQuery,
+    ) -> openpanel_core::CoreResult<openpanel_core::audit::AuditPage> {
+        Ok(openpanel_core::audit::AuditPage {
+            events: Vec::new(),
+            next_cursor: None,
+        })
+    }
 }
 
 #[tokio::test]
@@ -1574,6 +1584,16 @@ impl openpanel_core::AuditService for CapturingAudit {
         _limit: i64,
     ) -> Result<Vec<openpanel_core::AuditEvent>, openpanel_core::CoreError> {
         Ok(self.events.lock().expect("events").clone())
+    }
+
+    async fn query(
+        &self,
+        _query: openpanel_core::audit::AuditQuery,
+    ) -> Result<openpanel_core::audit::AuditPage, openpanel_core::CoreError> {
+        Ok(openpanel_core::audit::AuditPage {
+            events: Vec::new(),
+            next_cursor: None,
+        })
     }
 }
 

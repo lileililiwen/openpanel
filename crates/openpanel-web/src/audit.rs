@@ -62,7 +62,7 @@ pub struct AuditQueryParams {
 
 impl AuditQueryParams {
     /// Build a typed [`AuditQuery`], dropping unparseable time bounds.
-    fn into_query(&self) -> AuditQuery {
+    fn to_query(&self) -> AuditQuery {
         let from = self.from.as_deref().and_then(|s| {
             DateTime::parse_from_rfc3339(s)
                 .ok()
@@ -134,7 +134,7 @@ pub async fn audit_index(
     Query(params): Query<AuditQueryParams>,
 ) -> Response {
     let csrf = state.csrf.token_for(session.id());
-    let page = match state.audit.query(params.into_query()).await {
+    let page = match state.audit.query(params.to_query()).await {
         Ok(page) => page,
         Err(_) => {
             let content = html! {
@@ -169,7 +169,7 @@ pub async fn audit_list(
     headers: HeaderMap,
     Query(params): Query<AuditQueryParams>,
 ) -> Response {
-    let page = match state.audit.query(params.into_query()).await {
+    let page = match state.audit.query(params.to_query()).await {
         Ok(page) => page,
         Err(_) => {
             return (
@@ -232,18 +232,24 @@ fn render_summary(page: &AuditPage) -> Markup {
 /// The filter bar (GET form) plus the swap target for the event table.
 fn render_filters() -> Markup {
     html! {
-        form class="audit-filters form form-inline" method="get" action="/audit" {
-            input type="text" name="actor" placeholder="Actor" autocomplete="off";
-            input type="text" name="action" placeholder="Action (e.g. site_created)" autocomplete="off";
-            input type="text" name="target" placeholder="Target contains" autocomplete="off";
-            select name="outcome" {
-                option value="" { "Any outcome" }
-                option value="success" { "Success" }
-                option value="failure" { "Failure" }
-                option value="denied" { "Denied" }
+        form class="form form-inline" method="get" action="/audit" {
+            label { "Actor" input type="text" name="actor" autocomplete="off"; }
+            label { "Action"
+                input type="text" name="action" placeholder="e.g. site_created" autocomplete="off";
             }
-            input type="datetime-local" name="from";
-            input type="datetime-local" name="to";
+            label { "Target"
+                input type="text" name="target" placeholder="substring" autocomplete="off";
+            }
+            label { "Outcome"
+                select name="outcome" {
+                    option value="" { "Any outcome" }
+                    option value="success" { "Success" }
+                    option value="failure" { "Failure" }
+                    option value="denied" { "Denied" }
+                }
+            }
+            label { "From" input type="datetime-local" name="from"; }
+            label { "To" input type="datetime-local" name="to"; }
             button type="submit" { "Filter" }
             a class="btn btn-ghost" href="/audit" { "Clear" }
         }
@@ -306,7 +312,10 @@ fn render_events_fragment(page: &AuditPage) -> Markup {
 
 /// One audit event row with a `<details>` disclosure of safe metadata.
 fn render_event_row(view: &AuditView) -> Markup {
-    let has_meta = view.metadata.as_object().map_or(false, |m| !m.is_empty());
+    // Bound once so the template below can match on it instead of
+    // re-opening the object and unwrapping a value that only the
+    // surrounding `@if` guarantees.
+    let meta = view.metadata.as_object().filter(|m| !m.is_empty());
     html! {
         tr class=(format!("audit-row audit-outcome-{}", view.outcome)) {
             td { time datetime=(view.ts.to_rfc3339()) { (view.ts.to_rfc3339()) } }
@@ -315,10 +324,10 @@ fn render_event_row(view: &AuditView) -> Markup {
             td { (view.target.as_deref().unwrap_or("—")) }
             td { span class=(format!("audit-badge audit-badge-{}", view.outcome)) { (view.outcome) } }
             td {
-                @if has_meta {
+                @if let Some(meta) = meta {
                     details class="audit-meta" {
                         summary { "metadata" }
-                        @for (k, v) in view.metadata.as_object().unwrap() {
+                        @for (k, v) in meta {
                             div class="audit-meta-row" {
                                 span class="audit-meta-key" { (k) }
                                 span class="audit-meta-val" { (v.to_string()) }
@@ -422,7 +431,7 @@ mod tests {
             to: Some("2026-08-29T00:00:00Z".into()),
             ..Default::default()
         };
-        let q = params.into_query();
+        let q = params.to_query();
         assert!(q.from.is_none());
         assert!(q.to.is_some());
         let _ = AuditOutcome::Success;

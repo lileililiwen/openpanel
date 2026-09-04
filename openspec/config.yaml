@@ -83,4 +83,23 @@ rules:
     - >-
       Specs are the source of truth; code that drifts from a spec is a
       bug. Do not soften a requirement to match existing code.
+    - >-
+      Editing a requirement in agent-quality, quality, testing or
+      architecture also requires updating its digest and scenario count
+      in openspec/governance/manifest.yaml in the same reviewed change;
+      `make governance-contract` stays red until they match (Agents.md
+      §5.1).
+
+# OpenPanel is a single-store OpenSpec root. Declaring a self-reference
+# makes the configured project context observable through
+# `openspec context` (the CLI lists the project alongside the root
+# instead of reporting an empty working set with "No references
+# declared"). The reference shows as unresolved on machines that
+# have not registered the store via `openspec store register`; this
+# is a warning, not a failure, and the agent-governance gate tolerates
+# it as long as the working set is non-empty. See
+# openspec/specs/quality/spec.md "Agent-Governance Gate".
+references:
+  - id: openpanel
+    path: .
 

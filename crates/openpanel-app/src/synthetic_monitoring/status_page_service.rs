@@ -9,8 +9,8 @@ use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::{
     CheckResult, CheckStatus, Role, SyntheticCheck, SyntheticRepository, User,
     synthetic_monitoring::{
-        DailyBar, Incident, Slug, StatusEntry, StatusPage, StatusPageError,
-        StatusPageRepository, derive_incidents, uptime_bars_90d,
+        DailyBar, Incident, Slug, StatusEntry, StatusPage, StatusPageError, StatusPageRepository,
+        derive_incidents, uptime_bars_90d,
     },
 };
 use rand::RngCore;
@@ -65,13 +65,12 @@ impl EntryView {
                     CheckStatus::Fail
                 }
             })
-            .fold(CheckStatus::Ok, |acc, s| {
-                if rank(s) > rank(acc) {
-                    s
-                } else {
-                    acc
-                }
-            })
+            .fold(
+                CheckStatus::Ok,
+                |acc, s| {
+                    if rank(s) > rank(acc) { s } else { acc }
+                },
+            )
     }
 }
 
@@ -90,11 +89,7 @@ impl StatusPageService {
         synth: Arc<dyn SyntheticRepository>,
         audit: Arc<dyn AuditService>,
     ) -> Self {
-        Self {
-            repo,
-            synth,
-            audit,
-        }
+        Self { repo, synth, audit }
     }
 
     /// Load the page aggregate.
@@ -132,7 +127,7 @@ impl StatusPageService {
     pub async fn regenerate_slug(&self, caller: &User) -> Result<StatusPage, StatusPageError> {
         require_admin(caller)?;
         let mut page = self.repo.load().await?;
-        page.slug = random_slug();
+        page.slug = random_slug()?;
         self.repo.save(&page).await?;
         self.audit_change(caller, "slug_regenerated", &page).await;
         Ok(page)
@@ -226,10 +221,7 @@ impl StatusPageService {
 
     /// Like [`Self::public_view`] but enforces the page slug match
     /// for callers that already know the URL the visitor requested.
-    pub async fn public_view_for(
-        &self,
-        slug: &str,
-    ) -> Result<PublicStatusView, StatusPageError> {
+    pub async fn public_view_for(&self, slug: &str) -> Result<PublicStatusView, StatusPageError> {
         let page = self.repo.load().await?;
         if page.slug.as_str() != slug {
             return Err(StatusPageError::Disabled);
@@ -291,7 +283,11 @@ fn map_repo(error: openpanel_domain::RepoError) -> StatusPageError {
 
 /// Generate an enumeration-resistant base32-nopadding slug from
 /// 128 bits of OS entropy (26 base32 chars).
-pub fn random_slug() -> Slug {
+///
+/// Returns `Result` rather than a bare `Slug`: validation lives in
+/// `Slug::new`, and production code MUST NOT panic when it rejects a
+/// candidate.
+pub fn random_slug() -> Result<Slug, StatusPageError> {
     const ALPHABET: &[u8; 32] = b"abcdefghijklmnopqrstuvwxyz234567";
     let mut bytes = [0u8; 16];
     rand::rngs::OsRng.fill_bytes(&mut bytes);
@@ -311,8 +307,7 @@ pub fn random_slug() -> Slug {
         let idx = ((buffer << (5 - bits)) & 0x1f) as usize;
         out.push(ALPHABET[idx] as char);
     }
-    // Safe: our generator only emits characters in the alphabet.
-    Slug::new(out).expect("generated slug is alphanumeric")
+    Slug::new(out)
 }
 
 #[doc(hidden)]
@@ -326,7 +321,7 @@ mod tests {
 
     #[test]
     fn random_slug_is_alphanumeric_and_26_chars() {
-        let slug = random_slug();
+        let slug = random_slug().unwrap();
         let s = slug.as_str();
         assert_eq!(s.len(), 26);
         assert!(s.chars().all(|c| c.is_ascii_alphanumeric()));
@@ -336,7 +331,7 @@ mod tests {
     fn random_slugs_are_unique_over_many_draws() {
         let mut seen = std::collections::HashSet::new();
         for _ in 0..1000 {
-            assert!(seen.insert(random_slug().as_str().to_string()));
+            assert!(seen.insert(random_slug().unwrap().as_str().to_string()));
         }
     }
 

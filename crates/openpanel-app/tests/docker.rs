@@ -250,6 +250,16 @@ impl AuditService for Audit {
             .cloned()
             .collect())
     }
+
+    async fn query(
+        &self,
+        _: openpanel_core::audit::AuditQuery,
+    ) -> CoreResult<openpanel_core::audit::AuditPage> {
+        Ok(openpanel_core::audit::AuditPage {
+            events: Vec::new(),
+            next_cursor: None,
+        })
+    }
 }
 
 fn owner() -> User {

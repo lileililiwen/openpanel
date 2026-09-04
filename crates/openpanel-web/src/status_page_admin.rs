@@ -17,9 +17,11 @@ use uuid::Uuid;
 
 use crate::router::{WebState, WebUser};
 
+/// Marker form for actions that take no fields (e.g. rotating the slug).
 #[derive(Debug, Deserialize, Default)]
 pub struct EmptyForm;
 
+/// Form body for publishing a check on the public page.
 #[derive(Debug, Deserialize)]
 pub struct PublishForm {
     /// Check id to publish.
@@ -28,6 +30,7 @@ pub struct PublishForm {
     pub label: String,
 }
 
+/// Form body for removing a check from the public page.
 #[derive(Debug, Deserialize)]
 pub struct UnpublishForm {
     /// Check id to remove from the page.
@@ -35,10 +38,7 @@ pub struct UnpublishForm {
 }
 
 /// Render the admin settings page.
-pub async fn page(
-    State(state): State<WebState>,
-    WebUser(user, session): WebUser,
-) -> Response {
+pub async fn page(State(state): State<WebState>, WebUser(user, session): WebUser) -> Response {
     let csrf = state.csrf.token_for(session.id());
     let page = match state.status_page.get().await {
         Ok(page) => page,
@@ -182,7 +182,10 @@ pub async fn publish(
     WebUser(user, _session): WebUser,
     Form(form): Form<PublishForm>,
 ) -> Response {
-    let _ = state.status_page.publish(&user, form.check_id, form.label).await;
+    let _ = state
+        .status_page
+        .publish(&user, form.check_id, form.label)
+        .await;
     redirect()
 }
 
@@ -198,12 +201,7 @@ pub async fn unpublish(
 
 fn redirect() -> Response {
     use axum::http::header::LOCATION;
-    (
-        StatusCode::SEE_OTHER,
-        [(LOCATION, "/status-page")],
-        "",
-    )
-        .into_response()
+    (StatusCode::SEE_OTHER, [(LOCATION, "/status-page")], "").into_response()
 }
 
 #[doc(hidden)]

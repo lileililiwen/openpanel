@@ -9,8 +9,14 @@ gaps this capability closes are the system's key loss when relying on
 agents: loss of global view, architectural drift, and failure to reuse
 existing logic.
 
+The mechanical backstop for these guardrails is the `agent-governance`
+gate wired into `make check` (see `openspec/specs/quality/spec.md`
+`Agent-Governance Gate`). The gate is read-only and skips only when
+the `openspec` executable is unavailable; a project that claims a
+configured context but where `openspec context` reports an empty
+reference/context set, or whose runtime contract links drift away from
+the canonical `AGENTS.md`, MUST be rejected at review.
 ## Requirements
-
 ### Requirement: Project Context Injected Into Every Artifact
 
 OpenSpec's `config.yaml` MUST declare a `context:` block describing
@@ -112,4 +118,51 @@ hallucinated assumptions before they propagate into the tree.
   approved
 - **THEN** the workflow blocks `apply` and the change stays in
   `openspec/changes/` unmerged.
+
+### Requirement: Context And Runtime Contract Integrity Gate
+
+The repository SHALL provide `scripts/check-agent-governance.sh` and a
+`make agent-governance` target. The gate MUST verify that `openspec/config.yaml`
+declares non-empty `context` and all four artifact `rules` blocks, that
+`openspec context` does not report an empty reference/context set, and that
+each present runtime directory named by the canonical contract loads the same
+root `AGENTS.md` contract and references `openspec/specs/agent-quality/spec.md`.
+It MUST be read-only and emit the standard step status.
+
+#### Scenario: Empty OpenSpec context is rejected
+
+- **WHEN** `openspec context` reports `No references declared` while the
+  project claims a configured context
+- **THEN** `agent-governance` fails and names the contradictory output.
+
+#### Scenario: Stale runtime contract is rejected
+
+- **WHEN** `.codex/AGENTS.md` is copied from an older contract and differs from
+  root `AGENTS.md`
+- **THEN** the gate fails and identifies the runtime path.
+
+#### Scenario: Canonical runtime links pass
+
+- **WHEN** every present runtime contract resolves to or matches root
+  `AGENTS.md` and the required agent-quality spec is referenced
+- **THEN** the gate exits zero without modifying files.
+
+### Requirement: Governance Concerns Have Executable Protection
+
+Every manifest-listed archived governance requirement SHALL map to an
+executable positive/negative checker in the repository’s gate self-test.
+Passing a text or archive merge check alone SHALL NOT be considered evidence
+that the governance concern is protected from later code or configuration
+regression.
+
+#### Scenario: Text-only positive assessment is insufficient
+
+- **WHEN** an archived governance requirement remains present in the live spec
+  but its mapped checker is removed or no longer exercises a negative case
+- **THEN** the mandatory governance gate fails.
+
+#### Scenario: Positive and negative protection exists
+
+- **WHEN** the mapped checker proves both compliant and violating fixtures
+- **THEN** the requirement is reported as executable-protected.
 

@@ -350,18 +350,33 @@ fn require_admin(caller: &User) -> Result<(), SyntheticError> {
 
 /// HTTP probe backed by `reqwest`.
 pub struct ReqwestHttpProbe {
-    client: reqwest::Client,
+    // Built on first use: `reqwest::Client::builder().build()` fails when
+    // the TLS backend cannot initialise, and production code must not
+    // panic on that path.
+    client: std::sync::OnceLock<reqwest::Client>,
 }
 
 impl ReqwestHttpProbe {
     /// Create a new reqwest-backed HTTP probe.
     pub fn new() -> Self {
+        Self {
+            client: std::sync::OnceLock::new(),
+        }
+    }
+
+    /// The shared client, built on first use.
+    fn client(&self) -> Result<&reqwest::Client, SyntheticError> {
+        if let Some(client) = self.client.get() {
+            return Ok(client);
+        }
         let client = reqwest::Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .timeout(std::time::Duration::from_secs(30))
             .build()
-            .expect("reqwest client");
-        Self { client }
+            .map_err(|e| SyntheticError::Probe(format!("reqwest client: {e}")))?;
+        // A concurrent first call may win the race; the loser's client
+        // is dropped, which is harmless.
+        Ok(self.client.get_or_init(|| client))
     }
 }
 
@@ -377,7 +392,7 @@ impl HttpProbe for ReqwestHttpProbe {
         let start = std::time::Instant::now();
         let resp = tokio::time::timeout(
             std::time::Duration::from_secs(timeout_secs as u64),
-            self.client.get(url).send(),
+            self.client()?.get(url).send(),
         )
         .await
         .map_err(|_| SyntheticError::Probe("http request timed out".into()))?

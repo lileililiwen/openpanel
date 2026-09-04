@@ -29,6 +29,17 @@ mod tests {
         async fn recent(&self, _limit: i64) -> Result<Vec<AuditEvent>, openpanel_core::CoreError> {
             Ok(self.events.lock().await.clone())
         }
+
+        /// Paginated queries are not part of what this double asserts.
+        async fn query(
+            &self,
+            _query: openpanel_core::audit::AuditQuery,
+        ) -> Result<openpanel_core::audit::AuditPage, openpanel_core::CoreError> {
+            Ok(openpanel_core::audit::AuditPage {
+                events: Vec::new(),
+                next_cursor: None,
+            })
+        }
     }
 
     fn sample_manifest() -> PluginManifest {

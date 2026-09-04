@@ -187,11 +187,7 @@ fn promote(prev: CheckStatus, next: CheckStatus) -> CheckStatus {
         CheckStatus::Warn => 1,
         CheckStatus::Fail => 2,
     };
-    if rank(next) > rank(prev) {
-        next
-    } else {
-        prev
-    }
+    if rank(next) > rank(prev) { next } else { prev }
 }
 
 /// Bucket a check's results into daily uptime bars for the last 90
@@ -333,17 +329,16 @@ mod tests {
         // 90 bars total; days 1, 2, 3 have data, the rest are None.
         assert_eq!(bars.len(), 90);
         assert!(bars.iter().any(|b| b.day == today && b.uptime == Some(1.0)));
+        assert!(bars.iter().any(
+            |b| b.day == NaiveDate::from_ymd_opt(2026, 1, 2).unwrap() && b.uptime == Some(0.0)
+        ));
+        assert!(bars.iter().any(
+            |b| b.day == NaiveDate::from_ymd_opt(2026, 1, 1).unwrap() && b.uptime == Some(1.0)
+        ));
         assert!(
             bars.iter()
-                .any(|b| b.day == NaiveDate::from_ymd_opt(2026, 1, 2).unwrap() && b.uptime == Some(0.0))
-        );
-        assert!(
-            bars.iter()
-                .any(|b| b.day == NaiveDate::from_ymd_opt(2026, 1, 1).unwrap() && b.uptime == Some(1.0))
-        );
-        assert!(
-            bars.iter()
-                .any(|b| b.day == NaiveDate::from_ymd_opt(2025, 12, 30).unwrap() && b.uptime.is_none())
+                .any(|b| b.day == NaiveDate::from_ymd_opt(2025, 12, 30).unwrap()
+                    && b.uptime.is_none())
         );
     }
 
@@ -353,7 +348,7 @@ mod tests {
         assert!(Slug::new("").is_err());
         assert!(Slug::new("with-dash").is_err());
         assert!(Slug::new("with space").is_err());
-        assert!(Slug::new(&"x".repeat(65)).is_err());
+        assert!(Slug::new("x".repeat(65)).is_err());
     }
 }
 

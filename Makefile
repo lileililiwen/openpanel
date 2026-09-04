@@ -15,6 +15,8 @@
 #   make file-length — per-file line-count gate only (skipped if tool absent)
 #   make test      — full test suite (delegates to scripts/check-tests.sh)
 #   make test-gates — run scripts/test-gates.sh (the governance self-test)
+#   make agent-governance — run scripts/check-agent-governance.sh
+#   make governance-contract — run scripts/check-governance-contract.sh
 #   make coverage  — informational coverage report
 #   make install-lint-tools — install the optional file-length tools
 #   make split FILE=<path>  — auto-refactor preview for one file
@@ -26,15 +28,16 @@
 #   ensure-lint-tools
 #   → fmt → clippy → docs → audit → file-length → scan-literal
 #   → tasks-testing-first → reuse → layering
-#   → spec-test-drift → spec-drift → test-gates
+#   → spec-test-drift → spec-drift → agent-governance → governance-contract
+#   → test-gates
 #   → test
 #
 # Every per-check script prints `step: <name> status: ok | failed` and
 # exits non-zero on failure; `make` short-circuits on the first one.
 
-.PHONY: check fmt clippy docs audit file-length test coverage install-lint-tools ensure-lint-tools split a11y scan-literal tasks-testing-first reuse layering spec-test-drift spec-drift repo-map test-gates
+.PHONY: check fmt clippy docs audit file-length test coverage install-lint-tools ensure-lint-tools split a11y scan-literal tasks-testing-first reuse layering spec-test-drift spec-drift repo-map test-gates agent-governance governance-contract
 
-check: ensure-lint-tools fmt clippy docs audit file-length scan-literal tasks-testing-first reuse layering spec-test-drift spec-drift test-gates test
+check: ensure-lint-tools fmt clippy docs audit file-length scan-literal tasks-testing-first reuse layering spec-test-drift spec-drift agent-governance governance-contract test-gates test
 	@echo ""
 	@echo "=== All quality checks passed ==="
 
@@ -86,6 +89,12 @@ test:
 
 test-gates:
 	@scripts/test-gates.sh
+
+agent-governance:
+	@scripts/check-agent-governance.sh
+
+governance-contract:
+	@scripts/check-governance-contract.sh
 
 coverage:
 	@scripts/coverage.sh

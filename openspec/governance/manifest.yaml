@@ -1,0 +1,142 @@
+# Reviewed archived-governance manifest.
+#
+# Scope: archived OpenSpec deltas for the four governance capabilities
+# (`agent-quality`, `quality`, `testing`, `architecture`). Every entry
+# pins one requirement by content digest and scenario count and names the
+# executable checker(s) that prove the requirement is still enforced.
+#
+# Enforced by `scripts/check-governance-contract.sh` (`make
+# governance-contract`, wired into `make check`). The gate is read-only:
+# it never rewrites this file.
+#
+# How to change a protected requirement (reviewed procedure):
+#   1. Propose an OpenSpec change whose delta edits the live requirement
+#      under `openspec/specs/<cap>/spec.md`.
+#   2. Re-run `scripts/check-governance-contract.sh --report`.
+#   3. Update the matching entry's `digest` and `scenarios` from the
+#      report — in the same reviewed change, never as a drive-by edit.
+#   4. Archive. The gate fails until steps 2-3 are done.
+#
+# How to protect a requirement that is currently unprotected:
+#   1. Add positive + negative fixtures for the checker in
+#      `scripts/test-gates.sh`, tagged `# checker: <id> positive` and
+#      `# checker: <id> negative`.
+#   2. Add the entry below (digest + scenarios from `--report`).
+#   3. Remove the requirement from `unprotected-baseline.txt`
+#      (regenerate it with `--write-baseline` after the entry lands).
+#
+# Available checker IDs are exactly those registered in
+# `scripts/test-gates.sh`; the gate rejects an unknown (orphaned) ID.
+version: 1
+
+requirements:
+  # --- agent-quality ---------------------------------------------------
+  # The ratchet's own contract: `governance-contract` verifies that every
+  # entry below still maps to a registered positive/negative checker.
+  - archive: openspec/changes/archive/2026-09-04-ratchet-archived-governance-contract/specs/agent-quality/spec.md
+    capability: agent-quality
+    requirement: "Governance Concerns Have Executable Protection"
+    digest: sha256:acb02374f34ca86352a9b0ad1f389871bae8b523592dd5cd9d88ebaaadb0b8e3
+    scenarios: 2
+    checkers: [governance-contract]
+
+  - archive: openspec/changes/archive/2026-09-02-repair-governance-context-contract/specs/agent-quality/spec.md
+    capability: agent-quality
+    requirement: "Context And Runtime Contract Integrity Gate"
+    digest: sha256:b24518beae2acfb017d6412657a7d66673c867d64465744753648e864cfb450a
+    scenarios: 3
+    checkers: [agent-governance]
+
+  - archive: openspec/changes/archive/2026-08-15-refine-agent-context-engineering/specs/agent-quality/spec.md
+    capability: agent-quality
+    requirement: "Project Context Injected Into Every Artifact"
+    digest: sha256:bc853d928b6a4b4c4dc50f67671bc7d6a417c39dd6fe3fb9e516de7e64c57574
+    scenarios: 2
+    checkers: [agent-governance]
+
+  - archive: openspec/changes/archive/2026-08-15-refine-agent-context-engineering/specs/agent-quality/spec.md
+    capability: agent-quality
+    requirement: "Single Canonical Agent Contract Shared By Every Runtime"
+    digest: sha256:5963caa1af57c83ae0b03177e61db4a050fcf1fe0b845320b950ad2dfdbc1212
+    scenarios: 1
+    checkers: [agent-governance]
+
+  # --- quality ---------------------------------------------------------
+  - archive: openspec/changes/archive/2026-09-04-ratchet-archived-governance-contract/specs/quality/spec.md
+    capability: quality
+    requirement: "Archived Governance Content Ratchet"
+    digest: sha256:eee512ba94c3eda22ae6343b3fb7ce22bf0d0bb9e75fb120b57684229d7f6ee3
+    scenarios: 4
+    checkers: [governance-contract]
+
+  - archive: openspec/changes/archive/2026-08-25-refine-specs-with-drift-repair/specs/quality/spec.md
+    capability: quality
+    requirement: "Archive-Time Delta Merge Gate"
+    digest: sha256:d1a3c30d1b1f490662a40619237decdb13782726e1bc1ad5ab535fa39326dd24
+    scenarios: 3
+    checkers: [spec-drift]
+
+  - archive: openspec/changes/archive/2026-09-02-enforce-governance-gate-ci/specs/quality/spec.md
+    capability: quality
+    requirement: "Governance Gate Self-Tests Are Mandatory"
+    digest: sha256:c996e86b97831a8fa77eedd9f267072556fc29ac5f54e50fe869d8164b86e530
+    scenarios: 2
+    checkers: [gate-self-test]
+
+  - archive: openspec/changes/archive/2026-08-15-refine-agent-context-engineering/specs/quality/spec.md
+    capability: quality
+    requirement: "Intra-Crate Layering Gate"
+    digest: sha256:a70c4fa56a53aa9087788bf681aaa25b5f81aa0c23a629bf5d350cd06300b6ec
+    scenarios: 2
+    checkers: [layering]
+
+  - archive: openspec/changes/archive/2026-08-15-refine-agent-context-engineering/specs/quality/spec.md
+    capability: quality
+    requirement: "Reuse / Duplication Gate"
+    digest: sha256:cd1f4269768caf02fea71c5cdf09e7f7a9617ce326341919e872c517c24cf405
+    scenarios: 4
+    checkers: [reuse]
+
+  - archive: openspec/changes/archive/2026-08-15-refine-agent-context-engineering/specs/quality/spec.md
+    capability: quality
+    requirement: "Spec-To-Test Drift Gate"
+    digest: sha256:75a2e58691addd90734405f83a5e3d6a70355c95b5f8d8681c2f0e14e811704f
+    scenarios: 2
+    checkers: [spec-test-drift]
+
+  - archive: openspec/changes/archive/2026-08-14-2026-08-13-refine-quality-with-i18n-and-theme-policy/specs/quality/spec.md
+    capability: quality
+    requirement: "Template-Literal Scan"
+    digest: sha256:2e1b6d61ff86a5294c910f8e9803500c5680bacd70b5c27048fb899bbad8c5f3
+    scenarios: 3
+    checkers: [scan-literal]
+
+  # --- testing ---------------------------------------------------------
+  - archive: openspec/changes/archive/2026-08-15-refine-agent-context-engineering/specs/testing/spec.md
+    capability: testing
+    requirement: "`openspec validate` Enforces Tests-First In tasks.md"
+    digest: sha256:dfedf78fc5c97c32aa023d1edd959964e6c0ed5131d9ef1561549cd6e9ad0d2b
+    scenarios: 2
+    checkers: [tasks-testing-first]
+
+  - archive: openspec/changes/archive/2026-09-02-enforce-governance-gate-ci/specs/testing/spec.md
+    capability: testing
+    requirement: "Governance Gate Tests Cover Positive And Negative Paths"
+    digest: sha256:0c2dec222f09fac5bc6c3f720675e4a2243e21ca2993f6cd7f74fc76c36e7f5b
+    scenarios: 2
+    checkers: [gate-self-test]
+
+  - archive: openspec/changes/archive/2026-08-08-add-tdd-infrastructure/specs/testing/spec.md
+    capability: testing
+    requirement: "Tests Are Written Before Code (Standing Rule)"
+    digest: sha256:0543dc83d56f7967a12ed0ccfaac95692d52d9e7537f5117436b06d7a4fd8c44
+    scenarios: 1
+    checkers: [tasks-testing-first]
+
+  # --- architecture ----------------------------------------------------
+  - archive: openspec/changes/archive/2026-08-06-bootstrap-ddd-architecture/specs/architecture/spec.md
+    capability: architecture
+    requirement: "DDD Layered Architecture"
+    digest: sha256:ba7d467f01a766cce32120cfb9431b1532357abd34375e52eb9a800233a1c4d7
+    scenarios: 2
+    checkers: [layering]

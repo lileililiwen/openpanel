@@ -587,6 +587,39 @@ the self-test MUST NOT silently skip because a target is absent.
   zero
 - **THEN** `make test-gates` exits non-zero and identifies the failed fixture.
 
+### Requirement: Agent-Governance Gate
+
+`make check` SHALL run `scripts/check-agent-governance.sh`, exposed as
+`make agent-governance`. The gate MUST be read-only and MUST verify that
+`openspec/config.yaml` declares a non-empty `context:` block and a non-empty
+`rules:` block for each of the four artifact types (`proposal`, `design`,
+`tasks`, `specs`); that `openspec context` does not report an empty
+reference/context set while the project claims a configured context; and that
+every runtime contract directory present in the repository (`.agents/`,
+`.codex/`, `.qoder/`) loads the same root `AGENTS.md` (symlink or
+content-identical) and references `openspec/specs/agent-quality/spec.md`. The
+gate MUST skip (with an explicit status) only when the `openspec` executable
+is unavailable; every other failure MUST exit non-zero and identify the
+contradictory output or offending runtime path.
+
+#### Scenario: Empty OpenSpec context is rejected
+
+- **WHEN** `openspec context` reports `No references declared` while the
+  project claims a configured context in `openspec/config.yaml`
+- **THEN** `agent-governance` fails and names the contradictory output.
+
+#### Scenario: Stale runtime contract is rejected
+
+- **WHEN** `.codex/AGENTS.md` is a regular file whose contents differ from
+  root `AGENTS.md`
+- **THEN** the gate fails and identifies the runtime path.
+
+#### Scenario: Canonical runtime links pass
+
+- **WHEN** every present runtime contract resolves to (or byte-matches) root
+  `AGENTS.md` and the required agent-quality spec is referenced
+- **THEN** the gate exits zero without modifying files.
+
 ### Requirement: CI Enforces The Single Quality Entry Point
 
 The required CI check for every push and pull request SHALL run `make check`
@@ -604,4 +637,37 @@ for checks whose archived specification says new changes are strict.
 
 - **WHEN** `make check` returns non-zero for a governance regression
 - **THEN** the required CI job fails rather than allowing another job to pass.
+
+### Requirement: Archived Governance Content Ratchet
+
+The repository SHALL maintain a reviewed manifest of every archived
+governance requirement in the `agent-quality`, `quality`, `testing`, and
+`architecture` capabilities. Each entry MUST identify the archive path,
+capability, exact requirement name, content digest, scenario count, and at
+least one executable checker ID. `make check` SHALL run a read-only gate that
+fails when a live requirement block is missing, its normalized content or
+scenario count differs from the manifest, an archive path is unknown, or a
+checker ID is not implemented by the gate self-test.
+
+#### Scenario: Requirement text is weakened
+
+- **WHEN** a later edit removes a MUST/SHALL obligation from a manifest-listed
+  governance requirement without a reviewed manifest update
+- **THEN** the governance contract gate fails and names the requirement.
+
+#### Scenario: Scenario protection is removed
+
+- **WHEN** a scenario is deleted from a manifest-listed governance requirement
+- **THEN** the gate fails on the scenario-count/content mismatch.
+
+#### Scenario: Executable checker is orphaned
+
+- **WHEN** a manifest entry names a checker ID absent from the gate self-test
+- **THEN** the gate fails and names the orphaned checker ID.
+
+#### Scenario: Reviewed update passes
+
+- **WHEN** a reviewed OpenSpec change updates the manifest digest and checker
+  mapping together with the live requirement
+- **THEN** the gate passes without modifying the manifest or source files.
 
