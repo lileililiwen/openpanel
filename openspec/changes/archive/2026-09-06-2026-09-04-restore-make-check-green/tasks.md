@@ -36,4 +36,4 @@
       `make test-gates`; confirm no governance requirement was weakened.
 - [x] 3.4 Run `make check` end to end and confirm it reports all quality
       checks passed.
-- [ ] 3.5 Obtain human approval of `design.md`.
+- [x] 3.5 Obtain human approval of `design.md`.
