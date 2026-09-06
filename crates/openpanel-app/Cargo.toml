@@ -58,6 +58,10 @@ sysinfo = { workspace = true }
 tempfile = "3"
 totp-rs = { workspace = true }
 webauthn-rs = { workspace = true }
+# `openssl` is listed so cargo's feature unification forces the
+# `vendored` feature on the `webauthn-rs-core -> openssl` path;
+# the crate itself is not used in Rust source.
+openssl = { workspace = true }
 hmac = { workspace = true }
 
 [dev-dependencies]

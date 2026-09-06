@@ -136,6 +136,14 @@ totp-rs = { version = "5", default-features = false, features = ["gen_secret", "
 # WebAuthn / FIDO2 for two-factor authentication
 webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation", "danger-credential-internals"] }
 
+# Force the vendored OpenSSL build on the transitive `webauthn-rs ->
+# webauthn-rs-core -> openssl -> openssl-sys` path so the build does not
+# require libssl-dev / openssl-devel / libssl3-dev to be installed on
+# the host. Cargo's feature unification applies this to every consumer
+# of `openssl` in the dependency graph, so no system OpenSSL C library
+# is needed (Linux, macOS, Windows, *BSD, musl).
+openssl = { version = "0.10", features = ["vendored"] }
+
 # HMAC-based signing for remember-device cookies
 hmac = "0.12"
 

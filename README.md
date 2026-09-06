@@ -13,6 +13,11 @@ runtime. MIT licensed.
 
 ## Quick start (dev)
 
+The only host toolchain needed is a stable Rust toolchain plus a C
+compiler, `make`, and `perl` (for the vendored OpenSSL build used by
+`webauthn-rs` — see "Portability" below). No system OpenSSL /
+`libssl-dev` / `openssl-devel` / `libssl3-dev` is required.
+
 ```bash
 cargo run -p openpanel-cli -- dev
 ```
@@ -32,6 +37,20 @@ incidents (composer dependency hijacks, malicious plugins). OpenPanel is a
 single static binary with **no script engine at runtime** — no eval, no
 file inclusion, no `system()` from user input. Everything is enforced at
 compile time by Rust's type system and at runtime by axum middleware.
+
+## Portability
+
+The build is OS-independent: the only system libraries required at
+link time are `libc` and `pthread`, both of which are present on every
+target platform. The transitive `webauthn-rs → openssl` chain uses
+OpenSSL's `vendored` cargo feature, so OpenSSL is built and statically
+linked from source as part of `cargo build` (first build adds ~2 min
+for the OpenSSL compilation; release builds add ~5–10 MB to the
+binary). The result: a `cargo build` on a fresh Linux / macOS / Windows
+/ *BSD / musl box needs only a C toolchain, `make`, and `perl` — no
+`libssl-dev` / `openssl-devel` / `libssl3-dev` package is required and
+the resulting binary does not depend on the host's libssl/libcrypto
+versions.
 
 ## Layered architecture (DDD)
 
