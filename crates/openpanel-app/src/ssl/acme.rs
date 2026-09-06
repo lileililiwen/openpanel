@@ -99,11 +99,12 @@ impl AcmeClient for RustlsAcmeClient {
         _domain: &str,
         _challenge_server: &AcmeHttpServer,
     ) -> Result<IssuedCert, SslError> {
-        // TODO: drive the full HTTP-01 flow against `rustls-acme 0.13`.
-        // See the spec's ACME requirement. The skeleton is intentionally
-        // a stub so the rest of the change (domain, service, nginx
-        // render, API, CLI) can land without depending on the exact
-        // rustls-acme API surface, which has shifted across versions.
+        // TODO(openpanel#ACME-HTTP01): drive the full HTTP-01 flow against
+        // `rustls-acme 0.13`. Tracked in docs/TODOS.md (entry #1). The
+        // skeleton is intentionally a stub so the rest of the change
+        // (domain, service, nginx render, API, CLI) can land without
+        // depending on the exact rustls-acme API surface, which has shifted
+        // across versions. See the spec's ACME requirement.
         Err(SslError::Acme(
             "RustlsAcmeClient is a skeleton — see follow-up change \
              for the rustls-acme 0.13 wiring"
