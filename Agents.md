@@ -13,8 +13,14 @@ OpenPanel is a memory-safe, Rust-based, open-source server
 management panel — a Baota / cPanel alternative without PHP. It is a
 single static binary with no script engine at runtime. MIT licensed.
 
-**Status:** v0.1-alpha. Identity + auth, sites, databases, files,
-SSL, and monitoring ship. Cron is planned.
+**Status:** v0.x in active development. Identity + auth, sites,
+databases, files, SSL, mail, DNS, monitoring, cron, software center,
+owner-only audit activity center, an mTLS agent fleet, and a pure-Rust
+HTMX web UI ship. OpenSpec has 83 live capabilities and 124 archived
+changes. The `make check` quality gate is green end-to-end on `main`;
+the active change folder `openspec/changes/2026-09-04-restore-make-check-green/`
+is awaiting archive + principal ratification of `design.md`. See
+`HANDOFF.md` for the current roadmap.
 
 ---
 
@@ -573,16 +579,44 @@ description.
 - `openspec/specs/web-ui/spec.md` — web UI (login, shell, CSRF)
 - `openspec/specs/testing/spec.md` — TDD infrastructure
 - `openspec/specs/quality/spec.md` — quality engineering
+- `openspec/specs/agent-quality/spec.md` — agent contract (load first)
+- `openspec/governance/manifest.yaml` — ratchet for the four
+  governance capabilities (`agent-quality`, `quality`, `testing`,
+  `architecture`)
+- `openspec/governance/unprotected-baseline.txt` — tracked debt
+  (only shrinks)
 - `openspec/changes/archive/` — frozen history of every shipped change
+- `HANDOFF.md` — live roadmap + spec status (current change table)
 - `crates/openpanel-test-support/README.md` — test helpers API
 - `crates/openpanel-app/src/ssl/README.md` — SSL module internals
 - `crates/openpanel-app/src/monitoring/README.md` — monitoring module internals
-- `crates/openpanel-web/` — pure-Rust HTMX web UI (`layout`, `login`, `csrf`, `assets`, `router`)
+- `crates/openpanel-web/` — pure-Rust HTMX web UI (`layout`, `login`,
+  `csrf`, `assets`, `router`, `dashboard`, `site_workspace`, `audit`,
+  `software_center`, `ops_workflows`, `host_fleet`,
+  `software_center_trust`)
 - `tests/README.md` — how to run each test category
 - `Makefile` — single-entry quality gate (`make check`)
 - `scripts/check-fmt.sh`, `scripts/check-clippy.sh`,
   `scripts/check-docs.sh`, `scripts/check-audit.sh` — per-gate scripts
 - `scripts/check-tests.sh` — test gate
+- `scripts/check-file-length.sh` — per-file line-count lint
+- `scripts/check-tasks-testing-first.sh` — `## 1. Testing` first
+- `scripts/check-reuse.sh` — no duplicated public item across crates
+- `scripts/check-layering.sh` — domain MUST NOT import app/api
+- `scripts/check-spec-test-drift.sh` — every spec has a covering test
+- `scripts/check-spec-drift.sh` — every archived delta exists in the
+  live spec
+- `scripts/check-agent-governance.sh` — OpenSpec context + runtime
+  contract integrity (drives `make agent-governance`)
+- `scripts/check-governance-contract.sh` — archived governance
+  content ratchet (drives `make governance-contract`)
+- `scripts/test-gates.sh` — governance self-test harness (16
+  fixture-based checks; drives `make test-gates`)
+- `scripts/scan-template-literals.sh` — literal colour / string scan
 - `scripts/coverage.sh` — coverage report (informational)
-- `.github/workflows/ci.yml` — CI pipeline
+- `scripts/repo-map.sh` — structural map of public APIs (agent aid)
+- `.github/workflows/ci.yml` — CI pipeline (runs `make check` in the
+  `check` job; `make test-gates` + strict OpenSpec validation in
+  `agent-quality`)
 - `clippy.toml` + `rustfmt.toml` — quality policy files
+- `cargo-lint-extra.toml` — file-length thresholds (soft_limit, hard_limit)
