@@ -526,8 +526,9 @@ incorrectly and break on viewports in between.
    1280 px (laptop). Capture a screenshot at each width.
 6. Run `scripts/scan-template-literals.sh` (the literal-string
    scan). It MUST pass.
-7. Re-run `make check`. New clippy lints for non-token literals in
-   `app.css` will reject the change.
+7. Re-run `make check`. The `scan-literal` and `class-coverage`
+   shell gates will reject any new literal hex / `rgba()` / class
+   in `app.css` and any unmatched `class="..."` literal.
 
 ### 11.5 What NOT to do
 
@@ -545,19 +546,30 @@ incorrectly and break on viewports in between.
 
 ### 11.6 CI enforcement
 
-The follow-on `web-ui-styling` change ships:
+The follow-on `web-ui-styling` changes (add-web-ui-styling-and-responsive-layout,
+add-web-ui-element-baseline, resolve-unstyled-ui-classes, and
+tokenise-app-css-and-add-class-gate) ship:
 
-- A `tests/web_ui_styling.rs` integration suite that loads each
-  public web route at 360 / 768 / 1280 px and asserts no horizontal
+- A `tests/integration/web_ui_styling.rs` integration suite
+  (`tests/integration/web_ui_styling.rs:1`) that loads each public
+  web route at 360 / 768 / 1280 px and asserts no horizontal
   overflow at any width.
-- A `templates-no-browser-defaults` clippy-style lint that fails
-  the build when a `<form>` lacks a class.
-- A `tokens-only` lint that fails when CSS outside `tokens.css`
-  declares a literal colour, spacing value, or font family.
+- A `scan-literal` shell gate (`scripts/scan-template-literals.sh`)
+  that fails `make check` whenever a literal hex / `rgba()` /
+  `hsl()` value appears in any path except `tokens.css`. The
+  `tokenise-app-css-and-add-class-gate` change (commit e56a778)
+  extended the gate to also cover `*.css` files, so a new
+  literal in `app.css` is now a CI failure too.
+- A `class-coverage` shell gate (`scripts/check-class-coverage.sh`)
+  that fails `make check` whenever a `class="..."` literal in
+  `crates/openpanel-web/src/*.rs` references a token that has no
+  matching rule selector in `app.css`. The gate's
+  `DYNAMIC_FAMILIES` table pins every concrete variant the
+  codebase can produce; adding a new variant here without a
+  matching rule fails the build.
 
-Until those land, **every PR adding or modifying a web route must
-include a screenshot** at the three breakpoints above in the PR
-description.
+The screenshot rule above is no longer required: every PR is
+gated by the suite and the two shell gates.
 
 ### 11.7 References
 

@@ -12,7 +12,10 @@
 #   - reuse                 (cross-crate duplicate, default + strict)
 #   - spec-test-drift       (default mode reports, --strict fails)
 #   - spec-drift            (archive delta MUST exist in live spec)
-#   - scan-literal          (literal colour in a template)
+#   - scan-literal          (literal colour in a template; allowlist
+#                            and app.css paths are exercised)
+#   - class-coverage        (every class="..." literal has a rule
+#                            in app.css; dynamic-family expansion)
 #   - agent-governance      (config context/rules, openspec context, runtime contracts)
 #   - governance-contract   (archived governance digest/scenario/checker ratchet)
 #   - gate-self-test        (the self-test itself detects a broken gate)

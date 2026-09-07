@@ -2,9 +2,11 @@
 #
 # The Makefile is the *manager*: it knows the checks that exist and in
 # what order they run, but the actual work lives in one small script per
-# concern under `scripts/` (fmt, clippy, docs, audit, file-length, tests,
-# coverage, and the agent-quality gates: tasks-testing-first, reuse,
-# layering, spec-test-drift, spec-drift, and the gate self-test).
+# concern under `scripts/` (fmt, clippy, docs, audit, file-length,
+# scan-literal, class-coverage, tests, coverage, and the agent-quality
+# gates: tasks-testing-first, reuse, layering, spec-test-drift,
+# spec-drift, agent-governance, governance-contract, and the gate
+# self-test).
 #
 # Entry points:
 #   make check     — run every quality gate in order (CI entry point)
