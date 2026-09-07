@@ -288,7 +288,7 @@ fn card(
         hit.placeholder_digest,
     );
     html! {
-        article class="card" {
+        article class="storefront__card" {
             div class="card__icon" aria-hidden="true" { (category_glyph(hit.category.slug())) }
             header class="card__title" {
                 h3 { a href={"/software/entries/" (hit.id)} { (hit.name) } }

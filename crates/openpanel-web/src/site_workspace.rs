@@ -272,7 +272,7 @@ pub fn workspace_header(
 /// Site-scoped breadcrumb with a return path to the sites list.
 pub fn breadcrumb(site: &Site) -> Markup {
     html! {
-        nav class="breadcrumb" aria-label="Breadcrumb" {
+        nav class="breadcrumbs" aria-label="Breadcrumb" {
             a href="/sites" { "Sites" }
             span class="sep" { "/" }
             span aria-current="page" { (site.primary_domain()) }
@@ -294,7 +294,7 @@ pub async fn site_bar(state: &WebState, user: &User, site_id: Uuid, active: TabI
             }
         }
         Err(_) => html! {
-            nav class="breadcrumb" aria-label="Breadcrumb" {
+            nav class="breadcrumbs" aria-label="Breadcrumb" {
                 a href="/sites" { "Sites" }
                 span class="sep" { "/" }
                 span aria-current="page" { (site_id.to_string()) }

@@ -657,7 +657,7 @@ fn breadcrumb(site_id: Uuid, current: &str, parent: &Option<String>) -> Markup {
         }
     }
     html! {
-        nav class="breadcrumb" {
+        nav class="breadcrumbs" {
             a href=(format!("/sites/{site_id}/files")) { "root" }
             @if !parts.is_empty() {
                 " / "

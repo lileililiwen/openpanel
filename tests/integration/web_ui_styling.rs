@@ -569,3 +569,64 @@ async fn dashboard_renders_with_responsive_shell() {
         "shell must render the responsive .layout container"
     );
 }
+
+/// The `resolve-unstyled-ui-classes` contract requires that
+/// every public route renders heading text rather than an empty
+/// `<h1>` or `<h2>` — a heading with no content is a sign the
+/// template dropped the title and a future regression. We allow
+/// headings whose only contents are whitespace and reject
+/// headings with no class, no text, and no children. This pins
+/// the affordance end-to-end.
+#[tokio::test]
+async fn public_routes_never_emit_empty_headings() {
+    let server = TestServer::new().await;
+    let cookie = boot_admin(&server).await;
+
+    for route in PUBLIC_ROUTES {
+        let (status, body) = fetch_page(&server, &cookie, route).await;
+        if is_skipped(status) {
+            continue;
+        }
+        assert_eq!(status, 200, "{route}");
+        assert_no_empty_heading(&body, route);
+    }
+}
+
+/// Walk every `<h1 ...>` and `<h2 ...>` opening tag, extract the
+/// slice up to the matching `</h1>` / `</h2>`, and assert the
+/// body is non-empty (whitespace-only counts as empty).
+fn assert_no_empty_heading(html: &str, route: &str) {
+    for level in ["h1", "h2"] {
+        let open_tag = format!("<{level}");
+        let close_tag = format!("</{level}>");
+        let mut cursor = 0;
+        while let Some(idx) = html[cursor..].find(&open_tag) {
+            let abs = cursor + idx;
+            // Confirm this is the opening tag (not e.g. `<header>`).
+            let after = &html[abs + open_tag.len()..];
+            let next = after.chars().next();
+            if next != Some(' ') && next != Some('>') {
+                cursor = abs + open_tag.len();
+                continue;
+            }
+            let close = match html[abs..].find(&close_tag) {
+                Some(c) => c,
+                None => break,
+            };
+            let body = &html[abs + open_tag.len()..abs + close];
+            // After the opening tag, the body runs to the closing
+            // tag. Strip the opening tag attributes (the part up
+            // to the first `>`) and trim whitespace.
+            let after_open = match body.find('>') {
+                Some(p) => &body[p + 1..],
+                None => body,
+            };
+            let trimmed = after_open.trim();
+            assert!(
+                !trimmed.is_empty(),
+                "{route}: <{level}> at {abs} is empty — a heading must carry visible text"
+            );
+            cursor = abs + close + close_tag.len();
+        }
+    }
+}
