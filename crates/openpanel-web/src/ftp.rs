@@ -145,7 +145,7 @@ fn content(
         @if accounts.is_empty() {
             (crate::ui_states::EmptyState::new("No FTP accounts yet", "Create an account to let people connect to this site.").render())
         } @else {
-            table {
+            table class="table" {
                 thead { tr { th { "Username" } th { "Home" } th { "Mode" } th { "Status" } th { "Actions" } } }
                 tbody { @for account in accounts { tr { td { (&account.username) } td { (&account.home) } td { @if account.read_only { "read only" } @else { "read/write" } } td { @if account.enabled { "enabled" } @else { "disabled" } } td {
                     @if account.enabled {

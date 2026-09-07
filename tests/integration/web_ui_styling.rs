@@ -221,6 +221,64 @@ fn assert_all_inputs_have_label(html: &str, route: &str) {
     }
 }
 
+/// A `<table>` rendered in any public route MUST declare one of:
+/// `class="table"`, `class="detail__table"`, a BEM-style `*__table`
+/// token, or a `*-table` subsystem token (e.g. `network-table`,
+/// `audit-table`). Defence-in-depth for the element baseline
+/// (OpenSpec `add-web-ui-element-baseline`, 2026-09-07): a bare
+/// `<table>` still inherits the tokenised baseline, but the test
+/// pins the affordance so a regression lights up immediately.
+fn assert_all_tables_have_class(html: &str, route: &str) {
+    let mut cursor = 0usize;
+    while let Some(idx) = html[cursor..].find("<table") {
+        let abs = cursor + idx;
+        // Find the matching `>` so we capture the opening tag only.
+        let close = html[abs..]
+            .find('>')
+            .unwrap_or_else(|| panic!("{route}: unterminated <table at {abs}"));
+        let tag = &html[abs..abs + close + 1];
+
+        let class = extract_class_attr(tag).unwrap_or_else(|| {
+            panic!(
+                "{route}: <table> at {abs} has no class attribute: `{tag}` \
+                 (must declare one of `table`, `detail__table`, a BEM \
+                 `*__table` token, or a subsystem `*-table` token)"
+            )
+        });
+
+        let mut ok = false;
+        for tok in class.split_whitespace() {
+            if tok == "table" || tok == "detail__table" {
+                ok = true;
+                break;
+            }
+            if tok.ends_with("__table") || tok.ends_with("-table") {
+                ok = true;
+                break;
+            }
+        }
+        assert!(
+            ok,
+            "{route}: <table> at {abs} declares `{class}` — \
+             must declare one of `table`, `detail__table`, a BEM \
+             `*__table` token, or a subsystem `*-table` token"
+        );
+
+        cursor = abs + close + 1;
+    }
+}
+
+/// Extract the value of a `class="..."` attribute from an opening
+/// HTML tag. Returns `None` if the tag has no class attribute.
+fn extract_class_attr(tag: &str) -> Option<String> {
+    let lower = tag.to_ascii_lowercase();
+    let key = "class=\"";
+    let start = lower.find(key)?;
+    let after = start + key.len();
+    let end = tag[after..].find('"')? + after;
+    Some(tag[after..end].to_string())
+}
+
 /// Helper: fetch a public route with the session cookie. Returns
 /// `(status, body)`. A 501 status is treated as a stub that the
 /// styling contract does not yet cover; the body is still
@@ -321,13 +379,31 @@ async fn every_public_route_forms_obey_global_class_contract() {
     }
 }
 
+/// For every public route, every `<table>` MUST declare one of
+/// `class="table"`, `class="detail__table"`, or a BEM-style
+/// `*__table` token. Defence-in-depth for the
+/// `add-web-ui-element-baseline` (2026-09-07) change.
+#[tokio::test]
+async fn every_public_route_tables_have_a_class() {
+    let server = TestServer::new().await;
+    let cookie = boot_admin(&server).await;
+
+    for route in PUBLIC_ROUTES {
+        let (status, body) = fetch_page(&server, &cookie, route).await;
+        if is_skipped(status) {
+            continue;
+        }
+        assert_eq!(status, 200, "{route} should render 200 OK");
+        assert_all_tables_have_class(&body, route);
+    }
+}
+
 /// For every public route, every visible input MUST have a paired
 /// `<label>` either as a parent or via an explicit `for`/`id`.
 #[tokio::test]
 async fn every_public_route_inputs_have_paired_label() {
     let server = TestServer::new().await;
     let cookie = boot_admin(&server).await;
-
     for route in PUBLIC_ROUTES {
         let (status, body) = fetch_page(&server, &cookie, route).await;
         if is_skipped(status) {

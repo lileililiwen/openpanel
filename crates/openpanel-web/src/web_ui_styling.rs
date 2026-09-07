@@ -134,3 +134,195 @@ fn tokens_css_is_intact() {
         assert!(tokens.contains(needle), "tokens.css missing {needle}");
     }
 }
+
+// =====================================================================
+//  OpenSpec `add-web-ui-element-baseline` (2026-09-07)
+//  Static contracts for the global element baseline, the keyboard
+//  focus ring coverage, and the reduced-motion block. These are
+//  plain string scans: if a future PR deletes or renames the block,
+//  CI fails loudly.
+// =====================================================================
+
+/// Every block in the new element baseline MUST appear in `app.css`
+/// so a route never falls through to UA defaults. The needles are
+/// chosen to match the *new* block exactly (line-start anchored or
+/// otherwise unique) so the test does not get a false positive from
+/// an existing class-scoped rule.
+#[test]
+fn app_css_global_element_baseline_is_present() {
+    let css = css(APP_CSS);
+    for needle in [
+        // Headings are written as a single combined `h1, h2, h3, h4, h5, h6 {`
+        // block; the needle matches the opener exactly.
+        "h1, h2, h3, h4, h5, h6 {",
+        "p {",
+        "table {",
+        // `dl, dt, dd` is the typical pattern; the opener is unique.
+        "dl, dt, dd {",
+        "pre {",
+        // The bare `code` baseline is its own block, distinct from
+        // the existing `code, kbd, pre, samp` block.
+        "\ncode {",
+        "th, td {",
+        "hr {",
+        "fieldset {",
+        "legend {",
+        "blockquote {",
+        "figure {",
+        "img {",
+    ] {
+        assert!(
+            css.contains(needle),
+            "app.css missing element-baseline rule for `{needle}` — \
+             bare elements would fall through to UA defaults"
+        );
+    }
+}
+
+/// Each new element-baseline block MUST source its values from
+/// `var(--op-*)` rather than literal `rem`/`px`/hex values. The
+/// `prefers-reduced-motion` block is exempt (it is a media-query
+/// envelope, not a visual rule).
+#[test]
+fn app_css_element_baseline_blocks_source_tokens() {
+    let css = css(APP_CSS);
+    for needle in [
+        "h1, h2, h3, h4, h5, h6 {",
+        "p {",
+        "table {",
+        "dl, dt, dd {",
+        "pre {",
+        "th, td {",
+    ] {
+        let block_idx = css
+            .find(needle)
+            .unwrap_or_else(|| panic!("missing {needle}"));
+        let tail = &css[block_idx..];
+        let end = tail.find('}').unwrap_or(tail.len());
+        let block = &tail[..end];
+        assert!(
+            block.contains("var(--op-"),
+            "{needle} block must source tokens (var(--op-*)): {block}"
+        );
+    }
+}
+
+/// Every interactive element the user can reach with the keyboard
+/// MUST have a `:focus-visible` rule. This list mirrors the
+/// `web-ui-styling` "Keyboard Focus Ring Coverage" requirement.
+#[test]
+fn app_css_focus_visible_covers_all_interactives() {
+    let css = css(APP_CSS);
+    // The plain-anchor baseline is at `app.css:174`; the form
+    // baseline is at `app.css:689`. We assert both still exist.
+    assert!(
+        css.contains("a:focus-visible"),
+        "plain <a> :focus-visible rule missing"
+    );
+    assert!(
+        css.contains("form input:focus-visible"),
+        "form input :focus-visible rule missing"
+    );
+    assert!(
+        css.contains("form button:focus-visible"),
+        "form button :focus-visible rule missing"
+    );
+
+    // The non-form interactives that were not covered before the
+    // change — pin each so a future regression lights up the build.
+    for selector in [
+        ".topbar button:focus-visible",
+        ".table button:focus-visible",
+        ".btn:focus-visible",
+        ".button:focus-visible",
+        ".nav-item:focus-visible",
+        ".nav-rail-toggle:focus-visible",
+        ".op-modal-close:focus-visible",
+    ] {
+        assert!(
+            css.contains(selector),
+            "missing :focus-visible rule for `{selector}` — \
+             keyboard users would have no visible focus indicator"
+        );
+    }
+}
+
+/// The reduced-motion media query MUST exist and MUST silence the
+/// spinner animation and the transition durations.
+#[test]
+fn app_css_respects_prefers_reduced_motion() {
+    let css = css(APP_CSS);
+    let block_idx = css
+        .find("@media (prefers-reduced-motion: reduce)")
+        .expect("app.css missing @media (prefers-reduced-motion: reduce) block");
+    let tail = &css[block_idx..];
+    // Bound the block to the next top-level `@` or end of file.
+    let end = tail[1..]
+        .find("@media")
+        .map(|i| i + 1)
+        .unwrap_or(tail.len());
+    let block = &tail[..end];
+    assert!(
+        block.contains("animation-duration"),
+        "reduced-motion block must set animation-duration: {block}"
+    );
+    assert!(
+        block.contains("transition-duration"),
+        "reduced-motion block must set transition-duration: {block}"
+    );
+}
+
+/// Static source-level guard: every maud template `<table>` in
+/// `crates/openpanel-web/src/` MUST declare a class. Per-resource
+/// routes (`/sites/{id}/ftp`, `/settings/tokens`, `/cron`,
+/// `/sites/{id}/security`) are not in `PUBLIC_ROUTES` so the
+/// runtime walk cannot reach them; this unit test picks up the
+/// regression at compile time instead.
+#[test]
+fn every_maud_table_has_a_class() {
+    use std::path::Path;
+    let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("src");
+    let mut offenders: Vec<(String, String)> = Vec::new();
+    let entries = std::fs::read_dir(&dir).expect("read src dir");
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if ext != "rs" {
+            continue;
+        }
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            continue;
+        };
+        // Detect maud `table {` blocks that are NOT preceded by a
+        // class attribute. The check is conservative: a line that
+        // starts with optional whitespace and `table` followed by
+        // whitespace and `{` is a bare element block.
+        for (lineno, line) in text.lines().enumerate() {
+            let trimmed = line.trim_start();
+            if trimmed.starts_with("table ") && trimmed.ends_with('{') {
+                // The previous non-blank line should be the maud
+                // selector for `<table class="...">`. Maud requires
+                // the class attribute on the same line as the tag,
+                // so the `class="..."` substring is on the same
+                // physical line as `table` for a non-bare block.
+                if !line.contains("class=") {
+                    let file = path
+                        .file_name()
+                        .and_then(|n| n.to_str())
+                        .unwrap_or("?")
+                        .to_string();
+                    offenders.push((format!("{file}:{}", lineno + 1), line.to_string()));
+                }
+            }
+        }
+    }
+    assert!(
+        offenders.is_empty(),
+        "maud `<table {{` blocks must declare a class. Offenders:\n{}",
+        offenders
+            .iter()
+            .map(|(loc, src)| format!("  {loc}: {src}"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    );
+}

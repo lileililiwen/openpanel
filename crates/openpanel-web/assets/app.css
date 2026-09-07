@@ -590,6 +590,204 @@ code, kbd, pre, samp {
 .table button.danger:hover { border-color: #ff6b6b; color: #ff6b6b; }
 
 /* ============================================================
+   Global element baseline + focus ring + reduced motion.
+   OpenSpec `add-web-ui-element-baseline` (2026-09-07).
+
+   Every block here MUST source its values from `var(--op-*)`.
+   The block is the defence-in-depth layer for elements that a
+   route renders without a class: the bare baseline beats the UA
+   default even before any class-scoped rule kicks in. Per-class
+   rules (`.table`, `.detail__table`, `.card`, etc.) keep their
+   precedence and may further refine the visual.
+
+   The focus ring covers every interactive element a keyboard user
+   can reach: the plain-anchor rule below is the existing contract;
+   the seven non-form selectors are added so the sidebar, topbar,
+   table-row buttons, modal close, and the public `.btn`/`.button`
+   surfaces all paint a visible ring on focus.
+   ============================================================ */
+
+h1, h2, h3, h4, h5, h6 {
+  margin-block: var(--op-space-6) var(--op-space-3);
+  font-weight: 600;
+  line-height: var(--op-line-height);
+  color: var(--op-color-fg);
+}
+
+h1 { font-size: var(--op-font-size-2xl); margin-top: 0; }
+h2 { font-size: var(--op-font-size-xl); }
+h3 { font-size: var(--op-font-size-lg); }
+h4, h5, h6 { font-size: var(--op-font-size-md); }
+
+p {
+  margin-block: 0 var(--op-space-3);
+  max-width: 64ch;
+  color: var(--op-color-fg);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--op-color-surface);
+  border: 1px solid var(--op-color-border);
+  border-radius: var(--op-radius-md);
+  overflow: hidden;
+  margin-block: var(--op-space-3);
+}
+
+th, td {
+  text-align: left;
+  padding: var(--op-space-2) var(--op-space-3);
+  border-bottom: 1px solid var(--op-color-border);
+  vertical-align: top;
+}
+
+th {
+  color: var(--op-color-fg-muted);
+  font-size: var(--op-font-size-sm);
+  font-weight: 600;
+  background: var(--op-color-surface);
+}
+
+dl, dt, dd {
+  margin: 0;
+  color: var(--op-color-fg);
+}
+
+dl {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  column-gap: var(--op-space-4);
+  row-gap: var(--op-space-2);
+  margin-block: var(--op-space-3);
+}
+
+dt {
+  color: var(--op-color-fg-muted);
+  font-size: var(--op-font-size-sm);
+  font-weight: 500;
+}
+
+dd {
+  font-size: var(--op-font-size-sm);
+  margin-inline-start: 0;
+}
+
+pre {
+  margin-block: var(--op-space-3);
+  padding: var(--op-space-3);
+  background: var(--op-color-surface);
+  border: 1px solid var(--op-color-border);
+  border-radius: var(--op-radius-md);
+  overflow-x: auto;
+  font-family: var(--op-font-family-mono);
+  font-size: var(--op-font-size-sm);
+  line-height: var(--op-line-height);
+  color: var(--op-color-fg);
+}
+
+code {
+  font-family: var(--op-font-family-mono);
+  font-size: 0.95em;
+  padding: 0.1em 0.35em;
+  background: var(--op-color-surface);
+  border: 1px solid var(--op-color-border);
+  border-radius: var(--op-radius-sm);
+  color: var(--op-color-fg);
+}
+
+pre code {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+}
+
+hr {
+  border: 0;
+  border-top: 1px solid var(--op-color-border);
+  margin-block: var(--op-space-4);
+  color: var(--op-color-border);
+}
+
+fieldset {
+  margin: 0;
+  padding: var(--op-space-3);
+  border: 1px solid var(--op-color-border);
+  border-radius: var(--op-radius-md);
+}
+
+legend {
+  padding: 0 var(--op-space-2);
+  color: var(--op-color-fg-muted);
+  font-size: var(--op-font-size-sm);
+  font-weight: 600;
+}
+
+blockquote {
+  margin-block: var(--op-space-3);
+  padding: var(--op-space-2) var(--op-space-4);
+  border-inline-start: 3px solid var(--op-color-accent);
+  color: var(--op-color-fg-muted);
+  background: var(--op-color-surface);
+  border-radius: 0 var(--op-radius-md) var(--op-radius-md) 0;
+}
+
+figure {
+  margin-block: var(--op-space-3);
+  padding: var(--op-space-3);
+  background: var(--op-color-surface);
+  border: 1px solid var(--op-color-border);
+  border-radius: var(--op-radius-md);
+}
+
+img {
+  max-width: 100%;
+  height: auto;
+  display: block;
+}
+
+/* Focus ring: keyboard coverage for every interactive the user can
+   reach outside a <form>. The form baseline already paints a ring
+   on its descendants (see `form input:focus-visible, ...` below). */
+
+.topbar button:focus-visible,
+.table button:focus-visible,
+.btn:focus-visible,
+.button:focus-visible,
+.nav-item:focus-visible,
+.nav-rail-toggle:focus-visible,
+.op-modal-close:focus-visible {
+  outline: 2px solid var(--op-color-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--op-radius-sm);
+}
+
+.table button:focus-visible {
+  /* Tighter offset on a small inline button so the ring sits inside
+     the row gutter without displacing neighbours. */
+  outline-offset: 1px;
+}
+
+/* Reduced motion: silence the spinner, shorten transitions. The
+   rule uses `!important` for the duration overrides because some
+   elements (e.g. the op-spin keyframes) declare their duration
+   inline and a non-`!important` rule would lose the cascade. */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0ms !important;
+  }
+  .op-loading-spinner {
+    animation: none;
+  }
+}
+
+/* ============================================================
    Forms — GLOBAL CONTRACT.
    Every <form> in the web UI MUST declare one of:
      class="form"           — stacked, single column

@@ -30,7 +30,7 @@ pub async fn list(State(state): State<WebState>, WebUser(user, session): WebUser
                 .with_cta("/cron/new", "Create cron job")
                 .render())
         } @else {
-            table {
+            table class="table" {
                 thead { tr { th { "Name" } th { "Schedule" } th { "Timezone" } th { "Status" } } }
                 tbody { @for job in jobs { tr { td { a href=(format!("/cron/jobs/{}", job.id())) { (job.name()) } } td { (job.schedule().expression()) } td { (job.schedule().timezone()) } td { @if job.enabled() { "Enabled" } @else { "Disabled" } } } } }
             }

@@ -285,7 +285,7 @@ fn security_content(factors: &[Factor], recovery_remaining: u8, csrf: &str) -> M
                         @if factors.is_empty() {
                             p { "No factors enrolled. Add a TOTP factor below." }
                         } @else {
-                            table {
+                            table class="table" {
                                 thead { tr { th { "Kind" } th { "Enrolled" } th { "Last used" } th { "Status" } th { "" } } }
                                 tbody {
                                     @for factor in factors {

@@ -143,7 +143,7 @@ fn content(tokens: &[ApiTokenMetadata], csrf: &str, plaintext: Option<&str>) -> 
         @if tokens.is_empty() {
             (crate::ui_states::EmptyState::new("No API tokens yet", "Create a scoped token to use with the API.").render())
         } @else {
-            table {
+            table class="table" {
                 thead { tr { th { "Label" } th { "Scopes" } th { "Expires" } th { "Status" } th { "Actions" } } }
                 tbody {
                     @for token in tokens {
