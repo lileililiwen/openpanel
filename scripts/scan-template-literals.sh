@@ -9,25 +9,29 @@
 # `step: scan-literal status: ok | failed` line consumed by
 # `make check` via scripts/lib/step.sh.
 #
-# Scope: the scanner only inspects `.rs`, `.maud`, and `.html`
-# files inside `crates/`. CSS files in `assets/` are excluded
-# because the existing `app.css` is a pre-existing baseline
-# that owns the colour tokens; the lint exists to prevent
-# NEW inline literals in maud templates and Rust source.
+# Scope: the scanner inspects `.rs`, `.maud`, `.html`, and
+# `.css` files inside `crates/`. CSS files in `assets/` are
+# inspected the same way as everything else; `tokens.css` is
+# the colour home and is the only CSS file that may declare
+# literal hex/rgb/hsl values. The lint exists to prevent NEW
+# inline literals in maud templates, Rust source, and any
+# non-allowlisted stylesheet (including `app.css`).
 set -euo pipefail
 source "$(dirname "$0")/lib/step.sh"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-ALLOWED_COLOUR_HOME="crates/openpanel-web/src/tokens.css"
+ALLOWED_COLOUR_HOME="crates/openpanel-web/assets/tokens.css"
 ALLOWED_STRING_HOME="crates/openpanel-web/src/t.rs"
 
 # Patterns:
 #   - Hex: #RGB, #RRGGBB, #RRGGBBAA
-#   - rgb()/rgba()/hsl()/hsla()
+#   - rgb()/rgba()/hsl()/hsla() with a numeric first argument
+#     (excludes tokenised calls like `rgba(var(--op-color-*-rgb), 0.1)`
+#     which are the documented escape hatch for translucent values)
 HEX_REGEX='#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b'
-RGB_REGEX='\b(rgb|rgba|hsl|hsla|hwb)\s*\('
+RGB_REGEX='\b(rgb|rgba|hsl|hsla|hwb)\(\s*[0-9]'
 
 violations=0
 scan() {
@@ -40,14 +44,14 @@ scan() {
             continue
         fi
         case "$f" in
-            */target/*|*/node_modules/*|*/dist/*|*/proptest-regressions/*|*/assets/*) continue ;;
+            */target/*|*/node_modules/*|*/dist/*|*/proptest-regressions/*) continue ;;
         esac
         if rg -n --pcre2 "$pattern" "$f" >/dev/null 2>&1; then
             echo "scan: literal $label outside ${allowed}: $f"
             rg -n --pcre2 "$pattern" "$f" | head -3
             violations=$((violations + 1))
         fi
-    done < <(find crates -type f \( -name '*.rs' -o -name '*.maud' -o -name '*.html' \) | sort)
+    done < <(find crates -type f \( -name '*.rs' -o -name '*.maud' -o -name '*.html' -o -name '*.css' \) | sort)
 }
 
 scan "hex color" "$HEX_REGEX" "$ALLOWED_COLOUR_HOME"

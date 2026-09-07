@@ -107,9 +107,23 @@ requirements:
   - archive: openspec/changes/archive/2026-08-14-2026-08-13-refine-quality-with-i18n-and-theme-policy/specs/quality/spec.md
     capability: quality
     requirement: "Template-Literal Scan"
-    digest: sha256:2e1b6d61ff86a5294c910f8e9803500c5680bacd70b5c27048fb899bbad8c5f3
-    scenarios: 3
-    checkers: [scan-literal]
+    digest: sha256:718adcb7420ef2ecc581d7d524c99f12d42316dbe5a1c6587852ac643e6b2bc9
+    scenarios: 6
+    checkers: [scan-literal, class-coverage]
+
+  # The 2026-09-07 archive re-states the same Template-Literal Scan
+  # requirement text (it added the app.css + class-coverage scenarios
+  # to the existing requirement). The digest + scenarios + checkers
+  # are identical to the original 2026-08-14 entry; this row exists
+  # only so the gate's per-archive walk finds a manifest entry for
+  # the new path. If a future change mutates the requirement again,
+  # update BOTH entries' digest + scenarios in lockstep.
+  - archive: openspec/changes/archive/2026-09-07-2026-09-07-tokenise-app-css-and-add-class-gate/specs/quality/spec.md
+    capability: quality
+    requirement: "Template-Literal Scan"
+    digest: sha256:718adcb7420ef2ecc581d7d524c99f12d42316dbe5a1c6587852ac643e6b2bc9
+    scenarios: 6
+    checkers: [scan-literal, class-coverage]
 
   # --- testing ---------------------------------------------------------
   - archive: openspec/changes/archive/2026-08-15-refine-agent-context-engineering/specs/testing/spec.md

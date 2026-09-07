@@ -33,10 +33,24 @@
     --op-color-danger: #f85149;
     --op-color-info: #58a6ff;
 
+    /* RGB triplets for translucent values. The rgba() function
+       accepts three numbers (0-255) for the colour channels; using
+       the existing --op-color-* hex tokens would require callers
+       to know whether the token was solid or translucent, so we
+       keep the hex tokens for solid colour and the -rgb triplets
+       for use inside `rgba(var(--op-color-*-rgb), 0.N)`. */
+    --op-color-success-rgb: 63, 185, 80;
+    --op-color-warning-rgb: 210, 153, 34;
+    --op-color-danger-rgb: 248, 81, 73;
+    --op-color-info-rgb: 88, 166, 255;
+    --op-color-accent-rgb: 79, 140, 255;
+    --op-color-shadow-rgb: 0, 0, 0;
+
     /* Focus */
     --op-color-focus-ring: #58a6ff;
 
     /* Spacing */
+    --op-space-half: 2px;
     --op-space-1: 4px;
     --op-space-2: 8px;
     --op-space-3: 12px;
@@ -53,6 +67,7 @@
     /* Typography */
     --op-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     --op-font-family-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+    --op-font-size-2xs: 11px;
     --op-font-size-xs: 12px;
     --op-font-size-sm: 13px;
     --op-font-size-md: 14px;
@@ -69,4 +84,34 @@
     --op-duration-fast: 120ms;
     --op-duration-default: 200ms;
     --op-ease: cubic-bezier(0.2, 0, 0, 1);
+}
+
+/*
+ * Light-theme remap. The dark-theme hex above is the canonical value;
+ * light-mode surfaces are lower contrast, so the surface and semantic
+ * colours are re-mapped to lighter shades. Anything that sources
+ * `var(--op-color-bg)` etc. picks the new value here; app.css's
+ * legacy --bg/--panel aliases inherit the change for free.
+ *
+ * The new --op-color-*-rgb triplets are intentionally NOT remapped:
+ * translucent values blend against the local surface, and the same
+ * dark RGB looks fine on the lighter background (the surface is
+ * opaque, so the colour contribution is the same). Only the solid
+ * hex values need a light-theme override.
+ */
+html[data-theme="light"] {
+    /* Surface + foreground remap (replaces the legacy alias block
+       in app.css; kept here so app.css can drop its hex literals). */
+    --op-color-bg: #f5f7fb;
+    --op-color-surface: #ffffff;
+    --op-color-border: #d8deea;
+    --op-color-fg: #182033;
+    --op-color-fg-muted: #64708a;
+    --op-color-accent: #2869dc;
+
+    /* Semantic — darker shades for white background. */
+    --op-color-success: #1a7f37;
+    --op-color-warning: #9a6700;
+    --op-color-danger: #b1101b;
+    --op-color-info: #0969da;
 }

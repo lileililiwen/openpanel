@@ -7,9 +7,9 @@
  *              colours, spacings, and font families are forbidden
  *              here. The CI scan enforces this.
  *   legacy   — `--bg`, `--panel`, `--border`, `--text`, `--muted`,
- *              `--accent`. Aliased to the tokens so the existing
- *              pre-token rules continue to work and the
- *              light-theme switch keeps functioning.
+ *              `--accent`. Aliased to the --op-color-* tokens so
+ *              the pre-token rules continue to work; the
+ *              light-theme remap lives in tokens.css.
  */
 
 :root {
@@ -34,14 +34,9 @@ body {
   line-height: var(--op-line-height);
 }
 
-html[data-theme="light"] {
-  --bg: #f5f7fb;
-  --panel: #ffffff;
-  --border: #d8deea;
-  --text: #182033;
-  --muted: #64708a;
-  --accent: #2869dc;
-}
+/* Light-theme remap is in tokens.css (`html[data-theme="light"]`).
+   The legacy --bg/--panel aliases above inherit the new values
+   because they forward to --op-color-bg / --op-color-surface. */
 
 /* .layout is defined under the responsive section below (mobile-first). */
 
@@ -200,11 +195,11 @@ code, kbd, pre, samp {
   font-size: 0.95em;
 }
 
-.sidebar .nav-item:hover { color: var(--text); background: rgba(79, 140, 255, 0.1); }
+.sidebar .nav-item:hover { color: var(--text); background: rgba(var(--op-color-accent-rgb), 0.1); }
 
 .sidebar .nav-item[aria-current="page"] {
   color: var(--text);
-  background: rgba(79, 140, 255, 0.16);
+  background: rgba(var(--op-color-accent-rgb), 0.16);
   box-shadow: inset 3px 0 var(--accent);
 }
 
@@ -519,7 +514,7 @@ code, kbd, pre, samp {
   min-height: 44px;
 }
 
-.btn:hover { background: rgba(79, 140, 255, 0.1); text-decoration: none; }
+.btn:hover { background: rgba(var(--op-color-accent-rgb), 0.1); text-decoration: none; }
 
 .empty { color: var(--muted); }
 
@@ -572,7 +567,7 @@ code, kbd, pre, samp {
   padding: 0.15rem 0.6rem;
   border-radius: 999px;
   font-size: 0.8rem;
-  background: rgba(79, 140, 255, 0.15);
+  background: rgba(var(--op-color-accent-rgb), 0.15);
   color: var(--accent);
 }
 
@@ -587,7 +582,7 @@ code, kbd, pre, samp {
 
 .table button:hover { border-color: var(--accent); color: var(--accent); }
 
-.table button.danger:hover { border-color: #ff6b6b; color: #ff6b6b; }
+.table button.danger:hover { border-color: var(--op-color-danger); color: var(--op-color-danger); }
 
 /* ============================================================
    Global element baseline + focus ring + reduced motion.
@@ -1057,7 +1052,7 @@ form[data-form="bare"] {
   border-radius: var(--op-radius-md);
   border: 1px solid var(--op-color-danger);
   color: var(--op-color-danger);
-  background: rgba(248, 81, 73, 0.08);
+  background: rgba(var(--op-color-danger-rgb), 0.08);
   font-size: var(--op-font-size-sm);
 }
 
@@ -1067,7 +1062,7 @@ form[data-form="bare"] {
   border-radius: var(--op-radius-md);
   border: 1px solid var(--op-color-success);
   color: var(--op-color-success);
-  background: rgba(63, 185, 80, 0.08);
+  background: rgba(var(--op-color-success-rgb), 0.08);
   font-size: var(--op-font-size-sm);
 }
 
@@ -1150,7 +1145,7 @@ form[data-form="bare"] {
 }
 
 html[data-theme="light"] .storefront__tabs .tab--active {
-  color: white;
+  color: var(--op-color-accent-fg);
 }
 
 .storefront__search {
@@ -1281,18 +1276,18 @@ html[data-theme="light"] .storefront__tabs .tab--active {
 }
 
 .card__status--ok {
-  background: rgba(63, 185, 80, 0.2);
-  color: #3fb950;
+  background: rgba(var(--op-color-success-rgb), 0.2);
+  color: var(--op-color-success);
 }
 
 .card__status--external {
-  background: rgba(210, 153, 34, 0.2);
-  color: #d29922;
+  background: rgba(var(--op-color-warning-rgb), 0.2);
+  color: var(--op-color-warning);
 }
 
 .card__status--warn {
-  background: rgba(248, 81, 73, 0.2);
-  color: #f85149;
+  background: rgba(var(--op-color-danger-rgb), 0.2);
+  color: var(--op-color-danger);
 }
 
 .badge {
@@ -1305,15 +1300,15 @@ html[data-theme="light"] .storefront__tabs .tab--active {
 }
 
 .badge--warning {
-  background: rgba(248, 81, 73, 0.2);
-  color: #f85149;
+  background: rgba(var(--op-color-danger-rgb), 0.2);
+  color: var(--op-color-danger);
 }
 
 .button {
   display: inline-block;
   padding: 0.375rem 0.75rem;
   background: var(--accent);
-  color: white;
+  color: var(--op-color-accent-fg);
   border: none;
   border-radius: 0.375rem;
   font-size: 0.875rem;
@@ -1332,7 +1327,7 @@ html[data-theme="light"] .storefront__tabs .tab--active {
 }
 
 .button--danger {
-  background: #f85149;
+  background: var(--op-color-danger);
 }
 
 html[data-theme="light"] .button--ghost {
@@ -1447,15 +1442,15 @@ html[data-theme="light"] .button--ghost {
 }
 
 .banner--ok {
-  background: rgba(63, 185, 80, 0.12);
-  border: 1px solid #3fb950;
-  color: #3fb950;
+  background: rgba(var(--op-color-success-rgb), 0.12);
+  border: 1px solid var(--op-color-success);
+  color: var(--op-color-success);
 }
 
 .banner--error {
-  background: rgba(248, 81, 73, 0.12);
-  border: 1px solid #f85149;
-  color: #f85149;
+  background: rgba(var(--op-color-danger-rgb), 0.12);
+  border: 1px solid var(--op-color-danger);
+  color: var(--op-color-danger);
 }
 
 .detail__tabs {
@@ -1553,7 +1548,7 @@ html[data-theme="light"] .button--ghost {
 }
 
 .task-progress__error {
-  color: #f85149;
+  color: var(--op-color-danger);
   font-size: 0.8125rem;
   margin-top: 0.5rem;
   word-break: break-word;
@@ -1570,16 +1565,16 @@ html[data-theme="light"] .button--ghost {
   height: 100%;
   width: 0;
   border-radius: 999px;
-  background: #4493f8;
+  background: var(--op-color-info);
   transition: width 0.4s ease;
 }
 
 .progress__bar--ok {
-  background: #3fb950;
+  background: var(--op-color-success);
 }
 
 .progress__bar--error {
-  background: #f85149;
+  background: var(--op-color-danger);
 }
 
 .storefront__tasks {
@@ -1598,7 +1593,7 @@ html[data-theme="light"] .button--ghost {
   border-radius: var(--op-radius-md);
   border: 1px solid var(--op-color-danger);
   color: var(--op-color-danger);
-  background: rgba(248, 81, 73, 0.08);
+  background: rgba(var(--op-color-danger-rgb), 0.08);
   font-size: var(--op-font-size-sm);
 }
 
@@ -1781,17 +1776,17 @@ html[data-theme="light"] .button--ghost {
 }
 
 .audit-badge.audit-badge-success {
-  background: rgba(63, 185, 80, 0.12);
+  background: rgba(var(--op-color-success-rgb), 0.12);
   color: var(--op-color-success);
 }
 
 .audit-badge.audit-badge-failure {
-  background: rgba(248, 81, 73, 0.12);
+  background: rgba(var(--op-color-danger-rgb), 0.12);
   color: var(--op-color-danger);
 }
 
 .audit-badge.audit-badge-denied {
-  background: rgba(210, 153, 34, 0.12);
+  background: rgba(var(--op-color-warning-rgb), 0.12);
   color: var(--op-color-warning);
 }
 
@@ -1826,7 +1821,7 @@ html[data-theme="light"] .button--ghost {
 }
 
 .btn-ghost:hover {
-  background: rgba(79, 140, 255, 0.1);
+  background: rgba(var(--op-color-accent-rgb), 0.1);
 }
 
 /* Btn-danger variant (storefront .button--danger alias). */
@@ -1837,7 +1832,7 @@ html[data-theme="light"] .button--ghost {
 }
 
 .btn-danger:hover {
-  background: rgba(248, 81, 73, 0.85);
+  background: rgba(var(--op-color-danger-rgb), 0.85);
 }
 
 /* Checkbox label override (form label.checkbox). */
@@ -2129,7 +2124,7 @@ form label.checkbox {
   border-radius: var(--op-radius-md);
   border: 1px solid var(--op-color-danger);
   color: var(--op-color-danger);
-  background: rgba(248, 81, 73, 0.08);
+  background: rgba(var(--op-color-danger-rgb), 0.08);
   font-size: var(--op-font-size-sm);
 }
 
@@ -2531,12 +2526,12 @@ form label.checkbox {
 }
 
 .trust--ok {
-  background: rgba(63, 185, 80, 0.12);
+  background: rgba(var(--op-color-success-rgb), 0.12);
   color: var(--op-color-success);
 }
 
 .trust--blocked {
-  background: rgba(248, 81, 73, 0.12);
+  background: rgba(var(--op-color-danger-rgb), 0.12);
   color: var(--op-color-danger);
 }
 
@@ -2605,7 +2600,7 @@ form label.checkbox {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(var(--op-color-shadow-rgb), 0.5);
   padding: var(--op-space-4);
 }
 
@@ -2660,7 +2655,7 @@ form label.checkbox {
   align-items: center;
   justify-content: center;
   gap: var(--op-space-3);
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(var(--op-color-shadow-rgb), 0.5);
   color: var(--op-color-fg);
   font-size: var(--op-font-size-md);
 }

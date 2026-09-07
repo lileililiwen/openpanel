@@ -630,3 +630,39 @@ fn assert_no_empty_heading(html: &str, route: &str) {
         }
     }
 }
+
+/// Smoke-test the `class-coverage` gate wiring: the script
+/// exists, is exposed as a `make` target, and is in the `check`
+/// dependency chain. The script itself is unit-tested in
+/// `scripts/test-gates.sh`; this integration test guards the
+/// end-to-end contract.
+#[test]
+fn class_coverage_gate_is_wired_into_make_check() {
+    // The `integration` package's `CARGO_MANIFEST_DIR` resolves to
+    // the workspace root (the package lives at `tests/integration/`
+    // but is declared in the root `Cargo.toml`), so the Makefile
+    // sits at `${MANIFEST_DIR}/Makefile`.
+    let makefile = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("Makefile");
+    let body = std::fs::read_to_string(&makefile)
+        .unwrap_or_else(|e| panic!("read Makefile at {:?}: {e}", makefile));
+
+    assert!(
+        body.contains("class-coverage:"),
+        "Makefile must expose a `class-coverage` target"
+    );
+    assert!(
+        body.contains("scripts/check-class-coverage.sh"),
+        "Makefile must invoke scripts/check-class-coverage.sh"
+    );
+    // The `check:` target's dependency list lives on the single
+    // line that starts with `check:`. Assert class-coverage is
+    // named in that list (and therefore chained into `make check`).
+    let check_line = body
+        .lines()
+        .find(|l| l.trim_start().starts_with("check:"))
+        .expect("`check:` target in Makefile");
+    assert!(
+        check_line.contains("class-coverage"),
+        "`make check` must depend on class-coverage; got:\n{check_line}"
+    );
+}

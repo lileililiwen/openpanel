@@ -137,9 +137,10 @@ printf '# example spec\n\n### Requirement: Fixture Requirement\n' \
 
 # --- scan-literal --------------------------------------------------------
 # scan-template-literals.sh resolves its root from its own location and
-# scans `crates/**/*.{rs,maud,html}`, so a fixture tree is enough.
+# scans `crates/**/*.{rs,maud,html,css}`, so a fixture tree is enough.
 SL_ROOT="${TMP}/scan_literal"
-mkdir -p "${SL_ROOT}/scripts/lib" "${SL_ROOT}/crates/openpanel-web/src"
+mkdir -p "${SL_ROOT}/scripts/lib" "${SL_ROOT}/crates/openpanel-web/src" \
+         "${SL_ROOT}/crates/openpanel-web/assets"
 cp ./scripts/scan-template-literals.sh "${SL_ROOT}/scripts/scan-template-literals.sh"
 cp ./scripts/lib/step.sh "${SL_ROOT}/scripts/lib/step.sh"
 printf 'pub fn ok() {}\n' > "${SL_ROOT}/crates/openpanel-web/src/lib.rs"
@@ -148,9 +149,37 @@ assert "scan-literal: no literals passes" 0 "${SL_ROOT}/scripts/scan-template-li
 printf 'pub const BRAND: &str = "#4f8cff";\n' > "${SL_ROOT}/crates/openpanel-web/src/lib.rs"
 # checker: scan-literal negative
 assert "scan-literal: literal hex fails" 1 "${SL_ROOT}/scripts/scan-template-literals.sh"
-# The allowlisted token home is exempt from the scan.
-mv "${SL_ROOT}/crates/openpanel-web/src/lib.rs" "${SL_ROOT}/crates/openpanel-web/src/tokens.css"
+# The allowlisted token home (assets/tokens.css) is exempt from the scan.
+mv "${SL_ROOT}/crates/openpanel-web/src/lib.rs" "${SL_ROOT}/crates/openpanel-web/assets/tokens.css"
 assert "scan-literal: allowlisted token home passes" 0 "${SL_ROOT}/scripts/scan-template-literals.sh"
+# A literal hex inside any other CSS file is a violation.
+printf '.x { color: #4f8cff; }\n' > "${SL_ROOT}/crates/openpanel-web/assets/app.css"
+# checker: scan-literal negative
+assert "scan-literal: literal hex in app.css fails" 1 "${SL_ROOT}/scripts/scan-template-literals.sh"
+
+# --- class-coverage ------------------------------------------------------
+# check-class-coverage.sh resolves its root from its own location and
+# reads the source tree under OPENSPEC_WEB_SRC_DIR + the stylesheet at
+# OPENSPEC_WEB_CSS_FILE, so a fixture tree is enough.
+CC_ROOT="${TMP}/class_coverage"
+mkdir -p "${CC_ROOT}/scripts/lib" "${CC_ROOT}/crates/openpanel-web/src" \
+         "${CC_ROOT}/crates/openpanel-web/assets"
+cp ./scripts/check-class-coverage.sh "${CC_ROOT}/scripts/check-class-coverage.sh"
+cp ./scripts/lib/step.sh "${CC_ROOT}/scripts/lib/step.sh"
+printf '.known-widget { color: red; }\n' > "${CC_ROOT}/crates/openpanel-web/assets/app.css"
+printf 'div class="known-widget"\n' > "${CC_ROOT}/crates/openpanel-web/src/lib.rs"
+# checker: class-coverage positive
+assert "class-coverage: every class has a rule" 0 \
+  env OPENSPEC_WEB_SRC_DIR="${CC_ROOT}/crates/openpanel-web/src" \
+      OPENSPEC_WEB_CSS_FILE="${CC_ROOT}/crates/openpanel-web/assets/app.css" \
+      "${CC_ROOT}/scripts/check-class-coverage.sh"
+# A new class without a rule MUST fail.
+printf 'div class="made-up-widget"\n' > "${CC_ROOT}/crates/openpanel-web/src/lib.rs"
+# checker: class-coverage negative
+assert "class-coverage: undefined class fails" 1 \
+  env OPENSPEC_WEB_SRC_DIR="${CC_ROOT}/crates/openpanel-web/src" \
+      OPENSPEC_WEB_CSS_FILE="${CC_ROOT}/crates/openpanel-web/assets/app.css" \
+      "${CC_ROOT}/scripts/check-class-coverage.sh"
 
 # --- governance-contract -------------------------------------------------
 # Ratchet for archived governance requirements: the manifest pins each
@@ -512,6 +541,23 @@ if command -v make >/dev/null 2>&1; then
     pass=$((pass+1)); echo "  ok   - make check includes governance-contract"
   else
     fail=$((fail+1)); echo "  FAIL - make check does NOT include governance-contract"
+  fi
+fi
+
+# The class-coverage gate is the newest script-only entry point. An
+# unwired gate is no gate at all, so the self-test verifies the
+# Makefile both exposes it as its own target AND chains it into
+# `make check` after `scan-literal`.
+if command -v make >/dev/null 2>&1; then
+  if make -n class-coverage 2>/dev/null | grep -q 'scripts/check-class-coverage.sh'; then
+    pass=$((pass+1)); echo "  ok   - make class-coverage target runs the script"
+  else
+    fail=$((fail+1)); echo "  FAIL - make class-coverage target missing or unwired"
+  fi
+  if make -n check 2>/dev/null | grep -q 'scripts/check-class-coverage.sh'; then
+    pass=$((pass+1)); echo "  ok   - make check includes class-coverage"
+  else
+    fail=$((fail+1)); echo "  FAIL - make check does NOT include class-coverage"
   fi
 fi
 

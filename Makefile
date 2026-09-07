@@ -17,6 +17,7 @@
 #   make test-gates — run scripts/test-gates.sh (the governance self-test)
 #   make agent-governance — run scripts/check-agent-governance.sh
 #   make governance-contract — run scripts/check-governance-contract.sh
+#   make class-coverage — run scripts/check-class-coverage.sh
 #   make coverage  — informational coverage report
 #   make install-lint-tools — install the optional file-length tools
 #   make split FILE=<path>  — auto-refactor preview for one file
@@ -27,7 +28,7 @@
 # AGENTS.md "Quality gate" line):
 #   ensure-lint-tools
 #   → fmt → clippy → docs → audit → file-length → scan-literal
-#   → tasks-testing-first → reuse → layering
+#   → class-coverage → tasks-testing-first → reuse → layering
 #   → spec-test-drift → spec-drift → agent-governance → governance-contract
 #   → test-gates
 #   → test
@@ -35,9 +36,9 @@
 # Every per-check script prints `step: <name> status: ok | failed` and
 # exits non-zero on failure; `make` short-circuits on the first one.
 
-.PHONY: check fmt clippy docs audit file-length test coverage install-lint-tools ensure-lint-tools split a11y scan-literal tasks-testing-first reuse layering spec-test-drift spec-drift repo-map test-gates agent-governance governance-contract
+.PHONY: check fmt clippy docs audit file-length test coverage install-lint-tools ensure-lint-tools split a11y scan-literal class-coverage tasks-testing-first reuse layering spec-test-drift spec-drift repo-map test-gates agent-governance governance-contract
 
-check: ensure-lint-tools fmt clippy docs audit file-length scan-literal tasks-testing-first reuse layering spec-test-drift spec-drift agent-governance governance-contract test-gates test
+check: ensure-lint-tools fmt clippy docs audit file-length scan-literal class-coverage tasks-testing-first reuse layering spec-test-drift spec-drift agent-governance governance-contract test-gates test
 	@echo ""
 	@echo "=== All quality checks passed ==="
 
@@ -58,6 +59,9 @@ file-length:
 
 scan-literal:
 	@scripts/scan-template-literals.sh
+
+class-coverage:
+	@scripts/check-class-coverage.sh
 
 tasks-testing-first:
 	@scripts/check-tasks-testing-first.sh
