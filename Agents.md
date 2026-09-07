@@ -235,15 +235,16 @@ Local invocation runs the same gates as CI, in this order:
 4. `make audit` — `cargo audit` (optional, skipped if tool absent)
 5. `make file-length` — per-file line-count lint (optional)
 6. `make scan-literal` — literal colour / string scan
-7. `make tasks-testing-first` — `## 1. Testing` comes first in `tasks.md`
-8. `make reuse` — no duplicated public item across crates
-9. `make layering` — domain MUST NOT import app/api
-10. `make spec-test-drift` — every spec has a covering test
-11. `make spec-drift` — every archived delta exists in the live spec
-12. `make agent-governance` — OpenSpec context + runtime contract integrity
-13. `make governance-contract` — archived governance content ratchet
-14. `make test-gates` — the governance gates' own positive/negative fixtures
-15. `make test` — full test suite
+7. `make class-coverage` — every `class="..."` literal has a rule in `app.css`
+8. `make tasks-testing-first` — `## 1. Testing` comes first in `tasks.md`
+9. `make reuse` — no duplicated public item across crates
+10. `make layering` — domain MUST NOT import app/api
+11. `make spec-test-drift` — every spec has a covering test
+12. `make spec-drift` — every archived delta exists in the live spec
+13. `make agent-governance` — OpenSpec context + runtime contract integrity
+14. `make governance-contract` — archived governance content ratchet
+15. `make test-gates` — the governance gates' own positive/negative fixtures
+16. `make test` — full test suite
 
 `add-quality-engineering-infrastructure` defines the full policy.
 
@@ -285,6 +286,38 @@ the focused ratchet for the four governance capabilities
    negative fixtures for it in `scripts/test-gates.sh`, add the manifest
    entry, then regenerate the baseline with
    `scripts/check-governance-contract.sh --write-baseline`.
+
+### 5.2 Per-change commit cadence (commit 1, then commit 2)
+
+A change produces **two commits** in this order:
+
+- **Commit 1 — the change.** `openspec archive <name> --yes` moves
+  the spec deltas into the live specs and ratchets the manifest.
+  `git add` and commit (a) the implementation files (Rust / CSS /
+  shell / test), (b) the new gate scripts / Makefile / new
+  assets, (c) the live-spec updates (the now-merged delta under
+  `openspec/specs/<cap>/spec.md` and the manifest entry), (d) the
+  ticked `tasks.md`, and (e) the now-archived change folder under
+  `openspec/changes/archive/<name>/`. Use a `feat(...)` / `chore(...)`
+  / `fix(...)` prefix that matches the change's nature. When the
+  live spec + manifest updates have been pre-applied (e.g. an
+  earlier turn of the agent), pass `--skip-specs` to
+  `openspec archive` so it does not re-apply the already-merged
+  delta.
+- **Commit 2 — the HANDOFF follow-up.** Update `HANDOFF.md` to
+  reflect the new status (the change's row in the progress table
+  becomes `[x] implemented; archived & committed (<hash>)` using
+  the commit hash from commit 1; the "Next steps" entry moves to
+  the next change). `git add` and commit `HANDOFF.md` only. The
+  same change may also touch `AGENTS.md` / `README.md` to add a
+  new gate, a new example, or a quick-reference tweak; those
+  edits are part of commit 2.
+
+Do NOT amend commit 1 to add the HANDOFF update; do NOT commit
+them together. The two-commit split keeps commit 1 a clean change
+commit (revertable, bisectable, the unit of "what this change
+did") and commit 2 the post-hoc bookkeeping that depends on
+commit 1's hash.
 
 ---
 

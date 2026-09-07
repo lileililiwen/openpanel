@@ -9,18 +9,17 @@ folded into the live `audit-activity`, `operations-dashboard`, `sites`,
 and `web-ui-styling` specs. The active repo is on a green `make check`
 and `make test-gates` baseline.
 
-The style-baseline roadmap (changes #8–#10) is now in flight:
+The style-baseline roadmap (changes #8–#10) is now complete:
 #8 `add-web-ui-element-baseline` is implemented, archived as
 `2026-09-06-2026-09-07-add-web-ui-element-baseline`, and committed
-(commit 18ab4ba). Changes #9 (resolve the 87 undefined class tokens)
-and #10 (tokenise `app.css` and add the class-coverage CI gate) are
-proposed in `openspec/changes/2026-09-07-resolve-unstyled-ui-classes/`
-and `openspec/changes/2026-09-07-tokenise-app-css-and-add-class-gate/`
-and remain unarchived.
+(commit 18ab4ba). #9 `resolve-unstyled-ui-classes` is implemented and
+archived (commit 97abb32). #10 `tokenise-app-css-and-add-class-gate`
+is implemented and archived (this handoff, commit e56a778). All
+three changes are green end-to-end.
 
 ## Progress
 
-Overall: `[██████████] 7/7 UI/UX implemented & archived; 4/4 governance implemented & archived; 1 archived (reduce-todo-debt); 2/3 style-baseline implemented & archived; 1/3 style-baseline proposed`
+Overall: `[██████████] 7/7 UI/UX implemented & archived; 4/4 governance implemented & archived; 1 archived (reduce-todo-debt); 3/3 style-baseline implemented & archived`
 
 | Order | Change | Status | Depends on |
 |---:|---|---|---|
@@ -38,7 +37,7 @@ Overall: `[██████████] 7/7 UI/UX implemented & archived; 4/4
 | G5 | `reduce-todo-debt` | `[x] implemented; archived & committed` | none |
 | 8 | `add-web-ui-element-baseline` | `[x] implemented; archived & committed (18ab4ba)` | none |
 | 9 | `resolve-unstyled-ui-classes` | `[x] implemented & archived & committed (97abb32; design.md not pre-approved — see change #9 entry)` | 8 |
-| 10 | `tokenise-app-css-and-add-class-gate` | `[ ] proposed (openspec/changes/…)` | 8 |
+| 10 | `tokenise-app-css-and-add-class-gate` | `[x] implemented; archived & committed (e56a778)` | 8 |
 
 ## Required execution protocol
 
@@ -52,6 +51,31 @@ Overall: `[██████████] 7/7 UI/UX implemented & archived; 4/4
 8. Run focused tests, then `make check`; separately record environmental failures such as rustdoc OOM.
 9. Mark only evidenced tasks complete. Do not claim archive/commit/push unless actually done.
 10. Archive the completed change, commit related paths only, then stop before starting the next change.
+
+### Two-commit cadence per change (commits 1 and 2)
+
+A change produces **two commits**, in this order:
+
+- **Commit 1 — the change.** `openspec archive <name> --yes` moves
+  the spec deltas into the live specs and ratchets the manifest.
+  `git add` and commit (a) the implementation files (Rust / CSS /
+  shell / test), (b) the new gate scripts / Makefile / new
+  assets, (c) the live-spec updates (the now-merged delta under
+  `openspec/specs/<cap>/spec.md` and the manifest entry), (d) the
+  ticked `tasks.md`, and (e) the now-archived change folder under
+  `openspec/changes/archive/<name>/`. Use a `feat(...)` / `chore(...)`
+  / `fix(...)` prefix that matches the change's nature.
+- **Commit 2 — the HANDOFF follow-up.** Update `HANDOFF.md` to
+  reflect the new status (the change's row in the progress table
+  becomes `[x] implemented; archived & committed (<hash>)` using
+  the commit hash from commit 1; the "Next steps" entry moves to
+  the next change). `git add` and commit `HANDOFF.md` only.
+
+Do NOT amend commit 1 to add the HANDOFF update; do NOT commit them
+together. The two-commit split keeps commit 1 a clean change
+commit (revertable, bisectable, the unit of "what this change
+did") and commit 2 the post-hoc bookkeeping that depends on
+commit 1's hash.
 
 ## Known baseline evidence
 
@@ -79,25 +103,14 @@ Overall: `[██████████] 7/7 UI/UX implemented & archived; 4/4
 
 1. **Address the tracked `docs/TODOS.md` debt** — the ACME HTTP-01 flow
    against `rustls-acme 0.13`; ticket `openpanel#ACME-HTTP01`.
-2. **Implement style-baseline change #10** (the last of three):
-   - `#10 tokenise-app-css-and-add-class-gate`
-     (`openspec/changes/2026-09-07-tokenise-app-css-and-add-class-gate/`) —
-     replace every literal hex / `rem` / `px` in `app.css` with
-     `var(--op-*)`; drop the `*/assets/*` exclusion from
-     `scripts/scan-template-literals.sh`; add the new
-     `scripts/check-class-coverage.sh` gate wired into `make
-     check` (manifest ratchet on the governance-pinned
-     `Template-Literal Scan` requirement in
-     `openspec/specs/quality/spec.md`: scenarios 3 → 6, digest
-     regenerated from `scripts/check-governance-contract.sh
-     --report`).
-3. **Pick the next roadmap from `openspec/specs/`** — the competitive
+2. **Pick the next roadmap from `openspec/specs/`** — the competitive
    gap analysis (`docs/competitive-gap-analysis.md`) still has items
    8–10 unspec'd (object-storage hosting, CalDAV/CardDAV/WebDAV,
    mailing-list moderation depth). OpenSpec has 83 live capabilities
-   and 126 archived changes (one new archive this handoff: change
-   #8 `add-web-ui-element-baseline`); the next change should be its
-   own folder under `openspec/changes/`.
+   and 127 archived changes (one new archive this handoff: change
+   #10 `tokenise-app-css-and-add-class-gate`, commit e56a778); the
+   next change should be its own folder under
+   `openspec/changes/`.
 
 ## Competitor evidence to retain
 

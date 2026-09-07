@@ -39,14 +39,22 @@
 ## Quick reference
 
 - Workflow: `propose → validate → implement (apply) → archive`.
+- Per-change commits: a change produces **two commits** in order —
+  (1) the change itself (implementation + ticked `tasks.md` +
+  archived spec deltas + manifest ratchet + archive folder move),
+  then (2) the `HANDOFF.md` follow-up that records the commit-1
+  hash. Do not amend or merge them; the split keeps commit 1 a
+  clean "what this change did" commit. See `HANDOFF.md`
+  "Two-commit cadence per change" for the full procedure.
 - Quality gate: `make check` (fmt, clippy, docs, audit, file-length,
-  scan-literal, tasks-testing-first, reuse, layering, spec-test-drift,
-  spec-drift, agent-governance, governance-contract, test-gates, tests).
-  `make test-gates` runs the governance self-test in isolation.
-  `make agent-governance` re-verifies the OpenSpec context and every
-  runtime contract link. `make governance-contract` re-verifies the
-  archived-governance manifest (content digest, scenario count, checker
-  mapping); see `Agents.md` §5.1 for the reviewed update procedure.
+  scan-literal, class-coverage, tasks-testing-first, reuse, layering,
+  spec-test-drift, spec-drift, agent-governance, governance-contract,
+  test-gates, tests). `make test-gates` runs the governance
+  self-test in isolation. `make agent-governance` re-verifies the
+  OpenSpec context and every runtime contract link.
+  `make governance-contract` re-verifies the archived-governance
+  manifest (content digest, scenario count, checker mapping); see
+  `Agents.md` §5.1 for the reviewed update procedure.
 - Architecture: strict DDD, four layers; domain is I/O-free; adding a
   bounded context is one `app.register(XModule)` call.
 - Repo map: `scripts/repo-map.sh`.

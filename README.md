@@ -116,12 +116,13 @@ Specs live in `openspec/`:
 Workflow: `propose → validate → implement (apply) → archive`.
 `make check` is the single quality-gate entry point and runs:
 `fmt → clippy → docs → audit → file-length → scan-literal →
-tasks-testing-first → reuse → layering → spec-test-drift → spec-drift →
-test-gates → test`. `make test-gates` runs the governance self-test
-harness in isolation (16 fixture-based self-tests, positive + negative
-for every gate). `make agent-governance` re-verifies the OpenSpec
-context and every runtime contract link. See `HANDOFF.md` for the
-current roadmap and the latest spec status.
+class-coverage → tasks-testing-first → reuse → layering →
+spec-test-drift → spec-drift → test-gates → test`. `make
+test-gates` runs the governance self-test harness in isolation
+(50+ fixture-based self-tests, positive + negative for every
+gate). `make agent-governance` re-verifies the OpenSpec context
+and every runtime contract link. See `HANDOFF.md` for the current
+roadmap and the latest spec status.
 
 ## Quickstart
 
@@ -364,8 +365,8 @@ compile time rather than in production.
 **Local checks:**
 
 ```bash
-make check                 # full gate: fmt, clippy, docs, audit, file-length, scan-literal, tasks-testing-first, reuse, layering, spec-test-drift, spec-drift, test-gates, test
-make test-gates            # the governance self-tests in isolation (16 fixture-based checks)
+make check                 # full gate: fmt, clippy, docs, audit, file-length, scan-literal, class-coverage, tasks-testing-first, reuse, layering, spec-test-drift, spec-drift, test-gates, test
+make test-gates            # the governance self-tests in isolation (50+ fixture-based checks)
 make agent-governance      # OpenSpec context + runtime contract integrity
 make governance-contract   # archived governance content ratchet
 make fmt                   # or run a single gate: make clippy, ...
