@@ -154,3 +154,86 @@ requirements:
     digest: sha256:ba7d467f01a766cce32120cfb9431b1532357abd34375e52eb9a800233a1c4d7
     scenarios: 2
     checkers: [layering]
+
+  # --- quality-maturity-ratchet ----------------------------------------
+  # The ratchet change. Each entry pins the new requirement text by
+  # digest + scenario count and names the checker registered in
+  # `scripts/test-gates.sh`. The strict-mode checkers
+  # (`spec-test-drift-baseline`, `reuse-classified`,
+  # `coverage-floor`, `maturity-evidence`) are the protected executables
+  # for the ratchets; `governance-contract` itself is the meta-checker
+  # for the new agent-quality requirement.
+  - archive: openspec/changes/archive/2026-09-09-ratchet-quality-and-spec-maturity/specs/quality-maturity-ratchet/spec.md
+    capability: quality-maturity-ratchet
+    requirement: "New and Modified Spec Scenarios Are Covered"
+    digest: sha256:1bff3f2da8d5caa5e68522a3da54275d3eaf029acc66b6a3fe217d13fcd7295a
+    scenarios: 1
+    checkers: [spec-test-drift-baseline]
+
+  - archive: openspec/changes/archive/2026-09-09-ratchet-quality-and-spec-maturity/specs/quality-maturity-ratchet/spec.md
+    capability: quality-maturity-ratchet
+    requirement: "Quality Debt Only Shrinks"
+    digest: sha256:e32f2bf7ba0d50e8e5d0cbc466dc2f99c8c71be531ef0037f9c6dced52df5101
+    scenarios: 1
+    checkers: [spec-test-drift-baseline]
+
+  - archive: openspec/changes/archive/2026-09-09-ratchet-quality-and-spec-maturity/specs/quality-maturity-ratchet/spec.md
+    capability: quality-maturity-ratchet
+    requirement: "Coverage Is Reproducible and Enforced"
+    digest: sha256:a231d2bc6c2afb522f47c48ccad9ad49a716dbaf5eeab425ef45bb0e81b24087
+    scenarios: 1
+    checkers: [coverage-floor]
+
+  - archive: openspec/changes/archive/2026-09-09-ratchet-quality-and-spec-maturity/specs/quality-maturity-ratchet/spec.md
+    capability: quality-maturity-ratchet
+    requirement: "Duplicate Logic Is Classified"
+    digest: sha256:249ea9c5a943d17b00b93800ba17a84326227c58b57a62f6b69c212209db73b5
+    scenarios: 1
+    checkers: [reuse-classified]
+
+  - archive: openspec/changes/archive/2026-09-09-ratchet-quality-and-spec-maturity/specs/quality-maturity-ratchet/spec.md
+    capability: quality-maturity-ratchet
+    requirement: "Incomplete Work Has Evidence"
+    digest: sha256:0600c3f5cd4cd801a3dfb26ff2f61cc29282b938552abebf3a53b05fa92a45d9
+    scenarios: 1
+    checkers: [maturity-evidence]
+
+  # The new quality deltas wire the ratchets into the existing
+  # `quality` capability. They duplicate the digest of the matching
+  # `quality-maturity-ratchet` entry above because the requirements
+  # were written in lockstep; if either requirement text is later
+  # edited, update BOTH entries' digest + scenarios together.
+  - archive: openspec/changes/archive/2026-09-09-ratchet-quality-and-spec-maturity/specs/quality/spec.md
+    capability: quality
+    requirement: "Strict Spec-Test Drift Ratchet"
+    digest: sha256:7384930169e4ecaf27a3d8c1e1a866d8d90a8129ee39d69e971c29def61e6569
+    scenarios: 3
+    checkers: [spec-test-drift-baseline]
+
+  - archive: openspec/changes/archive/2026-09-09-ratchet-quality-and-spec-maturity/specs/quality/spec.md
+    capability: quality
+    requirement: "Strict Reuse Classification"
+    digest: sha256:2a8f8b4b6ebcece727315d40f718bc172666b7be4c18eda2269060da1c552227
+    scenarios: 2
+    checkers: [reuse-classified]
+
+  - archive: openspec/changes/archive/2026-09-09-ratchet-quality-and-spec-maturity/specs/quality/spec.md
+    capability: quality
+    requirement: "Coverage Floor and Tool Availability"
+    digest: sha256:ec117ea5ae4e85a7d2e2856a52a65bdf27b1db47e2f148dc71eb6de31e1458c9
+    scenarios: 4
+    checkers: [coverage-floor]
+
+  - archive: openspec/changes/archive/2026-09-09-ratchet-quality-and-spec-maturity/specs/testing/spec.md
+    capability: testing
+    requirement: "Production Incomplete Work Has Evidence"
+    digest: sha256:bb08c8ba9eb6109a4d5d157c0b0a747c16a12397dd1390e39659123b1180f364
+    scenarios: 4
+    checkers: [maturity-evidence]
+
+  - archive: openspec/changes/archive/2026-09-09-ratchet-quality-and-spec-maturity/specs/agent-quality/spec.md
+    capability: agent-quality
+    requirement: "New Maturity Gates Have Executable Protection"
+    digest: sha256:a6ccf2407608077bbf8e08f99e85ed92cde4a6899497bd80e5df58ccd8ecfb79
+    scenarios: 2
+    checkers: [governance-contract]

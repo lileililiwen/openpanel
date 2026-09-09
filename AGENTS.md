@@ -24,7 +24,8 @@
   relevant specs before coding. Never invent an API that already exists.
 - **Explore & reuse before implement.** Run `scripts/repo-map.sh` and
   grep for existing utilities/traits/modules; record reuse in
-  `design.md`. Duplicating existing logic fails `make check` (reuse gate).
+  `design.md`. Unclassified duplicated public items fail `make check`
+  (the `reuse-strict` ratchet).
 - **Specs are the source of truth.** Code that drifts from a spec is a
   bug. Every `tasks.md` starts with `## 1. Testing` (enforced).
 - **Governance cannot be softened silently.** Archived requirements in
@@ -47,14 +48,19 @@
   clean "what this change did" commit. See `HANDOFF.md`
   "Two-commit cadence per change" for the full procedure.
 - Quality gate: `make check` (fmt, clippy, docs, audit, file-length,
-  scan-literal, class-coverage, tasks-testing-first, reuse, layering,
-  spec-test-drift, spec-drift, agent-governance, governance-contract,
-  test-gates, tests). `make test-gates` runs the governance
-  self-test in isolation. `make agent-governance` re-verifies the
-  OpenSpec context and every runtime contract link.
-  `make governance-contract` re-verifies the archived-governance
-  manifest (content digest, scenario count, checker mapping); see
-  `Agents.md` §5.1 for the reviewed update procedure.
+  scan-literal, class-coverage, tasks-testing-first, reuse-strict,
+  layering, spec-test-drift-strict, spec-drift, agent-governance,
+  governance-contract, coverage-floor, maturity, test-gates, tests).
+  `make test-gates` runs the governance self-test in isolation.
+  `make agent-governance` re-verifies the OpenSpec context and every
+  runtime contract link. `make governance-contract` re-verifies the
+  archived-governance manifest (content digest, scenario count,
+  checker mapping); see `Agents.md` §5.1 for the reviewed update
+  procedure. `make coverage-floor` enforces the configured coverage
+  floor and fails when the tool is unavailable in a required CI
+  job. `make maturity` enforces that every production TODO / FIXME
+  / stub marker has a reviewed entry in
+  `openspec/governance/evidence.yaml`.
 - Architecture: strict DDD, four layers; domain is I/O-free; adding a
   bounded context is one `app.register(XModule)` call.
 - Repo map: `scripts/repo-map.sh`.

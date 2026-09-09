@@ -237,16 +237,25 @@ Local invocation runs the same gates as CI, in this order:
 6. `make scan-literal` — literal colour / string scan
 7. `make class-coverage` — every `class="..."` literal has a rule in `app.css`
 8. `make tasks-testing-first` — `## 1. Testing` comes first in `tasks.md`
-9. `make reuse` — no duplicated public item across crates
+9. `make reuse-strict` — no *unclassified* duplicated public item across crates
 10. `make layering` — domain MUST NOT import app/api
-11. `make spec-test-drift` — every spec has a covering test
+11. `make spec-test-drift-strict` — every new / modified spec has a covering test
 12. `make spec-drift` — every archived delta exists in the live spec
 13. `make agent-governance` — OpenSpec context + runtime contract integrity
 14. `make governance-contract` — archived governance content ratchet
-15. `make test-gates` — the governance gates' own positive/negative fixtures
-16. `make test` — full test suite
+15. `make coverage-floor` — measured coverage ≥ configured floor; required CI
+    job fails when its tool is missing
+16. `make maturity` — every production TODO / FIXME / stub marker has a
+    reviewed entry in `openspec/governance/evidence.yaml`
+17. `make test-gates` — the governance gates' own positive/negative fixtures
+18. `make test` — full test suite
 
-`add-quality-engineering-infrastructure` defines the full policy.
+`add-quality-engineering-infrastructure` defines the full policy. The
+strict gates (`reuse-strict`, `spec-test-drift-strict`,
+`coverage-floor`, `maturity`) are wired into `make check` by
+`ratchet-quality-and-spec-maturity`; they replace the
+warning-only behaviour of their default counterparts with a shrinking
+ratchet baseline.
 
 ### 5.1 Archived governance ratchet
 

@@ -5,8 +5,8 @@
 # concern under `scripts/` (fmt, clippy, docs, audit, file-length,
 # scan-literal, class-coverage, tests, coverage, and the agent-quality
 # gates: tasks-testing-first, reuse, layering, spec-test-drift,
-# spec-drift, agent-governance, governance-contract, and the gate
-# self-test).
+# spec-drift, agent-governance, governance-contract, coverage-floor,
+# maturity, and the gate self-test).
 #
 # Entry points:
 #   make check     — run every quality gate in order (CI entry point)
@@ -21,6 +21,8 @@
 #   make governance-contract — run scripts/check-governance-contract.sh
 #   make class-coverage — run scripts/check-class-coverage.sh
 #   make coverage  — informational coverage report
+#   make coverage-floor — strict coverage floor + tool-missing check
+#   make maturity  — production incomplete-work evidence gate
 #   make install-lint-tools — install the optional file-length tools
 #   make split FILE=<path>  — auto-refactor preview for one file
 #   make repo-map  — print a structural map of public APIs (agent aid)
@@ -30,17 +32,18 @@
 # AGENTS.md "Quality gate" line):
 #   ensure-lint-tools
 #   → fmt → clippy → docs → audit → file-length → scan-literal
-#   → class-coverage → tasks-testing-first → reuse → layering
-#   → spec-test-drift → spec-drift → agent-governance → governance-contract
+#   → class-coverage → tasks-testing-first → reuse --strict → layering
+#   → spec-test-drift --strict → spec-drift → agent-governance
+#   → governance-contract → coverage-floor → maturity
 #   → test-gates
 #   → test
 #
 # Every per-check script prints `step: <name> status: ok | failed` and
 # exits non-zero on failure; `make` short-circuits on the first one.
 
-.PHONY: check fmt clippy docs audit file-length test coverage install-lint-tools ensure-lint-tools split a11y scan-literal class-coverage tasks-testing-first reuse layering spec-test-drift spec-drift repo-map test-gates agent-governance governance-contract
+.PHONY: check fmt clippy docs audit file-length test coverage coverage-floor maturity install-lint-tools ensure-lint-tools split a11y scan-literal class-coverage tasks-testing-first reuse layering spec-test-drift spec-drift repo-map test-gates agent-governance governance-contract
 
-check: ensure-lint-tools fmt clippy docs audit file-length scan-literal class-coverage tasks-testing-first reuse layering spec-test-drift spec-drift agent-governance governance-contract test-gates test
+check: ensure-lint-tools fmt clippy docs audit file-length scan-literal class-coverage tasks-testing-first reuse-strict layering spec-test-drift-strict spec-drift agent-governance governance-contract coverage-floor maturity test-gates test
 	@echo ""
 	@echo "=== All quality checks passed ==="
 
@@ -71,6 +74,8 @@ tasks-testing-first:
 reuse:
 	@scripts/check-reuse.sh
 
+# The mandatory chain runs the ratchet: --strict with the classified
+# baseline. A new unclassified cross-crate duplicate fails the build.
 reuse-strict:
 	@scripts/check-reuse.sh --strict
 
@@ -79,6 +84,12 @@ layering:
 
 spec-test-drift:
 	@scripts/check-spec-test-drift.sh
+
+# The ratchet: --strict + the reviewed baseline. New / modified
+# capabilities without a covering test fail the build; pre-existing
+# gaps in the baseline are tracked debt.
+spec-test-drift-strict:
+	@scripts/check-spec-test-drift.sh --strict
 
 spec-drift:
 	@scripts/check-spec-drift.sh
@@ -104,6 +115,12 @@ governance-contract:
 
 coverage:
 	@scripts/coverage.sh
+
+coverage-floor:
+	@scripts/check-coverage-floor.sh
+
+maturity:
+	@scripts/check-maturity.sh
 
 install-lint-tools:
 	@scripts/install-lint-tools.sh

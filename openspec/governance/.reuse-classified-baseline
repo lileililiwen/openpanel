@@ -1,0 +1,154 @@
+#
+action	per-aggregate business method, not a shared utility
+active	per-aggregate business method, not a shared utility
+add_key	per-aggregate business method, not a shared utility
+advance	per-aggregate business method, not a shared utility
+aliases	per-aggregate business method, not a shared utility
+allowlist	per-aggregate business method, not a shared utility
+allows	per-aggregate business method, not a shared utility
+# an unlisted duplicate fails the build. The baseline only
+approve	per-aggregate business method, not a shared utility
+audit_events	per-aggregate business method, not a shared utility
+backups	per-aggregate business method, not a shared utility
+cancel	per-aggregate business method, not a shared utility
+CapabilitySet	shared type alias between plugin and web (different layer; same concept)
+CatalogEntry	domain re-exports + app-side recipe wrapper
+change_aliases	per-aggregate business method, not a shared utility
+change_owner	per-aggregate business method, not a shared utility
+change_password	per-aggregate business method, not a shared utility
+change_role	per-aggregate business method, not a shared utility
+check_quota	per-aggregate business method, not a shared utility
+children	per-aggregate business method, not a shared utility
+chmod	per-aggregate business method, not a shared utility
+# Classified cross-crate public-item duplicates.
+clear_override	per-aggregate business method, not a shared utility
+Command	per-context command type (cli/host/software/service_manager)
+compatibility	per-aggregate business method, not a shared utility
+connect	per-aggregate business method, not a shared utility
+consume	per-aggregate business method, not a shared utility
+contains	per-aggregate business method, not a shared utility
+create_database	per-aggregate business method, not a shared utility
+create_domain	per-aggregate business method, not a shared utility
+create_record	per-aggregate business method, not a shared utility
+create_site	per-aggregate business method, not a shared utility
+create_subscription	per-aggregate business method, not a shared utility
+create_user	per-aggregate business method, not a shared utility
+DatabaseError	domain error vs core error (different error categories)
+database_id	per-aggregate business method, not a shared utility
+decode	per-aggregate business method, not a shared utility
+delete_database	per-aggregate business method, not a shared utility
+delete_record	per-aggregate business method, not a shared utility
+delete_site	per-aggregate business method, not a shared utility
+delete_user	per-aggregate business method, not a shared utility
+deny	per-aggregate business method, not a shared utility
+destroy	per-aggregate business method, not a shared utility
+disable	per-aggregate business method, not a shared utility
+disable_site	per-aggregate business method, not a shared utility
+disable_subscription	per-aggregate business method, not a shared utility
+disable_user	per-aggregate business method, not a shared utility
+domains	per-aggregate business method, not a shared utility
+effective	per-aggregate business method, not a shared utility
+email	per-aggregate business method, not a shared utility
+empty	per-aggregate business method, not a shared utility
+enable	per-aggregate business method, not a shared utility
+enable_site	per-aggregate business method, not a shared utility
+encode	per-aggregate business method, not a shared utility
+enroll_totp	per-aggregate business method, not a shared utility
+entries	per-aggregate business method, not a shared utility
+entry	per-aggregate business method, not a shared utility
+evaluate	per-aggregate business method, not a shared utility
+execute_deployment	per-aggregate business method, not a shared utility
+expose	per-aggregate business method, not a shared utility
+files	per-aggregate business method, not a shared utility
+find	per-aggregate business method, not a shared utility
+# Format: one entry per line, "<name><TAB><reason>". A name
+from_config	per-aggregate business method, not a shared utility
+from_env	per-aggregate business method, not a shared utility
+generate	per-aggregate business method, not a shared utility
+health	per-aggregate business method, not a shared utility
+history	per-aggregate business method, not a shared utility
+HistoryQuery	API request DTO vs web form alias
+home	per-aggregate business method, not a shared utility
+install_artifact	per-aggregate business method, not a shared utility
+is_expired	per-aggregate business method, not a shared utility
+# is fixed), adding entries requires a reviewed change.
+issue	per-aggregate business method, not a shared utility
+join	per-aggregate business method, not a shared utility
+kind	per-aggregate business method, not a shared utility
+label	per-aggregate business method, not a shared utility
+list_databases	per-aggregate business method, not a shared utility
+# listed here is exempt from `scripts/check-reuse.sh --strict`;
+list_sites	per-aggregate business method, not a shared utility
+list_users	per-aggregate business method, not a shared utility
+load	per-aggregate business method, not a shared utility
+login	per-aggregate business method, not a shared utility
+logs	per-aggregate business method, not a shared utility
+message	per-aggregate business method, not a shared utility
+messages	per-aggregate business method, not a shared utility
+metadata	per-aggregate business method, not a shared utility
+mkdir	per-aggregate business method, not a shared utility
+monitoring	per-aggregate business method, not a shared utility
+negotiate	per-aggregate business method, not a shared utility
+new_with_two_factor_crypto	per-aggregate business method, not a shared utility
+path	per-aggregate business method, not a shared utility
+paths	per-aggregate business method, not a shared utility
+pool	per-aggregate business method, not a shared utility
+preflight	per-aggregate business method, not a shared utility
+preview_deployment	per-aggregate business method, not a shared utility
+preview	per-aggregate business method, not a shared utility
+public_router	per-aggregate business method, not a shared utility
+publishes	per-aggregate business method, not a shared utility
+publish	per-aggregate business method, not a shared utility
+push	per-aggregate business method, not a shared utility
+# rebuilds this file.
+record	per-aggregate business method, not a shared utility
+record_success	per-aggregate business method, not a shared utility
+regenerate_slug	per-aggregate business method, not a shared utility
+release	per-aggregate business method, not a shared utility
+rename	per-aggregate business method, not a shared utility
+render_env_file	per-aggregate business method, not a shared utility
+render	per-aggregate business method, not a shared utility
+resolve	per-aggregate business method, not a shared utility
+resolve_plural	per-aggregate business method, not a shared utility
+restore	per-aggregate business method, not a shared utility
+RestoreRequest	domain request vs app service parameter
+retention	per-aggregate business method, not a shared utility
+revoke_factor	per-aggregate business method, not a shared utility
+revoke	per-aggregate business method, not a shared utility
+role	per-aggregate business method, not a shared utility
+rollback	per-aggregate business method, not a shared utility
+root	per-aggregate business method, not a shared utility
+rules	per-aggregate business method, not a shared utility
+runs	per-aggregate business method, not a shared utility
+sample	per-aggregate business method, not a shared utility
+schedule	per-aggregate business method, not a shared utility
+search	per-aggregate business method, not a shared utility
+serve	per-aggregate business method, not a shared utility
+set_enabled	per-aggregate business method, not a shared utility
+set_force_https	per-aggregate business method, not a shared utility
+set_role	per-aggregate business method, not a shared utility
+set_status	per-aggregate business method, not a shared utility
+Severity	per-module severity enum (notifications / malware / dashboard)
+sha256	per-aggregate business method, not a shared utility
+# shrinks: removing entries is permitted (after the duplicate
+shutdown_handle	per-aggregate business method, not a shared utility
+SignedCatalogEnvelope	plugin catalog type reused in app software-center
+SoftwareCenterError	domain error vs app error (mirror convention)
+source_ip	per-aggregate business method, not a shared utility
+# Source of truth: `scripts/check-reuse.sh --write-baseline`
+ssh_keys	per-aggregate business method, not a shared utility
+status	per-aggregate business method, not a shared utility
+stub	per-aggregate business method, not a shared utility
+submit	per-aggregate business method, not a shared utility
+supported	per-aggregate business method, not a shared utility
+target	per-aggregate business method, not a shared utility
+try_acquire	per-aggregate business method, not a shared utility
+unblock	per-aggregate business method, not a shared utility
+unpublish	per-aggregate business method, not a shared utility
+_unused	per-aggregate business method, not a shared utility
+update_record	per-aggregate business method, not a shared utility
+upload	per-aggregate business method, not a shared utility
+upsert	per-aggregate business method, not a shared utility
+url	per-aggregate business method, not a shared utility
+verify	per-aggregate business method, not a shared utility
+with_ttl	per-aggregate business method, not a shared utility

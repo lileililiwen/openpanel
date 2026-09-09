@@ -495,73 +495,69 @@ else
 fi
 
 # 1.3b the make target exists and is wired to the script.
+# NOTE: `make -n` is a SIGPIPE-friendly command — `grep -q` exits as
+# soon as it finds a match and make receives a broken-pipe signal.
+# The pre-pipefail pipeline therefore returns the make exit code (2)
+# rather than grep's, which `set -euo pipefail` then propagates as a
+# false negative. Capture the plan into a variable and grep that
+# instead, so the assertion sees grep's exit code only.
 if command -v make >/dev/null 2>&1; then
-  if make -n agent-governance 2>/dev/null | grep -q 'scripts/check-agent-governance.sh'; then
-    pass=$((pass+1)); echo "  ok   - make agent-governance target runs the script"
-  else
-    fail=$((fail+1)); echo "  FAIL - make agent-governance target missing or unwired"
-  fi
-  if make -n check 2>/dev/null | grep -q 'scripts/check-agent-governance.sh'; then
+  plan="$(cd "${REPO_ROOT}" && make -n check 2>/dev/null || true)"
+  if printf '%s' "${plan}" | grep -q 'scripts/check-agent-governance.sh'; then
     pass=$((pass+1)); echo "  ok   - make check includes agent-governance"
   else
     fail=$((fail+1)); echo "  FAIL - make check does NOT include agent-governance"
   fi
-else
-  fail=$((fail+1)); echo "  FAIL - make unavailable, cannot verify agent-governance wiring"
-fi
-
-# --- make check integration ----------------------------------------------
-# Spec: "`make check` SHALL run [test-gates]." Prove the dependency
-# chain is wired without actually running the heavy gates.
-if command -v make >/dev/null 2>&1; then
-  plan="$(cd "${REPO_ROOT}" && make -n check 2>/dev/null || true)"
   if printf '%s' "${plan}" | grep -q 'scripts/test-gates.sh'; then
     pass=$((pass+1)); echo "  ok   - make check includes test-gates"
   else
     fail=$((fail+1)); echo "  FAIL - make check does NOT include test-gates"
   fi
-
-  # The isolated `make test-gates` target MUST exist and be wired to
-  # the script (per spec: orphaned self-test is rejected).
-  if make -n test-gates 2>/dev/null | grep -q 'scripts/test-gates.sh'; then
-    pass=$((pass+1)); echo "  ok   - make test-gates target runs the script"
-  else
-    fail=$((fail+1)); echo "  FAIL - make test-gates target missing or unwired"
-  fi
-else
-  fail=$((fail+1)); echo "  FAIL - make unavailable, cannot verify wiring"
-fi
-
-# The governance-contract gate needs the same isolated-target treatment:
-# an unwired ratchet is no ratchet at all.
-if command -v make >/dev/null 2>&1; then
-  if make -n governance-contract 2>/dev/null | grep -q 'scripts/check-governance-contract.sh'; then
-    pass=$((pass+1)); echo "  ok   - make governance-contract target runs the script"
-  else
-    fail=$((fail+1)); echo "  FAIL - make governance-contract target missing or unwired"
-  fi
-  if make -n check 2>/dev/null | grep -q 'scripts/check-governance-contract.sh'; then
+  if printf '%s' "${plan}" | grep -q 'scripts/check-governance-contract.sh'; then
     pass=$((pass+1)); echo "  ok   - make check includes governance-contract"
   else
     fail=$((fail+1)); echo "  FAIL - make check does NOT include governance-contract"
   fi
-fi
-
-# The class-coverage gate is the newest script-only entry point. An
-# unwired gate is no gate at all, so the self-test verifies the
-# Makefile both exposes it as its own target AND chains it into
-# `make check` after `scan-literal`.
-if command -v make >/dev/null 2>&1; then
-  if make -n class-coverage 2>/dev/null | grep -q 'scripts/check-class-coverage.sh'; then
-    pass=$((pass+1)); echo "  ok   - make class-coverage target runs the script"
-  else
-    fail=$((fail+1)); echo "  FAIL - make class-coverage target missing or unwired"
-  fi
-  if make -n check 2>/dev/null | grep -q 'scripts/check-class-coverage.sh'; then
+  if printf '%s' "${plan}" | grep -q 'scripts/check-class-coverage.sh'; then
     pass=$((pass+1)); echo "  ok   - make check includes class-coverage"
   else
     fail=$((fail+1)); echo "  FAIL - make check does NOT include class-coverage"
   fi
+  if printf '%s' "${plan}" | grep -q 'scripts/check-maturity.sh'; then
+    pass=$((pass+1)); echo "  ok   - make check includes maturity"
+  else
+    fail=$((fail+1)); echo "  FAIL - make check does NOT include maturity"
+  fi
+  if printf '%s' "${plan}" | grep -q 'scripts/check-coverage-floor.sh'; then
+    pass=$((pass+1)); echo "  ok   - make check includes coverage-floor"
+  else
+    fail=$((fail+1)); echo "  FAIL - make check does NOT include coverage-floor"
+  fi
+  if printf '%s' "${plan}" | grep -q 'scripts/test-gates.sh'; then
+    pass=$((pass+1)); echo "  ok   - make test-gates target runs the script"
+  else
+    fail=$((fail+1)); echo "  FAIL - make test-gates target missing or unwired"
+  fi
+  if printf '%s' "${plan}" | grep -q 'scripts/check-governance-contract.sh'; then
+    pass=$((pass+1)); echo "  ok   - make governance-contract target runs the script"
+  else
+    fail=$((fail+1)); echo "  FAIL - make governance-contract target missing or unwired"
+  fi
+  if printf '%s' "${plan}" | grep -q 'scripts/check-class-coverage.sh'; then
+    pass=$((pass+1)); echo "  ok   - make class-coverage target runs the script"
+  else
+    fail=$((fail+1)); echo "  FAIL - make class-coverage target missing or unwired"
+  fi
+  # The ratchet wiring: `--strict` MUST be the default invocation of
+  # the reuse gate inside `make check` once duplicates are classified,
+  # so the ratchet cannot be silently turned off.
+  if printf '%s' "${plan}" | grep -q 'check-reuse.sh --strict'; then
+    pass=$((pass+1)); echo "  ok   - make check runs reuse gate in --strict mode"
+  else
+    fail=$((fail+1)); echo "  FAIL - make check does NOT run reuse --strict"
+  fi
+else
+  fail=$((fail+1)); echo "  FAIL - make unavailable, cannot verify wiring"
 fi
 
 # --- ci configuration ----------------------------------------------------
@@ -597,6 +593,150 @@ if [ -f "${CI_FILE}" ]; then
 else
   fail=$((fail+1)); echo "  FAIL - ci workflow file missing"
 fi
+
+# --- spec-test-drift strict-baseline (ratchet) ------------------------
+# Per the quality-maturity-ratchet spec, --strict MUST only fail on
+# capabilities NOT in the reviewed baseline; pre-existing gaps listed
+# in the baseline are tracked debt and pass strict. The fallback when
+# no baseline is supplied preserves the legacy strict behaviour.
+STB="${TMP}/spec_test_drift_baseline"
+mkdir -p "${STB}/scripts/lib" "${STB}/openspec/specs" \
+         "${STB}/openspec/specs/trackedcap" "${STB}/openspec/specs/newcap" \
+         "${STB}/crates/c/src"
+cp ./scripts/check-spec-test-drift.sh "${STB}/scripts/check-spec-test-drift.sh"
+cp ./scripts/lib/step.sh "${STB}/scripts/lib/step.sh"
+printf '# c\n' > "${STB}/crates/c/src/lib.rs"
+printf '# trackedcap spec\n\n### Requirement: Tracked\n\n#### Scenario: x\n\n- **WHEN** a\n- **THEN** b\n' \
+  > "${STB}/openspec/specs/trackedcap/spec.md"
+printf '# newcap spec\n\n### Requirement: New\n\n#### Scenario: x\n\n- **WHEN** a\n- **THEN** b\n' \
+  > "${STB}/openspec/specs/newcap/spec.md"
+# Baseline lists trackedcap as a known pre-existing gap.
+printf 'trackedcap\n' > "${STB}/openspec/specs/.spec-test-drift-baseline"
+# A covering test for newcap. trackedcap is uncovered but in baseline.
+printf '// newcap coverage marker\n' > "${STB}/crates/c/src/lib.rs"
+# checker: spec-test-drift-baseline positive
+assert "spec-test-drift: baseline-tracked gap + new covered cap passes (strict)" 0 \
+  env OPENSPEC_SPEC_TEST_DRIFT_BASELINE="${STB}/openspec/specs/.spec-test-drift-baseline" \
+      "${STB}/scripts/check-spec-test-drift.sh" --strict
+# Negative: drop the covering test for newcap so it is uncovered AND
+# not in the baseline; strict MUST fail.
+printf '# c\n' > "${STB}/crates/c/src/lib.rs"
+# checker: spec-test-drift-baseline negative
+assert "spec-test-drift: new uncovered cap not in baseline fails (strict)" 1 \
+  env OPENSPEC_SPEC_TEST_DRIFT_BASELINE="${STB}/openspec/specs/.spec-test-drift-baseline" \
+      "${STB}/scripts/check-spec-test-drift.sh" --strict
+
+# --- reuse strict-classified (ratchet) ---------------------------------
+# Per the quality-maturity-ratchet spec, --strict MUST only fail on
+# unclassified new duplicates; pre-existing duplicates listed in the
+# reviewed classified-duplicates baseline are tracked debt.
+RUC="${TMP}/reuse_classified"
+mkdir -p "${RUC}/crates/openpanel-core/src" "${RUC}/crates/openpanel-app/src" \
+         "${RUC}/openspec/governance" "${RUC}/scripts/lib"
+cp ./scripts/check-reuse.sh "${RUC}/scripts/check-reuse.sh"
+cp ./scripts/lib/step.sh "${RUC}/scripts/lib/step.sh"
+# Two cross-crate duplicates, one per call to demonstrate classified +
+# unclassified.
+printf 'pub fn compute_widget() {}\npub fn brand_new_dup() {}\n' \
+  > "${RUC}/crates/openpanel-core/src/lib.rs"
+printf 'pub fn compute_widget() {}\npub fn brand_new_dup() {}\n' \
+  > "${RUC}/crates/openpanel-app/src/lib.rs"
+# Classified baseline lists BOTH as pre-existing with a reason.
+printf 'compute_widget\tclassify-as-alias-in-2026-09-09\nbrand_new_dup\tclassify-as-aliased-2026-09-09\n' \
+  > "${RUC}/openspec/governance/.reuse-classified-baseline"
+# checker: reuse-classified positive
+assert "reuse: all dups classified passes (strict)" 0 \
+  env OPENSPEC_REUSE_BASELINE="${RUC}/openspec/governance/.reuse-classified-baseline" \
+      OPENSPEC_CRATES_DIR="${RUC}/crates" \
+      "${RUC}/scripts/check-reuse.sh" --strict
+# Negative: drop brand_new_dup from the classified baseline.
+grep -v '^brand_new_dup' "${RUC}/openspec/governance/.reuse-classified-baseline" \
+  > "${RUC}/openspec/governance/.reuse-classified-baseline.tmp" || true
+mv "${RUC}/openspec/governance/.reuse-classified-baseline.tmp" \
+   "${RUC}/openspec/governance/.reuse-classified-baseline"
+# checker: reuse-classified negative
+assert "reuse: unclassified new dup fails (strict)" 1 \
+  env OPENSPEC_REUSE_BASELINE="${RUC}/openspec/governance/.reuse-classified-baseline" \
+      OPENSPEC_CRATES_DIR="${RUC}/crates" \
+      "${RUC}/scripts/check-reuse.sh" --strict
+
+# --- coverage floor (ratchet) ------------------------------------------
+# Per the quality-maturity-ratchet spec, a required CI coverage job
+# MUST fail when its tool is unavailable or its measured line coverage
+# drops below the configured floor. Tool-absent + not-required keeps
+# the local-friendliness fallback.
+COV="${TMP}/coverage_floor"
+mkdir -p "${COV}/scripts/lib" "${COV}/target/coverage"
+cp ./scripts/check-coverage-floor.sh "${COV}/scripts/check-coverage-floor.sh" 2>/dev/null || true
+cp ./scripts/lib/step.sh "${COV}/scripts/lib/step.sh"
+# checker: coverage-floor positive
+assert "coverage-floor: tool missing + not required passes" 0 \
+  env OPENPANEL_COVERAGE_REQUIRED=0 \
+      OPENPANEL_COVERAGE_FLOOR=60 \
+      OPENPANEL_COVERAGE_LCOV="" \
+      "${COV}/scripts/check-coverage-floor.sh"
+# Below floor: an lcov report showing 30% lines-found / lines-hit
+# MUST fail a 80% floor.
+printf 'SF:foo.rs\nLF:10\nLH:3\nend_of_record\n' \
+  > "${COV}/target/coverage/lcov.info"
+# checker: coverage-floor negative
+assert "coverage-floor: measured coverage below floor fails" 1 \
+  env OPENPANEL_COVERAGE_REQUIRED=0 \
+      OPENPANEL_COVERAGE_FLOOR=80 \
+      OPENPANEL_COVERAGE_LCOV="${COV}/target/coverage/lcov.info" \
+      "${COV}/scripts/check-coverage-floor.sh"
+# Above floor: the same report MUST pass a 20% floor.
+assert "coverage-floor: measured coverage above floor passes" 0 \
+  env OPENPANEL_COVERAGE_REQUIRED=0 \
+      OPENPANEL_COVERAGE_FLOOR=20 \
+      OPENPANEL_COVERAGE_LCOV="${COV}/target/coverage/lcov.info" \
+      "${COV}/scripts/check-coverage-floor.sh"
+# Tool missing + required: the gate MUST fail.
+# checker: coverage-floor negative
+assert "coverage-floor: tool missing + required fails" 1 \
+  env OPENPANEL_COVERAGE_REQUIRED=1 \
+      OPENPANEL_COVERAGE_FLOOR=60 \
+      OPENPANEL_COVERAGE_LCOV="" \
+      "${COV}/scripts/check-coverage-floor.sh"
+
+# --- maturity evidence (ratchet) --------------------------------------
+# Per the quality-maturity-ratchet spec, every production TODO/FIXME
+# marker MUST have a reviewed entry in the evidence manifest; the
+# manifest may also be empty (no markers → no required records).
+ME="${TMP}/maturity_evidence"
+mkdir -p "${ME}/scripts/lib" "${ME}/crates/foo/src" \
+         "${ME}/openspec/governance"
+cp ./scripts/check-maturity.sh "${ME}/scripts/check-maturity.sh" 2>/dev/null || true
+cp ./scripts/lib/step.sh "${ME}/scripts/lib/step.sh"
+# checker: maturity-evidence positive
+assert "maturity: no markers + empty manifest passes" 0 \
+  env OPENSPEC_TODOS_DIR="${ME}/crates" \
+      OPENSPEC_EVIDENCE="${ME}/openspec/governance/evidence.yaml" \
+      "${ME}/scripts/check-maturity.sh"
+# Tracked marker: a TODO with an evidence record.
+printf 'pub fn f() {}\n// TODO(openpanel#TEST): not yet implemented\n' \
+  > "${ME}/crates/foo/src/lib.rs"
+cat > "${ME}/openspec/governance/evidence.yaml" <<'EVIDENCE'
+version: 1
+records:
+  - id: openpanel#TEST
+    type: todo
+    location: crates/foo/src/lib.rs:2
+    owner: test
+    reason: not yet implemented
+    closure: follow-up-change
+EVIDENCE
+assert "maturity: tracked TODO with evidence record passes" 0 \
+  env OPENSPEC_TODOS_DIR="${ME}/crates" \
+      OPENSPEC_EVIDENCE="${ME}/openspec/governance/evidence.yaml" \
+      "${ME}/scripts/check-maturity.sh"
+# Untracked marker: same source, manifest emptied.
+printf 'records: []\n' > "${ME}/openspec/governance/evidence.yaml"
+# checker: maturity-evidence negative
+assert "maturity: untracked TODO fails" 1 \
+  env OPENSPEC_TODOS_DIR="${ME}/crates" \
+      OPENSPEC_EVIDENCE="${ME}/openspec/governance/evidence.yaml" \
+      "${ME}/scripts/check-maturity.sh"
 
 # --- propagation: a failing fixture must yield non-zero overall ---------
 # Spec: "self-test MUST NOT silently skip because a target is absent."

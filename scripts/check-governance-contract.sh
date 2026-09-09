@@ -62,7 +62,7 @@ BASELINE="${GOVERNANCE_CONTRACT_BASELINE:-openspec/governance/unprotected-baseli
 SELFTEST="${GOVERNANCE_CONTRACT_SELFTEST:-scripts/test-gates.sh}"
 ARCHIVE_DIR="${GOVERNANCE_CONTRACT_ARCHIVE_DIR:-openspec/changes/archive}"
 SPECS_DIR="${GOVERNANCE_CONTRACT_SPECS_DIR:-openspec/specs}"
-CAPABILITIES="${GOVERNANCE_CONTRACT_CAPABILITIES:-agent-quality quality testing architecture}"
+CAPABILITIES="${GOVERNANCE_CONTRACT_CAPABILITIES:-agent-quality quality testing architecture quality-maturity-ratchet}"
 
 mode="${1:-check}"
 case "${mode}" in

@@ -1,0 +1,34 @@
+# Reviewed evidence manifest for production incomplete work.
+#
+# Every production `// TODO(openpanel#<id>[: ...])`, `// FIXME(...)`,
+# or `// stub(...)` marker MUST have a matching entry below. The
+# evidence gate (`scripts/check-maturity.sh`) fails the build when a
+# new marker is introduced without an entry here.
+#
+# Each record has:
+#   id        — the bare id (without the `openpanel#` prefix) that
+#               appears in the source marker.
+#   type      — todo | stub | env-blocked | fake.
+#   location  — file:line of the marker (informational; the gate
+#               matches by id, not by line, so a move is fine).
+#   owner     — accountable person or team.
+#   reason    — short justification for the deferred status.
+#   closure   — follow-up change name, issue key, or "fixed-in-..."
+#               describing what removes the marker.
+#
+# Reviewers MUST inspect every record before merging a change that
+# adds a new one. Stale records (whose marker no longer exists) are
+# advisory; the gate does not fail on them, but the next reviewer
+# should remove them.
+version: 1
+records:
+  - id: ACME-HTTP01
+    type: todo
+    location: crates/openpanel-app/src/ssl/acme.rs:102
+    owner: paul
+    reason: >-
+      rustls-acme 0.13 API surface shifted across versions; the
+      surrounding change shipped so the domain / service / nginx /
+      API / CLI could land without depending on the exact
+      rustls-acme API.
+    closure: complete-production-acme-lifecycle

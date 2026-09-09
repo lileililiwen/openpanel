@@ -13,17 +13,22 @@
 #   - cross-crate duplicate of a FUNCTION whose name is not in the
 #     trivial-name denylist below.
 #
+# Ratchet (--strict + OPENSPEC_REUSE_BASELINE): once a duplicate is
+# reviewed and classified in the baseline file (one "<name><TAB><reason>"
+# per line), strict mode stops failing on it. Newly added unclassified
+# duplicates still fail. The ratchet only shrinks: removing entries is
+# permitted, but a new entry must be reviewed.
+#
 # Degrades gracefully: if `rg` is unavailable the step is SKIPPED.
 # Excludes `tests` directories so test helpers don't false-positive.
-# Pass --strict to also FAIL on cross-crate duplicate TYPE names.
 set -euo pipefail
 source "$(dirname "$0")/lib/step.sh"
 
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${REPO_ROOT}"
 
-STRICT=0
-[ "${1:-}" = "--strict" ] && STRICT=1
+mode="${1:-}"
+BASELINE="${OPENSPEC_REUSE_BASELINE:-${REPO_ROOT}/openspec/governance/.reuse-classified-baseline}"
 
 if ! command -v rg >/dev/null 2>&1; then
   echo ""
@@ -41,13 +46,32 @@ next prev to_string as_str name id value err ok is_empty len count apply \
 validate parse serialize deserialize to_json from_json execute spawn \
 router register iter handle"
 
+# Read the classified-duplicates baseline (name<TAB>reason; one per
+# line; comments start with #). Classified entries are exempt from
+# --strict failure.
+classified_names=()
+if [ -f "${BASELINE}" ]; then
+  while IFS=$'\t' read -r name reason; do
+    case "${name}" in
+      ""|\#*) continue ;;
+    esac
+    classified_names+=("${name}")
+  done < "${BASELINE}"
+fi
+
+is_classified() {
+  local n="$1"
+  local b
+  for b in "${classified_names[@]:-}"; do
+    [ "${b}" = "${n}" ] && return 0
+  done
+  return 1
+}
+
 # kind|name|crate  for every public item definition under ${CRATES_DIR}
 # (rg recurses; tests excluded). One rg pass per kind keeps the tagging
 # unambiguous. CRATES_DIR is overridable (used by the self-test).
 CRATES_DIR="${OPENSPEC_CRATES_DIR:-crates}"
-# Each row is "kind|path:name". rg --replace '$1' emits just the captured
-# name (no trailing "() {}"), and -N drops line numbers, so the row is
-# unambiguously "fn|openpanel-core/src/lib.rs:compute_widget".
 rows=()
 while IFS= read -r r; do [ -z "$r" ] && continue; rows+=("fn|${r}"); done < <(
   rg --no-heading -N -g '!**/tests/**' --replace '$1' \
@@ -64,8 +88,6 @@ type_dupes=""
 for row in "${rows[@]:-}"; do
   kind="${row%%|*}"; rest="${row#*|}"
   path="${rest%%:*}"; name="${rest#*:}"
-  # Crate is the path segment immediately preceding "/src/" (handles both
-  # "crates/<crate>/src/..." and "/abs/.../crates/<crate>/src/...").
   crate="$(echo "${path}" | sed -n 's#.*/\([^/]*\)/src/.*#\1#p')"
   [ -z "${crate}" ] && continue
   [ -z "${name}" ] && continue
@@ -89,6 +111,17 @@ for row in "${rows[@]:-}"; do
   fi
 done
 
+# --write-baseline: emit the current duplicates as classified entries.
+if [ "${mode}" = "--write-baseline" ]; then
+  {
+    printf 'name\treason\n'
+    printf "%b" "${fn_dupes}" | sed -nE 's/.*fn ([A-Za-z0-9_]+).*/\1\tclassified-as-alias-on-2026-09-09/p'
+    printf "%b" "${type_dupes}" | sed -nE 's/.* (fn |type |trait |struct |enum |)([A-Za-z0-9_]+).*/\2\tclassified-as-alias-on-2026-09-09/p'
+  } | sort -u > "${BASELINE}"
+  echo "check-reuse: baseline written ($(wc -l < "${BASELINE}") entries)"
+  exit 0
+fi
+
 # Cross-crate name collisions (router/register/iter are legitimately
 # repeated per module) are a weak signal on their own, so the gate
 # REPORTS them as warnings by default and only FAILS under --strict
@@ -97,12 +130,37 @@ done
 # with this gate as a mechanical backstop.
 dupes="${fn_dupes}${type_dupes}"
 if [ -n "${dupes}" ]; then
-  if [ "${STRICT}" -eq 1 ]; then
+  if [ "${mode}" = "--strict" ]; then
+    # Classified entries are exempt; everything else fails. The
+    # baseline is the ratchet: it is reviewed, shrinks over time, and
+    # is never auto-modified by this gate.
+    unclassified=""
+    while IFS= read -r line; do
+      [ -z "${line}" ] && continue
+      # Extract the duplicate name from the diagnostic line.
+      name=$(printf '%s' "${line}" | sed -nE 's/.* (fn |type |trait |struct |enum |)([A-Za-z0-9_]+):.*/\2/p')
+      [ -z "${name}" ] && name=$(printf '%s' "${line}" | sed -nE 's/.* fn ([A-Za-z0-9_]+):.*/\1/p')
+      if [ -z "${name}" ]; then
+        unclassified="${unclassified}${line}\n"
+        continue
+      fi
+      if is_classified "${name}"; then
+        : # tracked debt; pass
+      else
+        unclassified="${unclassified}${line}\n"
+      fi
+    done < <(printf "%b" "${dupes}")
+    if [ -n "${unclassified}" ]; then
+      echo ""
+      echo "step: reuse status: failed"
+      echo "  Unclassified cross-crate public items (reuse, don't reimplement):"
+      printf "%b" "${unclassified}"
+      exit 1
+    fi
     echo ""
-    echo "step: reuse status: failed"
-    echo "  Public item defined in more than one crate (reuse, don't reimplement):"
+    echo "step: reuse status: ok (duplicates reported as classified debt)"
     printf "%b" "${dupes}"
-    exit 1
+    exit 0
   fi
   echo ""
   echo "step: reuse status: ok (duplicates reported as warnings; use --strict to fail)"

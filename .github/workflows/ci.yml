@@ -52,6 +52,9 @@ jobs:
   coverage:
     name: Coverage
     runs-on: ubuntu-latest
+    # The informational coverage report is allowed to upload a stub
+    # when the tool is unavailable. The required coverage-floor job
+    # below is the one that fails the build.
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -64,21 +67,43 @@ jobs:
           path: target/coverage/lcov.info
           if-no-files-found: ignore
 
+  coverage-floor:
+    name: Coverage floor
+    runs-on: ubuntu-latest
+    # Required by the quality-maturity-ratchet spec: a configured
+    # coverage floor MUST be enforced in CI, and a missing tool MUST
+    # fail the required job (not a stub report).
+    env:
+      OPENPANEL_COVERAGE_FLOOR: 60
+      OPENPANEL_COVERAGE_REQUIRED: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-llvm-cov
+        run: cargo install --locked cargo-llvm-cov
+      - name: Required coverage floor
+        run: make coverage-floor
+
   agent-quality:
     name: Agent Quality Gates
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
-      - name: Reuse / duplication gate
-        run: make reuse
+      - name: Reuse / duplication gate (strict)
+        run: make reuse-strict
       - name: Intra-crate layering gate
         run: make layering
       - name: Tasks testing-first gate
         run: make tasks-testing-first
-      - name: Spec-to-test drift gate
-        run: make spec-test-drift
+      - name: Spec-to-test drift gate (strict)
+        run: make spec-test-drift-strict
       - name: Gate self-tests
         run: make test-gates
+      - name: Production incomplete-work evidence
+        run: make maturity
       - name: OpenSpec validation (strict)
         run: openspec validate --all --strict --no-interactive
