@@ -19,7 +19,7 @@ three changes are green end-to-end.
 
 ## Progress
 
-Overall: `[██████████] 7/7 UI/UX implemented & archived; 4/4 governance implemented & archived; 1 archived (reduce-todo-debt); 3/3 style-baseline implemented & archived`
+Overall: `[██████████] 7/7 UI/UX implemented & archived; 4/4 governance implemented & archived; 1 archived (reduce-todo-debt); 3/3 style-baseline implemented & archived; 1/9 maturity sequence implemented & archived (ratchet-quality-and-spec-maturity)`
 
 | Order | Change | Status | Depends on |
 |---:|---|---|---|
@@ -38,6 +38,7 @@ Overall: `[██████████] 7/7 UI/UX implemented & archived; 4/4
 | 8 | `add-web-ui-element-baseline` | `[x] implemented; archived & committed (18ab4ba)` | none |
 | 9 | `resolve-unstyled-ui-classes` | `[x] implemented & archived & committed (97abb32; design.md not pre-approved — see change #9 entry)` | 8 |
 | 10 | `tokenise-app-css-and-add-class-gate` | `[x] implemented; archived & committed (e56a778)` | 8 |
+| 1 | `ratchet-quality-and-spec-maturity` | `[x] implemented; archived & committed (775b77c)` | none |
 
 ## Required execution protocol
 
@@ -101,16 +102,47 @@ commit 1's hash.
 
 ## Next steps (post-handoff)
 
-1. **Address the tracked `docs/TODOS.md` debt** — the ACME HTTP-01 flow
-   against `rustls-acme 0.13`; ticket `openpanel#ACME-HTTP01`.
-2. **Pick the next roadmap from `openspec/specs/`** — the competitive
-   gap analysis (`docs/competitive-gap-analysis.md`) still has items
-   8–10 unspec'd (object-storage hosting, CalDAV/CardDAV/WebDAV,
-   mailing-list moderation depth). OpenSpec has 83 live capabilities
-   and 127 archived changes (one new archive this handoff: change
-   #10 `tokenise-app-css-and-add-class-gate`, commit e56a778); the
-   next change should be its own folder under
-   `openspec/changes/`.
+1. **Pick change 2 of the maturity sequence** —
+   `add-release-and-deployment-governance`
+   (`openspec/changes/add-release-and-deployment-governance/`,
+   plan-only, passes `openspec validate --strict --no-interactive`).
+   `design.md` is awaiting human-principal approval. Dependency on
+   change 1 is now satisfied.
+2. **Honor the design approval gate.** Each change requires human-principal
+   approval of `design.md` before implementation, then tests-first/red phase,
+   focused verification, `make check`, archive, and the repository's two-commit
+   cadence.
+
+## New remediation sequence (2026-09-09)
+
+| Order | OpenSpec change | Focus | Dependency |
+|---:|---|---|---|
+| 1 | `ratchet-quality-and-spec-maturity` | Strict spec/test coverage, coverage floors, reuse ratchet, evidence manifest | None |
+| 2 | `add-release-and-deployment-governance` | Reproducible artifacts, SBOM/signatures, container, upgrade/rollback | 1 |
+| 3 | `complete-production-acme-lifecycle` | Real ACME HTTP-01, renewal, reachability, recovery surfaces | 1–2 |
+| 4 | `bind-mailbox-surfaces-to-accounts` | Account-bound webmail, mailbox operations, queue health | 1–2 |
+| 5 | `complete-backup-dr-and-migration-operations` | Backup health, restore drills, scoped restore, host migration | 1–2 |
+| 6 | `unify-capability-navigation-and-site-workspaces` | Single route/capability registry and complete site workspace | 1 |
+| 7 | `enforce-browser-ui-quality-and-localization` | Browser axe/WCAG gates, responsive checks, typed localization | 1, 6 |
+| 8 | `add-operator-security-control-plane` | Unified findings, safe remediation, expiry, verification | 1, 6 |
+| 9 | `expand-monitoring-and-fleet-operations` | Configurable monitoring, uptime, thresholds, fleet health | 1, 2, 6 |
+
+### Active planning folders
+
+- `openspec/changes/ratchet-quality-and-spec-maturity/`
+- `openspec/changes/add-release-and-deployment-governance/`
+- `openspec/changes/complete-production-acme-lifecycle/`
+- `openspec/changes/bind-mailbox-surfaces-to-accounts/`
+- `openspec/changes/complete-backup-dr-and-migration-operations/`
+- `openspec/changes/unify-capability-navigation-and-site-workspaces/`
+- `openspec/changes/enforce-browser-ui-quality-and-localization/`
+- `openspec/changes/add-operator-security-control-plane/`
+- `openspec/changes/expand-monitoring-and-fleet-operations/`
+
+The existing `docs/TODOS.md` ACME entry is covered by sequence item 3. The
+competitive backlog items for object storage, CalDAV/CardDAV/WebDAV, and
+mailing-list moderation remain intentionally outside this nine-change queue
+until the core production and operator workflows are complete.
 
 ## Competitor evidence to retain
 
