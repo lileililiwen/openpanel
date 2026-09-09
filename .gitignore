@@ -39,3 +39,4 @@ certs/
 /tmp/openpanel-test/
 crates/openpanel-app/target/
 package-lock.json
+.zvec-grep/
