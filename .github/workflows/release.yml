@@ -1,0 +1,208 @@
+name: release
+
+# Reproducible multi-target release pipeline.
+#
+# Triggers:
+#   - push of a v* tag (e.g. v0.1.0) — full release; uploads artifacts
+#     + provenance + SBOM + detached signature to a GitHub draft release.
+#   - workflow_dispatch — dry-run reproducibility check (no upload),
+#     used to confirm two clean builds on the same commit produce
+#     identical content hashes.
+#
+# Required checks:
+#   - `make check` MUST pass before any artifact is uploaded.
+#   - Every binary MUST be accompanied by a `.sha256`, `.sbom.json`,
+#     and a `.sig` sidecar, AND must be listed in `provenance.json`.
+#   - `scripts/check-release-governance.sh` MUST exit zero before
+#     the upload step runs (fail-closed).
+#
+# The matrix targets mirror the supported-platform list in
+# `docs/RELEASE.md`; adding a new target there is a reviewed change
+# in `openspec/specs/release-deployment-governance/spec.md`.
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build twice, assert reproducible, do not upload'
+        required: false
+        default: 'true'
+
+permissions:
+  contents: write
+  id-token: write
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS: -D warnings
+
+jobs:
+  release:
+    name: Release (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - x86_64-unknown-linux-gnu
+          - x86_64-unknown-linux-musl
+          - aarch64-unknown-linux-gnu
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          cache-on-failure: true
+
+      - name: Required quality gate
+        run: make check
+
+      - name: Build (release, stripped, reproducible flags)
+        env:
+          SOURCE_DATE_EPOCH: ${{ github.event.repository.updated_at }}
+          OPENPANEL_MAX_SCHEMA_VERSION: '0'
+        run: |
+          mkdir -p dist
+          cargo build --release --locked --target ${{ matrix.target }} \
+            --bin openpanel --bin openpanel-cli
+          for bin in target/${{ matrix.target }}/release/openpanel \
+                     target/${{ matrix.target }}/release/openpanel-cli; do
+            [ -f "${bin}" ] || continue
+            strip "${bin}"
+            base="$(basename "${bin}")"
+            cp "${bin}" "dist/${base}-${{ matrix.target }}"
+          done
+
+      - name: Reproducibility (two clean builds)
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          SOURCE_DATE_EPOCH: ${{ github.event.repository.updated_at }}
+        run: |
+          cargo build --release --locked --target ${{ matrix.target }} \
+            --bin openpanel
+          sha256sum target/${{ matrix.target }}/release/openpanel \
+            | tee dist/openpanel-${{ matrix.target }}.sha256.repro
+          cargo clean -p openpanel
+          cargo build --release --locked --target ${{ matrix.target }} \
+            --bin openpanel
+          sha256sum target/${{ matrix.target }}/release/openpanel \
+            | tee dist/openpanel-${{ matrix.target }}.sha256.repro2
+          if ! diff -q \
+              dist/openpanel-${{ matrix.target }}.sha256.repro \
+              dist/openpanel-${{ matrix.target }}.sha256.repro2 >/dev/null; then
+            echo "::error::Reproducibility check failed: two clean builds differ"
+            exit 1
+          fi
+
+      - name: Checksums
+        run: |
+          for bin in dist/*; do
+            case "${bin}" in
+              *.sha256|*.sbom.json|*.sig|provenance.json) continue ;;
+            esac
+            sha256sum "${bin}" | awk '{print $1}' > "${bin}.sha256"
+          done
+
+      - name: SBOM (CycloneDX via cargo metadata)
+        run: |
+          for bin in dist/*; do
+            case "${bin}" in
+              *.sha256|*.sbom.json|*.sig|provenance.json) continue ;;
+            esac
+            cargo metadata --format-version=1 --no-deps \
+              | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+out = {
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.5",
+  "version": 1,
+  "components": [
+    {"type": "library", "name": p["name"], "version": p["version"]}
+    for p in data["packages"]
+  ],
+}
+print(json.dumps(out, indent=2))
+' > "${bin}.sbom.json"
+          done
+
+      - name: Detached signature (placeholder fingerprint)
+        if: env.RELEASE_SIGNING_KEY == ''
+        run: |
+          for bin in dist/*; do
+            case "${bin}" in
+              *.sha256|*.sbom.json|*.sig|provenance.json) continue ;;
+            esac
+            sha256sum "${bin}" | awk '{print $1}' \
+              | sed 's/^/placeholder:/' > "${bin}.sig"
+          done
+
+      - name: Detached signature (minisign)
+        if: env.RELEASE_SIGNING_KEY != ''
+        env:
+          RELEASE_SIGNING_KEY: ${{ secrets.RELEASE_SIGNING_KEY }}
+        run: |
+          for bin in dist/*; do
+            case "${bin}" in
+              *.sha256|*.sbom.json|*.sig|provenance.json) continue ;;
+            esac
+            echo "${RELEASE_SIGNING_KEY}" > /tmp/sign.key
+            minisign -S -s /tmp/sign.key -m "${bin}" -c "openpanel release ${{ github.ref_name }}"
+          done
+
+      - name: Provenance manifest
+        run: |
+          {
+            printf '{\n'
+            printf '  "commit": "%s",\n' "${{ github.sha }}"
+            printf '  "ref": "%s",\n' "${{ github.ref }}"
+            printf '  "target": "%s",\n' "${{ matrix.target }}"
+            printf '  "source_date_epoch": "%s",\n' "${{ github.event.repository.updated_at }}"
+            printf '  "artifacts": [\n'
+            first=1
+            for bin in dist/*; do
+              case "${bin}" in
+                *.sha256|*.sbom.json|*.sig|provenance.json) continue ;;
+              esac
+              base="$(basename "${bin}")"
+              if [ "${first}" -eq 1 ]; then first=0; else printf ',\n'; fi
+              printf '    "%s"' "${base}"
+            done
+            printf '\n  ]\n}\n'
+          } > dist/provenance.json
+
+      - name: Required release-governance gate
+        env:
+          OPENPANEL_DIST_DIR: dist
+        run: scripts/check-release-governance.sh
+
+      - name: Upload to draft release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*
+          fail_on_unmatched_files: true
+          draft: true
+
+  container:
+    name: Container smoke
+    runs-on: ubuntu-latest
+    needs: release
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the container
+        run: docker build -t openpanel:${{ github.ref_name }} .
+      - name: Smoke (/health, non-root, graceful SIGTERM)
+        run: bash packages/installer/smoke-container.sh openpanel:${{ github.ref_name }}

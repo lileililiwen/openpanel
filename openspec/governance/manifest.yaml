@@ -237,3 +237,17 @@ requirements:
     digest: sha256:a6ccf2407608077bbf8e08f99e85ed92cde4a6899497bd80e5df58ccd8ecfb79
     scenarios: 2
     checkers: [governance-contract]
+
+  # The new release-deployment-governance capability ships a release
+  # gate that asserts every artifact under OPENPANEL_DIST_DIR has a
+  # .sha256 + .sbom.json + .sig and is listed in provenance.json.
+  # The gate is paired with positive and negative fixtures in
+  # scripts/test-gates.sh (`# checker: release-governance positive`
+  # / `negative`), so any future regression of the gate is caught
+  # by the test-gates self-test.
+  - archive: openspec/changes/archive/2026-09-09-add-release-and-deployment-governance/specs/quality/spec.md
+    capability: quality
+    requirement: "Release Governance Gate"
+    digest: sha256:aac590538ac17cc2756eb5cdb4040b28e344f9d3c140e7115bf89d971a4308a5
+    scenarios: 5
+    checkers: [release-governance]

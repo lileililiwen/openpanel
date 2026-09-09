@@ -523,6 +523,11 @@ if command -v make >/dev/null 2>&1; then
   else
     fail=$((fail+1)); echo "  FAIL - make check does NOT include class-coverage"
   fi
+  if printf '%s' "${plan}" | grep -q 'scripts/check-release-governance.sh'; then
+    pass=$((pass+1)); echo "  ok   - make check includes release-governance"
+  else
+    fail=$((fail+1)); echo "  FAIL - make check does NOT include release-governance"
+  fi
   if printf '%s' "${plan}" | grep -q 'scripts/check-maturity.sh'; then
     pass=$((pass+1)); echo "  ok   - make check includes maturity"
   else
@@ -737,6 +742,75 @@ assert "maturity: untracked TODO fails" 1 \
   env OPENSPEC_TODOS_DIR="${ME}/crates" \
       OPENSPEC_EVIDENCE="${ME}/openspec/governance/evidence.yaml" \
       "${ME}/scripts/check-maturity.sh"
+
+# --- release-governance --------------------------------------------------
+# Per the release-deployment-governance spec, every release artifact in
+# OPENPANEL_DIST_DIR MUST ship with a .sha256 + .sbom.json + .sig and
+# be listed in provenance.json. A missing sidecar, an unlisted
+# artifact, or a signature that does not verify (with
+# RELEASE_VERIFY_KEY set) fails the build. The gate is read-only and
+# must skip gracefully when OPENPANEL_DIST_DIR does not exist.
+build_release_fixture() { # build_release_fixture <root> <variant: good|bad-sbom|bad-sig|unlisted>
+  local root="$1"; local variant="$2"
+  mkdir -p "${root}/dist"
+  printf 'fake-binary-bytes' > "${root}/dist/openpanel"
+  local actual
+  actual="$(sha256sum "${root}/dist/openpanel" | awk '{print $1}')"
+  printf '%s\n' "${actual}" > "${root}/dist/openpanel.sha256"
+  printf '{"bomFormat":"CycloneDX","components":[]}\n' > "${root}/dist/openpanel.sbom.json"
+  printf 'untrusted:dummy\n' > "${root}/dist/openpanel.sig"
+  case "${variant}" in
+    bad-sbom)
+      rm -f "${root}/dist/openpanel.sbom.json"
+      ;;
+    bad-sig)
+      rm -f "${root}/dist/openpanel.sig"
+      ;;
+    unlisted)
+      cat > "${root}/dist/provenance.json" <<PROV
+{"commit":"abc123","target":"x86_64-unknown-linux-gnu","artifacts":["something-else"]}
+PROV
+      ;;
+    *)
+      cat > "${root}/dist/provenance.json" <<PROV
+{"commit":"abc123","target":"x86_64-unknown-linux-gnu","artifacts":["openpanel"]}
+PROV
+      ;;
+  esac
+}
+RG="${TMP}/release_governance"
+mkdir -p "${RG}/scripts/lib"
+cp ./scripts/check-release-governance.sh "${RG}/scripts/check-release-governance.sh"
+cp ./scripts/lib/step.sh "${RG}/scripts/lib/step.sh"
+build_release_fixture "${RG}" good
+# checker: release-governance positive
+assert "release-governance: complete artifact set passes" 0 \
+  env OPENPANEL_DIST_DIR="${RG}/dist" \
+      "${RG}/scripts/check-release-governance.sh"
+# Missing SBOM MUST fail.
+build_release_fixture "${RG}" bad-sbom
+# checker: release-governance negative
+assert "release-governance: missing SBOM fails" 1 \
+  env OPENPANEL_DIST_DIR="${RG}/dist" \
+      "${RG}/scripts/check-release-governance.sh"
+# Missing signature MUST fail.
+build_release_fixture "${RG}" bad-sig
+# checker: release-governance negative
+assert "release-governance: missing signature fails" 1 \
+  env OPENPANEL_DIST_DIR="${RG}/dist" \
+      "${RG}/scripts/check-release-governance.sh"
+# An artifact present on disk but not listed in provenance.json MUST fail.
+build_release_fixture "${RG}" unlisted
+# checker: release-governance negative
+assert "release-governance: unlisted artifact fails" 1 \
+  env OPENPANEL_DIST_DIR="${RG}/dist" \
+      "${RG}/scripts/check-release-governance.sh"
+# A missing dist/ MUST skip (so `make check` does not block local work).
+rm -rf "${RG}/dist"
+# checker: release-governance positive
+assert "release-governance: missing dist dir skips cleanly" 0 \
+  env OPENPANEL_DIST_DIR="${RG}/dist" \
+      "${RG}/scripts/check-release-governance.sh"
 
 # --- propagation: a failing fixture must yield non-zero overall ---------
 # Spec: "self-test MUST NOT silently skip because a target is absent."

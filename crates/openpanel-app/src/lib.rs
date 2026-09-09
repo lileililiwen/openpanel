@@ -118,6 +118,10 @@ pub mod prelude;
 /// Quotas bounded context: per-user / per-site resource quotas
 /// with soft/hard limits and grace windows.
 pub mod quotas;
+/// Release preflight: refuse to mutate a store whose schema is
+/// newer than this binary supports. Decision logic is pure; the
+/// async composition-root glue lives in the composition-root crate.
+pub mod release_preflight;
 pub mod security;
 /// Service manager bounded context: allow-listed systemctl
 /// surface with audited lifecycle actions.
@@ -303,6 +307,7 @@ pub use plugin_marketplace::{
     PluginMarketplaceModule, SqliteCatalogCache,
 };
 pub use quotas::{QuotaService, QuotasModule, SqliteQuotaRepository};
+pub use release_preflight::{PreflightError, PreflightOutcome, evaluate, evaluate_runner};
 pub use security::{HostSshKeysService, SecurityModule, SecurityService};
 pub use service_manager::{
     RecordingSystemCtl, ServiceActor, ServiceLister, ServiceManagerModule,

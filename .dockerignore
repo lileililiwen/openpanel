@@ -1,0 +1,17 @@
+target/
+.git/
+.github/
+.idea/
+.codex/
+.codegraph/
+.qoder/
+.agents/
+node_modules/
+*.log
+*.tmp
+test-results/
+proptest-regressions/
+openspec/
+docs/
+tests/
+crates/openpanel-test-support/

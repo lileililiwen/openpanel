@@ -32,7 +32,8 @@
 # AGENTS.md "Quality gate" line):
 #   ensure-lint-tools
 #   → fmt → clippy → docs → audit → file-length → scan-literal
-#   → class-coverage → tasks-testing-first → reuse --strict → layering
+#   → class-coverage → release-governance → tasks-testing-first
+#   → reuse --strict → layering
 #   → spec-test-drift --strict → spec-drift → agent-governance
 #   → governance-contract → coverage-floor → maturity
 #   → test-gates
@@ -41,9 +42,9 @@
 # Every per-check script prints `step: <name> status: ok | failed` and
 # exits non-zero on failure; `make` short-circuits on the first one.
 
-.PHONY: check fmt clippy docs audit file-length test coverage coverage-floor maturity install-lint-tools ensure-lint-tools split a11y scan-literal class-coverage tasks-testing-first reuse layering spec-test-drift spec-drift repo-map test-gates agent-governance governance-contract
+.PHONY: check fmt clippy docs audit file-length test coverage coverage-floor maturity install-lint-tools ensure-lint-tools split a11y scan-literal class-coverage release-governance tasks-testing-first reuse layering spec-test-drift spec-drift repo-map test-gates agent-governance governance-contract
 
-check: ensure-lint-tools fmt clippy docs audit file-length scan-literal class-coverage tasks-testing-first reuse-strict layering spec-test-drift-strict spec-drift agent-governance governance-contract coverage-floor maturity test-gates test
+check: ensure-lint-tools fmt clippy docs audit file-length scan-literal class-coverage release-governance tasks-testing-first reuse-strict layering spec-test-drift-strict spec-drift agent-governance governance-contract coverage-floor maturity test-gates test
 	@echo ""
 	@echo "=== All quality checks passed ==="
 
@@ -67,6 +68,9 @@ scan-literal:
 
 class-coverage:
 	@scripts/check-class-coverage.sh
+
+release-governance:
+	@scripts/check-release-governance.sh
 
 tasks-testing-first:
 	@scripts/check-tasks-testing-first.sh

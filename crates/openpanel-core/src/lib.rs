@@ -24,6 +24,10 @@ pub mod migration;
 pub mod module;
 /// Per-file line-count thresholds and exclude glob list.
 pub mod quality;
+/// Release metadata embedded in the binary (version, commit, target,
+/// `max_schema_version`). The preflight and the release-governance
+/// gate read from this module.
+pub mod release_metadata;
 /// Tracing subscriber initialization.
 pub mod tracing_init;
 
@@ -45,5 +49,7 @@ pub use migration::{Migration, MigrationRecord, MigrationRunner};
 pub use module::{AppContext, Module, ModuleRegistry, RouteMount};
 /// Re-export of the file-length threshold value object.
 pub use quality::{DEFAULT_HARD_LIMIT, DEFAULT_SOFT_LIMIT, FileLengthThresholds, LintExtraFile};
+/// Re-export of the embedded release metadata helpers.
+pub use release_metadata::{BinaryMetadata, compiled_max_schema_version, current_metadata};
 /// Re-export of the tracing initializer.
 pub use tracing_init::init_tracing;
