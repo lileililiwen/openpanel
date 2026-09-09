@@ -17,6 +17,23 @@ archived (commit 97abb32). #10 `tokenise-app-css-and-add-class-gate`
 is implemented and archived (this handoff, commit e56a778). All
 three changes are green end-to-end.
 
+The maturity sequence (changes 1–9) is now in flight: change 1
+`ratchet-quality-and-spec-maturity` is implemented and archived
+(commit 775b77c). Change 2 `add-release-and-deployment-governance`
+is implemented, archived as
+`2026-09-09-add-release-and-deployment-governance`, and committed
+(commit 212961c). The five new requirements under
+`openspec/specs/release-deployment-governance/` (Reproducible
+Supported Artifacts, Artifact Integrity Metadata, Container Runtime
+Contract, Safe Upgrade and Rollback, Release Gate Is Blocking) and
+the one new requirement under `openspec/specs/quality/`
+(Release Governance Gate) are all live. The new
+`scripts/check-release-governance.sh` gate is wired into `make
+check` between `class-coverage` and `tasks-testing-first` and is
+backed by 18 positive/negative fixtures in
+`scripts/test-gates.sh`. The `governance-contract` manifest gains
+one `release-governance` checker entry; the gate is green.
+
 ## Progress
 
 Overall: `[██████████] 7/7 UI/UX implemented & archived; 4/4 governance implemented & archived; 1 archived (reduce-todo-debt); 3/3 style-baseline implemented & archived; 1/9 maturity sequence implemented & archived (ratchet-quality-and-spec-maturity)`
@@ -38,6 +55,7 @@ Overall: `[██████████] 7/7 UI/UX implemented & archived; 4/4
 | 8 | `add-web-ui-element-baseline` | `[x] implemented; archived & committed (18ab4ba)` | none |
 | 9 | `resolve-unstyled-ui-classes` | `[x] implemented & archived & committed (97abb32; design.md not pre-approved — see change #9 entry)` | 8 |
 | 10 | `tokenise-app-css-and-add-class-gate` | `[x] implemented; archived & committed (e56a778)` | 8 |
+| 2 | `add-release-and-deployment-governance` | `[x] implemented; archived & committed (212961c)` | 1 |
 | 1 | `ratchet-quality-and-spec-maturity` | `[x] implemented; archived & committed (775b77c)` | none |
 
 ## Required execution protocol
@@ -102,12 +120,12 @@ commit 1's hash.
 
 ## Next steps (post-handoff)
 
-1. **Pick change 2 of the maturity sequence** —
-   `add-release-and-deployment-governance`
-   (`openspec/changes/add-release-and-deployment-governance/`,
+1. **Pick change 3 of the maturity sequence** —
+   `complete-production-acme-lifecycle`
+   (`openspec/changes/complete-production-acme-lifecycle/`,
    plan-only, passes `openspec validate --strict --no-interactive`).
    `design.md` is awaiting human-principal approval. Dependency on
-   change 1 is now satisfied.
+   changes 1–2 is now satisfied.
 2. **Honor the design approval gate.** Each change requires human-principal
    approval of `design.md` before implementation, then tests-first/red phase,
    focused verification, `make check`, archive, and the repository's two-commit
