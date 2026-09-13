@@ -1,6 +1,6 @@
 # OpenPanel Roadmap Handoff
 
-Updated: 2026-09-07
+Updated: 2026-09-13
 Scope: the UI/UX gap roadmap (changes #1–#7) and the governance ratchet
 roadmap (changes G1–G4) are all implemented and archived. The final spec
 `2026-09-04-restore-make-check-green` (G4) is now archived as
@@ -36,7 +36,7 @@ one `release-governance` checker entry; the gate is green.
 
 ## Progress
 
-Overall: `[██████████] 7/7 UI/UX implemented & archived; 4/4 governance implemented & archived; 1 archived (reduce-todo-debt); 3/3 style-baseline implemented & archived; 1/9 maturity sequence implemented & archived (ratchet-quality-and-spec-maturity)`
+Overall: `[██████████] 7/7 UI/UX implemented & archived; 4/4 governance implemented & archived; 1 archived (reduce-todo-debt); 3/3 style-baseline implemented & archived; 3/9 maturity sequence implemented & archived (ratchet-quality-and-spec-maturity, add-release-and-deployment-governance, complete-production-acme-lifecycle)`
 
 | Order | Change | Status | Depends on |
 |---:|---|---|---|
@@ -55,8 +55,9 @@ Overall: `[██████████] 7/7 UI/UX implemented & archived; 4/4
 | 8 | `add-web-ui-element-baseline` | `[x] implemented; archived & committed (18ab4ba)` | none |
 | 9 | `resolve-unstyled-ui-classes` | `[x] implemented & archived & committed (97abb32; design.md not pre-approved — see change #9 entry)` | 8 |
 | 10 | `tokenise-app-css-and-add-class-gate` | `[x] implemented; archived & committed (e56a778)` | 8 |
-| 2 | `add-release-and-deployment-governance` | `[x] implemented; archived & committed (212961c)` | 1 |
 | 1 | `ratchet-quality-and-spec-maturity` | `[x] implemented; archived & committed (775b77c)` | none |
+| 2 | `add-release-and-deployment-governance` | `[x] implemented; archived & committed (212961c)` | 1 |
+| 3 | `complete-production-acme-lifecycle` | `[x] implemented; archived & committed (7c94228)` | 1–2 |
 
 ## Required execution protocol
 
@@ -105,6 +106,8 @@ commit 1's hash.
 - The `/audit` filter form was brought into the `web-ui-styling` contract in change G4: the ad-hoc `audit-filters` class is dropped (leaving `class="form form-inline"`) and each of the six visible controls is wrapped in a `<label>`; placeholders that merely repeated the label text are removed. The three `tests/integration/web_ui_styling.rs` assertions that previously failed on `/audit` now pass.
 - Pre-existing gate blockers from the previous handoff have all been resolved. The synthetic_monitoring clippy lints (`expect`/`unwrap` in `crates/openpanel-app/src/synthetic_monitoring/{service,status_page_repo,status_page_service}.rs`) and the `UnpublishForm` rustdoc miss in `crates/openpanel-web/src/status_page_admin.rs` were fixed as part of change G4. The `web_ui_audit.rs` fmt drift introduced with change #2 was fixed in change G4. `make check` is green end-to-end (fmt, clippy, docs, audit, file-length, scan-literal, tasks-testing-first, reuse, layering, spec-test-drift, spec-drift, agent-governance, governance-contract, test-gates, tests).
 - The worktree is clean. All committed work is in 125 archived change folders; there are no unarchived change folders.
+- `complete-production-acme-lifecycle` (maturity 3) is implemented and archived as `2026-09-13-complete-production-acme-lifecycle` (commit `7c94228`) with new live spec `openspec/specs/ssl-production-lifecycle/spec.md` (10 requirements: issuance, fail-closed, staging opt-in, durable renewal, visible recovery, bounded backoff, classified errors, preflight, 24h backoff, nginx-reload gating). Delivered: `issuance_state.rs` (`IssuanceError`, `classify_acme_error`/`classify_problem`, `IssuanceAttempt` 6-poll 2s→60s backoff, `RENEWAL_RETRY_AFTER` 24h, `redact_acme_text`), `preflight.rs` (`PreflightOutcome`, 5s per-step DNS + port-80 checks), `Certificate::last_attempt_at` + `record_attempt`/`attempted_within`, `SslError::AcmeRateLimited` (→429) / `AcmeUnreachable` (→502), `SslService::preflight_status`/`reload_nginx`/`with_nginx`, renewal 24h backoff + reload-on-success, migration `V002__last_attempt_at.sql`, `docs/ACME.md` runbook, `docs/TODOS.md` #1 → Partially wired. `RustlsAcmeClient::issue` returns structured `SslError::Acme` gated on the follow-up `AcmeState` stream-bridge change. 446 `openpanel-app` + 527 `openpanel-domain` lib tests green; `openspec validate --strict` green.
+- `make check` at change 3 is green except a pre-existing environmental `audit` failure: `h2 0.4.15` advisory `RUSTSEC-2026-0258` from the upstream advisory DB (plus allowed `rustls-pemfile` unmaintained warning). `Cargo.lock` is untouched by this change; all other gates (fmt, clippy, docs, file-length, class-coverage, tasks-testing-first, reuse-strict, layering, spec-test-drift-strict, spec-drift, agent-governance, governance-contract, coverage-floor, maturity, test-gates 71/71) pass.
 - `redesign-operations-dashboard` is implemented: `crates/openpanel-web/src/dashboard.rs` rebuilt into a role-aware `DashboardModel` with server-identity header + last-updated/stale flag, `#host-gauges` gauges carrying text status, per-mount disk-capacity and per-interface network widgets, an attention queue (security blocks / degraded services / failed backups, owner-scoped), role-scoped quick actions, and a CPU trend sparkline reusing `crate::monitoring::sparkline`. Failed monitoring collection now renders an `ErrorState` instead of the former silent-zero `fallback_snapshot`. 17 dashboard unit tests; 150 `openpanel-web` lib tests green. `openspec validate redesign-operations-dashboard --strict` passed; archived as `2026-08-29-redesign-operations-dashboard` with spec `openspec/specs/operations-dashboard/spec.md`.
 - `add-site-workspace-ux` is implemented: new `crates/openpanel-web/src/site_workspace.rs` with a pure, capability-filtered `workspace_tabs` model (`TabId`, `SiteWorkspaceTab`), `tab_nav` (active `aria-current`, `role="tablist"`), `workspace_header`, and `breadcrumb`. `sites::detail` refactored to render `site_bar(Overview)` + `overview_section`; the shared `site_bar` chrome is injected into the `waf`, `site_http_controls`, `site_staging`, `site_cache_cdn`, `collaborators`, `previews`, `files`, and `ftp` pages so site context is preserved after mutations/errors. Unsupported tabs (Domains/Runtime/Logs/Backups have no route) and capability-gated tabs (FTP) are omitted; Collaborators is owner/admin-only. 7 site_workspace unit tests; 157 `openpanel-web` lib tests green. `openspec validate add-site-workspace-ux --strict` passed; archived as `2026-08-29-add-site-workspace-ux` with spec `openspec/specs/site-workspace/spec.md`.
 - `complete-file-database-backup-workflows` core logic is implemented: new `crates/openpanel-web/src/ops_workflows.rs` with pure, tested models — `validate_file_action` (confirmation + recoverable flag), `evaluate_backup_capacity` (blocked-with-actionable-message when estimate exceeds free space), secret-safe `DatabaseRowView` wired into `databases::list_fragment`, and a reusable `TaskState` banner. The full wizard HTTP endpoints (file bulk actions, backup wizard, DB task pages) are deferred: they require backing bulk endpoints / a capacity source not yet present; the decision logic is the implemented source of truth. 9 ops_workflows unit tests; 166 `openpanel-web` lib tests green. `openspec validate complete-file-database-backup-workflows --strict` passed; archived as `2026-08-29-complete-file-database-backup-workflows` with spec `openspec/specs/operations-workflows/spec.md`.
@@ -120,9 +123,9 @@ commit 1's hash.
 
 ## Next steps (post-handoff)
 
-1. **Pick change 3 of the maturity sequence** —
-   `complete-production-acme-lifecycle`
-   (`openspec/changes/complete-production-acme-lifecycle/`,
+1. **Pick change 4 of the maturity sequence** —
+   `bind-mailbox-surfaces-to-accounts`
+   (`openspec/changes/bind-mailbox-surfaces-to-accounts/`,
    plan-only, passes `openspec validate --strict --no-interactive`).
    `design.md` is awaiting human-principal approval. Dependency on
    changes 1–2 is now satisfied.
