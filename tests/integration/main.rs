@@ -12,6 +12,8 @@ mod account_hierarchy;
 mod admin_interaction_surface;
 mod api_tokens;
 mod backups;
+/// Capability navigation + site workspace completion integration tests.
+mod capability_navigation;
 /// Per-site collaborator HTTP integration tests.
 mod collaborators;
 /// Container registry HTTP integration tests.

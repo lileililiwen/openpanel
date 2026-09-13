@@ -455,4 +455,67 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn nav_items_agree_with_capability_registry() {
+        // `capability-navigation`: Navigation and Router Agree. Every
+        // sidebar item must have a matching global registry entry (route,
+        // capability, label, icon, role), and every global registry entry
+        // must have a sidebar item, so neither side can name a dead link.
+        let registry = crate::capability_registry::entries();
+        for section in NAV_SECTIONS {
+            for item in section.items {
+                let entry = registry
+                    .iter()
+                    .find(|e| e.route == item.href)
+                    .unwrap_or_else(|| {
+                        panic!(
+                            "nav item `{}` ({}) missing from capability registry",
+                            item.label, item.href
+                        )
+                    });
+                assert_eq!(
+                    entry.capability, item.capability,
+                    "capability drift for {}",
+                    item.href
+                );
+                assert_eq!(entry.label, item.label, "label drift for {}", item.href);
+                assert_eq!(entry.icon, item.icon, "icon drift for {}", item.href);
+                let expected_owner = matches!(item.role, RequiredRole::Owner);
+                let entry_owner = entry.min_role == openpanel_domain::Role::Owner;
+                assert_eq!(expected_owner, entry_owner, "role drift for {}", item.href);
+            }
+        }
+        let nav_hrefs: Vec<&str> = NAV_SECTIONS
+            .iter()
+            .flat_map(|section| section.items)
+            .map(|item| item.href)
+            .collect();
+        for entry in registry
+            .iter()
+            .filter(|e| e.scope == crate::capability_registry::RouteScope::Global)
+        {
+            assert!(
+                nav_hrefs.contains(&entry.route),
+                "registry route `{}` has no navigation item (dead entry)",
+                entry.route
+            );
+        }
+    }
+
+    #[test]
+    fn registry_global_routes_are_mounted() {
+        // `capability-navigation`: a navigation item pointing at an
+        // unmounted route fails here and names the item. The router mounts
+        // explicitly; this static guard pins the two together.
+        const ROUTER: &str = include_str!("router.rs");
+        for entry in crate::capability_registry::global_entries() {
+            let needle = format!("\"{}\"", entry.route);
+            assert!(
+                ROUTER.contains(&needle),
+                "registry route `{}` is not mounted in router.rs",
+                entry.route
+            );
+        }
+    }
 }

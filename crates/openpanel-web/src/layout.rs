@@ -18,39 +18,17 @@ pub struct CapabilitySet(BTreeSet<&'static str>);
 impl CapabilitySet {
     /// Capabilities currently shipped by the OpenPanel composition root.
     ///
-    /// Every first-class web workflow that has a sidebar navigation item
-    /// is registered here so the shell can derive navigation from the same
-    /// inventory as the router. Owner-only gating is enforced separately by
-    /// [`crate::nav_model::RequiredRole`]; this set reflects what is
-    /// installed/mounted, not who may see it.
+    /// Derived from the single discoverability inventory
+    /// ([`crate::capability_registry`]) so the shell, the router, and the
+    /// site workspace can never drift apart. Owner-only gating is enforced
+    /// separately by [`crate::nav_model::RequiredRole`]; this set reflects
+    /// what is installed/mounted, not who may see it.
     pub fn shipped() -> Self {
-        Self(BTreeSet::from([
-            "dashboard",
-            "sites",
-            "files",
-            "databases",
-            "ssl",
-            "mail",
-            "webmail",
-            "dns",
-            "host-security",
-            "monitoring",
-            "logs",
-            "backups",
-            "previews",
-            "status-page",
-            "cron",
-            "system-services",
-            "software-center",
-            "marketplace",
-            "plugins",
-            "docker",
-            "container-registry",
-            "users",
-            "themeable-ui",
-            "settings",
-            "audit",
-        ]))
+        Self(
+            crate::capability_registry::global_capabilities()
+                .into_iter()
+                .collect(),
+        )
     }
 
     /// Add a registered capability, used as new modules join the web router.

@@ -14,6 +14,8 @@ pub mod assets;
 /// Audit log route stubs.
 pub mod audit;
 pub mod backups;
+/// Capability navigation registry: one discoverability inventory.
+pub mod capability_registry;
 /// Per-site collaborator web page.
 pub mod collaborators;
 /// Container registry web page.
@@ -63,6 +65,8 @@ pub mod settings;
 pub mod site_cache_cdn;
 /// Per-site WAF editor page.
 pub mod site_http_controls;
+/// Site-scoped landing routes (domains, runtime, logs, backups).
+pub mod site_scoped;
 /// Per-site staging web pages.
 pub mod site_staging;
 /// Site workspace: capability-filtered tabbed navigation shared by site pages.

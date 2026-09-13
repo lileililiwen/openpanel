@@ -355,6 +355,10 @@ pub fn router(
             "/sites/{site_id}/ftp/{account_id}/{action}",
             post(crate::ftp::action),
         )
+        .route("/sites/{id}/domains", get(crate::site_scoped::domains))
+        .route("/sites/{id}/runtime", get(crate::site_scoped::runtime_page))
+        .route("/sites/{id}/logs", get(crate::site_scoped::logs))
+        .route("/sites/{id}/backups", get(crate::site_scoped::backups))
         .route(
             "/login",
             get(login::login_page_handler).post(login::login_handler),

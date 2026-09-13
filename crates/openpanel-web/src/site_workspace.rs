@@ -91,14 +91,14 @@ const TAB_DEFS: &[TabDef] = &[
         label: "Domains",
         capability: None,
         min_role: Role::User,
-        href: None,
+        href: Some(|s| format!("/sites/{}/domains", s.id())),
     },
     TabDef {
         id: TabId::Runtime,
         label: "Runtime",
         capability: None,
         min_role: Role::User,
-        href: None,
+        href: Some(|s| format!("/sites/{}/runtime", s.id())),
     },
     TabDef {
         id: TabId::Files,
@@ -133,14 +133,14 @@ const TAB_DEFS: &[TabDef] = &[
         label: "Logs",
         capability: Some("logs"),
         min_role: Role::User,
-        href: None,
+        href: Some(|s| format!("/sites/{}/logs", s.id())),
     },
     TabDef {
         id: TabId::Backups,
         label: "Backups",
         capability: Some("backups"),
         min_role: Role::User,
-        href: None,
+        href: Some(|s| format!("/sites/{}/backups", s.id())),
     },
     TabDef {
         id: TabId::Staging,
@@ -334,15 +334,20 @@ mod tests {
         let caps = CapabilitySet::shipped();
         let tabs = workspace_tabs(&site(), &caps, Role::Owner);
         let ids = tab_ids(&tabs);
-        // Defined order, minus route-less/unsupported tabs.
+        // Defined order; Domains/Runtime/Logs/Backups now have backing
+        // routes (`capability-navigation`) so they are present.
         assert_eq!(
             ids,
             vec![
                 TabId::Overview,
+                TabId::Domains,
+                TabId::Runtime,
                 TabId::Files,
                 TabId::Ssl,
                 TabId::Http,
                 TabId::Waf,
+                TabId::Logs,
+                TabId::Backups,
                 TabId::Staging,
                 TabId::Previews,
                 TabId::Cache,
@@ -365,17 +370,49 @@ mod tests {
     }
 
     #[test]
-    fn route_less_tabs_are_never_shown() {
-        // Domains / Runtime / Logs / Backups have no site-scoped route.
-        let caps = CapabilitySet::shipped()
-            .with("ftp")
-            .with("logs")
-            .with("backups");
-        let ids = tab_ids(&workspace_tabs(&site(), &caps, Role::Owner));
-        for absent in [TabId::Domains, TabId::Runtime, TabId::Logs, TabId::Backups] {
+    fn workspace_tabs_agree_with_registry() {
+        // `capability-navigation`: Site Workspace Is Complete and Scoped.
+        // Every workspace tab with a backing route must have a matching
+        // site registry entry, and the entry's tab key must round-trip.
+        for tab in workspace_tabs(&site(), &CapabilitySet::shipped(), Role::Owner) {
+            let key = tab.id.as_str();
+            let entry = crate::capability_registry::site_entry_for_tab(key)
+                .unwrap_or_else(|| panic!("tab `{key}` missing from capability registry"));
             assert!(
-                !ids.contains(&absent),
-                "{absent:?} must be omitted (no route)"
+                crate::capability_registry::template_matches(entry.route, &tab.href),
+                "tab `{key}` href `{}` does not match registry template `{}`",
+                tab.href,
+                entry.route
+            );
+        }
+    }
+
+    #[test]
+    fn site_tabs_point_at_mounted_routes() {
+        // `capability-navigation`: no workspace tab may render a dead link.
+        const ROUTER: &str = include_str!("router.rs");
+        for tab in workspace_tabs(&site(), &CapabilitySet::shipped(), Role::Owner) {
+            let template = match tab.id {
+                TabId::Overview => "/sites/{id}",
+                TabId::Domains => "/sites/{id}/domains",
+                TabId::Runtime => "/sites/{id}/runtime",
+                TabId::Files => "/sites/{site_id}/files",
+                TabId::Ssl => "/ssl/{domain}",
+                TabId::Http => "/sites/{id}/http",
+                TabId::Waf => "/sites/{id}/waf",
+                TabId::Logs => "/sites/{id}/logs",
+                TabId::Backups => "/sites/{id}/backups",
+                TabId::Staging => "/sites/{id}/staging",
+                TabId::Previews => "/sites/{id}/previews",
+                TabId::Cache => "/sites/{id}/cache",
+                TabId::Ftp => "/sites/{id}/ftp",
+                TabId::Collaborators => "/sites/{id}/collaborators",
+            };
+            let needle = format!("\"{template}\"");
+            assert!(
+                ROUTER.contains(&needle),
+                "tab `{}` route `{template}` is not mounted in router.rs",
+                tab.id.as_str()
             );
         }
     }
