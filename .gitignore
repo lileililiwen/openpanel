@@ -40,3 +40,4 @@ certs/
 crates/openpanel-app/target/
 package-lock.json
 .zvec-grep/
+.ariadex/
