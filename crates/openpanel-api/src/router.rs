@@ -42,6 +42,7 @@ use crate::{
         malware_scanner::router as malware_scanner_router,
         monitoring::router as monitoring_router,
         notifications::router as notifications_router,
+        operator_security::router as operator_security_router,
         plugin_extension::router as plugin_extension_router,
         plugin_marketplace::router as plugin_marketplace_router,
         previews::router as previews_router,
@@ -122,6 +123,7 @@ pub fn build_router(
     malware_scanner: Arc<MalwareScannerService>,
     previews: Arc<openpanel_app::PreviewService>,
     status_page: Arc<StatusPageService>,
+    operator_security: Arc<openpanel_app::OperatorSecurityService>,
 ) -> Router {
     let auth_state = ApiAuthState {
         identity: identity.clone(),
@@ -156,6 +158,10 @@ pub fn build_router(
         .nest("/logs", logs_router(logs))
         .nest("/logs", logs_policies_router(log_rotation))
         .nest("/security", security_router(security))
+        .nest(
+            "/security/findings",
+            operator_security_router(operator_security),
+        )
         .nest("/host", ssh_keys_router(host_ssh_keys))
         .nest("/services", system_services_router(system_services))
         .nest("/dns", dns_router(dns))

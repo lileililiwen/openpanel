@@ -497,6 +497,21 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .context("apply git_deployment migrations")?;
     let previews_svc = git_deployment_module.preview_service();
 
+    // Operator security control plane shares the live firewall, WAF,
+    // and service-health services with the web adapter below.
+    let operator_security_svc = Arc::new(
+        openpanel_app::OperatorSecurityService::new(
+            Arc::new(
+                openpanel_app::ExistingServiceRemediationPort::empty()
+                    .with_security(security_svc.clone())
+                    .with_waf(waf_svc.clone())
+                    .with_services(system_services_svc.clone()),
+            ),
+            audit.clone(),
+        )
+        .with_notifications(notification_svc.clone()),
+    );
+
     let app = build_router(
         identity_svc.clone(),
         sites_svc.clone(),
@@ -598,6 +613,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         )),
         previews_svc.clone(),
         status_page_svc.clone(),
+        operator_security_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -651,7 +667,8 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
                 .with("marketplace")
                 .with("audit")
                 .with("themeable-ui"),
-        ),
+        )
+        .with_operator_security(operator_security_svc),
     ))
     .merge(openpanel_web::public_router(status_page_svc.clone()));
 
@@ -1782,6 +1799,180 @@ pub async fn security_unblock(config: Arc<Config>, key: String) -> anyhow::Resul
     } else {
         println!("already unblocked");
     }
+    Ok(())
+}
+
+/// Build the control-plane service plus the owner caller, seeding from
+/// live firewall + service-health state in the same process (the
+/// projection store is process-local; every CLI invocation reseeds
+/// from the authoritative services first).
+async fn build_control_plane(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::OperatorSecurityService>,
+    openpanel_domain::User,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    sqlx::query(include_str!("audit.sql"))
+        .execute(&pool)
+        .await
+        .context("ensure audit schema")?;
+    let ctx = AppContext::new(config.clone(), db, audit.clone());
+    let security_module = SecurityModule::new(&ctx)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let system_services_module = SystemServicesModule::new(&ctx)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let runner = MigrationRunner::for_sqlite(pool);
+    runner
+        .apply_module(security_module.name(), &security_module.migrations())
+        .await?;
+    runner
+        .apply_module(
+            system_services_module.name(),
+            &system_services_module.migrations(),
+        )
+        .await?;
+    // Local CLI runs as host owner (same trust as `security_actor()`);
+    // the synthetic caller is never persisted.
+    let owner = openpanel_domain::User::new(
+        uuid::Uuid::nil(),
+        openpanel_domain::Username::new("owner").map_err(anyhow::Error::msg)?,
+        openpanel_domain::Email::new("owner@localhost.local").map_err(anyhow::Error::msg)?,
+        openpanel_domain::Password::hash("correct horse battery staple")
+            .map_err(anyhow::Error::msg)?,
+        openpanel_domain::Role::Owner,
+    );
+    let control_plane = Arc::new(openpanel_app::OperatorSecurityService::new(
+        Arc::new(
+            openpanel_app::ExistingServiceRemediationPort::empty()
+                .with_security(security_module.service())
+                .with_services(system_services_module.service()),
+        ),
+        audit,
+    ));
+    let now = chrono::Utc::now();
+    let active = security_module
+        .service()
+        .blocks()
+        .await
+        .map(|blocks| blocks.iter().filter(|block| block.is_active(now)).count())
+        .unwrap_or(0);
+    let mut degraded = Vec::new();
+    if let Ok(services) = system_services_module.service().inventory().await {
+        for service in services {
+            if service.status.active_state != "active" {
+                degraded.push(service.descriptor.id().as_str().to_string());
+            }
+        }
+    }
+    control_plane
+        .ingest(
+            &owner,
+            openpanel_web::operator_security::seed_findings(active, &degraded, now),
+            now,
+        )
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    Ok((control_plane, owner))
+}
+
+fn print_finding(item: &openpanel_domain::operator_security::SecurityFinding) {
+    println!(
+        "{} {} {} {} {}",
+        item.id(),
+        item.severity().as_str(),
+        item.state().as_str(),
+        item.resource(),
+        item.title()
+    );
+}
+
+/// Seed from live services and print the prioritized queue.
+pub async fn security_findings_queue(config: Arc<Config>) -> anyhow::Result<()> {
+    let (service, owner) = build_control_plane(config).await?;
+    for item in service
+        .queue(&owner, chrono::Utc::now())
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?
+    {
+        print_finding(&item);
+    }
+    Ok(())
+}
+
+/// Show one finding with redacted evidence.
+pub async fn security_findings_show(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let (service, owner) = build_control_plane(config).await?;
+    let id = uuid::Uuid::parse_str(&id).context("invalid finding id")?;
+    let item = service
+        .find(&owner, id)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    print_finding(&item);
+    println!("source={} rule={}", item.source().as_str(), item.rule_key());
+    println!("evidence={}", item.evidence());
+    Ok(())
+}
+
+/// Preview the typed remediation adapter.
+pub async fn security_findings_preview(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+    let (service, owner) = build_control_plane(config).await?;
+    let id = uuid::Uuid::parse_str(&id).context("invalid finding id")?;
+    let preview = service
+        .preview(&owner, id)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&serde_json::json!({
+            "finding_id": preview.finding_id(),
+            "adapter": preview.kind().as_str(),
+            "summary": preview.summary(),
+            "steps": preview.steps(),
+            "requires_confirmation": preview.requires_confirmation(),
+            "supports_rollback": preview.supports_rollback(),
+            "recovery_guidance": preview.kind().recovery_guidance(),
+        }))?
+    );
+    Ok(())
+}
+
+/// Suppress with reason, scope, and expiry.
+pub async fn security_findings_suppress(
+    config: Arc<Config>,
+    id: String,
+    reason: String,
+    scope: String,
+    expires_in_hours: i64,
+) -> anyhow::Result<()> {
+    let (service, owner) = build_control_plane(config).await?;
+    let id = uuid::Uuid::parse_str(&id).context("invalid finding id")?;
+    let now = chrono::Utc::now();
+    let expires_at = now + chrono::Duration::hours(expires_in_hours.clamp(1, 720));
+    let item = service
+        .suppress_finding(&owner, id, &reason, &scope, expires_at, now)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    println!("suppressed {} until {}", item.id(), expires_at.to_rfc3339());
+    Ok(())
+}
+
+/// Execute the typed remediation with idempotency and post-check.
+pub async fn security_findings_remediate(
+    config: Arc<Config>,
+    id: String,
+    idempotency_key: String,
+    confirm: bool,
+) -> anyhow::Result<()> {
+    let (service, owner) = build_control_plane(config).await?;
+    let id = uuid::Uuid::parse_str(&id).context("invalid finding id")?;
+    let item = service
+        .remediate(&owner, id, &idempotency_key, confirm, chrono::Utc::now())
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    println!("{} {}", item.id(), item.state().as_str());
     Ok(())
 }
 

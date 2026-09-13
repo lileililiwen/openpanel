@@ -171,6 +171,9 @@ pub mod maintenance_windows;
 /// contract, `MigrationPlan` preview results, `ImportedResource`
 /// outcomes, and the redacted `TranslationLog`.
 pub mod migration_importers;
+/// Operator security control plane: normalized findings, deterministic
+/// queue order, suppression with expiry, and secret-safe evidence.
+pub mod operator_security;
 /// OS update management bounded context: package updates,
 /// unattended-upgrades policy, reboot state.
 pub mod os_updates;
@@ -371,6 +374,11 @@ pub use monitoring::{
 pub use offsite_backup_targets::{
     BackupCredential, BackupTargetAdapter, CredentialKind, KekRef, OffsiteBackupError,
     OffsiteBackupRepository, RemoteTargetConfig,
+};
+pub use operator_security::{
+    ControlPlaneError, FindingSeverity, FindingSource, FindingState, FindingSuppression,
+    RemediationMode, SecurityFinding, deduplicate_findings, redact_text, sort_findings,
+    stable_finding_id,
 };
 pub use os_updates::{
     OsUpdateError, OsUpdateRepository, PackageUpdate, RebootState, UpdateHistoryRecord, UpdateKind,

@@ -237,6 +237,7 @@ pub struct TestServer {
     db_grant_port: std::sync::Arc<openpanel_app::MemoryGrantPort>,
     logs: Arc<LogService>,
     security: Arc<SecurityService>,
+    operator_security: Arc<openpanel_app::OperatorSecurityService>,
     system_services: Arc<openpanel_app::ServiceManager>,
     dns: Arc<DnsService>,
     mail: Arc<MailService>,
@@ -947,6 +948,24 @@ impl TestServer {
 
         let settings_path = sandbox.path().join("web-preferences.json");
         let two_factor_svc = identity_module.two_factor();
+        // Operator security control plane: one shared instance feeds
+        // both the API and web adapters so the queue is consistent
+        // across surfaces. Backed by the same live firewall, WAF,
+        // malware, and service-health services as the rest of the
+        // test server.
+        let operator_security_svc = std::sync::Arc::new(
+            openpanel_app::OperatorSecurityService::new(
+                std::sync::Arc::new(
+                    openpanel_app::ExistingServiceRemediationPort::empty()
+                        .with_security(security_svc.clone())
+                        .with_waf(waf_svc.clone())
+                        .with_malware(malware_scanner_svc.clone())
+                        .with_services(system_services_svc.clone()),
+                ),
+                audit.clone(),
+            )
+            .with_notifications(notification_svc.clone()),
+        );
         let app = build_router(
             identity_svc.clone(),
             sites_svc.clone(),
@@ -1018,6 +1037,7 @@ impl TestServer {
             malware_scanner_svc.clone(),
             git_deployment_module.preview_service(),
             status_page_svc.clone(),
+            operator_security_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -1064,6 +1084,7 @@ impl TestServer {
                     .to_string_lossy()
                     .into_owned(),
             )
+            .with_operator_security(operator_security_svc.clone())
             .with_capabilities(
                 openpanel_web::layout::CapabilitySet::shipped()
                     .with("cron")
@@ -1121,6 +1142,7 @@ impl TestServer {
             db_grant_port: db_grant_port_recorder.clone(),
             logs: logs_svc,
             security: security_svc,
+            operator_security: operator_security_svc,
             system_services: system_services_svc,
             dns: dns_svc,
             mail: mail_svc,
@@ -1364,6 +1386,11 @@ impl TestServer {
     /// The host-security service handle.
     pub fn security(&self) -> Arc<SecurityService> {
         self.security.clone()
+    }
+
+    /// The operator security control-plane handle.
+    pub fn operator_security(&self) -> Arc<openpanel_app::OperatorSecurityService> {
+        self.operator_security.clone()
     }
 
     /// The allowlisted system-service manager.

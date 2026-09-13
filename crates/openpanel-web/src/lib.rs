@@ -51,6 +51,9 @@ pub mod monitoring;
 /// Navigation model and icon set for the shell sidebar.
 pub mod nav_model;
 pub mod notifications;
+/// Operator security control plane: queue, detail, preview, suppress,
+/// remediate (owner/admin) over the shared lifecycle service.
+pub mod operator_security;
 /// Shared operational-workflow building blocks (file-action validation,
 /// capacity-aware backup decisions, secret-safe rows, task-state banners).
 pub mod ops_workflows;

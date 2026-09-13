@@ -120,6 +120,13 @@ const MAIL_NETWORK: &[NavItem] = &[
         role: RequiredRole::Owner,
         icon: "lock",
     },
+    NavItem {
+        href: "/security/findings",
+        label: "Security findings",
+        capability: "host-security",
+        role: RequiredRole::Owner,
+        icon: "shield",
+    },
 ];
 
 const OPERATIONS: &[NavItem] = &[

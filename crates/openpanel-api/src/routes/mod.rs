@@ -40,6 +40,8 @@ pub mod malware_scanner;
 /// Monitoring resource routes (`/monitoring`).
 pub mod monitoring;
 pub mod notifications;
+/// Operator security control-plane routes (`/security/findings`).
+pub mod operator_security;
 /// Plugin extension framework routes (`/plugins`).
 pub mod plugin_extension;
 /// Plugin marketplace discovery routes (`/marketplace`).

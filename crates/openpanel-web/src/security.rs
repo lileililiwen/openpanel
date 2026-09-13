@@ -27,6 +27,7 @@ pub async fn page(State(state): State<WebState>, WebUser(user, session): WebUser
     let content = html! {
         h1 { "Host security" }
         p { "OpenPanel manages only the isolated nftables table " code { "inet openpanel" } "." }
+        p { a class="btn" href="/security/findings" { "Open security findings queue" } }
         h2 { "Firewall rules" }
         ul { @for rule in rules { li { (rule.comment()) " — " (rule.source()) ":" (rule.ports()) } } }
         form method="post" action="/security/rules" class="form form-grid" {

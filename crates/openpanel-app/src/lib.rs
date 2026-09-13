@@ -107,6 +107,9 @@ pub mod notifications;
 /// lifecycle, KEK management, remote target attachment, and the
 /// upload service driving `BackupTargetAdapter` implementations.
 pub mod offsite_backup_targets;
+/// Operator security control plane: normalized finding lifecycle,
+/// typed remediation adapters, expiry, and verification.
+pub mod operator_security;
 /// OS update management bounded context: package updates,
 /// unattended-upgrades policy, reboot state.
 pub mod os_updates;
@@ -294,6 +297,10 @@ pub use offsite_backup_targets::{
 };
 /// Re-export the `BinlogSink` trait so composition code can name it.
 pub use openpanel_domain::BinlogSink;
+pub use operator_security::{
+    ControlPlaneServiceError, ControlRemediationKind, ControlRemediationPort,
+    ControlRemediationPreview, ExistingServiceRemediationPort, OperatorSecurityService,
+};
 pub use os_updates::{
     OsUpdateApplier, OsUpdateLister, OsUpdateModule, PackageManager, RecordingPackageManager,
     SqliteOsUpdateRepository, UnattendedConfig,

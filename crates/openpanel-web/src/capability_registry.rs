@@ -147,6 +147,16 @@ pub const REGISTRY: &[RouteMeta] = &[
         site_tab: None,
     },
     RouteMeta {
+        key: "security-findings",
+        route: "/security/findings",
+        label: "Security findings",
+        icon: "shield",
+        capability: "host-security",
+        min_role: Role::Owner,
+        scope: RouteScope::Global,
+        site_tab: None,
+    },
+    RouteMeta {
         key: "monitoring",
         route: "/monitoring",
         label: "Monitoring",

@@ -19,10 +19,11 @@ use openpanel_api::{
 use openpanel_app::{
     ApiTokenService, BackupService, CollaboratorService, ContainerRegistryService,
     ContainerRuntimeService, CronService, DatabasesService, DnsService, DockerService,
-    FeedbackService, FilesService, FtpService, IdentityService, LogService, MailService,
-    MonitoringService, NotificationService, PitrService, PreviewService, SecurityService,
-    SitesService, SoftwareCenterService, SslService, StagingService, StatusPageService, WafService,
-    identity::TwoFactorService, security::LoginThrottleService, system_services::ServiceManager,
+    ExistingServiceRemediationPort, FeedbackService, FilesService, FtpService, IdentityService,
+    LogService, MailService, MonitoringService, NotificationService, OperatorSecurityService,
+    PitrService, PreviewService, SecurityService, SitesService, SoftwareCenterService, SslService,
+    StagingService, StatusPageService, WafService, identity::TwoFactorService,
+    security::LoginThrottleService, system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
 use openpanel_domain::{Session, SessionToken, User};
@@ -32,7 +33,7 @@ use crate::{
     csrf::{CsrfStore, ValidateCsrf},
     dashboard, databases, feedback, files, forms, layer,
     layout::CapabilitySet,
-    login, logs, monitoring, previews, security, settings,
+    login, logs, monitoring, operator_security, previews, security, settings,
     settings::{InstallationInfo, PanelPreferences, SettingsStore},
     sites, ssl, users,
 };
@@ -45,6 +46,7 @@ pub struct WebRuntime {
     data_path: String,
     config_path: String,
     capabilities: CapabilitySet,
+    operator_security: Option<Arc<OperatorSecurityService>>,
 }
 
 impl WebRuntime {
@@ -63,6 +65,7 @@ impl WebRuntime {
             data_path: data_path.into(),
             config_path: config_path.into(),
             capabilities: CapabilitySet::shipped(),
+            operator_security: None,
         }
     }
 
@@ -70,6 +73,23 @@ impl WebRuntime {
     pub fn with_capabilities(mut self, capabilities: CapabilitySet) -> Self {
         self.capabilities = capabilities;
         self
+    }
+
+    /// Share one control-plane instance between the web adapter and
+    /// callers that also feed the API adapter (test servers pass the
+    /// same `Arc` to both routers).
+    pub fn with_operator_security(mut self, service: Arc<OperatorSecurityService>) -> Self {
+        self.operator_security = Some(service);
+        self
+    }
+
+    fn operator_security_service(&self) -> Arc<OperatorSecurityService> {
+        self.operator_security.clone().unwrap_or_else(|| {
+            Arc::new(OperatorSecurityService::new(
+                Arc::new(ExistingServiceRemediationPort::empty()),
+                self.audit.clone(),
+            ))
+        })
     }
 }
 
@@ -152,6 +172,8 @@ pub struct WebState {
     pub capabilities: CapabilitySet,
     /// Append-only audit log read service (owner-only audit center).
     pub audit: Arc<dyn AuditService>,
+    /// Operator security control-plane lifecycle service.
+    pub operator_security: Arc<OperatorSecurityService>,
 }
 
 impl WebState {
@@ -280,6 +302,7 @@ pub fn router(
     let initial_preferences = PanelPreferences::load_or_default(&runtime.preferences_path);
     let installation =
         InstallationInfo::from_config(&runtime.config, &runtime.data_path, &runtime.config_path);
+    let operator_security = runtime.operator_security_service();
     let state = WebState {
         identity: identity.clone(),
         sites,
@@ -323,6 +346,7 @@ pub fn router(
         installation: Arc::new(installation),
         capabilities: runtime.capabilities,
         audit: runtime.audit.clone(),
+        operator_security,
     };
     Router::new()
         .route("/", get(dashboard::home))
@@ -434,6 +458,20 @@ pub fn router(
         .route("/logs/entries", get(logs::entries))
         .route("/security", get(security::page))
         .route("/security/rules", post(security::create))
+        .route("/security/findings", get(operator_security::queue_page))
+        .route(
+            "/security/findings/seed",
+            post(operator_security::seed_queue),
+        )
+        .route("/security/findings/{id}", get(operator_security::detail))
+        .route(
+            "/security/findings/{id}/suppress",
+            post(operator_security::suppress_post),
+        )
+        .route(
+            "/security/findings/{id}/remediate",
+            post(operator_security::remediate_post),
+        )
         .route("/services", get(crate::system_services::page))
         .route(
             "/services/{id}/actions",

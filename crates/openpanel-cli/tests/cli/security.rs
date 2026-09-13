@@ -64,3 +64,49 @@ async fn cli_security_status_rule_preview_apply_rollback_and_blocks() {
         0
     );
 }
+
+/// Capability under test: `operator-security-control-plane` (CLI queue,
+/// show, preview, suppress, remediate wiring; per-process seed).
+#[tokio::test]
+async fn cli_security_findings_queue_and_triage_wiring() {
+    let runner = CliRunner::new().await;
+    // Fresh DB seeds an empty queue; the command still exits zero.
+    let queue = runner.run(&["security", "findings", "queue"]);
+    assert_eq!(queue.code, 0, "{}", queue.stderr);
+
+    let missing = "00000000-0000-0000-0000-000000000000";
+    for args in [
+        vec!["security", "findings", "show", "--id", missing],
+        vec!["security", "findings", "preview", "--id", missing],
+    ] {
+        let result = runner.run(&args);
+        assert_ne!(result.code, 0, "{args:?} must fail for unknown id");
+    }
+    let bad_id = runner.run(&["security", "findings", "show", "--id", "nope"]);
+    assert_ne!(bad_id.code, 0, "malformed id is rejected");
+
+    let suppress = runner.run(&[
+        "security",
+        "findings",
+        "suppress",
+        "--id",
+        missing,
+        "--reason",
+        "noise",
+        "--scope",
+        "firewall:rules",
+    ]);
+    assert_ne!(suppress.code, 0, "suppress of unknown id fails");
+
+    let remediate = runner.run(&[
+        "security",
+        "findings",
+        "remediate",
+        "--id",
+        missing,
+        "--idempotency-key",
+        "key-1",
+        "--confirm",
+    ]);
+    assert_ne!(remediate.code, 0, "remediate of unknown id fails");
+}

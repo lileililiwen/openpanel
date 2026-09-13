@@ -800,6 +800,58 @@ pub enum SecurityCommand {
         #[arg(long)]
         key: String,
     },
+    /// List and triage normalized security findings.
+    Findings {
+        /// Findings operation.
+        #[command(subcommand)]
+        action: SecurityFindingsCommand,
+    },
+}
+
+/// Operator security findings triage.
+#[derive(Debug, Subcommand)]
+pub enum SecurityFindingsCommand {
+    /// Seed from live services and print the prioritized queue.
+    Queue,
+    /// Show one finding with redacted evidence.
+    Show {
+        /// Finding id.
+        #[arg(long)]
+        id: String,
+    },
+    /// Preview the typed remediation adapter.
+    Preview {
+        /// Finding id.
+        #[arg(long)]
+        id: String,
+    },
+    /// Suppress with reason, scope, and expiry.
+    Suppress {
+        /// Finding id.
+        #[arg(long)]
+        id: String,
+        /// Human reason.
+        #[arg(long)]
+        reason: String,
+        /// Scope the suppression applies to.
+        #[arg(long)]
+        scope: String,
+        /// Hours until the finding reopens (1-720).
+        #[arg(long, default_value_t = 24)]
+        expires_in_hours: i64,
+    },
+    /// Execute the typed remediation with idempotency and post-check.
+    Remediate {
+        /// Finding id.
+        #[arg(long)]
+        id: String,
+        /// Idempotency key (repeat calls are safe).
+        #[arg(long)]
+        idempotency_key: String,
+        /// Confirm the previewed remediation.
+        #[arg(long, default_value_t = false)]
+        confirm: bool,
+    },
 }
 
 /// Login address allowlist CRUD.

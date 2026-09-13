@@ -566,6 +566,21 @@ async fn build_attention(state: &WebState, caller: &User, is_owner: bool) -> Vec
                 });
             }
         }
+        if let Ok(counts) = state
+            .operator_security
+            .attention_counts(caller, Utc::now())
+            .await
+        {
+            let open: usize = counts.values().sum();
+            if open > 0 {
+                items.push(AttentionItem {
+                    severity: Severity::Critical,
+                    label: format!("{open} open security finding(s)"),
+                    detail: "Open the findings queue to preview, remediate, or suppress.".into(),
+                    href: Some("/security/findings".into()),
+                });
+            }
+        }
         if let Ok(services) = state.system_services.inventory().await {
             for svc in services {
                 if svc.status.active_state != "active" {

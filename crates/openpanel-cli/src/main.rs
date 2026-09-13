@@ -8,10 +8,11 @@ use openpanel_cli::{
     LogsCommand, MailCommand, MarketplaceCommand, MonitoringCommand, NotificationChannelCommand,
     NotificationCommand, NotificationSubscriptionCommand, PitrCommand, PluginCommand,
     RecoveryCodeCommand, RegistryCommand, ScanCommand, SecurityAllowlistCommand, SecurityCommand,
-    SecurityRuleCommand, ServerSnapshotCommand, ServicesCommand, SiteCacheCommand,
-    SiteCloneCommand, SiteCommand, SiteHttpCommand, SitePreviewCommand, SiteTemplateCommand,
-    SoftwareCommand, SslCommand, StagingCommand, StatusPageCommand, TerminalCommand, TokenCommand,
-    TwoFactorCommand, UserCommand, WafCommand, WebappCommand, handlers,
+    SecurityFindingsCommand, SecurityRuleCommand, ServerSnapshotCommand, ServicesCommand,
+    SiteCacheCommand, SiteCloneCommand, SiteCommand, SiteHttpCommand, SitePreviewCommand,
+    SiteTemplateCommand, SoftwareCommand, SslCommand, StagingCommand, StatusPageCommand,
+    TerminalCommand, TokenCommand, TwoFactorCommand, UserCommand, WafCommand, WebappCommand,
+    handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -558,6 +559,38 @@ async fn main() -> anyhow::Result<()> {
                 }
             },
             SecurityCommand::Unblock { key } => handlers::security_unblock(config, key).await,
+            SecurityCommand::Findings { action } => match action {
+                SecurityFindingsCommand::Queue => handlers::security_findings_queue(config).await,
+                SecurityFindingsCommand::Show { id } => {
+                    handlers::security_findings_show(config, id).await
+                }
+                SecurityFindingsCommand::Preview { id } => {
+                    handlers::security_findings_preview(config, id).await
+                }
+                SecurityFindingsCommand::Suppress {
+                    id,
+                    reason,
+                    scope,
+                    expires_in_hours,
+                } => {
+                    handlers::security_findings_suppress(
+                        config,
+                        id,
+                        reason,
+                        scope,
+                        expires_in_hours,
+                    )
+                    .await
+                }
+                SecurityFindingsCommand::Remediate {
+                    id,
+                    idempotency_key,
+                    confirm,
+                } => {
+                    handlers::security_findings_remediate(config, id, idempotency_key, confirm)
+                        .await
+                }
+            },
         },
         Command::Services { action } => match action {
             ServicesCommand::List => handlers::services_list(config).await,
