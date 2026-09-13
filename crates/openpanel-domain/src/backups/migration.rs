@@ -3,7 +3,7 @@
 //!
 //! Covers `backup-dr-operations`: Host Migration Is Verifiable.
 
-use super::{BackupError, snapshot::SUPPORTED_MANIFEST_SCHEMA};
+use super::{BackupError, Guidance, snapshot::SUPPORTED_MANIFEST_SCHEMA};
 use serde::{Deserialize, Serialize};
 
 /// Readiness summary for importing one bundle on this host.
@@ -30,9 +30,11 @@ impl MigrationReadiness {
     pub fn bootstrap_command(&self) -> &str {
         &self.bootstrap_command
     }
+}
 
+impl Guidance for MigrationReadiness {
     /// Safe operator guidance.
-    pub fn guidance(&self) -> &str {
+    fn guidance(&self) -> &str {
         &self.guidance
     }
 }

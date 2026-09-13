@@ -36,6 +36,11 @@
   the context window stays focused.
 - **Human review gate.** No change is implemented until its `design.md`
   is approved by a human principal.
+- **Archive is not completion.** Run `openspec archive` only after
+  every `tasks.md` box is ticked with evidence; never start the next
+  change while boxes remain unticked. No pre-existing-failure
+  exemption: every failing gate is yours — fix it before archive
+  (see `Agents.md` §5.3).
 
 ## Quick reference
 
@@ -47,6 +52,9 @@
   hash. Do not amend or merge them; the split keeps commit 1 a
   clean "what this change did" commit. See `HANDOFF.md`
   "Two-commit cadence per change" for the full procedure.
+  Archive is not completion: all boxes ticked first, next change
+  only after (see `Agents.md` §5.3). No pre-existing-failure
+  exemption: every failing gate is yours — fix it before archive.
 - Quality gate: `make check` (fmt, clippy, docs, audit, file-length,
   scan-literal, class-coverage, tasks-testing-first, reuse-strict,
   layering, spec-test-drift-strict, spec-drift, agent-governance,

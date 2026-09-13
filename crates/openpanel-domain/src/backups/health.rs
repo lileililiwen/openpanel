@@ -7,6 +7,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::Guidance;
+
 /// Health state of one backup plan.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -84,9 +86,11 @@ impl BackupHealth {
     pub fn verified(&self) -> bool {
         self.verified
     }
+}
 
+impl Guidance for BackupHealth {
     /// Safe recovery guidance (links to logs/retry/configuration).
-    pub fn guidance(&self) -> &str {
+    fn guidance(&self) -> &str {
         &self.guidance
     }
 }

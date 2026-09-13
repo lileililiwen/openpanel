@@ -23,6 +23,16 @@ pub mod migration;
 mod refine;
 pub mod snapshot;
 
+/// Shared operator-guidance accessor for backup summaries.
+///
+/// One trait instead of three same-named inherent methods: health,
+/// migration-readiness, and remote-verification reports all carry
+/// safe operator guidance, and callers use one vocabulary for it.
+pub trait Guidance {
+    /// Safe operator guidance (links to logs/retry/configuration).
+    fn guidance(&self) -> &str;
+}
+
 /// Domain validation and transition failures.
 #[derive(Debug, Clone, Error, PartialEq, Eq)]
 pub enum BackupError {

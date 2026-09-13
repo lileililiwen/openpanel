@@ -24,7 +24,7 @@ use openpanel_core::{Migration, MigrationRunner};
 use openpanel_domain::{
     Email, Password, Role, User, Username,
     backups::{
-        BackupResource,
+        BackupResource, Guidance,
         health::BackupHealthStatus,
         migration::{
             assess_migration_readiness, check_manifest_compatibility, migration_bootstrap_command,

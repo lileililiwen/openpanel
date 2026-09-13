@@ -328,6 +328,22 @@ commit (revertable, bisectable, the unit of "what this change
 did") and commit 2 the post-hoc bookkeeping that depends on
 commit 1's hash.
 
+### 5.3 Archive is not completion
+
+`openspec archive` MUST run only after every `tasks.md` box is
+ticked with evidence. An archived change with unticked boxes is
+still unfinished work: finish the remaining tasks first
+(re-verify, tick with dated evidence in the archived copy), and
+never start the next change until all boxes are checked. An
+`openspec archive` warning about incomplete tasks is a stop
+signal, not a `--yes` override.
+
+There is no pre-existing-failure exemption. If any gate fails,
+the failure is yours regardless of which commit introduced it:
+fix every failure before archive. Recording a failure as
+"pre-existing", "environmental", or "tracked for follow-up"
+never counts as done.
+
 ---
 
 ## 6. Security — private-key & secret handling

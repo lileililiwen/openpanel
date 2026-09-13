@@ -5,6 +5,7 @@
 //! unavailable storage. The probe object is bounded and removed
 //! afterwards; reports carry no secret material.
 
+use openpanel_domain::backups::Guidance;
 use openpanel_domain::offsite_backup_targets::BackupTargetAdapter;
 
 /// Outcome of one remote-target verification pass.
@@ -50,14 +51,16 @@ impl RemoteRoundtrip {
         self.latency_ms
     }
 
-    /// Safe operator guidance.
-    pub fn guidance(&self) -> &str {
-        &self.guidance
-    }
-
     /// Whether every check passed.
     pub fn all_ok(&self) -> bool {
         self.reachable && self.authenticated && self.write_ok && self.read_ok && self.retention_ok
+    }
+}
+
+impl Guidance for RemoteRoundtrip {
+    /// Safe operator guidance.
+    fn guidance(&self) -> &str {
+        &self.guidance
     }
 }
 

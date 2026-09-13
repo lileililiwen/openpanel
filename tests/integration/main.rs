@@ -71,6 +71,8 @@ mod sites;
 mod smoke;
 mod software_center;
 mod ssl;
+/// ACME production-lifecycle integration tests.
+mod ssl_production_lifecycle;
 mod sso;
 mod system_services;
 /// Themeable UI / white-label integration tests.
