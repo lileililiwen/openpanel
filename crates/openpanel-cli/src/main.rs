@@ -385,6 +385,12 @@ async fn main() -> anyhow::Result<()> {
             MonitoringCommand::History { metric, range } => {
                 handlers::monitoring_history(config, metric, range).await
             }
+            MonitoringCommand::ValidateQuery {
+                range,
+                limit,
+                refresh,
+            } => handlers::monitoring_validate_query(config, range, limit, refresh).await,
+            MonitoringCommand::Fleet => handlers::monitoring_fleet_status(config).await,
         },
         Command::StatusPage { action } => match action {
             StatusPageCommand::Show => handlers::status_page_show(config).await,

@@ -102,6 +102,7 @@ pub mod malware_scanner;
 pub mod migration_importers;
 pub mod migrations;
 pub mod monitoring;
+pub mod monitoring_fleet;
 pub mod notifications;
 /// Offsite backup targets bounded context: encrypted credential
 /// lifecycle, KEK management, remote target attachment, and the
@@ -289,6 +290,7 @@ pub use migration_importers::{
     TarWithJsonManifestDriver, sniff_tar_manifest,
 };
 pub use monitoring::{MonitoringModule, service::MonitoringService};
+pub use monitoring_fleet::{FleetServiceError, MonitoringFleetService};
 pub use notifications::{NotificationModule, NotificationService};
 pub use offsite_backup_targets::{
     BackupUploadService, OffsiteBackupTargetsModule, SqliteOffsiteBackupRepository,

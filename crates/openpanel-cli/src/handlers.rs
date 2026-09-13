@@ -511,6 +511,12 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         )
         .with_notifications(notification_svc.clone()),
     );
+    // Monitoring-fleet projection shares the monitoring snapshot repo
+    // so history + staleness agree across API and web.
+    let monitoring_fleet_svc = Arc::new(
+        openpanel_app::MonitoringFleetService::new(monitoring_svc.repo(), audit.clone())
+            .with_notifications(notification_svc.clone()),
+    );
 
     let app = build_router(
         identity_svc.clone(),
@@ -614,6 +620,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         previews_svc.clone(),
         status_page_svc.clone(),
         operator_security_svc.clone(),
+        monitoring_fleet_svc.clone(),
     )
     .merge(openpanel_web::router(
         identity_svc,
@@ -668,7 +675,8 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
                 .with("audit")
                 .with("themeable-ui"),
         )
-        .with_operator_security(operator_security_svc),
+        .with_operator_security(operator_security_svc)
+        .with_monitoring_fleet(monitoring_fleet_svc),
     ))
     .merge(openpanel_web::public_router(status_page_svc.clone()));
 
@@ -4640,6 +4648,33 @@ pub async fn monitoring_history(
     for s in samples {
         println!("{}  {} {metric}", s.ts.to_rfc3339(), s.value);
     }
+    Ok(())
+}
+
+/// `openpanel monitoring validate-query --range <secs> --limit <n> --refresh <secs>`.
+///
+/// Validates bounded metric-query policy without touching storage.
+pub async fn monitoring_validate_query(
+    _config: Arc<Config>,
+    range: i64,
+    limit: u32,
+    refresh: u32,
+) -> anyhow::Result<()> {
+    let query = openpanel_domain::monitoring_fleet::FleetMetricQuery::new(range, limit, refresh)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "valid query: range={}s limit={} refresh={}s",
+        query.range_secs, query.limit, query.refresh_secs
+    );
+    Ok(())
+}
+
+/// `openpanel monitoring fleet` — print fleet health semantics.
+pub async fn monitoring_fleet_status(_config: Arc<Config>) -> anyhow::Result<()> {
+    println!(
+        "fleet health: heartbeat deadline={}s; scopes=owner; secrets=never shown",
+        openpanel_domain::monitoring_fleet::FLEET_HEARTBEAT_DEADLINE_SECS
+    );
     Ok(())
 }
 

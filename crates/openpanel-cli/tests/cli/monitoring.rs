@@ -56,3 +56,36 @@ async fn monitoring_history_rejects_unknown_metric() {
         out.stderr
     );
 }
+
+#[tokio::test]
+async fn cli_monitoring_validate_query_and_fleet() {
+    // Covers `monitoring-fleet-operations`: bounded query validation and
+    // fleet health semantics via the CLI.
+    let runner = CliRunner::new().await;
+    let valid = runner.run(&[
+        "monitoring",
+        "validate-query",
+        "--range",
+        "3600",
+        "--limit",
+        "500",
+        "--refresh",
+        "60",
+    ]);
+    assert_eq!(valid.code, 0, "stderr: {}", valid.stderr);
+    assert!(valid.stdout.contains("valid query"));
+    let invalid = runner.run(&[
+        "monitoring",
+        "validate-query",
+        "--range",
+        "30",
+        "--limit",
+        "500",
+        "--refresh",
+        "60",
+    ]);
+    assert_ne!(invalid.code, 0, "unbounded range must exit non-zero");
+    let fleet = runner.run(&["monitoring", "fleet"]);
+    assert_eq!(fleet.code, 0, "stderr: {}", fleet.stderr);
+    assert!(fleet.stdout.contains("heartbeat deadline="));
+}

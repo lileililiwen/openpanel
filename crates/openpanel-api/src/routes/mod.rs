@@ -39,6 +39,8 @@ pub mod mail;
 pub mod malware_scanner;
 /// Monitoring resource routes (`/monitoring`).
 pub mod monitoring;
+/// Monitoring-fleet routes (`/monitoring/views`, `/monitoring/fleet/*`).
+pub mod monitoring_fleet;
 pub mod notifications;
 /// Operator security control-plane routes (`/security/findings`).
 pub mod operator_security;

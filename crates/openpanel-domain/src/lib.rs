@@ -47,6 +47,9 @@ pub mod mail;
 /// `ScanProfile`, `ScanRun`, `ScanFinding`, `QuarantineRecord`.
 pub mod malware_scanner;
 pub mod monitoring;
+/// Monitoring + fleet operations: configurable views, threshold policy
+/// with recovery hysteresis, independent probes, safe fleet aggregation.
+pub mod monitoring_fleet;
 /// Notification channels, subscriptions, events, and durable delivery state.
 pub mod notifications;
 /// Offsite backup targets bounded context: the `BackupTargetAdapter`
@@ -370,6 +373,13 @@ pub use migration_importers::{
 pub use monitoring::{
     Alert, AlertRule, DiskReading, MetricKind, MetricSample, MonitoringError, NetworkReading,
     SnapshotRepository, SystemSnapshot, Unit,
+};
+pub use monitoring_fleet::{
+    FLEET_HEARTBEAT_DEADLINE_SECS, FleetDataState, FleetEventRateLimiter, FleetHealthState,
+    FleetHostSummary, FleetMetricQuery, FleetOpsError, FleetRefreshPolicy, FleetSavedView,
+    FleetThresholdPolicy, FleetThresholdState, FleetThresholdTracker, FleetThresholdTransition,
+    FleetViewPanel, IndependentProbeOrigin, IndependentProbeResult, project_fleet_host,
+    scope_fleet_hosts,
 };
 pub use offsite_backup_targets::{
     BackupCredential, BackupTargetAdapter, CredentialKind, KekRef, OffsiteBackupError,

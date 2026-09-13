@@ -8,13 +8,13 @@ use openpanel_app::{
     ContainerRuntimeService, CronService, DatabasesService, DnsService, DockerService,
     FilesService, FtpService, GrantResolver, HierarchyService, HostingPlansService,
     IdentityService, LogService, MailFilterService, MailService, MailingListService,
-    MalwareScannerService, MarketplaceService, MonitoringService, NotificationService, PitrService,
-    PluginService, SecurityService, ServerSnapshotService, SiteCacheService, SiteCloneService,
-    SiteHttpService, SitesService, SoftwareCenterService, SslService, SsoService, StagingService,
-    StatusPageService, ThemeableUiService, WafService, WebApplicationInstallerService,
-    WebTerminalService, backups::DrillService, identity::TwoFactorService,
-    security::LoginThrottleService, site_clone_template::SqliteSiteCloneTemplateRepository,
-    system_services::ServiceManager,
+    MalwareScannerService, MarketplaceService, MonitoringFleetService, MonitoringService,
+    NotificationService, PitrService, PluginService, SecurityService, ServerSnapshotService,
+    SiteCacheService, SiteCloneService, SiteHttpService, SitesService, SoftwareCenterService,
+    SslService, SsoService, StagingService, StatusPageService, ThemeableUiService, WafService,
+    WebApplicationInstallerService, WebTerminalService, backups::DrillService,
+    identity::TwoFactorService, security::LoginThrottleService,
+    site_clone_template::SqliteSiteCloneTemplateRepository, system_services::ServiceManager,
 };
 
 use crate::{
@@ -41,6 +41,7 @@ use crate::{
         mail::router as mail_router,
         malware_scanner::router as malware_scanner_router,
         monitoring::router as monitoring_router,
+        monitoring_fleet::router as monitoring_fleet_router,
         notifications::router as notifications_router,
         operator_security::router as operator_security_router,
         plugin_extension::router as plugin_extension_router,
@@ -124,6 +125,7 @@ pub fn build_router(
     previews: Arc<openpanel_app::PreviewService>,
     status_page: Arc<StatusPageService>,
     operator_security: Arc<openpanel_app::OperatorSecurityService>,
+    monitoring_fleet: Arc<MonitoringFleetService>,
 ) -> Router {
     let auth_state = ApiAuthState {
         identity: identity.clone(),
@@ -151,6 +153,7 @@ pub fn build_router(
         .nest("/files", files_router(files.clone()))
         .nest("/ssl", ssl_router(ssl))
         .nest("/monitoring", monitoring_router(monitoring))
+        .nest("/monitoring", monitoring_fleet_router(monitoring_fleet))
         .nest("/cron", cron_router(cron))
         .nest("/backups", backups_router(backups, backup_drills))
         .nest("/backups", db_pitr_router(pitr))

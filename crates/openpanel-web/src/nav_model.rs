@@ -138,6 +138,20 @@ const OPERATIONS: &[NavItem] = &[
         icon: "activity",
     },
     NavItem {
+        href: "/monitoring/views",
+        label: "Monitoring views",
+        capability: "monitoring",
+        role: RequiredRole::Authenticated,
+        icon: "activity",
+    },
+    NavItem {
+        href: "/fleet",
+        label: "Fleet",
+        capability: "monitoring",
+        role: RequiredRole::Owner,
+        icon: "server",
+    },
+    NavItem {
         href: "/logs",
         label: "Logs",
         capability: "logs",

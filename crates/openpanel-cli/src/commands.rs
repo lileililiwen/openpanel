@@ -1750,6 +1750,20 @@ pub enum MonitoringCommand {
         #[arg(long, default_value_t = 3600)]
         range: i64,
     },
+    /// Validate a bounded metric query (range, limit, refresh).
+    ValidateQuery {
+        /// Look-back window in seconds (60..=2592000).
+        #[arg(long, default_value_t = 3600)]
+        range: i64,
+        /// Maximum points (1..=5000).
+        #[arg(long, default_value_t = 500)]
+        limit: u32,
+        /// Refresh interval in seconds (15..=600).
+        #[arg(long, default_value_t = 60)]
+        refresh: u32,
+    },
+    /// Show fleet health semantics (heartbeat deadline, scopes).
+    Fleet,
 }
 
 /// Subcommands for the public status page.

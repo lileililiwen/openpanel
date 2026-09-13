@@ -48,6 +48,9 @@ pub mod login;
 pub mod logs;
 pub mod mail;
 pub mod monitoring;
+/// Monitoring-fleet operator views: configurable dashboard views and
+/// safe scoped fleet health.
+pub mod monitoring_fleet;
 /// Navigation model and icon set for the shell sidebar.
 pub mod nav_model;
 pub mod notifications;

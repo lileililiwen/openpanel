@@ -20,10 +20,10 @@ use openpanel_app::{
     ApiTokenService, BackupService, CollaboratorService, ContainerRegistryService,
     ContainerRuntimeService, CronService, DatabasesService, DnsService, DockerService,
     ExistingServiceRemediationPort, FeedbackService, FilesService, FtpService, IdentityService,
-    LogService, MailService, MonitoringService, NotificationService, OperatorSecurityService,
-    PitrService, PreviewService, SecurityService, SitesService, SoftwareCenterService, SslService,
-    StagingService, StatusPageService, WafService, identity::TwoFactorService,
-    security::LoginThrottleService, system_services::ServiceManager,
+    LogService, MailService, MonitoringFleetService, MonitoringService, NotificationService,
+    OperatorSecurityService, PitrService, PreviewService, SecurityService, SitesService,
+    SoftwareCenterService, SslService, StagingService, StatusPageService, WafService,
+    identity::TwoFactorService, security::LoginThrottleService, system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
 use openpanel_domain::{Session, SessionToken, User};
@@ -33,7 +33,7 @@ use crate::{
     csrf::{CsrfStore, ValidateCsrf},
     dashboard, databases, feedback, files, forms, layer,
     layout::CapabilitySet,
-    login, logs, monitoring, operator_security, previews, security, settings,
+    login, logs, monitoring, monitoring_fleet, operator_security, previews, security, settings,
     settings::{InstallationInfo, PanelPreferences, SettingsStore},
     sites, ssl, users,
 };
@@ -47,6 +47,7 @@ pub struct WebRuntime {
     config_path: String,
     capabilities: CapabilitySet,
     operator_security: Option<Arc<OperatorSecurityService>>,
+    monitoring_fleet: Option<Arc<MonitoringFleetService>>,
 }
 
 impl WebRuntime {
@@ -66,6 +67,7 @@ impl WebRuntime {
             config_path: config_path.into(),
             capabilities: CapabilitySet::shipped(),
             operator_security: None,
+            monitoring_fleet: None,
         }
     }
 
@@ -83,10 +85,29 @@ impl WebRuntime {
         self
     }
 
+    /// Share one monitoring-fleet instance between the web adapter and
+    /// callers that also feed the API adapter.
+    pub fn with_monitoring_fleet(mut self, service: Arc<MonitoringFleetService>) -> Self {
+        self.monitoring_fleet = Some(service);
+        self
+    }
+
     fn operator_security_service(&self) -> Arc<OperatorSecurityService> {
         self.operator_security.clone().unwrap_or_else(|| {
             Arc::new(OperatorSecurityService::new(
                 Arc::new(ExistingServiceRemediationPort::empty()),
+                self.audit.clone(),
+            ))
+        })
+    }
+
+    fn monitoring_fleet_service(
+        &self,
+        monitoring: &Arc<MonitoringService>,
+    ) -> Arc<MonitoringFleetService> {
+        self.monitoring_fleet.clone().unwrap_or_else(|| {
+            Arc::new(MonitoringFleetService::new(
+                monitoring.repo(),
                 self.audit.clone(),
             ))
         })
@@ -174,6 +195,8 @@ pub struct WebState {
     pub audit: Arc<dyn AuditService>,
     /// Operator security control-plane lifecycle service.
     pub operator_security: Arc<OperatorSecurityService>,
+    /// Monitoring-fleet projection service (views, thresholds, fleet).
+    pub monitoring_fleet: Arc<MonitoringFleetService>,
 }
 
 impl WebState {
@@ -303,6 +326,7 @@ pub fn router(
     let installation =
         InstallationInfo::from_config(&runtime.config, &runtime.data_path, &runtime.config_path);
     let operator_security = runtime.operator_security_service();
+    let monitoring_fleet = runtime.monitoring_fleet_service(&monitoring);
     let state = WebState {
         identity: identity.clone(),
         sites,
@@ -347,6 +371,7 @@ pub fn router(
         capabilities: runtime.capabilities,
         audit: runtime.audit.clone(),
         operator_security,
+        monitoring_fleet,
     };
     Router::new()
         .route("/", get(dashboard::home))
@@ -589,6 +614,12 @@ pub fn router(
         .route("/monitoring", get(monitoring::landing))
         .route("/monitoring/history", get(monitoring::history))
         .route("/monitoring/alerts", get(monitoring::alerts))
+        .route("/monitoring/views", get(monitoring_fleet::fleet_views_page))
+        .route(
+            "/monitoring/views/save",
+            post(monitoring_fleet::fleet_view_save),
+        )
+        .route("/fleet", get(monitoring_fleet::fleet_health_page))
         .route("/ssl", get(ssl::list))
         .route("/ssl/new", get(ssl::new_form))
         .route("/ssl/issue", post(ssl::issue))

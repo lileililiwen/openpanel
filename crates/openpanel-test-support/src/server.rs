@@ -24,9 +24,9 @@ use openpanel_app::{
     FtpModule, FtpService, GrantResolver, HostingPlansModule, HostingPlansService, IdentityModule,
     IdentityService, InMemoryMailBridge, InMemoryStagingFilesystem, LogService, LogsModule,
     MailModule, MailService, MalwareScannerService, MarketplaceService, MigrationImportersModule,
-    MonitoringModule, MonitoringService, NotificationModule, NotificationService,
-    OffsiteBackupTargetsModule, PitrService, PluginService, RealInstallerFs, RealScannerFs,
-    ReqwestArtifactDownloader, SecurityModule, SecurityService, SiteCacheCdnModule,
+    MonitoringFleetService, MonitoringModule, MonitoringService, NotificationModule,
+    NotificationService, OffsiteBackupTargetsModule, PitrService, PluginService, RealInstallerFs,
+    RealScannerFs, ReqwestArtifactDownloader, SecurityModule, SecurityService, SiteCacheCdnModule,
     SiteCloneService, SiteCloneTemplateModule, SiteHttpControlsModule, SiteHttpService,
     SiteStagingModule, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
     SslModule, SslPaths, SslService, StagingService, SystemServicesModule, ThemeableUiService,
@@ -238,6 +238,7 @@ pub struct TestServer {
     logs: Arc<LogService>,
     security: Arc<SecurityService>,
     operator_security: Arc<openpanel_app::OperatorSecurityService>,
+    monitoring_fleet: Arc<MonitoringFleetService>,
     system_services: Arc<openpanel_app::ServiceManager>,
     dns: Arc<DnsService>,
     mail: Arc<MailService>,
@@ -966,6 +967,13 @@ impl TestServer {
             )
             .with_notifications(notification_svc.clone()),
         );
+        // Monitoring-fleet projection: one shared instance feeds both
+        // the API and web adapters. Backed by the same snapshot repo as
+        // the monitoring service so history + staleness agree.
+        let monitoring_fleet_svc = std::sync::Arc::new(
+            MonitoringFleetService::new(monitoring_svc.repo(), audit.clone())
+                .with_notifications(notification_svc.clone()),
+        );
         let app = build_router(
             identity_svc.clone(),
             sites_svc.clone(),
@@ -1038,6 +1046,7 @@ impl TestServer {
             git_deployment_module.preview_service(),
             status_page_svc.clone(),
             operator_security_svc.clone(),
+            monitoring_fleet_svc.clone(),
         )
         .merge(openpanel_web::router(
             identity_svc.clone(),
@@ -1085,6 +1094,7 @@ impl TestServer {
                     .into_owned(),
             )
             .with_operator_security(operator_security_svc.clone())
+            .with_monitoring_fleet(monitoring_fleet_svc.clone())
             .with_capabilities(
                 openpanel_web::layout::CapabilitySet::shipped()
                     .with("cron")
@@ -1143,6 +1153,7 @@ impl TestServer {
             logs: logs_svc,
             security: security_svc,
             operator_security: operator_security_svc,
+            monitoring_fleet: monitoring_fleet_svc,
             system_services: system_services_svc,
             dns: dns_svc,
             mail: mail_svc,
@@ -1391,6 +1402,11 @@ impl TestServer {
     /// The operator security control-plane handle.
     pub fn operator_security(&self) -> Arc<openpanel_app::OperatorSecurityService> {
         self.operator_security.clone()
+    }
+
+    /// The monitoring-fleet projection handle.
+    pub fn monitoring_fleet(&self) -> Arc<MonitoringFleetService> {
+        self.monitoring_fleet.clone()
     }
 
     /// The allowlisted system-service manager.

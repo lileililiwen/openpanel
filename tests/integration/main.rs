@@ -48,6 +48,8 @@ mod malware_scanner;
 /// Migration importers preview / run / rollback integration tests.
 mod migration_importers;
 mod monitoring;
+/// Monitoring-fleet operations integration tests.
+mod monitoring_fleet;
 /// Offsite backup targets credential / remote-config integration tests.
 mod offsite_backup_targets;
 /// Operator security control-plane integration tests.
