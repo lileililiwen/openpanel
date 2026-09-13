@@ -18,6 +18,8 @@ use uuid::Uuid;
 use crate::cron::CronSchedule;
 
 pub mod drill;
+pub mod health;
+pub mod migration;
 mod refine;
 pub mod snapshot;
 
