@@ -36,6 +36,11 @@ pub struct ComposeBody {
 
 /// GET /webmail — mint a session on first entry, then redirect to
 /// the folder list.
+///
+/// `mailbox-surfaces`: the session is bound to the authenticated
+/// user's authorized mailbox (own address first, else first visible
+/// mailbox). There is no fixed demo mailbox; callers without an
+/// authorized mailbox receive `403` with a safe error state.
 pub async fn index(
     State(state): State<WebState>,
     WebUser(user, panel_session): WebUser,
@@ -44,11 +49,19 @@ pub async fn index(
     let ws = match query.ws {
         Some(ws) => ws,
         None => {
-            // Mint a session for the demo mailbox (real wiring binds
-            // the session to the authenticated user's mailbox).
+            let mailbox = match state
+                .mail
+                .default_mailbox_for_user(user.id(), user.role(), user.email().as_str())
+                .await
+            {
+                Ok(mailbox) => mailbox,
+                Err(_) => {
+                    return (StatusCode::FORBIDDEN, "no authorized mailbox").into_response();
+                }
+            };
             let session = match state
                 .webmail
-                .mint_session("webmail", "webmail@example.com")
+                .mint_session(&user.id().to_string(), mailbox.address.as_str())
                 .await
             {
                 Ok(s) => s,
@@ -70,10 +83,22 @@ pub async fn index(
                 .into_response();
         }
     };
+    if state
+        .mail
+        .resolve_authorized_mailbox(user.id(), user.role(), session.mailbox())
+        .await
+        .is_err()
+    {
+        return (StatusCode::FORBIDDEN, "no authorized mailbox").into_response();
+    }
     let folders = match state.webmail.folders(&session).await {
         Ok(f) => f,
-        Err(e) => {
-            return (StatusCode::INTERNAL_SERVER_ERROR, format!("folders: {e:?}")).into_response();
+        Err(_) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "mailbox unavailable; try again later",
+            )
+                .into_response();
         }
     };
     let body: Markup = html! {
@@ -109,12 +134,20 @@ pub async fn folder(
         Ok(s) => s,
         Err(_) => return (StatusCode::UNAUTHORIZED, "expired session").into_response(),
     };
+    if state
+        .mail
+        .resolve_authorized_mailbox(user.id(), user.role(), session.mailbox())
+        .await
+        .is_err()
+    {
+        return (StatusCode::FORBIDDEN, "no authorized mailbox").into_response();
+    }
     let messages = match state.webmail.messages(&session, &name, 50).await {
         Ok(m) => m,
-        Err(e) => {
+        Err(_) => {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
-                format!("messages: {e:?}"),
+                "mailbox unavailable; try again later",
             )
                 .into_response();
         }
@@ -154,6 +187,14 @@ pub async fn message(
         Ok(s) => s,
         Err(_) => return (StatusCode::UNAUTHORIZED, "expired session").into_response(),
     };
+    if state
+        .mail
+        .resolve_authorized_mailbox(user.id(), user.role(), session.mailbox())
+        .await
+        .is_err()
+    {
+        return (StatusCode::FORBIDDEN, "no authorized mailbox").into_response();
+    }
     let msg = match state.webmail.message(&session, uid).await {
         Ok(m) => m,
         Err(_) => return (StatusCode::NOT_FOUND, "message not found").into_response(),
@@ -207,15 +248,34 @@ pub async fn compose_form(
 /// POST /webmail/compose — CSRF-protected compose submission.
 pub async fn compose_send(
     State(state): State<WebState>,
+    WebUser(user, _): WebUser,
     axum::Form(body): axum::Form<ComposeBody>,
 ) -> Response {
     let session = match state.webmail.validate_session(&body.ws).await {
         Ok(s) => s,
         Err(_) => return (StatusCode::UNAUTHORIZED, "expired session").into_response(),
     };
-    #[allow(clippy::unwrap_used)] // constants are within valid quota ranges
-    let quota = openpanel_domain::mail::MailboxQuota::new(1_000_000, 1, 1_000_000_000).unwrap();
-    let policy = openpanel_domain::mail::DomainSendingPolicy::default_for("example.com");
+    if state
+        .mail
+        .resolve_authorized_mailbox(user.id(), user.role(), session.mailbox())
+        .await
+        .is_err()
+    {
+        return (StatusCode::FORBIDDEN, "no authorized mailbox").into_response();
+    }
+    let Some(quota) = openpanel_domain::mail::MailboxQuota::new(1_000_000, 1, 1_000_000_000).ok()
+    else {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "mailbox unavailable; try again later",
+        )
+            .into_response();
+    };
+    let domain = session
+        .mailbox()
+        .rsplit_once('@')
+        .map_or("example.invalid", |(_, domain)| domain);
+    let policy = openpanel_domain::mail::DomainSendingPolicy::default_for(domain);
     match state
         .webmail
         .send(
@@ -235,9 +295,9 @@ pub async fn compose_send(
             [("Location", format!("/webmail?ws={}", body.ws))],
         )
             .into_response(),
-        Err(e) => (
+        Err(_) => (
             StatusCode::UNPROCESSABLE_ENTITY,
-            format!("send refused: {e:?}"),
+            "send refused; check recipients and quota",
         )
             .into_response(),
     }

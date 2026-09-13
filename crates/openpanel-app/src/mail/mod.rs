@@ -468,6 +468,76 @@ impl MailService {
             .collect())
     }
 
+    /// Resolve one authorized, enabled mailbox by canonical address.
+    ///
+    /// `mailbox-surfaces`: every webmail session and mailbox operation
+    /// resolves through the authenticated user and the authorized
+    /// domain/mailbox relationship. Absence maps to `Forbidden` (never
+    /// `NotFound`) so callers cannot probe cross-account existence;
+    /// disabled mailboxes are also `Forbidden`. Denied attempts emit a
+    /// redacted `mailbox_access_denied` audit event without credentials
+    /// or message content.
+    pub async fn resolve_authorized_mailbox(
+        &self,
+        actor: Uuid,
+        role: Role,
+        address: &str,
+    ) -> Result<Mailbox, MailServiceError> {
+        let parsed = MailAddress::parse(address).map_err(|_| MailServiceError::Forbidden)?;
+        let stored = match self.repo.mailbox_by_address(&parsed).await {
+            Ok(stored) => stored,
+            Err(_) => {
+                self.audit_denied(actor, "mailbox_access_denied").await;
+                return Err(MailServiceError::Forbidden);
+            }
+        };
+        let domain = match self.repo.domain(stored.mailbox.domain_id).await {
+            Ok(domain) => domain,
+            Err(_) => {
+                self.audit_denied(actor, "mailbox_access_denied").await;
+                return Err(MailServiceError::Forbidden);
+            }
+        };
+        if Self::authorize_domain(actor, role, &domain).is_err() || !stored.mailbox.enabled {
+            self.audit_denied(actor, "mailbox_access_denied").await;
+            return Err(MailServiceError::Forbidden);
+        }
+        Ok(stored.mailbox)
+    }
+
+    /// Default mailbox for webmail entry: the caller's own address when
+    /// it resolves, else the first mailbox in the caller's visible
+    /// domains. `mailbox-surfaces`: never synthesizes an address and
+    /// never falls back to a fixed demo mailbox.
+    pub async fn default_mailbox_for_user(
+        &self,
+        actor: Uuid,
+        role: Role,
+        email: &str,
+    ) -> Result<Mailbox, MailServiceError> {
+        if let Ok(mailbox) = self.resolve_authorized_mailbox(actor, role, email).await {
+            return Ok(mailbox);
+        }
+        let domains = self
+            .repo
+            .domains((role == Role::User).then_some(actor))
+            .await?;
+        for domain in domains {
+            if Self::authorize_domain(actor, role, &domain).is_err() {
+                continue;
+            }
+            if let Ok(boxes) = self.repo.mailboxes(domain.id).await {
+                for stored in boxes {
+                    if stored.mailbox.enabled {
+                        return Ok(stored.mailbox);
+                    }
+                }
+            }
+        }
+        self.audit_denied(actor, "mailbox_access_denied").await;
+        Err(MailServiceError::Forbidden)
+    }
+
     /// List secret-free aliases after domain ownership authorization.
     pub async fn aliases(
         &self,
@@ -724,6 +794,21 @@ impl MailService {
             )
             .await
             .map_err(|_| MailServiceError::Repository)
+    }
+
+    async fn audit_denied(&self, actor: Uuid, operation: &str) {
+        let _ = self
+            .audit
+            .record(
+                AuditEvent::new(
+                    actor.to_string(),
+                    AuditAction::MailChanged,
+                    AuditOutcome::Denied,
+                )
+                .target(actor.to_string())
+                .metadata(serde_json::json!({"operation":operation})),
+            )
+            .await;
     }
 }
 

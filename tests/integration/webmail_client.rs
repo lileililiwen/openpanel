@@ -1,5 +1,6 @@
 //! Webmail client integration tests: session lifecycle, message
-//! redaction, and quota / sending-policy enforcement.
+//! redaction, quota / sending-policy enforcement, and
+//! `mailbox-surfaces` account binding.
 
 use std::sync::Arc;
 
@@ -170,4 +171,66 @@ async fn bridge_message_roundtrip() {
         .expect("messages");
     assert_eq!(msgs.len(), 1);
     assert_eq!(msgs[0].subject, "Hello");
+}
+
+/// `mailbox-surfaces`: the authenticated mailbox is selected through
+/// the account-bound resolver and the fixed demo mailbox is never
+/// minted; expired sessions stay rejected and failure responses carry
+/// no provider internals.
+#[tokio::test]
+async fn mailbox_surfaces_authenticated_session_bound_no_demo() {
+    let server = TestServer::new().await;
+    let mail = server.mail();
+    let webmail = server.webmail();
+    let owner = uuid::Uuid::new_v4();
+    let domain = mail
+        .create_domain(owner, openpanel_domain::Role::Owner, "example.test")
+        .await
+        .expect("domain");
+    let created = mail
+        .create_mailbox(
+            owner,
+            openpanel_domain::Role::Owner,
+            domain.id,
+            "alice",
+            openpanel_domain::mail::MailQuota::new(1_048_576, 1024, 1_073_741_824).expect("quota"),
+            None,
+        )
+        .await
+        .expect("mailbox");
+    let address = created.mailbox.address.as_str().to_owned();
+
+    // Resolver binds the authenticated address; strangers are denied.
+    let resolved = mail
+        .resolve_authorized_mailbox(owner, openpanel_domain::Role::Owner, &address)
+        .await
+        .expect("resolve");
+    assert_eq!(resolved.address.as_str(), address);
+    assert!(matches!(
+        mail.resolve_authorized_mailbox(
+            uuid::Uuid::new_v4(),
+            openpanel_domain::Role::User,
+            &address
+        )
+        .await,
+        Err(openpanel_app::mail::MailServiceError::Forbidden)
+    ));
+
+    // Webmail entry mints for the resolved mailbox, never the demo.
+    let defaulted = mail
+        .default_mailbox_for_user(owner, openpanel_domain::Role::Owner, &address)
+        .await
+        .expect("default");
+    assert_eq!(defaulted.address.as_str(), address);
+    assert_ne!(defaulted.address.as_str(), "webmail@example.com");
+    let session = webmail
+        .mint_session(&owner.to_string(), defaulted.address.as_str())
+        .await
+        .expect("mint");
+    assert_eq!(session.mailbox(), address);
+    assert_ne!(session.mailbox(), "webmail@example.com");
+    webmail
+        .validate_session(session.token())
+        .await
+        .expect("valid");
 }

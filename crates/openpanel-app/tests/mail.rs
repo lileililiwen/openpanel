@@ -476,3 +476,220 @@ mod surface_leak_prop {
             .unwrap();
     }
 }
+
+mod mailbox_surfaces {
+    #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+
+    use std::sync::Arc;
+
+    use async_trait::async_trait;
+    use openpanel_app::mail::{MailService, MailServiceError, MemoryMailRepository};
+    use openpanel_core::AuditOutcome;
+    use openpanel_domain::{
+        Role,
+        mail::MailQuota,
+        mail_filtering::{MailQueueSnapshot, MtaQueuePort},
+    };
+    use openpanel_test_support::MockAudit;
+    use uuid::Uuid;
+
+    use super::{MockBackup, MockConfig, MockReady};
+
+    /// `mailbox-surfaces`: account-bound mailbox resolution, default
+    /// selection without a demo fallback, denied-audit, and queue
+    /// degrade coverage.
+    fn service() -> MailService {
+        let mut backup = MockBackup::new();
+        backup.expect_register_domain().returning(|_| Ok(()));
+        MailService::new(
+            Arc::new(MemoryMailRepository::default()),
+            Arc::new(MockConfig::new()),
+            Arc::new(MockReady::new()),
+            Arc::new(backup),
+            Arc::new(MockAudit::stub()),
+            Arc::new(openpanel_app::mail_filtering::queue::NullQueueAdapter),
+        )
+    }
+
+    fn quota() -> MailQuota {
+        MailQuota::new(1_048_576, 1024, 1_073_741_824).unwrap()
+    }
+
+    async fn seeded() -> (MailService, Uuid, String) {
+        let svc = service();
+        let owner = Uuid::new_v4();
+        let domain = svc
+            .create_domain(owner, Role::Owner, "example.test")
+            .await
+            .unwrap();
+        let created = svc
+            .create_mailbox(owner, Role::Owner, domain.id, "alice", quota(), None)
+            .await
+            .unwrap();
+        let address = created.mailbox.address.as_str().to_owned();
+        (svc, owner, address)
+    }
+
+    #[tokio::test]
+    async fn owner_and_delegated_admin_resolve() {
+        let (svc, owner, address) = seeded().await;
+        let mailbox = svc
+            .resolve_authorized_mailbox(owner, Role::Owner, &address)
+            .await
+            .unwrap();
+        assert_eq!(mailbox.address.as_str(), address);
+        // Delegated admin (different identity, Admin role) is authorized
+        // through the domain boundary, matching collaborator delegation.
+        let mailbox = svc
+            .resolve_authorized_mailbox(Uuid::new_v4(), Role::Admin, &address)
+            .await
+            .unwrap();
+        assert_eq!(mailbox.address.as_str(), address);
+    }
+
+    #[tokio::test]
+    async fn unrelated_user_and_disabled_mailbox_are_forbidden() {
+        let (svc, owner, address) = seeded().await;
+        let err = svc
+            .resolve_authorized_mailbox(Uuid::new_v4(), Role::User, &address)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, MailServiceError::Forbidden));
+        // Unknown addresses also map to Forbidden (no cross-account oracle).
+        let err = svc
+            .resolve_authorized_mailbox(Uuid::new_v4(), Role::User, "ghost@example.test")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, MailServiceError::Forbidden));
+        svc.set_mailbox_enabled(owner, Role::Owner, &address, false)
+            .await
+            .unwrap();
+        let err = svc
+            .resolve_authorized_mailbox(owner, Role::Owner, &address)
+            .await
+            .unwrap_err();
+        assert!(matches!(err, MailServiceError::Forbidden));
+    }
+
+    #[tokio::test]
+    async fn default_selects_authenticated_mailbox_never_demo() {
+        let (svc, owner, address) = seeded().await;
+        let domain = svc.domains(owner, Role::Owner).await.unwrap();
+        assert_eq!(domain.len(), 1);
+        let selected = svc
+            .default_mailbox_for_user(owner, Role::Owner, &address)
+            .await
+            .unwrap();
+        assert_eq!(selected.address.as_str(), address);
+        assert_ne!(selected.address.as_str(), "webmail@example.com");
+        // A stranger with no visible mailbox gets Forbidden, never a demo.
+        let err = svc
+            .default_mailbox_for_user(Uuid::new_v4(), Role::User, "stranger@example.test")
+            .await
+            .unwrap_err();
+        assert!(matches!(err, MailServiceError::Forbidden));
+    }
+
+    #[tokio::test]
+    async fn unauthorized_mutation_rejected_and_audited_without_row_change() {
+        use openpanel_core::AuditEvent;
+        let events: Arc<std::sync::Mutex<Vec<AuditEvent>>> =
+            Arc::new(std::sync::Mutex::new(Vec::new()));
+        let sink = Arc::clone(&events);
+        let mut audit = MockAudit::new();
+        audit.expect_record().returning(move |event| {
+            sink.lock().unwrap().push(event);
+            Ok(())
+        });
+        audit.expect_recent().returning(|_| Ok(Vec::new()));
+        audit.expect_query().returning(|_| {
+            Ok(openpanel_core::audit::AuditPage {
+                events: Vec::new(),
+                next_cursor: None,
+            })
+        });
+        let mut backup = MockBackup::new();
+        backup.expect_register_domain().returning(|_| Ok(()));
+        let svc = MailService::new(
+            Arc::new(MemoryMailRepository::default()),
+            Arc::new(MockConfig::new()),
+            Arc::new(MockReady::new()),
+            Arc::new(backup),
+            Arc::new(audit),
+            Arc::new(openpanel_app::mail_filtering::queue::NullQueueAdapter),
+        );
+        let owner = Uuid::new_v4();
+        let domain = svc
+            .create_domain(owner, Role::Owner, "example.test")
+            .await
+            .unwrap();
+        let created = svc
+            .create_mailbox(owner, Role::Owner, domain.id, "alice", quota(), None)
+            .await
+            .unwrap();
+        let address = created.mailbox.address.as_str().to_owned();
+        let before = created.mailbox.quota.bytes();
+        let stranger = Uuid::new_v4();
+        let err = svc
+            .update_quota(
+                stranger,
+                Role::User,
+                &address,
+                MailQuota::new(2_097_152, 1024, 1_073_741_824).unwrap(),
+            )
+            .await
+            .unwrap_err();
+        assert!(matches!(err, MailServiceError::Forbidden));
+        // Unauthorized forwarder-style mutation leaves the row untouched.
+        let after = svc
+            .resolve_authorized_mailbox(owner, Role::Owner, &address)
+            .await
+            .unwrap();
+        assert_eq!(after.quota.bytes(), before);
+        // A denied read generates the redacted denied audit.
+        let _ = svc
+            .resolve_authorized_mailbox(stranger, Role::User, &address)
+            .await;
+        // The denied attempt is audited without credentials or content.
+        let transcript = events
+            .lock()
+            .unwrap()
+            .iter()
+            .map(|e| serde_json::to_string(e).unwrap())
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(transcript.contains("mailbox_access_denied"));
+        assert!(transcript.contains("denied"));
+        assert!(!transcript.contains("password"));
+    }
+
+    struct FailQueue;
+    #[async_trait]
+    impl MtaQueuePort for FailQueue {
+        async fn snapshot(&self) -> Result<MailQueueSnapshot, String> {
+            Err("mta unreachable".into())
+        }
+    }
+
+    #[tokio::test]
+    async fn queue_depth_degrades_to_unknown_without_content() {
+        let svc = MailService::new(
+            Arc::new(MemoryMailRepository::default()),
+            Arc::new(MockConfig::new()),
+            Arc::new(MockReady::new()),
+            Arc::new(MockBackup::new()),
+            Arc::new(MockAudit::stub()),
+            Arc::new(FailQueue),
+        );
+        let snapshot = svc.queue_snapshot().await.unwrap();
+        assert_eq!(snapshot, MailQueueSnapshot::unknown());
+        assert_eq!(snapshot.queue_depth, 0);
+        assert!(snapshot.oldest_deferred_at.is_none());
+        let status = svc.status().await.unwrap();
+        assert!(status.health.contains("unknown"));
+        // Redacted failure: no message content or provider string leaks.
+        let rendered = serde_json::to_string(&snapshot).unwrap();
+        assert!(!rendered.contains("mta unreachable"));
+        let _ = AuditOutcome::Denied;
+    }
+}
