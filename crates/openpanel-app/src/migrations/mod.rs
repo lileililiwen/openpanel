@@ -28,6 +28,9 @@ pub const SITES_V002: &str = include_str!("sites/V002__transport.sql");
 pub const DATABASES_V001: &str = include_str!("databases/V001__init.sql");
 /// SQL for the ssl v001 migration (`certificates` table).
 pub const SSL_V001: &str = include_str!("ssl/V001__init.sql");
+/// SQL for the ssl v002 migration (adds `last_attempt_at` column for
+/// the 24h renewal backoff).
+pub const SSL_V002: &str = include_str!("ssl/V002__last_attempt_at.sql");
 /// SQL for the monitoring v001 migration (`monitoring_samples` table).
 pub const MONITORING_V001: &str = include_str!("monitoring/V001__init.sql");
 /// SQL for the cron v001 migration (`cron_jobs` and `cron_runs`).

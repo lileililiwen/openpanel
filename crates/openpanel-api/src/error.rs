@@ -111,6 +111,10 @@ impl IntoResponse for ApiError {
                 SslError::AcmeChallenge(_) | SslError::Acme(_) => {
                     (StatusCode::BAD_GATEWAY, "ssl_acme_failed")
                 }
+                SslError::AcmeRateLimited(_) => {
+                    (StatusCode::TOO_MANY_REQUESTS, "ssl_acme_rate_limited")
+                }
+                SslError::AcmeUnreachable(_) => (StatusCode::BAD_GATEWAY, "ssl_acme_unreachable"),
                 SslError::KeyMismatch => (StatusCode::BAD_REQUEST, "ssl_key_mismatch"),
                 SslError::Expired => (StatusCode::BAD_REQUEST, "ssl_expired"),
                 SslError::InvalidPem(_) | SslError::InvalidCert(_) | SslError::InvalidKey(_) => {

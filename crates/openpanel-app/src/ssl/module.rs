@@ -77,12 +77,20 @@ impl SslModule {
             contact_email,
         ));
         let renewal_task = SslRenewalTask::new(service.clone());
-        let migrations = vec![Migration {
-            module: MODULE_NAME,
-            version: "001".to_string(),
-            description: "ssl initial schema".to_string(),
-            sql: crate::migrations::SSL_V001.to_string(),
-        }];
+        let migrations = vec![
+            Migration {
+                module: MODULE_NAME,
+                version: "001".to_string(),
+                description: "ssl initial schema".to_string(),
+                sql: crate::migrations::SSL_V001.to_string(),
+            },
+            Migration {
+                module: MODULE_NAME,
+                version: "002".to_string(),
+                description: "ssl last_attempt_at column".to_string(),
+                sql: crate::migrations::SSL_V002.to_string(),
+            },
+        ];
         Self {
             service,
             challenge_server,

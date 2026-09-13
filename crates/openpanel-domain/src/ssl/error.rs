@@ -28,6 +28,16 @@ pub enum SslError {
     #[error("ACME error: {0}")]
     Acme(String),
 
+    /// The CA returned a `rateLimited` problem. The renewal
+    /// scheduler MUST skip the cert for 24 hours.
+    #[error("ACME rate limit: {0}")]
+    AcmeRateLimited(String),
+
+    /// DNS or port-80 reachability failed before the issuance
+    /// started. Operator must investigate the domain.
+    #[error("ACME preflight unreachable: {0}")]
+    AcmeUnreachable(String),
+
     /// The uploaded private key does not match the uploaded
     /// certificate's public key.
     #[error("private key does not match the supplied certificate")]

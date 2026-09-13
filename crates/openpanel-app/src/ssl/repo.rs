@@ -219,6 +219,15 @@ fn row_to_cert(row: sqlx::sqlite::SqliteRow) -> Result<Certificate, RepoError> {
     let last_error: Option<String> = row
         .try_get("last_error")
         .map_err(|e| RepoError::new(e.to_string()))?;
+    let last_attempt_at = row
+        .try_get::<Option<String>, _>("last_attempt_at")
+        .map_err(|e| RepoError::new(e.to_string()))?
+        .map(|s| {
+            DateTime::parse_from_rfc3339(&s)
+                .map(|d| d.with_timezone(&Utc))
+                .map_err(|e| RepoError::new(e.to_string()))
+        })
+        .transpose()?;
 
     Ok(Certificate {
         id,
@@ -236,6 +245,7 @@ fn row_to_cert(row: sqlx::sqlite::SqliteRow) -> Result<Certificate, RepoError> {
         created_at,
         renewed_at,
         last_error,
+        last_attempt_at,
     })
 }
 

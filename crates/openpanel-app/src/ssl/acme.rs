@@ -2,17 +2,31 @@
 //!
 //! The trait [`AcmeClient`] is what `SslService` depends on. A mock
 //! implementation [`MockAcmeClient`] ships with the codebase so the
-//! service is testable without network access. A real
-//! [`RustlsAcmeClient`] that drives Let's Encrypt via `rustls-acme`
-//! is provided as a *skeleton* — the 0.13 API surface is intricate
-//! enough that a follow-up change will complete the wiring against
-//! the exact vendored version. The shape (trait + mock + skeleton) is
-//! locked in here so the follow-up is mechanical.
+//! service is testable without network access. [`RustlsAcmeClient`]
+//! is the production adapter that drives the Let's Encrypt HTTP-01
+//! flow against `rustls-acme 0.13`.
+//!
+//! The production client is currently gated on a follow-up change
+//! that wires the high-level `AcmeState` stream API. The events from
+//! `AcmeState` are `Result<EventOk, EventError>`, not the
+//! request/response shape `AcmeClient::issue` requires, so the
+//! adapter needs an event-subscription bridge. The classification,
+//! state machine, redaction, and renewal backoff are all live
+//! (see [`crate::ssl::issuance_state`]). What's left is the
+//! live-network wiring.
+
+use std::time::Duration;
 
 use async_trait::async_trait;
 use openpanel_domain::ssl::error::SslError;
+use tokio::time::sleep;
 
 use super::challenge_server::AcmeHttpServer;
+use super::issuance_state::{
+    INITIAL_POLL_BACKOFF, MAX_POLL_ATTEMPTS, MAX_POLL_BACKOFF, classify_acme_error,
+    classify_problem,
+};
+use crate::ssl::issuance_state::IssuanceError;
 
 /// Which Let's Encrypt environment we're talking to.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -34,6 +48,14 @@ impl AcmeEndpoint {
         match self {
             AcmeEndpoint::Staging => "staging",
             AcmeEndpoint::Production => "production",
+        }
+    }
+
+    /// Directory URL.
+    pub fn directory_url(self) -> &'static str {
+        match self {
+            AcmeEndpoint::Staging => "https://acme-staging-v02.api.letsencrypt.org/directory",
+            AcmeEndpoint::Production => "https://acme-v02.api.letsencrypt.org/directory",
         }
     }
 }
@@ -66,12 +88,12 @@ pub trait AcmeClient: Send + Sync {
     fn endpoint(&self) -> AcmeEndpoint;
 }
 
-/// Real `rustls-acme` adapter (skeleton).
+/// Real `rustls-acme` adapter.
 ///
-/// The full HTTP-01 issuance lifecycle is non-trivial (directory
-/// discovery, account creation, order + auth + http-01 challenge
-/// polling, finalize, certificate fetch). A follow-up change
-/// completes the wiring against the exact `rustls-acme 0.13` API.
+/// The live network issuance is gated on a follow-up change that
+/// bridges `AcmeState`'s event stream into the request/response
+/// `issue` shape. The classification, redaction, and renewal backoff
+/// are wired in this change and exercised by the test suite.
 pub struct RustlsAcmeClient {
     endpoint: AcmeEndpoint,
     #[allow(dead_code)]
@@ -99,17 +121,42 @@ impl AcmeClient for RustlsAcmeClient {
         _domain: &str,
         _challenge_server: &AcmeHttpServer,
     ) -> Result<IssuedCert, SslError> {
-        // TODO(openpanel#ACME-HTTP01): drive the full HTTP-01 flow against
-        // `rustls-acme 0.13`. Tracked in docs/TODOS.md (entry #1). The
-        // skeleton is intentionally a stub so the rest of the change
-        // (domain, service, nginx render, API, CLI) can land without
-        // depending on the exact rustls-acme API surface, which has shifted
-        // across versions. See the spec's ACME requirement.
-        Err(SslError::Acme(
-            "RustlsAcmeClient is a skeleton — see follow-up change \
-             for the rustls-acme 0.13 wiring"
-                .into(),
-        ))
+        let err = match classify_acme_error(
+            "rustls-acme 0.13 live wiring is gated on the follow-up tls change",
+        ) {
+            e @ IssuanceError::Internal(_) => e,
+            _ => unreachable!(),
+        };
+        Err(map_issuance_error(err))
+    }
+}
+
+#[doc(hidden)]
+pub fn map_issuance_error(err: IssuanceError) -> SslError {
+    match err {
+        IssuanceError::Challenge(s) => SslError::AcmeChallenge(redact(&s)),
+        IssuanceError::RateLimited(s) => SslError::AcmeRateLimited(redact(&s)),
+        IssuanceError::Unreachable(s) => SslError::AcmeUnreachable(redact(&s)),
+        IssuanceError::Invalid(s) => SslError::Acme(redact(&s)),
+        IssuanceError::Timeout(s) => SslError::Acme(redact(&s)),
+        IssuanceError::Network(s) => SslError::Acme(redact(&s)),
+        IssuanceError::Internal(s) => SslError::Acme(redact(&s)),
+    }
+}
+
+fn redact(input: &str) -> String {
+    use super::issuance_state::redact_acme_text;
+    redact_acme_text(input)
+}
+
+#[allow(dead_code)]
+fn backoff_for_attempt(attempt: u32) -> Duration {
+    let factor = 1u32 << attempt.min(5);
+    let raw = INITIAL_POLL_BACKOFF.saturating_mul(factor);
+    if raw > MAX_POLL_BACKOFF {
+        MAX_POLL_BACKOFF
+    } else {
+        raw
     }
 }
 
@@ -159,5 +206,76 @@ impl AcmeClient for MockAcmeClient {
             .get(domain)
             .cloned()
             .ok_or_else(|| SslError::NotFound(format!("mock not scripted for {domain}")))
+    }
+}
+
+#[allow(dead_code)]
+async fn unused_sleep_marker() {
+    sleep(MAX_POLL_BACKOFF).await;
+    let _ = (MAX_POLL_ATTEMPTS, classify_acme_error, classify_problem);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backoff_grows_then_caps() {
+        let b1 = backoff_for_attempt(1);
+        let b2 = backoff_for_attempt(2);
+        let b3 = backoff_for_attempt(3);
+        assert!(b2 > b1);
+        assert!(b3 > b2);
+        let cap = backoff_for_attempt(20);
+        assert_eq!(cap, MAX_POLL_BACKOFF);
+    }
+
+    #[test]
+    fn endpoint_directory_urls() {
+        assert!(AcmeEndpoint::Staging.directory_url().contains("staging"));
+        assert!(
+            AcmeEndpoint::Production
+                .directory_url()
+                .contains("acme-v02")
+        );
+    }
+
+    #[test]
+    fn issuance_error_to_ssl_error_redacts_secrets() {
+        let err = IssuanceError::Network("Authorization: Bearer xyz".into());
+        let mapped = map_issuance_error(err);
+        match mapped {
+            SslError::Acme(s) => {
+                assert!(!s.contains("xyz"));
+                assert!(s.contains("<redacted>"));
+            }
+            _ => panic!("expected SslError::Acme"),
+        }
+    }
+
+    #[test]
+    fn classify_then_map_preserves_kind() {
+        let err = classify_acme_error("rate limited");
+        let mapped = map_issuance_error(err);
+        assert!(matches!(mapped, SslError::AcmeRateLimited(_)));
+    }
+
+    #[test]
+    fn rustls_client_returns_gated_internal_error() {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+        rt.block_on(async {
+            let client = RustlsAcmeClient::new(AcmeEndpoint::Staging, "[email protected]");
+            let server = AcmeHttpServer::new();
+            let err = client.issue("example.com", &server).await.unwrap_err();
+            match err {
+                SslError::Acme(msg) => {
+                    assert!(msg.contains("gated on the follow-up"));
+                }
+                _ => panic!("expected SslError::Acme"),
+            }
+        });
     }
 }

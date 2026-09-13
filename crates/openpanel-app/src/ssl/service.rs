@@ -23,6 +23,7 @@ use openpanel_domain::ssl::{
 
 use super::{
     super::databases::crypto::KEY_LEN,
+    super::sites::nginx::NginxConfigGenerator,
     acme::{AcmeClient, AcmeEndpoint, IssuedCert},
     challenge_server::AcmeHttpServer,
     crypto::{decrypt_key_pem, encrypt_key_pem},
@@ -83,6 +84,7 @@ pub struct SslService {
     acme_client: Arc<dyn AcmeClient>,
     acme_endpoint: AcmeEndpoint,
     contact_email: String,
+    nginx: Option<Arc<NginxConfigGenerator>>,
 }
 
 impl SslService {
@@ -91,7 +93,8 @@ impl SslService {
     /// DB; `contact_email` is the Let's Encrypt account contact
     /// (`mailto:[email protected]`); `acme_client` is the ACME
     /// adapter (use `RustlsAcmeClient` in production, `MockAcmeClient`
-    /// in tests).
+    /// in tests); `nginx` is optional and enables `reload_nginx` on
+    /// successful renewals.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         repo: Arc<dyn CertificateRepository>,
@@ -112,7 +115,15 @@ impl SslService {
             acme_client,
             acme_endpoint,
             contact_email: contact_email.into(),
+            nginx: None,
         }
+    }
+
+    /// Attach an nginx manager so `reload_nginx` is a real
+    /// `nginx -t && nginx -s reload` after a successful renewal.
+    pub fn with_nginx(mut self, nginx: Arc<NginxConfigGenerator>) -> Self {
+        self.nginx = Some(nginx);
+        self
     }
 
     /// Resolve the configured ACME endpoint.
@@ -128,6 +139,32 @@ impl SslService {
     /// Build an `AcmeClient` configured for this service's endpoint.
     pub fn acme_client(&self) -> Arc<dyn AcmeClient> {
         self.acme_client.clone()
+    }
+
+    /// Run the preflight checks for `domain` and return the
+    /// outcome. The result is safe to surface to the operator
+    /// through the web/API/CLI without further redaction. The
+    /// `challenge_loopback` is the `127.0.0.1:<port>` the local
+    /// challenge server is bound to; pass `None` to skip the
+    /// challenge-routing check.
+    pub async fn preflight_status(
+        &self,
+        domain: &str,
+        challenge_loopback: Option<std::net::SocketAddr>,
+    ) -> super::preflight::PreflightOutcome {
+        super::preflight::preflight(domain, challenge_loopback).await
+    }
+
+    /// Reload nginx so the freshly-renewed cert is served. The
+    /// `NginxManager` is optional: when it is `None` the call is a
+    /// no-op (tests + offline runs).
+    pub async fn reload_nginx(&self) -> Result<(), SslError> {
+        if let Some(manager) = self.nginx.as_ref() {
+            manager
+                .reload()
+                .map_err(|e| SslError::Io(format!("nginx reload: {e}")))?;
+        }
+        Ok(())
     }
 
     /// Fetch every certificate, sorted by domain.

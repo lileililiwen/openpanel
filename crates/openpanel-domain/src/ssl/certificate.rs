@@ -94,6 +94,10 @@ pub struct Certificate {
     /// Last issuance / renewal error, if any. Cleared on a successful
     /// renewal.
     pub last_error: Option<String>,
+    /// When the last issuance / renewal attempt started, regardless
+    /// of outcome. Used by the renewal scheduler to enforce a
+    /// 24-hour backoff after transient failures.
+    pub last_attempt_at: Option<DateTime<Utc>>,
 }
 
 impl Certificate {
@@ -142,6 +146,7 @@ impl Certificate {
             created_at: Utc::now(),
             renewed_at: None,
             last_error: None,
+            last_attempt_at: None,
         })
     }
 
@@ -205,6 +210,24 @@ impl Certificate {
     /// re-issue replaces the row and resets the revoked state.
     pub fn mark_revoked(&mut self) {
         self.last_error = Some("revoked".into());
+    }
+
+    /// True iff the cert was attempted within `window` and should
+    /// not be retried yet. Used by the renewal scheduler to honour
+    /// Let's Encrypt rate limits after a failure.
+    pub fn attempted_within(&self, now: DateTime<Utc>, window: std::time::Duration) -> bool {
+        match self.last_attempt_at {
+            Some(at) => {
+                now.signed_duration_since(at)
+                    < chrono::Duration::from_std(window).unwrap_or(chrono::Duration::days(1))
+            }
+            None => false,
+        }
+    }
+
+    /// Record the start of an issuance / renewal attempt.
+    pub fn record_attempt(&mut self, at: DateTime<Utc>) {
+        self.last_attempt_at = Some(at);
     }
 
     /// Record a successful renewal with the new cert material.
