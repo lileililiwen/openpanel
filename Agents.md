@@ -236,19 +236,20 @@ Local invocation runs the same gates as CI, in this order:
 5. `make file-length` — per-file line-count lint (optional)
 6. `make scan-literal` — literal colour / string scan
 7. `make class-coverage` — every `class="..."` literal has a rule in `app.css`
-8. `make tasks-testing-first` — `## 1. Testing` comes first in `tasks.md`
-9. `make reuse-strict` — no *unclassified* duplicated public item across crates
-10. `make layering` — domain MUST NOT import app/api
-11. `make spec-test-drift-strict` — every new / modified spec has a covering test
-12. `make spec-drift` — every archived delta exists in the live spec
-13. `make agent-governance` — OpenSpec context + runtime contract integrity
-14. `make governance-contract` — archived governance content ratchet
-15. `make coverage-floor` — measured coverage ≥ configured floor; required CI
+8. `make browser-ui-quality` — rendered axe/WCAG, responsive, localization, reduced-motion
+9. `make tasks-testing-first` — `## 1. Testing` comes first in `tasks.md`
+10. `make reuse-strict` — no *unclassified* duplicated public item across crates
+11. `make layering` — domain MUST NOT import app/api
+12. `make spec-test-drift-strict` — every new / modified spec has a covering test
+13. `make spec-drift` — every archived delta exists in the live spec
+14. `make agent-governance` — OpenSpec context + runtime contract integrity
+15. `make governance-contract` — archived governance content ratchet
+16. `make coverage-floor` — measured coverage ≥ configured floor; required CI
     job fails when its tool is missing
-16. `make maturity` — every production TODO / FIXME / stub marker has a
+17. `make maturity` — every production TODO / FIXME / stub marker has a
     reviewed entry in `openspec/governance/evidence.yaml`
-17. `make test-gates` — the governance gates' own positive/negative fixtures
-18. `make test` — full test suite
+18. `make test-gates` — the governance gates' own positive/negative fixtures
+19. `make test` — full test suite
 
 `add-quality-engineering-infrastructure` defines the full policy. The
 strict gates (`reuse-strict`, `spec-test-drift-strict`,

@@ -56,7 +56,7 @@
   only after (see `Agents.md` §5.3). No pre-existing-failure
   exemption: every failing gate is yours — fix it before archive.
 - Quality gate: `make check` (fmt, clippy, docs, audit, file-length,
-  scan-literal, class-coverage, tasks-testing-first, reuse-strict,
+  scan-literal, class-coverage, browser-ui-quality, tasks-testing-first, reuse-strict,
   layering, spec-test-drift-strict, spec-drift, agent-governance,
   governance-contract, coverage-floor, maturity, test-gates, tests).
   `make test-gates` runs the governance self-test in isolation.

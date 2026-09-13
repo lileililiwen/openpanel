@@ -239,9 +239,10 @@ impl<'a> Shell<'a> {
         let page_title = current.map_or("OpenPanel".to_string(), |item| {
             format!("{} · OpenPanel", item.label)
         });
+        let text_dir = crate::browser_ui_quality::browser_text_dir(&self.locale);
         html! {
             (DOCTYPE)
-            html lang=(self.locale) data-theme=(self.theme) data-timezone=(self.timezone) {
+            html lang=(self.locale) dir=(text_dir) data-theme=(self.theme) data-timezone=(self.timezone) {
                 head {
                     meta charset="utf-8";
                     meta name="viewport" content="width=device-width, initial-scale=1";

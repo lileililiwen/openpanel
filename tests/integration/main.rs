@@ -12,6 +12,8 @@ mod account_hierarchy;
 mod admin_interaction_surface;
 mod api_tokens;
 mod backups;
+/// Browser UI quality (axe/WCAG, responsive, localization) integration tests.
+mod browser_ui_quality;
 /// Capability navigation + site workspace completion integration tests.
 mod capability_navigation;
 /// Per-site collaborator HTTP integration tests.

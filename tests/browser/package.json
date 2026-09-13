@@ -1,0 +1,14 @@
+{
+  "name": "openpanel-browser-quality",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pinned Playwright + axe harness for the browser-ui-quality gate",
+  "type": "module",
+  "scripts": {
+    "quality": "node quality.mjs"
+  },
+  "dependencies": {
+    "axe-core": "4.10.2",
+    "playwright": "1.49.1"
+  }
+}

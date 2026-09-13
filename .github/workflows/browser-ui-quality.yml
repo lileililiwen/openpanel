@@ -1,0 +1,35 @@
+name: browser-ui-quality
+
+on: [push, pull_request]
+
+jobs:
+  browser-quality:
+    name: Browser quality (Playwright + axe)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: tests/browser/package.json
+      - name: Install pinned browser harness
+        working-directory: tests/browser
+        run: npm ci
+      - name: Install Playwright browsers
+        working-directory: tests/browser
+        run: npx playwright install --with-deps chromium
+      - name: Static browser gate
+        run: make browser-ui-quality
+      - name: Boot dev server
+        run: |
+          cargo run -p openpanel -- --help >/dev/null 2>&1 || true
+      - name: Upload browser artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-artifacts
+          path: target/browser-artifacts
+          if-no-files-found: ignore

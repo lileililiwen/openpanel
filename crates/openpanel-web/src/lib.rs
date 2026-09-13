@@ -14,6 +14,8 @@ pub mod assets;
 /// Audit log route stubs.
 pub mod audit;
 pub mod backups;
+/// Browser UI quality gate: route matrix, rendered checks, localization.
+pub mod browser_ui_quality;
 /// Capability navigation registry: one discoverability inventory.
 pub mod capability_registry;
 /// Per-site collaborator web page.
