@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "openpanel",
+  "kind": "rust-product",
+  "profile": "rust-product",
+  "lifecycle": "active",
+  "verification": {
+    "command": "cargo test --workspace",
+    "gate_runtime": "driftwatchdog",
+    "evidence_status": "planned"
+  },
+  "deployment": {
+    "deployable": false,
+    "jenkins_job": null,
+    "compose_file": null
+  }
+}

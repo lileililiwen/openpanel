@@ -1,0 +1,12 @@
+version: 1
+runtime: driftwatchdog
+profile: rust-product
+rule_pack: workspace-governance@1
+checks:
+  repository: true
+  build: true
+  tests: true
+  security: true
+blocking:
+  - FAIL
+  - REVIEW_REQUIRED
