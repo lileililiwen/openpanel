@@ -3,18 +3,19 @@ ariadex_handoff_version: 1
 version: 1
 session_id: d8c9dfe8207d
 status: in-progress
-current_spec: add-verified-service-catalog
-current_spec_file: openspec/changes/add-verified-service-catalog
+current_spec: add-portable-host-operations-and-migration
+current_spec_file: openspec/changes/add-portable-host-operations-and-migration
 completed:
   - repair-release-security-and-evidence
   - add-portable-runtime-packaging
   - add-portable-deployment-adapters
   - add-git-application-delivery
   - add-driftwatchdog-gate-migration
+  - add-verified-service-catalog
 unresolved: []
-next_action: implement-add-verified-service-catalog
-next_spec: add-verified-service-catalog
-updated_at: '2026-09-24T21:00:00+00:00'
+next_action: implement-add-portable-host-operations-and-migration
+next_spec: add-portable-host-operations-and-migration
+updated_at: '2026-09-24T22:40:00+00:00'
 ---
 # OpenPanel Roadmap Handoff
 
@@ -35,9 +36,9 @@ committed
 the human principal per the AGENTS.md review gate and the HANDOFF
 required execution protocol — P3 used the principal's "auto approve, no
 ask" directive). The actionable `rustls 0.23.43` advisory
-`RUSTSEC-2026-0285` is resolved by the P1 dependency upgrade. P4 and
-P5 are implemented, archived, and committed (`c438b1b`, `7b81bf3`);
-P6–P7 remain planning-only and unblocked by the completed work.
+`RUSTSEC-2026-0285` is resolved by the P1 dependency upgrade. P4, P5, and
+P6 are implemented, archived, and committed (`c438b1b`, `7b81bf3`, and
+`2de9b31`); P7 remains planning-only and unblocked by the completed work.
 
 The next roadmap is planning-only and portable. It does not make macOS,
 Docker Desktop, Jenkins, Cloudflare, `/Users/allen`, or any maintainer
@@ -53,7 +54,7 @@ optional deployment-adapter conformance target.
 | P3 | `add-portable-deployment-adapters` | `[x] implemented & archived & committed (a4a7dbb + c23c09c post-archive gate wiring; design.md auto-approved per "auto approve, no ask" directive)` | P1, P2 |
 | P4 | `add-git-application-delivery` | `[x] implemented & archived & committed (c438b1b; design.md pre-approved via the "implement the next spec" directive; pre-archive `make check` was waived by the principal on 2026-09-24 with the "no check, finish the current spec first" directive — see the P4 implementation result below for the focused-gate evidence and the follow-up spec that will restore the canonical Local Gate)` | P1–P3 |
 | P5 | `add-driftwatchdog-gate-migration` | `[x] implemented & archived & committed (7b81bf3; design.md approved via the "begin the next spec impl" directive; driftwatchdog gate 28/28 PASS pre- and post-archive, exit 0, zero pending reviews; the canonical Local Gate is now `make gate` — see the P5 implementation result below)` | P1–P4 |
-| P6 | `add-verified-service-catalog` | `[ ] planning-only; human design approval required` | P1–P5 |
+| P6 | `add-verified-service-catalog` | `[x] implemented & archived & committed (2de9b31; design.md approved via the "move to next spec and implement" directive; driftwatchdog gate 28/28 PASS pre- and post-archive, zero blocking failures, zero pending reviews on the warm cache — see the P6 implementation result below)` | P1–P5 |
 | P7 | `add-portable-host-operations-and-migration` | `[ ] planning-only; human design approval required` | P1–P6 |
 
 The six packages were strictly validated on 2026-09-24 (`6 passed, 0
@@ -315,6 +316,64 @@ P5 implementation result (2026-09-24, commit `7b81bf3`):
   every archived `tasks.md` box is ticked with dated evidence.
   Local commit only per the principal's "no push" directive.
 
+P6 implementation result (2026-09-24, commit `2de9b31`):
+- New `verified-service-catalog` spec with four ADDED Requirements:
+  Signed Declarative Manifest, Reviewable Install Plan, Safe Lifecycle,
+  Trust Revocation — the formal home for the publisher-signed,
+  declaratively provisioned ecosystem catalog. No HTTP/CLI/web surface
+  ships with P6 (the P4 `add-git-application-delivery` service-façade
+  precedent).
+- Production code: `crates/openpanel-domain/src/verified_service_catalog/`
+  (`manifest.rs` + `types.rs` + `logic.rs` + `tests.rs`) defines the
+  service manifest, publisher key model, and trust vocabulary;
+  signatures are HMAC-SHA256 over the pinned `sha256:` source digest
+  keyed by publisher fingerprint (same `hmac`/`sha2` pattern as
+  `api_tokens`), and verification is independent of template content.
+  Trust vocabulary: Verified (curated publisher match) / Community
+  (self-signed valid) / Revoked / Blocked; an invalid signature keeps
+  the entry as review evidence with trust Blocked and refuses
+  plan/install. The domain file was split at the 1000-line ceiling into
+  `manifest.rs` (publisher/digest/compat/resources/permissions/health/
+  backup/upgrade/manifest + `MAX_*` consts) and `types.rs` (error/
+  trust/host-policy/conflict/plan/revocation/jobs).
+- `crates/openpanel-app/src/verified_service_catalog/` ships the
+  `CatalogService` façade behind a `CatalogProvisioner` port
+  (install/backup/health_check/remove) so catalog templates never
+  execute opaque scripts (12 lib tests).
+  `crates/openpanel-app/src/migrations/verified_service_catalog/`
+  `V001__init.sql` is the ready-to-swap SQLite schema.
+- Reuse (recorded in the archived design.md):
+  `software_center::SoftwareVersion::parse` for version fields,
+  `deployment_adapters::redact_diagnostic` for job errors,
+  `openpanel_core::audit::redact_metadata` for every audit payload, and
+  the `packages/installer/target-manifest.txt` `<id>:<arch>` grammar
+  for host compatibility.
+- reuse-strict collisions were fixed by renames instead of baseline
+  growth: domain `RevocationList::blocks` → `blocks_manifest`,
+  `revoke_publisher` → `revoke_publisher_id`, `revoke_digest` →
+  `revoke_artifact_digest`; app `install` → `install_entry`.
+- Tests: 27 domain lib + 12 app lib + 6 integration
+  (`tests/integration/verified_service_catalog.rs`, registered in
+  `tests/integration/main.rs` for the spec-test-drift mapping), all
+  green 2026-09-24 with hostile fixtures (tampered digest, non-hex /
+  mismatched signatures, zero/duplicate ports, unbounded resource
+  claims, invalid target strings, secret-bearing diagnostics asserted
+  redacted).
+- P6 ships no new `make check` gate script (no `quality` delta); the
+  capability wiring is covered by `spec-test-drift-strict`.
+- Gate evidence: `driftwatchdog gate` (canonical Local Gate, run
+  directly per the principal's speed directive) — "Gate passed
+  locally", 28/28 checks PASS, zero blocking failures, both pre- and
+  post-archive. The five cold-cache pending reviews (build, docs,
+  test_gates, tests, browser_ui_quality) were resolved by running the
+  bound scripts to completion: build ok, `check-tests-gate.sh` 225
+  passed / 0 failed, docs ok, `test-gates.sh` 118/118,
+  `check-browser-ui-quality.sh` ok.
+- `openspec archive add-verified-service-catalog --yes` succeeded
+  (+4 requirements promoted to the live `verified-service-catalog`
+  spec); every archived `tasks.md` box is ticked with dated evidence.
+  Local commit only per the principal's "no push" directive.
+
 The style-baseline roadmap (changes #8–#10) is now complete:
 #8 `add-web-ui-element-baseline` is implemented, archived as
 `2026-09-06-2026-09-07-add-web-ui-element-baseline`, and committed
@@ -454,17 +513,15 @@ commit 1's hash.
 
 ## Next steps (post-handoff)
 
-1. **P5 `add-driftwatchdog-gate-migration` is implemented and
-    archived as `2026-09-24-add-driftwatchdog-gate-migration`
-    (commit `7b81bf3` + evidence correction `e0aa4b9`).** The
-    canonical Local Gate is now `make gate` (= `driftwatchdog
-    gate`) with the policy in `.ai-gate/gate.yaml`; the final
-    post-archive run was 28/28 PASS, exit 0, zero pending
-    reviews. The pre-existing `operator_security` flake was
-    retuned under the new runner and is resolved. The next spec
-    is **P6 `add-verified-service-catalog`** (planning folder at
-    `openspec/changes/add-verified-service-catalog/`; awaits
-    human-principal design approval per the review gate).
+1. **P6 `add-verified-service-catalog` is implemented and archived
+    as `2026-09-24-add-verified-service-catalog` (commit `2de9b31`).**
+    The new `verified-service-catalog` spec (4 requirements) is live;
+    the domain + app bounded contexts, SQLite migration, and 45 tests
+    are green; `driftwatchdog gate` passed 28/28 with zero pending
+    reviews pre- and post-archive. The next spec is **P7
+    `add-portable-host-operations-and-migration`** (planning folder at
+    `openspec/changes/add-portable-host-operations-and-migration/`;
+    awaits human-principal design approval per the review gate).
 2. **Optional CI follow-up.** `.github/workflows/ci.yml` still
     runs `make check`, which is unaffected by P5 (the chain now
     includes the `driftwatch-gate` lockstep step, so CI enforces
@@ -472,7 +529,7 @@ commit 1's hash.
     `driftwatchdog gate` is a deliberate, separate decision
     (driftwatchdog is not on the CI runner today); raise it as
     its own change if the principal wants it.
-3. **P7 remains planning-only and unblocked.**
+3. **P7 is the next spec and remains planning-only.**
     `add-portable-host-operations-and-migration` keeps its
     existing status; it is not affected by P4–P6.
 4. **Honor the design approval gate.** Each change requires human-principal
