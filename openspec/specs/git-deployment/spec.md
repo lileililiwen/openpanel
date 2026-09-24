@@ -140,3 +140,25 @@ plan quotas SHALL apply to preview counts.
 - **THEN** the reaper destroys it and audits
           `PreviewDestroyed{reason: "expired"}`.
 
+### Requirement: Application Delivery Reuses Git Webhook Verification
+
+Application delivery deployments that target a Git source MUST
+reuse the `git_deployment::verify_webhook` verifier. The
+verification key, body, and presented signature flow through the
+existing function unchanged; the application-delivery service
+MUST NOT introduce a parallel HMAC verifier.
+
+#### Scenario: Git webhook signature is verified through the existing helper
+
+- **WHEN** a Git source adapter receives a webhook payload
+- **THEN** verification is delegated to
+  `openpanel_domain::git_deployment::verify_webhook` and the
+  deployment proceeds only when the helper returns `Ok`.
+
+#### Scenario: Bad signature aborts before any side effect
+
+- **WHEN** the presented signature does not match the expected
+  digest
+- **THEN** no build or deploy is started and an audit event
+  records the refusal without the raw signature.
+

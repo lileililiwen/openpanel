@@ -1115,6 +1115,118 @@ assert "deployment-adapters: domain depending on app fails" 1 \
       OPENSPEC_TESTS_DIR="${DA}/tests/integration" \
       "${DA}/scripts/check-deployment-adapters.sh"
 
+# --- application-delivery (new) -----------------------------------------
+# Per the application-delivery spec, OpenPanel exposes a typed
+# `Application` aggregate above the existing site Git, container,
+# preview, and release services. The gate asserts the wiring of the
+# contract: domain types, app service, integration test coverage, and
+# layering.
+AD="${TMP}/application_delivery"
+mkdir -p "${AD}/crates/openpanel-domain/src/application_delivery" \
+         "${AD}/crates/openpanel-app/src/application_delivery" \
+         "${AD}/openspec/specs/application-delivery" \
+         "${AD}/tests/integration" \
+         "${AD}/scripts/lib"
+cp ./scripts/check-application-delivery.sh "${AD}/scripts/check-application-delivery.sh"
+cp ./scripts/lib/step.sh "${AD}/scripts/lib/step.sh"
+
+# A minimal but passing domain module: aggregate, environment, release,
+# state machine, redaction, and isolation helpers.
+cat > "${AD}/crates/openpanel-domain/src/application_delivery/mod.rs" <<'DOMAIN'
+//! Fixtured application-delivery domain module.
+#![allow(dead_code)]
+pub struct Application;
+pub struct Environment;
+pub struct Release;
+pub enum ReleaseState { Pending }
+pub enum EnvironmentKind { Production, Preview }
+pub fn redact_diagnostic(_value: &str) -> String { String::new() }
+pub fn is_mutable_digest(_value: &str) -> bool { false }
+pub fn resolve_environment<'a>(_: &'a Environment, _: &'a str, _: &'a str) -> &'a str { "" }
+pub fn can_promote(_: &Release, _: &Environment, _: &str) -> Result<(), ()> { Ok(()) }
+pub fn can_rollback(_: &Release, _: &Environment, _: &str) -> Result<(), ()> { Ok(()) }
+DOMAIN
+
+# A minimal passing app service.
+cat > "${AD}/crates/openpanel-app/src/application_delivery/service.rs" <<'APP'
+//! Fixtured application-delivery app service.
+#![allow(dead_code)]
+pub struct ApplicationDeliveryService;
+impl ApplicationDeliveryService {
+    pub fn register_application(&self) {}
+    pub fn build_release(&self) {}
+    pub fn promote(&self) {}
+    pub fn rollback(&self) {}
+    fn require_operator(&self) {}
+    fn audit(&self) { let _ = openpanel_core::audit::redact_metadata(&serde_json::json!({})); }
+}
+APP
+
+# A minimal spec delta with one scenario so the coverage check has
+# something to assert against.
+cat > "${AD}/openspec/specs/application-delivery/spec.md" <<'SPEC'
+# Fixtured application-delivery spec.
+
+## ADDED Requirements
+
+### Requirement: Fixture
+
+#### Scenario: Rollback succeeds
+SPEC
+
+# A minimal integration test file that references the scenario.
+cat > "${AD}/tests/integration/application_delivery.rs" <<'TEST'
+//! Fixtured application-delivery integration test.
+//! Rollback succeeds — the typed aggregate records the audit event.
+fn application_delivery_rolls_back() {}
+TEST
+
+# checker: application-delivery positive
+assert "application-delivery: all wiring present passes" 0 \
+  env OPENSPEC_CRATES_DIR="${AD}/crates" \
+      OPENSPEC_SPECS_DIR="${AD}/openspec/specs" \
+      OPENSPEC_TESTS_DIR="${AD}/tests/integration" \
+      "${AD}/scripts/check-application-delivery.sh"
+
+# Remove the integration test file so the scenario coverage check fails.
+rm "${AD}/tests/integration/application_delivery.rs"
+# checker: application-delivery negative
+assert "application-delivery: missing integration test fails" 1 \
+  env OPENSPEC_CRATES_DIR="${AD}/crates" \
+      OPENSPEC_SPECS_DIR="${AD}/openspec/specs" \
+      OPENSPEC_TESTS_DIR="${AD}/tests/integration" \
+      "${AD}/scripts/check-application-delivery.sh"
+
+# Restore for the layering test.
+cat > "${AD}/tests/integration/application_delivery.rs" <<'TEST'
+//! Fixtured application-delivery integration test.
+//! Rollback succeeds — the typed aggregate records the audit event.
+fn application_delivery_rolls_back() {}
+TEST
+
+# Domain MUST NOT import app; layering re-assertion in the new context.
+cat > "${AD}/crates/openpanel-domain/src/application_delivery/mod.rs" <<'DOMAIN'
+//! Fixtured application-delivery domain module that violates layering.
+#![allow(dead_code)]
+use openpanel_app::something;
+pub struct Application;
+pub struct Environment;
+pub struct Release;
+pub enum ReleaseState { Pending }
+pub enum EnvironmentKind { Production, Preview }
+pub fn redact_diagnostic(_value: &str) -> String { String::new() }
+pub fn is_mutable_digest(_value: &str) -> bool { false }
+pub fn resolve_environment<'a>(_: &'a Environment, _: &'a str, _: &'a str) -> &'a str { "" }
+pub fn can_promote(_: &Release, _: &Environment, _: &str) -> Result<(), ()> { Ok(()) }
+pub fn can_rollback(_: &Release, _: &Environment, _: &str) -> Result<(), ()> { Ok(()) }
+DOMAIN
+# checker: application-delivery negative
+assert "application-delivery: domain depending on app fails" 1 \
+  env OPENSPEC_CRATES_DIR="${AD}/crates" \
+      OPENSPEC_SPECS_DIR="${AD}/openspec/specs" \
+      OPENSPEC_TESTS_DIR="${AD}/tests/integration" \
+      "${AD}/scripts/check-application-delivery.sh"
+
 # --- release-evidence (new) ---------------------------------------------
 # Per the release-evidence spec, a publication workflow MUST fail when
 # any required coverage / browser / SBOM / signature / provenance /

@@ -11,6 +11,10 @@ mod account_hierarchy;
 /// Interaction surface integration tests (layer, forms, ui states, feedback).
 mod admin_interaction_surface;
 mod api_tokens;
+/// Application delivery bounded-context integration tests:
+/// immutable release, isolated environments, health-gated
+/// promotion, audited rollback.
+mod application_delivery;
 mod backups;
 /// Browser UI quality (axe/WCAG, responsive, localization) integration tests.
 mod browser_ui_quality;

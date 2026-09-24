@@ -2,6 +2,7 @@
 action	per-aggregate business method, not a shared utility
 active	per-aggregate business method, not a shared utility
 actor	per-aggregate business method, not a shared utility
+add_environment	per-aggregate business method, not a shared utility
 add_key	per-aggregate business method, not a shared utility
 advance	per-aggregate business method, not a shared utility
 aliases	per-aggregate business method, not a shared utility

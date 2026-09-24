@@ -267,3 +267,19 @@ requirements:
     digest: sha256:78d4d34bd419fd02542a657a95b421fd8e27b2f411fc823f6c2d8003cf22ad9a
     scenarios: 3
     checkers: [deployment-adapters]
+
+  # The new application-delivery capability ships a contract gate
+  # (`scripts/check-application-delivery.sh`) that asserts the
+  # domain aggregate + types, the app service, the integration
+  # test fixture, the layering invariant, and the scenario
+  # coverage for `application-delivery`. The gate is paired with
+  # positive and negative fixtures in `scripts/test-gates.sh`
+  # (`# checker: application-delivery positive` / `negative`), so
+  # any future regression of the gate is caught by the
+  # test-gates self-test.
+  - archive: openspec/changes/archive/2026-09-24-add-git-application-delivery/specs/quality/spec.md
+    capability: quality
+    requirement: "Application-Delivery Contract Gate"
+    digest: sha256:3ee095015fe39fd3b855d33da3a5f6ef9785b974a62f76449d659d8c5d4bf875
+    scenarios: 3
+    checkers: [application-delivery]

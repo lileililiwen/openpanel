@@ -111,6 +111,8 @@ pub const LOG_VIEWER_V001: &str = include_str!("log_viewer/V001__init.sql");
 pub const DB_PRIVILEGES_V001: &str = include_str!("db_privileges/V001__init.sql");
 /// Deployment adapters: idempotency records and evidence.
 pub const DEPLOYMENT_ADAPTERS_V001: &str = include_str!("deployment_adapters/V001__init.sql");
+/// Application delivery: applications, environments, releases.
+pub const APPLICATION_DELIVERY_V001: &str = include_str!("application_delivery/V001__init.sql");
 /// IPv6 + address-pool: pools and per-site allocations.
 pub const IP_ALLOCATION_V001: &str = include_str!("ip_allocation/V001__init.sql");
 /// Reseller billing: meters, chargebacks, integrations.

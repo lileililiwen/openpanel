@@ -114,6 +114,14 @@ pub mod ai_ops;
 /// supervisor unit, and the nginx reverse-proxy block that
 /// targets `127.0.0.1:APP_PORT`.
 pub mod app_runtimes;
+/// Application delivery bounded context: provider-neutral
+/// lifecycle for source- or image-based applications above the
+/// existing site Git, container, preview, and release services.
+/// The aggregate owns the immutable release, the production /
+/// preview environment split, the typed state machine, the
+/// promotion + rollback operators, and the secret-safe diagnostic
+/// contract.
+pub mod application_delivery;
 /// Bandwidth accounting bounded context: typed bridge between
 /// the `BandwidthObserver` collector and the SQLite-backed
 /// rolling-window store.
@@ -243,6 +251,14 @@ pub use app_runtimes::{
     ALLOWED_RUNTIME_KINDS, RESERVED_PORTS, RuntimeError, RuntimeKind, RuntimeRepository,
     RuntimeStatus, SiteRuntime, is_kind_allowed, is_port_allowed, is_version_allowed,
     is_workdir_inside_chroot, render_nginx_proxy_block, render_supervisor_unit,
+};
+pub use application_delivery::{
+    Application, ApplicationDeliveryError, ApplicationSource, ApplicationSourceKind, AuditTag,
+    BuildAdapter, Environment, EnvironmentKind, MAX_APPLICATION_NAME, MAX_DIGEST_LEN, MAX_REF_LEN,
+    PromotionRequest, Release, ReleaseDigest, ReleaseLifecycle, ReleaseOutcome, ReleaseState,
+    RollbackRequest, RuntimeAdapter, SecretSetRef, build_release_identity, can_promote,
+    can_rollback, is_mutable_digest, redact_diagnostic as redact_diagnostic_ad,
+    resolve_environment, validate_environment_isolation, validate_source_ref,
 };
 pub use bandwidth_accounting::{
     BandwidthCounterRow, BandwidthReader, BandwidthRepository, BandwidthStorageObserver,

@@ -30,3 +30,26 @@ Backup creation MUST show scope, destination, retention, estimated size, availab
 - **WHEN** the estimated backup exceeds available capacity
 - **THEN** execution is blocked with an actionable capacity message
 
+### Requirement: Application Delivery Workflow Is Confirmed End-to-End
+
+The application delivery workflow MUST require a typed
+operator confirmation at every mutating step (build, promote,
+rollback). The confirmation is captured in the request, recorded
+in the audit event, and never exposed in the response.
+
+#### Scenario: Promote without confirmation is refused
+
+- **WHEN** an operator submits a promote request with an empty
+  `confirmation` field
+- **THEN** the request is refused with a typed
+  `ApplicationDeliveryError` and no release state mutation
+  occurs.
+
+#### Scenario: Rollback without confirmation is refused
+
+- **WHEN** an operator submits a rollback request with an empty
+  `confirmation` field
+- **THEN** the request is refused with a typed
+  `ApplicationDeliveryError` and no release state mutation
+  occurs.
+

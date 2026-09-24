@@ -21,6 +21,14 @@ pub mod api_tokens;
 /// supervisor unit, and the nginx reverse-proxy block that
 /// targets `127.0.0.1:APP_PORT`.
 pub mod app_runtimes;
+/// Application delivery bounded context: provider-neutral
+/// application / environment / release lifecycle above the
+/// existing site Git, container, preview, and release services.
+/// The `ApplicationDeliveryService` consumes a `BuildAdapter`
+/// and a `RuntimeAdapter` and routes every transition through
+/// the canonical audit fan-out; the SQLite schema is the
+/// projection-first source of truth for a follow-on change.
+pub mod application_delivery;
 pub mod backups;
 /// Reseller billing integration bounded context: usage meters,
 /// chargeback pricing, integration state, and webhook HMAC
@@ -183,6 +191,9 @@ pub use api_tokens::{ApiTokenModule, ApiTokenService};
 pub use app_runtimes::{
     AppRuntimesModule, ReverseProxyLayer, RuntimeEnvService, RuntimeService,
     SqliteRuntimeRepository, SupervisorUnitBuilder,
+};
+pub use application_delivery::{
+    ApplicationDeliveryService, ApplicationDeliveryServiceError, ApplicationRecord, ReleaseRecord,
 };
 pub use backups::{
     BackupService, BackupsModule,
