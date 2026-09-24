@@ -1,5 +1,6 @@
 /target
 .codegraph/
+.driftwatch/
 **/*.rs.bk
 Cargo.lock.bak
 

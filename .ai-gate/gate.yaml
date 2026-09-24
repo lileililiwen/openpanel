@@ -1,12 +1,77 @@
 version: 1
 runtime: driftwatchdog
-profile: rust-product
-rule_pack: workspace-governance@1
+profile: rust-platform
+rule_pack: rust-platform@0.1.0
 checks:
-  repository: true
+  repository_integrity: true
+  format: true
+  lint: true
   build: true
   tests: true
   security: true
+  # OpenSpec-spec gates — bind each `make check` step to its `scripts/check-*.sh`.
+  audit: true
+  docs: true
+  file_length: true
+  scan_literal: true
+  class_coverage: true
+  browser_ui_quality: true
+  release_governance: true
+  release_evidence: true
+  portable_runtime: true
+  deployment_adapters: true
+  application_delivery: true
+  tasks_testing_first: true
+  reuse_strict: true
+  layering: true
+  spec_test_drift_strict: true
+  spec_drift: true
+  agent_governance: true
+  governance_contract: true
+  coverage_floor: true
+  maturity: true
+  test_gates: true
+  driftwatch_gate: true
 blocking:
+  # FAIL = the command exited non-zero within its 60 s budget: a
+  # machine-decided violation that blocks archive. Timeout / signal /
+  # spawn failures map to REVIEW_REQUIRED ("pending reviews"): the
+  # command was killed at driftwatchdog's hard-coded 60 s per-check
+  # budget (CHECK_TIMEOUT_MS in src/commands/gate.rs, no per-command
+  # override in 0.1.0). The operator resolves a pending review by
+  # running the underlying script to completion (`make test`,
+  # `make docs`, …) before archive; openpanel policy does NOT treat
+  # pending reviews as blocking because `cargo test --workspace` can
+  # never fit a 60 s window. See
+  # openspec/changes/add-driftwatchdog-gate-migration/design.md
+  # §"Boundaries and safety".
   - FAIL
-  - REVIEW_REQUIRED
+commands:
+  repository_integrity: "git diff --check"
+  format: "cargo fmt --all -- --check"
+  lint: "cargo clippy --workspace --all-targets -- -D warnings"
+  build: "cargo build --workspace --all-targets"
+  tests: "scripts/check-tests-gate.sh"
+  security: "scripts/check-audit.sh"
+  audit: "scripts/check-audit.sh"
+  docs: "scripts/check-docs.sh"
+  file_length: "scripts/check-file-length.sh"
+  scan_literal: "scripts/scan-template-literals.sh"
+  class_coverage: "scripts/check-class-coverage.sh"
+  browser_ui_quality: "scripts/check-browser-ui-quality.sh"
+  release_governance: "scripts/check-release-governance.sh"
+  release_evidence: "scripts/check-release-evidence.sh"
+  portable_runtime: "scripts/check-portable-runtime.sh"
+  deployment_adapters: "scripts/check-deployment-adapters.sh"
+  application_delivery: "scripts/check-application-delivery.sh"
+  tasks_testing_first: "scripts/check-tasks-testing-first.sh"
+  reuse_strict: "scripts/check-reuse.sh --strict"
+  layering: "scripts/check-layering.sh"
+  spec_test_drift_strict: "scripts/check-spec-test-drift.sh --strict"
+  spec_drift: "scripts/check-spec-drift.sh"
+  agent_governance: "scripts/check-agent-governance.sh"
+  governance_contract: "scripts/check-governance-contract.sh"
+  coverage_floor: "scripts/check-coverage-floor.sh"
+  maturity: "scripts/check-maturity.sh"
+  test_gates: "scripts/test-gates.sh"
+  driftwatch_gate: "scripts/check-driftwatch-gate.sh"

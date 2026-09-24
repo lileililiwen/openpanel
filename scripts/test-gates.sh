@@ -1364,6 +1364,88 @@ else
     env OPENSPEC_CHANGES_DIR="${REENTRY_DIR}" ./scripts/check-tasks-testing-first.sh
 fi
 
+if [ "${TEST_GATES_REENTRY:-0}" -ne 1 ]; then
+# --- driftwatch-gate (P5) -------------------------------------------------
+# Per the DriftWatchdog Local Gate quality requirement, the canonical
+# pre-archive gate is `driftwatchdog gate`; .ai-gate/gate.yaml is the
+# policy surface. The new self-test exercises three properties:
+#   1. The shipped .ai-gate/gate.yaml + scripts/check-driftwatch-gate.sh
+#      pair passes on a clean repo (positive wiring).
+#   2. A `commands:` entry that names a missing script fails the gate
+#      (negative — drift between the policy and the scripts/ dir).
+#   3. `make -n check` still calls the same scripts the gate plan names
+#      (drift detection between the developer convenience and the
+#      canonical policy).
+DWG_GOOD="${TMP}/driftwatch_gate_good"
+mkdir -p "${DWG_GOOD}/.ai-gate" "${DWG_GOOD}/scripts/lib"
+cp "${REPO_ROOT}/.ai-gate/gate.yaml" "${DWG_GOOD}/.ai-gate/gate.yaml"
+cp ./scripts/check-driftwatch-gate.sh "${DWG_GOOD}/scripts/check-driftwatch-gate.sh"
+cp ./scripts/lib/step.sh "${DWG_GOOD}/scripts/lib/step.sh"
+# Copy the real Makefile so the fixture's `check:` target is the same
+# canonical chain the shipped `.ai-gate/gate.yaml` is in lockstep
+# with; the positive assertion proves the shipped pair passes the
+# drift detector.
+cp "${REPO_ROOT}/Makefile" "${DWG_GOOD}/Makefile"
+# checker: driftwatch-gate positive
+assert "driftwatch-gate: shipped wiring passes" 0 \
+  bash -c "cd '${DWG_GOOD}' && bash scripts/check-driftwatch-gate.sh"
+
+DWG_BAD="${TMP}/driftwatch_gate_bad"
+mkdir -p "${DWG_BAD}/.ai-gate" "${DWG_BAD}/scripts/lib"
+cp "${REPO_ROOT}/Makefile" "${DWG_BAD}/Makefile"
+# Copy the shipped gate.yaml and remove a `commands:` entry that the
+# script-backed subset of `make check` requires, so the drift detector
+# fails.
+python3 - "${REPO_ROOT}/.ai-gate/gate.yaml" "${DWG_BAD}/.ai-gate/gate.yaml" <<'PY'
+import sys, yaml
+with open(sys.argv[1]) as f:
+    data = yaml.safe_load(f)
+# Remove a key that the SCRIPT_STEPS detector in
+# scripts/check-driftwatch-gate.sh looks for. Pick `file-length` because
+# the script intentionally maps it via the Makefile's `file-length`
+# step, which becomes `file_length` (hyphen→underscore) in YAML.
+data["commands"].pop("file_length", None)
+with open(sys.argv[2], "w") as f:
+    yaml.safe_dump(data, f, sort_keys=False)
+PY
+cp ./scripts/check-driftwatch-gate.sh "${DWG_BAD}/scripts/check-driftwatch-gate.sh"
+cp ./scripts/lib/step.sh "${DWG_BAD}/scripts/lib/step.sh"
+# checker: driftwatch-gate negative
+# Belt-and-suspenders: explicitly assert the broken gate actually exits 1.
+if bash -c "cd '${DWG_BAD}' && bash scripts/check-driftwatch-gate.sh" >/dev/null 2>&1; then
+    fail=$((fail+1)); echo "  FAIL - driftwatch-gate: missing commands entry still passed (expected non-zero exit)"
+else
+    pass=$((pass+1)); echo "  ok   - driftwatch-gate: missing commands entry fails"
+fi
+
+# Drift detection between the Makefile `check:` target and the
+# `.ai-gate/gate.yaml` `commands:` block. We only enforce the
+# script-backed subset of `make check` (the cargo-native ones —
+# `fmt`, `clippy`, `repository_integrity` — bind directly to `cargo
+# subcommands` in the YAML, matching the labrys shape). The list below
+# MUST stay in lockstep with the SCRIPT_STEPS regex in
+# `scripts/check-driftwatch-gate.sh`. Step names use hyphens
+# (matching the Makefile) which are translated to underscores for
+# the YAML lookup.
+SCRIPT_BACKED_STEPS="docs audit file-length scan-literal class-coverage browser-ui-quality release-governance release-evidence portable-runtime deployment-adapters application-delivery tasks-testing-first reuse-strict layering spec-test-drift-strict spec-drift agent-governance governance-contract coverage-floor maturity test-gates"
+for step in ${SCRIPT_BACKED_STEPS}; do
+    yaml_key=$(echo "${step}" | tr '-' '_')
+    yaml_value=$(python3 -c "
+import sys, yaml
+with open('${REPO_ROOT}/.ai-gate/gate.yaml') as f:
+    d = yaml.safe_load(f)
+print(d['commands'].get('${yaml_key}', ''))
+")
+    if [ -z "${yaml_value}" ]; then
+        fail=$((fail+1))
+        echo "  FAIL - driftwatch-gate: \`${step}\` is in \`make check\` but missing from \`commands:\`"
+    else
+        pass=$((pass+1))
+        echo "  ok   - driftwatch-gate: \`${step}\` is bound in \`commands:\`"
+    fi
+done
+fi  # end TEST_GATES_REENTRY guard for driftwatch-gate fixtures
+
 echo ""
 echo "gate self-tests: ${pass} passed, ${fail} failed"
 [ "${fail}" -eq 0 ]

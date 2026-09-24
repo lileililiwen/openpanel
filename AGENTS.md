@@ -55,10 +55,19 @@
   Archive is not completion: all boxes ticked first, next change
   only after (see `Agents.md` §5.3). No pre-existing-failure
   exemption: every failing gate is yours — fix it before archive.
-- Quality gate: `make check` (fmt, clippy, docs, audit, file-length,
-  scan-literal, class-coverage, browser-ui-quality, tasks-testing-first, reuse-strict,
+- Canonical Local Gate: `make gate` (= `driftwatchdog gate`), with the
+  policy declared in `.ai-gate/gate.yaml` (`profile: rust-platform`;
+  every `make check` step is bound to a `commands:` entry;
+  `blocking: [FAIL]`; a check killed by driftwatchdog's 60 s budget
+  is a "pending review" and MUST be resolved by running the
+  underlying script before archive). `make check` (fmt, clippy,
+  docs, audit, file-length, scan-literal, class-coverage,
+  browser-ui-quality, tasks-testing-first, reuse-strict,
   layering, spec-test-drift-strict, spec-drift, agent-governance,
-  governance-contract, coverage-floor, maturity, test-gates, tests).
+  governance-contract, coverage-floor, maturity, test-gates,
+  driftwatch-gate, tests) is preserved as the full developer / CI
+  convenience chain; `scripts/check-driftwatch-gate.sh` fails
+  whenever the two surfaces drift.
   `make test-gates` runs the governance self-test in isolation.
   `make agent-governance` re-verifies the OpenSpec context and every
   runtime contract link. `make governance-contract` re-verifies the

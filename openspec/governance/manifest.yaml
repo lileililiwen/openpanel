@@ -283,3 +283,16 @@ requirements:
     digest: sha256:3ee095015fe39fd3b855d33da3a5f6ef9785b974a62f76449d659d8c5d4bf875
     scenarios: 3
     checkers: [application-delivery]
+  # The canonical pre-archive Local Gate (P5): `driftwatchdog gate`
+  # executes the `.ai-gate/gate.yaml` `commands:` policy 1:1 against
+  # the `make check` chain. Executable protection is
+  # `scripts/check-driftwatch-gate.sh` (checker id `driftwatch-gate`),
+  # paired with positive and negative fixtures in
+  # `scripts/test-gates.sh` (`# checker: driftwatch-gate positive` /
+  # `negative`) plus the 21 per-step lockstep assertions.
+  - archive: openspec/changes/archive/2026-09-24-add-driftwatchdog-gate-migration/specs/quality/spec.md
+    capability: quality
+    requirement: "DriftWatchdog Local Gate"
+    digest: sha256:e7c8a31291251510bfdcc11ad2e7865ad42857103d1fcd3e4f00a6e8c696dd38
+    scenarios: 4
+    checkers: [driftwatch-gate]

@@ -226,7 +226,13 @@ See `openspec/specs/testing/spec.md` for the full standard.
 calls `.unwrap()` on input it never received will still panic in
 production. Static analysis catches what tests don't.
 
-**Workflow gate:** every PR must exit 0 from `make check`.
+**Workflow gate:** every PR must exit 0 from `make check`. The
+canonical Local Gate is `make gate` (= `driftwatchdog gate`), whose
+policy lives in `.ai-gate/gate.yaml`; `make check` is the full
+developer / CI chain and `scripts/check-driftwatch-gate.sh` fails
+whenever the two surfaces drift. A check killed by driftwatchdog's
+60 s per-command budget is a "pending review" and MUST be resolved
+by running the underlying script before archive.
 Local invocation runs the same gates as CI, in this order:
 
 1. `make fmt` — `cargo fmt --all -- --check`
@@ -249,7 +255,9 @@ Local invocation runs the same gates as CI, in this order:
 17. `make maturity` — every production TODO / FIXME / stub marker has a
     reviewed entry in `openspec/governance/evidence.yaml`
 18. `make test-gates` — the governance gates' own positive/negative fixtures
-19. `make test` — full test suite
+19. `make driftwatch-gate` — the `make check` chain and the
+    `.ai-gate/gate.yaml` `commands:` block are in lockstep
+20. `make test` — full test suite
 
 `add-quality-engineering-infrastructure` defines the full policy. The
 strict gates (`reuse-strict`, `spec-test-drift-strict`,

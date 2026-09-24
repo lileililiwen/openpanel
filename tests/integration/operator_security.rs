@@ -291,7 +291,14 @@ async fn operator_security_control_plane_suppression_expires_and_reopens() {
     let items: Vec<serde_json::Value> = queue.json().await.expect("queue json");
     assert!(items.is_empty(), "suppressed hides: {items:?}");
 
-    tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
+    // P5 retune: 1200 ms was too tight against the 1 s suppression
+    // window under full-suite parallel load (the test flaked in the
+    // `make check` `test` step whenever the box was busy — see the
+    // pre-existing-failure note in
+    // openspec/changes/archive/2026-09-24-add-git-application-delivery/tasks.md).
+    // 2000 ms keeps the asserted contract (a 1 s expiry reopens the
+    // finding) with a 1 s observation margin.
+    tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
     let queue = server
         .client()
         .get(format!("{}/api/v1/security/findings", server.base_url()))

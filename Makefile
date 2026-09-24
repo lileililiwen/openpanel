@@ -40,17 +40,27 @@
 #   → reuse --strict → layering
 #   → spec-test-drift --strict → spec-drift → agent-governance
 #   → governance-contract → coverage-floor → maturity
-#   → test-gates
+#   → test-gates → driftwatch-gate
 #   → test
 #
 # Every per-check script prints `step: <name> status: ok | failed` and
 # exits non-zero on failure; `make` short-circuits on the first one.
 
-.PHONY: check fmt clippy docs audit file-length test coverage coverage-floor maturity install-lint-tools ensure-lint-tools split a11y scan-literal class-coverage browser-ui-quality release-governance release-evidence portable-runtime deployment-adapters application-delivery tasks-testing-first reuse layering spec-test-drift spec-drift repo-map test-gates agent-governance governance-contract
+.PHONY: check fmt clippy docs audit file-length test coverage coverage-floor maturity install-lint-tools ensure-lint-tools split a11y scan-literal class-coverage browser-ui-quality release-governance release-evidence portable-runtime deployment-adapters application-delivery tasks-testing-first reuse layering spec-test-drift spec-drift repo-map test-gates agent-governance governance-contract gate driftwatch-gate
 
-check: ensure-lint-tools fmt clippy docs audit file-length scan-literal class-coverage browser-ui-quality release-governance release-evidence portable-runtime deployment-adapters application-delivery tasks-testing-first reuse-strict layering spec-test-drift-strict spec-drift agent-governance governance-contract coverage-floor maturity test-gates test
+check: ensure-lint-tools fmt clippy docs audit file-length scan-literal class-coverage browser-ui-quality release-governance release-evidence portable-runtime deployment-adapters application-delivery tasks-testing-first reuse-strict layering spec-test-drift-strict spec-drift agent-governance governance-contract coverage-floor maturity test-gates driftwatch-gate test
 	@echo ""
 	@echo "=== All quality checks passed ==="
+
+# `make gate` is the canonical pre-archive Local Gate (P5):
+# the driftwatchdog runtime resolves the policy in
+# .ai-gate/gate.yaml and runs every `commands:` binding.
+# `make check` is preserved as a developer convenience and a CI
+# mirror that runs the same scripts directly. The two are kept
+# in lockstep by the `scripts/check-driftwatch-gate.sh` self-test
+# fixture (which `make test-gates` invokes).
+gate:
+	@driftwatchdog gate
 
 fmt:
 	@scripts/check-fmt.sh
@@ -129,6 +139,9 @@ test:
 
 test-gates:
 	@scripts/test-gates.sh
+
+driftwatch-gate:
+	@scripts/check-driftwatch-gate.sh
 
 agent-governance:
 	@scripts/check-agent-governance.sh
