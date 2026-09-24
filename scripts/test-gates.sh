@@ -870,6 +870,117 @@ assert "audit: tool missing + not required skips cleanly" 0 \
       OPENPANEL_AUDIT_REQUIRED=0 \
       "${AU}/scripts/check-audit.sh"
 
+# --- portable-runtime --------------------------------------------------
+# Per the portable-runtime spec, the runtime contract is the union of a
+# published target manifest, a secret-free OCI image, a native installer
+# that preflights the manifest, an upgrade path that runs a
+# post-upgrade health check, and agreement between the two adapters on
+# the default persistent data directory. The gate
+# (scripts/check-portable-runtime.sh) scans the static artifacts;
+# runtime behaviour is exercised by packages/installer/install-tests.sh
+# which requires Docker and runs in a separate job.
+PR="${TMP}/portable_runtime"
+mkdir -p "${PR}/scripts/lib" "${PR}/packages/installer"
+cp ./scripts/check-portable-runtime.sh "${PR}/scripts/check-portable-runtime.sh"
+cp ./scripts/lib/step.sh "${PR}/scripts/lib/step.sh"
+
+# Helper: build a clean fixture tree (everything required is present,
+# no secret literals anywhere).
+build_pr_clean() {
+    local root="$1"
+    mkdir -p "${root}/packages/installer"
+    # A Dockerfile that declares the default data dir, runs as the
+    # openpanel user, and ships zero credential literals.
+    cat > "${root}/Dockerfile" <<'DOCKERFILE'
+FROM debian:bookworm-slim
+ENV OPENPANEL_DATA_DIR=/var/lib/openpanel
+USER openpanel
+VOLUME ["/var/lib/openpanel"]
+HEALTHCHECK CMD ["/usr/local/bin/openpanel", "healthcheck"]
+DOCKERFILE
+    # install.sh that references the manifest and runs a post-upgrade
+    # healthcheck (not --version).
+    cat > "${root}/packages/installer/install.sh" <<'INSTALL'
+#!/usr/bin/env bash
+set -euo pipefail
+MANIFEST="${SCRIPT_DIR:-.}/target-manifest.txt"
+if [ ! -f "${MANIFEST}" ]; then
+    echo "unsupported distribution: manifest missing" >&2
+    exit 78
+fi
+do_upgrade() {
+    cp openpanel openpanel.bak.$(date -u +%Y%m%dT%H%M%SZ)
+    cp new openpanel
+    openpanel healthcheck || { cp openpanel.bak.* openpanel; exit 1; }
+}
+INSTALL
+    chmod +x "${root}/packages/installer/install.sh"
+    # entrypoint.sh with the same default data dir.
+    cat > "${root}/packages/installer/entrypoint.sh" <<'ENTRY'
+#!/usr/bin/env bash
+set -euo pipefail
+DATA_DIR="${OPENPANEL_DATA_DIR:-/var/lib/openpanel}"
+mkdir -p "${DATA_DIR}"
+ENTRY
+    chmod +x "${root}/packages/installer/entrypoint.sh"
+    # A valid target manifest with two supported (os, arch) pairs.
+    cat > "${root}/packages/installer/target-manifest.txt" <<'MANIFEST'
+debian x86_64
+debian aarch64
+ubuntu x86_64
+MANIFEST
+}
+
+# checker: portable-runtime positive
+build_pr_clean "${PR}"
+assert "portable-runtime: clean contract passes" 0 \
+  env OPENPANEL_PORTABLE_RUNTIME_REPO_ROOT="${PR}" \
+      "${PR}/scripts/check-portable-runtime.sh"
+
+# Dockerfile with a password literal MUST fail.
+sed -i 's|^USER openpanel$|ENV password=hunter2\nUSER openpanel|' "${PR}/Dockerfile"
+# checker: portable-runtime negative
+assert "portable-runtime: Dockerfile secret literal fails" 1 \
+  env OPENPANEL_PORTABLE_RUNTIME_REPO_ROOT="${PR}" \
+      OPENPANEL_PORTABLE_RUNTIME_REQUIRED=1 \
+      "${PR}/scripts/check-portable-runtime.sh"
+# Restore the clean Dockerfile for the next case.
+sed -i '/^ENV password=hunter2$/d' "${PR}/Dockerfile"
+
+# Missing target manifest MUST fail in required mode.
+rm "${PR}/packages/installer/target-manifest.txt"
+# checker: portable-runtime negative
+assert "portable-runtime: missing target manifest fails" 1 \
+  env OPENPANEL_PORTABLE_RUNTIME_REPO_ROOT="${PR}" \
+      OPENPANEL_PORTABLE_RUNTIME_REQUIRED=1 \
+      "${PR}/scripts/check-portable-runtime.sh"
+# Restore for the next case.
+cat > "${PR}/packages/installer/target-manifest.txt" <<'MANIFEST'
+debian x86_64
+MANIFEST
+
+# install.sh that does NOT consult the manifest MUST fail.
+cat > "${PR}/packages/installer/install.sh" <<'INSTALL'
+#!/usr/bin/env bash
+set -euo pipefail
+echo "no manifest reference"
+INSTALL
+# checker: portable-runtime negative
+assert "portable-runtime: install.sh without manifest reference fails" 1 \
+  env OPENPANEL_PORTABLE_RUNTIME_REPO_ROOT="${PR}" \
+      OPENPANEL_PORTABLE_RUNTIME_REQUIRED=1 \
+      "${PR}/scripts/check-portable-runtime.sh"
+
+# 1b. the make target exists and is wired to the script.
+if command -v make >/dev/null 2>&1; then
+  plan="$(cd "${REPO_ROOT}" && make -n check 2>/dev/null || true)"
+  if printf '%s' "${plan}" | grep -q 'scripts/check-portable-runtime.sh'; then
+    pass=$((pass+1)); echo "  ok   - make check includes portable-runtime"
+  else
+    fail=$((fail+1)); echo "  FAIL - make check does NOT include portable-runtime"
+  fi
+fi
+
 # --- release-evidence (new) ---------------------------------------------
 # Per the release-evidence spec, a publication workflow MUST fail when
 # any required coverage / browser / SBOM / signature / provenance /

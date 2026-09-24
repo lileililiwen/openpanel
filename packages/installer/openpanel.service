@@ -1,0 +1,54 @@
+# packages/installer/openpanel.service — systemd unit.
+#
+# Native Linux service contract. The unit is the metal-side analogue
+# of the OCI image's HEALTHCHECK + STOPSIGNAL + VOLUME triple:
+# - `ExecStart` runs the binary in the foreground.
+# - `ExecStop` / `KillSignal` honour SIGTERM, the same signal the OCI
+#   image declares via `STOPSIGNAL`, so the graceful-shutdown
+#   contract is identical across adapters.
+# - `EnvironmentFile` is the recommended carrier for the
+#   `OPENPANEL_*` environment variables; secret material MUST be
+#   supplied via `EnvironmentFile=` or `LoadCredential=`, NEVER via
+#   `ExecStart=` or a baked-in unit.
+# - `StateDirectory` provides the persistent data path the runtime
+#   contract declares (`/var/lib/openpanel`); systemd creates and
+#   owns the directory, no other path is consulted.
+# - `Type=notify` makes the unit depend on the binary's own
+#   readiness signal; deployment adapters that wrap this unit (or
+#   mimic it under another supervisor) MUST preserve the same
+#   dependency.
+#
+# Installation:
+#   sudo cp openpanel.service /etc/systemd/system/openpanel.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now openpanel
+
+[Unit]
+Description=OpenPanel runtime
+Documentation=https://github.com/openpanel/openpanel
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=openpanel
+Group=openpanel
+EnvironmentFile=-/etc/openpanel/openpanel.env
+ExecStart=/usr/local/bin/openpanel
+ExecStop=/bin/kill -TERM "$MAINPID"
+KillMode=mixed
+KillSignal=SIGTERM
+TimeoutStopSec=30s
+Restart=on-failure
+RestartSec=5s
+StateDirectory=openpanel
+ConfigurationDirectory=openpanel
+LogsDirectory=openpanel
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/var/lib/openpanel /etc/openpanel
+
+[Install]
+WantedBy=multi-user.target

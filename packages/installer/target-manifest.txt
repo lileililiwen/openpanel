@@ -1,0 +1,30 @@
+# packages/installer/target-manifest.txt — supported (OS, arch) pairs.
+#
+# Single source of truth for "what is supported" per the
+# portable-runtime spec. The native installer consults this file
+# before any filesystem mutation; an unsupported host MUST exit
+# with code 78 (EX_CONFIG) and MUST NOT create the service user or
+# the data directory. The format is one pair per line:
+#   <id> <arch>
+# where <id> is the value of ID in /etc/os-release on the
+# supported distribution and <arch> is the Rust
+# `std::env::consts::ARCH` value.
+#
+# Drift between this manifest and the live binary's own platform
+# catalog is a spec violation; the same file is consulted by every
+# adapter so a per-script hard-coded list is not authoritative.
+
+debian x86_64
+debian aarch64
+ubuntu x86_64
+ubuntu aarch64
+fedora x86_64
+fedora aarch64
+rhel x86_64
+centos x86_64
+rocky x86_64
+almalinux x86_64
+arch x86_64
+manjaro x86_64
+alpine x86_64
+alpine aarch64

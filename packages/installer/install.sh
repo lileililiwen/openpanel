@@ -5,13 +5,17 @@
 #   install   — fresh install for the current user/OS.
 #   upgrade   — replace the installed binary with the one passed
 #               in --from <path>; preflight the schema version, take
-#               a binary backup, refuse unsupported downgrades, and
-#               roll back automatically on a failed swap.
+#               a binary backup, refuse unsupported downgrades, run
+#               a post-upgrade `healthcheck`, and roll back
+#               automatically on a failed smoke check.
 #   rollback  — restore the most recent binary backup.
 #
-# Supported distros (mirrors packages/openpanel-menu/scripts/install.sh):
-#   debian, ubuntu, fedora, rhel, centos, rocky, almalinux, arch,
-#   manjaro, alpine. Anything else exits 78 (EX_CONFIG).
+# Supported (OS, arch) pairs are declared in
+# `target-manifest.txt` (single source of truth, see the
+# portable-runtime spec). The installer consults the manifest
+# before any filesystem mutation; an unsupported host exits 78
+# (EX_CONFIG) with an actionable diagnostic and creates no
+# partial state.
 #
 # Environment:
 #   OPENPANEL_BIN_DIR    target directory (default /usr/local/bin)
@@ -22,10 +26,20 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN_DIR="${OPENPANEL_BIN_DIR:-/usr/local/bin}"
 DATA_DIR="${OPENPANEL_DATA_DIR:-/var/lib/openpanel}"
 USER_NAME="${OPENPANEL_USER:-openpanel}"
 BACKUP_SUFFIX=".bak.$(date -u +%Y%m%dT%H%M%SZ)"
+HOST_ARCH="${HOST_ARCH:-$(uname -m)}"
+# Normalise uname's arch names to the Rust std::env::consts::ARCH
+# values declared in target-manifest.txt.
+case "${HOST_ARCH}" in
+    x86_64|amd64)        HOST_ARCH="x86_64" ;;
+    aarch64|arm64)       HOST_ARCH="aarch64" ;;
+    armv7l|armv7)        HOST_ARCH="armv7" ;;
+    *)                   HOST_ARCH="${HOST_ARCH}" ;;
+esac
 
 log()  { printf '[INFO] %s\n' "$*"; }
 ok()   { printf '[OK] %s\n'   "$*"; }
@@ -48,6 +62,32 @@ detect_distro() {
     else
         printf 'unknown\n'
     fi
+}
+
+# Per the portable-runtime spec: the target manifest is the single
+# source of truth for "what is supported". A hard-coded list inside
+# this script would silently drift from the manifest; consult the
+# manifest instead and exit 78 (EX_CONFIG) on a miss.
+check_target_supported() {
+    local id arch
+    id="$(detect_distro)"
+    arch="${HOST_ARCH}"
+    if [ ! -f "${SCRIPT_DIR}/target-manifest.txt" ]; then
+        err "target manifest missing at ${SCRIPT_DIR}/target-manifest.txt"
+        err "the portable-runtime contract requires a published (OS, arch) manifest"
+        exit 78
+    fi
+    # The manifest is one "<id> <arch>" per line. A host whose
+    # pair is absent is unsupported — exit 78 (EX_CONFIG) without
+    # mutating any state.
+    if ! awk -v want_id="${id}" -v want_arch="${arch}" \
+            '$1 == want_id && $2 == want_arch { found=1; exit } END { exit !found }' \
+            "${SCRIPT_DIR}/target-manifest.txt"; then
+        err "unsupported distribution: ${id} (${arch})"
+        err "consult packages/installer/target-manifest.txt for the supported matrix"
+        exit 78
+    fi
+    log "Target supported: ${id} (${arch})."
 }
 
 create_service_user() {
@@ -107,6 +147,7 @@ preflight_schema() {
 }
 
 do_install() {
+    check_target_supported
     create_service_user
     $SUDO mkdir -p "${DATA_DIR}"
     $SUDO chown -R "${USER_NAME}:${USER_NAME}" "${DATA_DIR}"
@@ -115,6 +156,7 @@ do_install() {
 }
 
 do_upgrade() {
+    check_target_supported
     local from=""
     while [ "$#" -gt 0 ]; do
         case "$1" in
@@ -141,17 +183,25 @@ do_upgrade() {
         $SUDO cp "${backup}" "${BIN_DIR}/openpanel"
         exit 1
     fi
-    if ! command -v "${BIN_DIR}/openpanel" >/dev/null 2>&1; then
-        "$BIN_DIR/openpanel" --version >/dev/null 2>&1 || {
-            err "Post-upgrade smoke check failed; rolling back."
-            $SUDO cp "${backup}" "${BIN_DIR}/openpanel"
-            exit 1
-        }
+    # Per the portable-runtime spec (Safe Upgrade and Rollback), the
+    # post-upgrade health check MUST exercise the binary's
+    # `healthcheck` subcommand. A failed check MUST roll back
+    # automatically and report the rolled-back-to path. We do not
+    # restart the service here: the orchestrator (systemd, the OCI
+    # runtime, the deployment adapter) is responsible for the
+    # restart. The smoke check is what the upgrade path runs
+    # synchronously, before declaring success.
+    if ! "${BIN_DIR}/openpanel" healthcheck >/dev/null 2>&1; then
+        err "post-upgrade health check failed; rolling back to ${backup}."
+        $SUDO cp "${backup}" "${BIN_DIR}/openpanel"
+        $SUDO chown "${USER_NAME}:${USER_NAME}" "${BIN_DIR}/openpanel"
+        exit 1
     fi
     ok "Upgrade complete. Backup retained at ${backup}."
 }
 
 do_rollback() {
+    check_target_supported
     local latest
     latest="$(ls -1t "${BIN_DIR}"/openpanel.bak.* 2>/dev/null | head -1 || true)"
     if [ -z "${latest}" ]; then

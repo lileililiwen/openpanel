@@ -58,6 +58,7 @@ mod operator_security;
 mod plugin_extension;
 /// Plugin marketplace HTTP integration tests.
 mod plugin_marketplace;
+mod portable_runtime;
 mod quality;
 /// Release-evidence contract integration tests.
 mod release_evidence;

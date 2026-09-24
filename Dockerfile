@@ -14,15 +14,31 @@
 #   cargo build --release
 #   cp target/release/openpanel ./openpanel
 #   docker build -t openpanel:dev .
+#
+# OCI labels (org.opencontainers.image.*) are the runtime contract's
+# machine-readable identity; the registry consumes them and the
+# portable-runtime spec requires they be present.
 
 FROM debian:bookworm-slim AS runtime
 
 ARG OPENPANEL_UID=10001
 ARG OPENPANEL_GID=10001
+ARG OPENPANEL_VERSION="dev"
+ARG OPENPANEL_REVISION="unknown"
+ARG OPENPANEL_SOURCE="https://github.com/openpanel/openpanel"
+ARG OPENPANEL_CREATED="1970-01-01T00:00:00Z"
 
 ENV OPENPANEL_DATA_DIR=/var/lib/openpanel
 ENV OPENPANEL_CONFIG=/etc/openpanel/openpanel.toml
 ENV RUST_LOG=info
+
+LABEL org.opencontainers.image.title="openpanel" \
+      org.opencontainers.image.description="OpenPanel — portable Linux/OCI runtime" \
+      org.opencontainers.image.source="${OPENPANEL_SOURCE}" \
+      org.opencontainers.image.version="${OPENPANEL_VERSION}" \
+      org.opencontainers.image.revision="${OPENPANEL_REVISION}" \
+      org.opencontainers.image.created="${OPENPANEL_CREATED}" \
+      org.opencontainers.image.licenses="Apache-2.0"
 
 RUN groupadd --system --gid ${OPENPANEL_GID} openpanel \
  && useradd --system --uid ${OPENPANEL_UID} --gid openpanel \
