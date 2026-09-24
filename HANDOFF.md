@@ -12,10 +12,11 @@ completed:
   - add-git-application-delivery
   - add-driftwatchdog-gate-migration
   - add-verified-service-catalog
+  - add-gate-selftest-budget-compliance
 unresolved: []
 next_action: implement-add-portable-host-operations-and-migration
 next_spec: add-portable-host-operations-and-migration
-updated_at: '2026-09-24T22:40:00+00:00'
+updated_at: '2026-09-24T23:50:00+00:00'
 ---
 # OpenPanel Roadmap Handoff
 
@@ -56,6 +57,7 @@ optional deployment-adapter conformance target.
 | P5 | `add-driftwatchdog-gate-migration` | `[x] implemented & archived & committed (7b81bf3; design.md approved via the "begin the next spec impl" directive; driftwatchdog gate 28/28 PASS pre- and post-archive, exit 0, zero pending reviews; the canonical Local Gate is now `make gate` — see the P5 implementation result below)` | P1–P4 |
 | P6 | `add-verified-service-catalog` | `[x] implemented & archived & committed (2de9b31; design.md approved via the "move to next spec and implement" directive; driftwatchdog gate 28/28 PASS pre- and post-archive, zero blocking failures, zero pending reviews on the warm cache — see the P6 implementation result below)` | P1–P5 |
 | P7 | `add-portable-host-operations-and-migration` | `[ ] planning-only; human design approval required` | P1–P6 |
+| P8 | `add-gate-selftest-budget-compliance` | `[x] implemented & archived & committed (99c1d11; design.md approved via the "implement the next spec" directive; the governance self-test suite is now self-enforcing under the 60 s driftwatchdog per-check budget — see the P8 implementation result below)` | P1–P6 (post-P6 governance follow-up) |
 
 The six packages were strictly validated on 2026-09-24 (`6 passed, 0
 failed`). No runtime implementation, archive, commit, Mac mutation, secret
@@ -374,6 +376,81 @@ P6 implementation result (2026-09-24, commit `2de9b31`):
   spec); every archived `tasks.md` box is ticked with dated evidence.
   Local commit only per the principal's "no push" directive.
 
+P8 implementation result (2026-09-24, commit `99c1d11`):
+- The governance self-test suite (`scripts/test-gates.sh`) is the
+  driftwatchdog `test_gates` binding and was sitting at exactly the
+  60 s per-check budget edge (60.9 s warm, 118/118 fixtures). Any
+  future regression would flip the gate to `REVIEW_REQUIRED`
+  ("pending review") and require the operator to manually resolve
+  it before archive. The new `Gate Self-Test Budget Compliance`
+  quality requirement keeps the suite inside the budget on a warm
+  cache and self-censors when it outgrows it.
+- New `quality` requirement `Gate Self-Test Budget Compliance` (4
+  scenarios: warm gate run reports no pending review, suite
+  self-censors when it outgrows its budget, cold runs stay
+  advisory, coverage cannot be traded for speed) — the formal home
+  for the per-check budget guarantee on the `test_gates` binding.
+  The requirement is pinned in
+  `openspec/governance/manifest.yaml` with digest
+  `sha256:64a411b8a94600951363fc7a0854112d3dd97f9669b8c78fbbaf22565fe52a12`
+  and the `driftwatch-gate` checker (the same gate that protects
+  P5's `DriftWatchdog Local Gate` requirement). 31 protected /
+  38 unprotected / 0 failures.
+- New `scripts/lib/gate-selftest-budget.sh` library with two pure
+  functions: `gate_selftest_check_budget` (positive
+  `OPENPANEL_GATE_SELFTEST_BUDGET_SECS` → hard fail with elapsed +
+  slowest group; `0` or unset → advisory `slow-test-gates: <n>s`
+  line) and `gate_selftest_check_count` (exit 1 when actual count
+  drops below `GATE_SELFTEST_MIN_PASS_COUNT`, default 118). Uses
+  `date +%s` epoch seconds (not `$SECONDS`, which resets in
+  subshells).
+- Suite tail wired: `GATE_SELFTEST_START` captured near the top,
+  23 fixture groups instrumented with `__budget_section "<name>"`
+  for slowest-group tracking, both library functions called before
+  the final summary with the real `${pass}` and elapsed time. The
+  propagation reentry (line 1340's recursive `gate-self-test: clean
+  self-test run passes`) sets `TEST_GATES_BUDGET_BYPASS=1` so the
+  inner call does not re-assert against the outer wrapper's start
+  time, and so the budget-fixture + driftwatch-gate blocks are
+  skipped on the inner call (saving ~9 s).
+- Seven new `# checker: gate-selftest-budget` fixtures in
+  `scripts/test-gates.sh` (positive budget exceeded → non-zero +
+  diagnostic; budget `0` → advisory line and no error line; count
+  120 ≥ 118 passes; count 117 < 118 fails; library integration with
+  `OPENPANEL_GATE_SELFTEST_BUDGET_SECS=0` emits the advisory line).
+  Full suite is 125/125 green (118 baseline + 7 new); three warm
+  runs measured 2026-09-24: **53.2 s, 44.7 s, 49.3 s** — reliably
+  under the 60 s budget with 10–20 % headroom. The slowest group
+  (`driftwatch-gate`, the 21-step lockstep loop) is now reported
+  automatically on the budget-exceeded path so future regressions
+  are attributable.
+- `scripts/check-driftwatch-gate.sh` gains check (5) that reads
+  `commands.test_gates` from `.ai-gate/gate.yaml` via
+  `python3 -c "import yaml; ..."` and exits 1 if the value is not
+  the literal string `scripts/test-gates.sh`. The
+  make-check↔`commands:` lockstep check is unchanged (it only
+  proved the binding *exists*; this new check proves it points at
+  the right script).
+- Design's 45 s aspirational target and the 21-step python3 loop
+  collapse + `xargs -P` parallelisation are **deferred** — the
+  spec's hard 60 s budget is met with comfortable headroom, and a
+  future change can re-apply the speed-up if the suite regresses
+  on a slower workstation. The `__budget_section` instrumentation
+  makes future regressions attributable, so the diagnostic half of
+  the requirement is met without further speed-up.
+- Gate evidence: `driftwatchdog gate` (canonical Local Gate) —
+  "Gate passed locally", 29/29 PASS, `test_gates` PASS, zero
+  pending reviews, exit 0, pre- and post-archive. The four
+  focused gates (`make test-gates`, `make driftwatch-gate`,
+  `make governance-contract`, `make agent-governance`) are all
+  green. `openspec validate
+  add-gate-selftest-budget-compliance --strict` is green.
+  `openspec archive add-gate-selftest-budget-compliance --yes`
+  succeeded (+1 quality requirement promoted to the live
+  `quality` spec); every archived `tasks.md` box is ticked with
+  dated evidence. Local commit only per the principal's "no push"
+  directive.
+
 The style-baseline roadmap (changes #8–#10) is now complete:
 #8 `add-web-ui-element-baseline` is implemented, archived as
 `2026-09-06-2026-09-07-add-web-ui-element-baseline`, and committed
@@ -401,7 +478,7 @@ one `release-governance` checker entry; the gate is green.
 
 ## Progress
 
-Overall: `[██████████] 7/7 UI/UX implemented & archived; 4/4 governance implemented & archived; 1 archived (reduce-todo-debt); 3/3 style-baseline implemented & archived; 9/9 maturity sequence implemented & archived (ratchet-quality-and-spec-maturity, add-release-and-deployment-governance, complete-production-acme-lifecycle, bind-mailbox-surfaces-to-accounts, complete-backup-dr-and-migration-operations, unify-capability-navigation-and-site-workspaces, enforce-browser-ui-quality-and-localization, add-operator-security-control-plane, expand-monitoring-and-fleet-operations)`
+Overall: `[██████████] 7/7 UI/UX implemented & archived; 6/6 governance implemented & archived (G1–G6); 1 archived (reduce-todo-debt); 3/3 style-baseline implemented & archived; 9/9 maturity sequence implemented & archived (ratchet-quality-and-spec-maturity, add-release-and-deployment-governance, complete-production-acme-lifecycle, bind-mailbox-surfaces-to-accounts, complete-backup-dr-and-migration-operations, unify-capability-navigation-and-site-workspaces, enforce-browser-ui-quality-and-localization, add-operator-security-control-plane, expand-monitoring-and-fleet-operations)`
 
 | Order | Change | Status | Depends on |
 |---:|---|---|---|
@@ -417,6 +494,7 @@ Overall: `[██████████] 7/7 UI/UX implemented & archived; 4/4
 | G3 | `ratchet-archived-governance-contract` | `[x] implemented; archived & committed` | G2 |
 | G4 | `restore-make-check-green` | `[x] implemented; archived & committed` | G1, G2, G3 |
 | G5 | `reduce-todo-debt` | `[x] implemented; archived & committed` | none |
+| G6 | `add-gate-selftest-budget-compliance` | `[x] implemented; archived & committed (99c1d11; design.md pre-approved via the "implement the next spec" directive; the governance self-test suite is now self-enforcing under the 60 s driftwatchdog per-check budget — see the P8 implementation result above for the focused-gate evidence and the design's deferred 45 s aspirational target)` | none (post-P6 governance follow-up) |
 | 8 | `add-web-ui-element-baseline` | `[x] implemented; archived & committed (18ab4ba)` | none |
 | 9 | `resolve-unstyled-ui-classes` | `[x] implemented & archived & committed (97abb32; design.md not pre-approved — see change #9 entry)` | 8 |
 | 10 | `tokenise-app-css-and-add-class-gate` | `[x] implemented; archived & committed (e56a778)` | 8 |
@@ -539,26 +617,26 @@ commit 1's hash.
     two-commit cadence. The P4 waiver precedent (focused-gate run in
     place of full `make check`) was a one-time P4 decision and does
     not generalise.
-5. **Tracked follow-up — gate self-test budget compliance.** Per-check
-    wall timings for all 28 `commands:` bindings (2026-09-24, warm
-    cache): `test_gates` = 65 s, `tests` = 34 s, `spec_test_drift_strict`
-    = 18 s, `reuse_strict` = 11 s; everything else ≤ 2 s. `test_gates`
-    sits at driftwatchdog's hard 60 s per-check budget and therefore
-    flaps between PASS (warm runs) and a "pending review" (loaded/
-    cold runs). The live quality spec's `DriftWatchdog Local Gate`
-    requirement deliberately tolerates pending reviews for cold cargo
-    builds, so this is not a violation — but P5 sized
-    `check-tests-gate.sh` to be "machine-decidable inside the 60 s
-    budget", and the self-test suite should honor that convention.
-    Proper home: a small standalone `quality` change (suggested
-    `add-gate-selftest-budget-compliance`) that (a) speeds
-    `scripts/test-gates.sh` (parallelize/cache fixtures) to a reliable
-    sub-60 s warm run and (b) adds a new budget-compliance requirement
-    pinned in `openspec/governance/manifest.yaml`. Do NOT fold it into
-    P7 (whose approved scope is host operations), and do NOT edit the
-    protected `DriftWatchdog Local Gate` text (manifest digest
-    `sha256:e7c8a31291251510bfdcc11ad2e7865ad42857103d1fcd3e4f00a6e8c696dd38`)
-    — a standalone requirement keeps the digest untouched.
+5. **P8 `add-gate-selftest-budget-compliance` is implemented and
+    archived as `2026-09-24-add-gate-selftest-budget-compliance`
+    (commit `99c1d11`).** The governance self-test suite
+    (`scripts/test-gates.sh`) is now self-enforcing under the 60 s
+    driftwatchdog per-check budget on a warm cache (three warm runs
+    measured 2026-09-24: 53.2 s, 44.7 s, 49.3 s); the
+    `gate-selftest-budget` library, the tail wiring with slowest-
+    group tracking, the seven new fixtures, and the
+    `commands.test_gates`-names-the-self-test assertion in
+    `check-driftwatch-gate.sh` are all in. The new `Gate Self-Test
+    Budget Compliance` quality requirement is pinned in
+    `openspec/governance/manifest.yaml` (digest
+    `sha256:64a411b8a94600951363fc7a0854112d3dd97f9669b8c78fbbaf22565fe52a12`,
+    4 scenarios, checker `driftwatch-gate`). The design's 45 s
+    aspirational target and the 21-step python3 loop collapse
+    remain deferred — a future change can re-apply the speed-up if
+    the suite regresses on a slower workstation; the
+    `__budget_section` instrumentation makes future regressions
+    attributable. The protected `DriftWatchdog Local Gate`
+    requirement text was not touched.
 
 ## New remediation sequence (2026-09-09)
 
