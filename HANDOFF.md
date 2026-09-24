@@ -12,7 +12,7 @@ completed:
 unresolved: []
 next_action: implement-add-git-application-delivery
 next_spec: add-git-application-delivery
-updated_at: '2026-09-24T16:00:00+00:00'
+updated_at: '2026-09-24T17:00:00+00:00'
 ---
 # OpenPanel Roadmap Handoff
 
@@ -47,7 +47,7 @@ optional deployment-adapter conformance target.
 |---:|---|---|---|
 | P1 | `repair-release-security-and-evidence` | `[x] implemented & archived & committed (0f3745d; design.md pre-approved)` | none |
 | P2 | `add-portable-runtime-packaging` | `[x] implemented & archived & committed (0b8217c; design.md pre-approved)` | P1 |
-| P3 | `add-portable-deployment-adapters` | `[x] implemented & archived & committed (a4a7dbb; design.md auto-approved per "auto approve, no ask" directive)` | P1, P2 |
+| P3 | `add-portable-deployment-adapters` | `[x] implemented & archived & committed (a4a7dbb + c23c09c post-archive gate wiring; design.md auto-approved per "auto approve, no ask" directive)` | P1, P2 |
 | P4 | `add-git-application-delivery` | `[ ] planning-only; human design approval required` | P1–P3 |
 | P5 | `add-verified-service-catalog` | `[ ] planning-only; human design approval required` | P1–P4 |
 | P6 | `add-portable-host-operations-and-migration` | `[ ] planning-only; human design approval required` | P1–P5 |
@@ -122,7 +122,7 @@ P2 implementation result (2026-09-24, commit `0b8217c`):
   `tests/integration/main.rs` so the spec-test-drift gate maps them
   to the new capability.
 
-P3 implementation result (2026-09-24, commit `a4a7dbb`):
+P3 implementation result (2026-09-24, commit `a4a7dbb` + post-archive gate wiring in `c23c09c`):
 - New `deployment-adapters` spec with four requirements (Adapter Capability
   Declaration, Idempotent Deployment Lifecycle, Provider-Neutral Evidence,
   Safe Failure and Rollback) — the formal home for the typed adapter
@@ -133,16 +133,19 @@ P3 implementation result (2026-09-24, commit `a4a7dbb`):
   (Deployment Adapter Operations Are Per-Host and Auditable), and
   `quality` (Deployment-Adapter Contract Gate, the new
   `scripts/check-deployment-adapters.sh`).
-- Production code: `crates/openpanel-domain/src/deployment_adapters/mod.rs`
+- Production code: `crates/openpanel-domain/src/deployment_adapters/`
   defines the `DeploymentAdapter` trait, `AdapterManifest`, `DeploymentPlan`,
   `DeploymentEvidence`, `OperationKey`, `SecretRef`, `HealthMethod`,
   `DeploymentState`, `RollbackPolicy`, `IdempotencyDecision`, plus
   `decide_replay` / `validate_plan` / `redact_diagnostic` helpers
-  (16 unit + 2 proptest cases). `crates/openpanel-app/src/deployment_adapters/`
+  (22 unit + proptest cases; the file was split post-archive into
+  `mod.rs` + `types.rs` + `logic.rs` + `tests.rs` to satisfy the
+  1000-line file-length ceiling in `c23c09c`).
+  `crates/openpanel-app/src/deployment_adapters/`
   ships the `DeploymentAdapterService` with an idempotency cache, dry-run
   path, replay path, and audit fan-out that routes every event through the
   canonical `openpanel_core::audit::redact_metadata` allowlist
-  (5 unit tests). `crates/openpanel-app/src/migrations/deployment_adapters/
+  (6 unit tests). `crates/openpanel-app/src/migrations/deployment_adapters/
   V001__init.sql` is the ready-to-swap SQLite schema for the evidence +
   idempotency tables. The Mac/Jenkins fixture (`ConformanceAdapter`,
   id `mac-jenkins-v1`) lives in `tests/integration/deployment_adapters.rs`
@@ -162,6 +165,14 @@ P3 implementation result (2026-09-24, commit `a4a7dbb`):
   `portable-runtime` and `tasks-testing-first`. `scripts/test-gates.sh`
   gains 3 new fixtures (clean wiring passes, missing test file fails,
   domain depending on app fails) for a 92/92 self-test suite.
+- Post-archive gate wiring (`c23c09c`): the new
+  `Deployment-Adapter Contract Gate` requirement is pinned in
+  `openspec/governance/manifest.yaml` with the `deployment-adapters`
+  checker (28 protected, 38 unprotected governance requirements, 0
+  failures). The new cross-crate `actor` / `dry_run` / `supports_rollback`
+  duplicates are classified as per-aggregate business methods in
+  `openspec/governance/.reuse-classified-baseline` so `make reuse-strict`
+  stays green. `make check` is now green end-to-end across all 17 gates.
 
 The style-baseline roadmap (changes #8–#10) is now complete:
 #8 `add-web-ui-element-baseline` is implemented, archived as
