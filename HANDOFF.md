@@ -3,17 +3,18 @@ ariadex_handoff_version: 1
 version: 1
 session_id: d8c9dfe8207d
 status: in-progress
-current_spec: add-driftwatchdog-gate-migration
-current_spec_file: openspec/changes/add-driftwatchdog-gate-migration
+current_spec: add-verified-service-catalog
+current_spec_file: openspec/changes/add-verified-service-catalog
 completed:
   - repair-release-security-and-evidence
   - add-portable-runtime-packaging
   - add-portable-deployment-adapters
   - add-git-application-delivery
+  - add-driftwatchdog-gate-migration
 unresolved: []
-next_action: implement-add-driftwatchdog-gate-migration
-next_spec: add-driftwatchdog-gate-migration
-updated_at: '2026-09-24T20:00:00+00:00'
+next_action: implement-add-verified-service-catalog
+next_spec: add-verified-service-catalog
+updated_at: '2026-09-24T21:00:00+00:00'
 ---
 # OpenPanel Roadmap Handoff
 
@@ -34,8 +35,9 @@ committed
 the human principal per the AGENTS.md review gate and the HANDOFF
 required execution protocol — P3 used the principal's "auto approve, no
 ask" directive). The actionable `rustls 0.23.43` advisory
-`RUSTSEC-2026-0285` is resolved by the P1 dependency upgrade. P4–P6
-remain planning-only and unblocked by P1 + P2 + P3.
+`RUSTSEC-2026-0285` is resolved by the P1 dependency upgrade. P4 and
+P5 are implemented, archived, and committed (`c438b1b`, `7b81bf3`);
+P6–P7 remain planning-only and unblocked by the completed work.
 
 The next roadmap is planning-only and portable. It does not make macOS,
 Docker Desktop, Jenkins, Cloudflare, `/Users/allen`, or any maintainer
@@ -50,7 +52,7 @@ optional deployment-adapter conformance target.
 | P2 | `add-portable-runtime-packaging` | `[x] implemented & archived & committed (0b8217c; design.md pre-approved)` | P1 |
 | P3 | `add-portable-deployment-adapters` | `[x] implemented & archived & committed (a4a7dbb + c23c09c post-archive gate wiring; design.md auto-approved per "auto approve, no ask" directive)` | P1, P2 |
 | P4 | `add-git-application-delivery` | `[x] implemented & archived & committed (c438b1b; design.md pre-approved via the "implement the next spec" directive; pre-archive `make check` was waived by the principal on 2026-09-24 with the "no check, finish the current spec first" directive — see the P4 implementation result below for the focused-gate evidence and the follow-up spec that will restore the canonical Local Gate)` | P1–P3 |
-| P5 | `add-driftwatchdog-gate-migration` | `[ ] planning-only; quick proposal in `openspec/changes/add-driftwatchdog-gate-migration/proposal.md` awaits human design approval` | P1–P4 |
+| P5 | `add-driftwatchdog-gate-migration` | `[x] implemented & archived & committed (7b81bf3; design.md approved via the "begin the next spec impl" directive; driftwatchdog gate 28/28 PASS pre- and post-archive, exit 0, zero pending reviews; the canonical Local Gate is now `make gate` — see the P5 implementation result below)` | P1–P4 |
 | P6 | `add-verified-service-catalog` | `[ ] planning-only; human design approval required` | P1–P5 |
 | P7 | `add-portable-host-operations-and-migration` | `[ ] planning-only; human design approval required` | P1–P6 |
 
@@ -262,6 +264,57 @@ P4 implementation result (2026-09-24, commit `c438b1b`):
   and commit 2 is this HANDOFF update. Local commit only per the
   principal's "no push" directive; the remote is not updated.
 
+P5 implementation result (2026-09-24, commit `7b81bf3`):
+- The canonical Local Gate is now `make gate` (= `driftwatchdog
+  gate`), declared in the rewritten `.ai-gate/gate.yaml`:
+  `profile: rust-platform`, `rule_pack: rust-platform@0.1.0`,
+  28 checks with a `commands:` block binding every `make check`
+  step 1:1 (plus the profile-native `repository_integrity` /
+  `build` / `security` extras, per the labrys pattern).
+- Verified driftwatchdog 0.1.0 behavior (captured in the archived
+  design.md): `CHECK_TIMEOUT_MS = 60_000` is hard-coded with no
+  per-command override, over-budget commands map to
+  `REVIEW_REQUIRED` "pending reviews", so openpanel policy
+  declares `blocking: [FAIL]` — a pending review must be resolved
+  by running the underlying script before archive. Run 1 exposed
+  the design's assumptions empirically (1 whitespace FAIL +
+  3 cold-cache pending reviews); run 2/3 refined them; the final
+  pre-archive and post-archive runs were both **28/28 PASS,
+  exit 0, zero pending reviews**.
+- New gate `scripts/check-driftwatch-gate.sh` wired into
+  `make check` between `test-gates` and `test`: asserts YAML
+  well-formedness, make-check↔`commands:` lockstep in both
+  directions (with `fmt`→`format`, `clippy`→`lint`, `test`→`tests`
+  aliases), `driftwatchdog gate --dry-run` plan resolution
+  (skips only when the binary is absent — CI-safe), and
+  `make -n gate` wiring. `scripts/test-gates.sh` gained 23
+  fixtures (118/118 self-tests green); the requirement is pinned
+  in `openspec/governance/manifest.yaml` with digest
+  `sha256:e7c8a31291251510bfdcc11ad2e7865ad42857103d1fcd3e4f00a6e8c696dd38`
+  (4 scenarios, checker `driftwatch-gate`): 30 protected /
+  38 unprotected / 0 failures.
+- New `scripts/check-tests-gate.sh` is the gate's `tests`
+  binding: the workspace unit suites (`cargo test --workspace
+  --lib`, 36.7 s warm — machine-decidable inside the 60 s
+  budget). The heavy integration suite stays in `make test`.
+- The pre-existing `operator_security` suppression-expiry flake
+  (the reason P4's `make check` was interrupted) is **retuned**:
+  observation window 1200 ms → 2000 ms against the 1 s contract;
+  the full suite passed 347/347 + 1358 unit afterwards, and the
+  gate's `tests` binding is green under it.
+- Runtime initialized: `driftwatchdog init`, committed
+  `driftwatch.toml` (labrys-shape fingerprint ignores),
+  `.driftwatch/` git-ignored.
+- `AGENTS.md` + `Agents.md` declare `make gate` canonical and
+  `make check` the full developer/CI chain; the drift detector
+  keeps the two in lockstep. CI (`make check`) is intentionally
+  unchanged by this commit — migrating CI to `driftwatchdog gate`
+  is the tracked follow-up (Next steps item 2).
+- `openspec archive add-driftwatchdog-gate-migration --yes`
+  succeeded (+1 quality requirement promoted to the live spec);
+  every archived `tasks.md` box is ticked with dated evidence.
+  Local commit only per the principal's "no push" directive.
+
 The style-baseline roadmap (changes #8–#10) is now complete:
 #8 `add-web-ui-element-baseline` is implemented, archived as
 `2026-09-06-2026-09-07-add-web-ui-element-baseline`, and committed
@@ -327,7 +380,13 @@ Overall: `[██████████] 7/7 UI/UX implemented & archived; 4/4
 5. Implement exactly one change at a time. Do not mix roadmap folders.
 6. Follow `tasks.md` top-to-bottom: tests first, red phase, implementation, green phase, full gates.
 7. Validate with `openspec validate <change> --strict`.
-8. Run focused tests, then `make check`; separately record environmental failures such as rustdoc OOM.
+8. Run focused tests, then the canonical Local Gate (`make gate` =
+   `driftwatchdog gate`), then the full `make check` (which includes
+   the heavy integration suite and the `driftwatch-gate` lockstep
+   self-test); separately record environmental failures such as
+   rustdoc OOM. A gate "pending review" (a check killed by the 60 s
+   budget) must be resolved by running the underlying script to
+   completion before archive.
 9. Mark only evidenced tasks complete. Do not claim archive/commit/push unless actually done.
 10. Archive the completed change only after every `tasks.md` box is ticked with evidence, then commit related paths only, then stop before starting the next change. Archive is not completion: an archived change with unticked boxes is still unfinished work — finish the remaining tasks first (re-verify, tick with dated evidence) and never start the next change while boxes remain unticked. No pre-existing-failure exemption: every failing gate is yours — fix it before archive (see `Agents.md` §5.3).
 
@@ -395,33 +454,31 @@ commit 1's hash.
 
 ## Next steps (post-handoff)
 
-1. **P4 `add-git-application-delivery` is implemented and archived as
-    `2026-09-24-add-git-application-delivery` (commit `c438b1b`).**
-    The next spec is **P5 `add-driftwatchdog-gate-migration`**
-    (proposal only; awaits human-principal design approval). The P5
-    quick proposal declares a single change: openpanel's current
-    `.ai-gate/gate.yaml` is a no-op (`driftwatchdog gate --dry-run`
-    reports `(none) project commands`). The proposal is to migrate
-    the policy to the labrys-style `commands:` block so that
-    `driftwatchdog gate` becomes the canonical Local Gate that
-    `make check` is today - every `make check` step gets a
-    corresponding `command:` binding, and the new gate is run
-    instead of `make check` before every archive. P5 also re-
-    evaluates the pre-existing
-    `operator_security::operator_security_control_plane_suppression_expires_and_reopens`
-    flake under the new runner; if it is still timing-sensitive, it
-    is retuned or quarantined there. P5 does not change any
-    production behaviour - it is a tools-and-infrastructure change
-    that strengthens the pre-archive gate without altering the
-    panel, the API, or the tests. See
-    `openspec/changes/add-driftwatchdog-gate-migration/proposal.md`
-    for the full impact map.
-2. **P6/P7 remain planning-only and unblocked.** `add-verified-service-catalog`
-    and `add-portable-host-operations-and-migration` keep their
-    existing status; they are not affected by P4 or P5.
-3. **Honor the design approval gate.** Each change requires human-principal
+1. **P5 `add-driftwatchdog-gate-migration` is implemented and
+    archived as `2026-09-24-add-driftwatchdog-gate-migration`
+    (commit `7b81bf3` + evidence correction `e0aa4b9`).** The
+    canonical Local Gate is now `make gate` (= `driftwatchdog
+    gate`) with the policy in `.ai-gate/gate.yaml`; the final
+    post-archive run was 28/28 PASS, exit 0, zero pending
+    reviews. The pre-existing `operator_security` flake was
+    retuned under the new runner and is resolved. The next spec
+    is **P6 `add-verified-service-catalog`** (planning folder at
+    `openspec/changes/add-verified-service-catalog/`; awaits
+    human-principal design approval per the review gate).
+2. **Optional CI follow-up.** `.github/workflows/ci.yml` still
+    runs `make check`, which is unaffected by P5 (the chain now
+    includes the `driftwatch-gate` lockstep step, so CI enforces
+    the gate policy from day one). Migrating the CI job itself to
+    `driftwatchdog gate` is a deliberate, separate decision
+    (driftwatchdog is not on the CI runner today); raise it as
+    its own change if the principal wants it.
+3. **P7 remains planning-only and unblocked.**
+    `add-portable-host-operations-and-migration` keeps its
+    existing status; it is not affected by P4–P6.
+4. **Honor the design approval gate.** Each change requires human-principal
     approval of `design.md` before implementation, then tests-first/red phase,
-    focused verification, the Local Gate, archive, and the repository's
+    focused verification, the canonical Local Gate (`make gate`) plus the
+    heavy `make check` steps (`make test`), archive, and the repository's
     two-commit cadence. The P4 waiver precedent (focused-gate run in
     place of full `make check`) was a one-time P4 decision and does
     not generalise.
@@ -466,7 +523,7 @@ until the core production and operator workflows are complete.
 
 ## Definition of done per change
 
-`design.md` approved → tests written and red → implementation complete → focused tests green → `make check` green or documented environment blocker → strict OpenSpec validation green → tasks accurately checked → archived → related-only commit → handoff updated.
+`design.md` approved → tests written and red → implementation complete → focused tests green → the canonical Local Gate (`make gate` = `driftwatchdog gate`) green with every pending review resolved by running the underlying script, plus the heavy `make check` steps (`make test`) green or a documented environment blocker → strict OpenSpec validation green → tasks accurately checked → archived → related-only commit → handoff updated.
 
 ## Workflow violations recorded
 
