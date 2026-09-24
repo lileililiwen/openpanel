@@ -3,14 +3,15 @@ ariadex_handoff_version: 1
 version: 1
 session_id: d8c9dfe8207d
 status: in-progress
-current_spec: add-portable-runtime-packaging
-current_spec_file: openspec/changes/add-portable-runtime-packaging
+current_spec: add-portable-deployment-adapters
+current_spec_file: openspec/changes/add-portable-deployment-adapters
 completed:
   - repair-release-security-and-evidence
+  - add-portable-runtime-packaging
 unresolved: []
-next_action: implement-add-portable-runtime-packaging
-next_spec: add-portable-runtime-packaging
-updated_at: '2026-09-24T13:30:00+00:00'
+next_action: implement-add-portable-deployment-adapters
+next_spec: add-portable-deployment-adapters
+updated_at: '2026-09-24T15:30:00+00:00'
 ---
 # OpenPanel Roadmap Handoff
 
@@ -24,13 +25,13 @@ and `web-ui-styling` specs. The active repo is on a green `make check`
 and `make test-gates` baseline.
 
 The portable production maturity queue (P1–P6) has started: P1
-`repair-release-security-and-evidence` is implemented, archived as
-`2026-09-24-repair-release-security-and-evidence`, and committed
-(`0f3745d`; design.md was pre-approved by the human principal per the
-AGENTS.md review gate and the HANDOFF required execution protocol).
-The actionable `rustls 0.23.43` advisory `RUSTSEC-2026-0285` is
-resolved by the dependency upgrade in this change. P2–P6 remain
-planning-only and unblocked by P1.
+`repair-release-security-and-evidence` and P2 `add-portable-runtime-packaging`
+are implemented, archived, and committed
+(`0f3745d` and `0b8217c`; both design.md files were pre-approved by
+the human principal per the AGENTS.md review gate and the HANDOFF
+required execution protocol). The actionable `rustls 0.23.43` advisory
+`RUSTSEC-2026-0285` is resolved by the P1 dependency upgrade. P3–P6
+remain planning-only and unblocked by P1 + P2.
 
 The next roadmap is planning-only and portable. It does not make macOS,
 Docker Desktop, Jenkins, Cloudflare, `/Users/allen`, or any maintainer
@@ -42,7 +43,7 @@ optional deployment-adapter conformance target.
 | Order | Change | Status | Depends on |
 |---:|---|---|---|
 | P1 | `repair-release-security-and-evidence` | `[x] implemented & archived & committed (0f3745d; design.md pre-approved)` | none |
-| P2 | `add-portable-runtime-packaging` | `[ ] planning-only; human design approval required` | P1 |
+| P2 | `add-portable-runtime-packaging` | `[x] implemented & archived & committed (0b8217c; design.md pre-approved)` | P1 |
 | P3 | `add-portable-deployment-adapters` | `[ ] planning-only; human design approval required` | P1, P2 |
 | P4 | `add-git-application-delivery` | `[ ] planning-only; human design approval required` | P1–P3 |
 | P5 | `add-verified-service-catalog` | `[ ] planning-only; human design approval required` | P1–P4 |
@@ -69,6 +70,54 @@ P1 implementation result (2026-09-24, commit `0f3745d`):
 - 12 new test fixtures in `scripts/test-gates.sh` (5 audit + 6
   release-evidence + 1 make-check wiring); full self-test suite is
   83/83 green.
+
+P2 implementation result (2026-09-24, commit `0b8217c`):
+- New `portable-runtime` spec with four requirements (provider-neutral
+  runtime contract, supported target manifest, persistent data and
+  secret boundary, safe upgrade and rollback) — the formal home for
+  the runtime contract that unifies the native Linux installer and the
+  OCI image.
+- `packages/installer/target-manifest.txt` (new) — single source of
+  truth for the supported (OS, architecture) matrix (14 pairs across
+  debian / ubuntu / fedora / rhel / centos / rocky / almalinux /
+  arch / manjaro / alpine). `install.sh` consults the manifest via
+  `check_target_supported()` and exits 78 (EX_CONFIG) on an
+  unsupported host before any filesystem mutation.
+- `install.sh` upgrade path now runs the binary's `healthcheck`
+  subcommand as the post-upgrade smoke check (replacing `--version`,
+  which did not exercise the readiness contract). A failed check
+  automatically rolls back to the retained `.bak.<UTC>` backup and
+  exits non-zero with a diagnostic naming the rolled-back-to path.
+- `Dockerfile` ships the `org.opencontainers.image.*` label set
+  (title, description, source, version, revision, created, licenses);
+  STOPSIGNAL SIGTERM, USER openpanel, VOLUME /var/lib/openpanel,
+  HEALTHCHECK `openpanel healthcheck` are unchanged and continue to
+  honour the graceful-shutdown and persistent-data contract.
+- `packages/installer/openpanel.service` (new) — systemd unit
+  (Type=notify, KillSignal=SIGTERM, StateDirectory=openpanel,
+  EnvironmentFile=-/etc/openpanel/openpanel.env) is the native-
+  service analogue of the OCI image's HEALTHCHECK + STOPSIGNAL +
+  VOLUME triple; it MUST NOT be replaced with a per-host hand-rolled
+  unit, and deployment adapters that wrap the binary MUST preserve
+  the same dependencies.
+- `scripts/check-portable-runtime.sh` (new gate) scans the Dockerfile
+  for credential literals (password=/api_key=/token=/secret=,
+  secret-shaped ARG, credentials-shaped COPY), asserts the manifest
+  exists and contains at least one valid `<id> <arch>` pair, asserts
+  `install.sh` references the manifest and exits 78, asserts the two
+  adapters agree on the default `OPENPANEL_DATA_DIR`, and asserts the
+  upgrade path runs a healthcheck. Default is advisory; fail-closed
+  under `OPENPANEL_PORTABLE_RUNTIME_REQUIRED=1`.
+- 5 new test fixtures in `scripts/test-gates.sh` (clean contract
+  passes, Dockerfile secret literal fails, missing manifest fails,
+  install.sh without manifest reference fails, make check wiring);
+  full self-test suite is 88/88 green.
+- 4 new Rust tests in `tests/integration/portable_runtime.rs`
+  (runtime env vars unique + non-empty, default data dir is
+  absolute + shell-safe, SIGTERM is the graceful-shutdown signal,
+  target-manifest line is parseable). Registered in
+  `tests/integration/main.rs` so the spec-test-drift gate maps them
+  to the new capability.
 
 The style-baseline roadmap (changes #8–#10) is now complete:
 #8 `add-web-ui-element-baseline` is implemented, archived as
