@@ -93,6 +93,10 @@ mod sso;
 mod system_services;
 /// Themeable UI / white-label integration tests.
 mod themeable_ui;
+/// Verified-service-catalog integration tests: signed manifests,
+/// reviewable plans, bounded-retry lifecycle jobs, and trust
+/// revocation (capability `verified-service-catalog`).
+mod verified_service_catalog;
 mod waf;
 /// Web application installer integration tests.
 mod web_application_installer;

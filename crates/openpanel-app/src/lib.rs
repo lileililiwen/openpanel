@@ -166,6 +166,10 @@ pub mod system_services;
 /// theme overrides, palette validation, logo upload, and host
 /// resolution.
 pub mod themeable_ui;
+/// Verified ecosystem service catalog bounded context: signed
+/// declarative manifests, reviewable install plans, bounded-retry
+/// lifecycle jobs, and trust revocation.
+pub mod verified_service_catalog;
 pub mod waf;
 /// Web application installer bounded context: typed install
 /// plans, install runs, idempotency, and uninstall.
@@ -379,6 +383,10 @@ pub use synthetic_monitoring::{
 pub use system_services::{ServiceManager, SystemServicesModule};
 pub use themeable_ui::{
     DEFAULT_BRANDING_ROOT, MAX_LOGO_BYTES, SqliteThemeableUiRepository, ThemeableUiService,
+};
+pub use verified_service_catalog::{
+    CatalogEntryView, ServiceJobView, VerifiedServiceCatalogService,
+    VerifiedServiceCatalogServiceError,
 };
 pub use waf::{WafModule, WafService};
 pub use web_application_installer::{

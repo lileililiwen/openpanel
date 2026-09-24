@@ -214,6 +214,10 @@ pub mod site_staging;
 /// Synthetic monitoring bounded context: periodic HTTP / TCP / SSL
 /// checks with a per-check throttle and typed alert decision.
 pub mod synthetic_monitoring;
+/// Verified ecosystem service catalog bounded context: signed
+/// declarative manifests, reviewable install plans, safe lifecycle
+/// jobs, and trust revocation for portable service templates.
+pub mod verified_service_catalog;
 /// Wildcard SSL with DNS-01 challenge bounded context: cert
 /// request with `ChallengeKind::Dns01`, ACME endpoint mode, and
 /// a DNS lease lifecycle.
@@ -478,6 +482,14 @@ pub use synthetic_monitoring::{
 pub use themeable_ui::{
     BrandingScope, HexColor, Palette, PanelDomain, ThemeOverride, ThemeableUiError,
     ThemeableUiRepository, Typography, contrast_ratio,
+};
+pub use verified_service_catalog::{
+    CatalogProvisioner, HostPolicy, JobOutcome, JobPhase, PlanConflict, ProvisionOutcome,
+    PublisherIdentity, ResourceRequest, RevocationList, ServiceBackupPolicy, ServiceCompatibility,
+    ServiceHealthProbe, ServiceJob, ServiceManifest, ServicePermissions, ServicePlan,
+    ServiceUpgradePolicy, SourceDigest, TrustState, VerifiedServiceCatalogError, can_retry,
+    check_target_compatibility, ensure_installable, manifest_signature, plan_service_install,
+    service_job_transition_allowed, verify_manifest_signature,
 };
 pub use waf::{Rule, RuleSet, WafError, WafRepository};
 pub use web_application_installer::{
