@@ -979,7 +979,141 @@ if command -v make >/dev/null 2>&1; then
   else
     fail=$((fail+1)); echo "  FAIL - make check does NOT include portable-runtime"
   fi
+  if printf '%s' "${plan}" | grep -q 'scripts/check-deployment-adapters.sh'; then
+    pass=$((pass+1)); echo "  ok   - make check includes deployment-adapters"
+  else
+    fail=$((fail+1)); echo "  FAIL - make check does NOT include deployment-adapters"
+  fi
 fi
+
+# --- deployment-adapters -------------------------------------------------
+# Per the deployment-adapters spec, the contract is a typed
+# `DeploymentAdapter` trait, a `DeploymentAdapterService` that owns the
+# lifecycle, idempotency, evidence, and audit fan-out, and a covering
+# integration test. The gate
+# (`scripts/check-deployment-adapters.sh`) asserts the static wiring
+# (domain module + app service + integration test) and the layering
+# invariant for the new bounded context; the test below exercises both
+# the passing and the failing case.
+DA="${TMP}/deployment_adapters"
+mkdir -p "${DA}/scripts/lib" \
+         "${DA}/crates/openpanel-domain/src/deployment_adapters" \
+         "${DA}/crates/openpanel-app/src/deployment_adapters" \
+         "${DA}/tests/integration" \
+         "${DA}/openspec/changes/add-portable-deployment-adapters/specs/deployment-adapters" \
+         "${DA}/openspec/specs/deployment-adapters"
+cp ./scripts/check-deployment-adapters.sh "${DA}/scripts/check-deployment-adapters.sh"
+cp ./scripts/lib/step.sh "${DA}/scripts/lib/step.sh"
+
+# Domain module with the trait + the three typed data items.
+cat > "${DA}/crates/openpanel-domain/src/deployment_adapters/mod.rs" <<'DOMAIN'
+//! Fixtured deployment-adapter domain module.
+#![allow(dead_code)]
+pub struct AdapterManifest;
+pub struct DeploymentPlan;
+pub struct DeploymentEvidence;
+pub trait DeploymentAdapter {
+    fn manifest(&self) -> &AdapterManifest;
+    fn execute(&self, _plan: &DeploymentPlan, _cached: Option<&DeploymentEvidence>)
+        -> DeploymentEvidence;
+}
+DOMAIN
+
+# App service with the lifecycle, the operator gate, and the canonical
+# audit redaction.
+cat > "${DA}/crates/openpanel-app/src/deployment_adapters/service.rs" <<'SERVICE'
+//! Fixtured deployment-adapter service.
+#![allow(dead_code)]
+use openpanel_core::audit::redact_metadata;
+pub struct DeploymentAdapterService;
+impl DeploymentAdapterService {
+    pub async fn run(&self) {}
+    fn require_operator(&self) {}
+}
+SERVICE
+
+# Integration test file referencing every scenario in the spec.
+cat > "${DA}/openspec/changes/add-portable-deployment-adapters/specs/deployment-adapters/spec.md" <<'DELTA'
+# deployment-adapters Specification
+
+## ADDED Requirements
+
+### Requirement: Sample
+
+#### Scenario: Unsupported action
+
+- **WHEN** a
+- **THEN** b
+
+#### Scenario: Mac adapter evidence
+
+- **WHEN** c
+- **THEN** d
+
+#### Scenario: Health failure
+
+- **WHEN** e
+- **THEN** f
+DELTA
+cat > "${DA}/tests/integration/deployment_adapters.rs" <<'TEST'
+//! Fixtured deployment-adapter integration test.
+//!
+//! Unsupported action — a plan asking for a non-declared action is rejected.
+//! Mac adapter evidence — the mac-jenkins-v1 conformance fixture emits
+//! evidence that matches the generic Linux schema.
+//! Health failure — a deployment that fails its declared health check
+//! MUST NOT report Ready.
+fn deployment_adapters_unsupported_action() {}
+fn deployment_adapters_mac_adapter_evidence() {}
+fn deployment_adapters_health_failure() {}
+TEST
+
+# checker: deployment-adapters positive
+assert "deployment-adapters: all wiring present passes" 0 \
+  env OPENSPEC_CRATES_DIR="${DA}/crates" \
+      OPENSPEC_SPECS_DIR="${DA}/openspec/specs" \
+      OPENSPEC_TESTS_DIR="${DA}/tests/integration" \
+      "${DA}/scripts/check-deployment-adapters.sh"
+
+# Remove the integration test file so the scenario coverage check fails.
+rm "${DA}/tests/integration/deployment_adapters.rs"
+# checker: deployment-adapters negative
+assert "deployment-adapters: missing integration test fails" 1 \
+  env OPENSPEC_CRATES_DIR="${DA}/crates" \
+      OPENSPEC_SPECS_DIR="${DA}/openspec/specs" \
+      OPENSPEC_TESTS_DIR="${DA}/tests/integration" \
+      "${DA}/scripts/check-deployment-adapters.sh"
+
+# Restore for the layering test.
+cat > "${DA}/tests/integration/deployment_adapters.rs" <<'TEST'
+//! Fixtured deployment-adapter integration test.
+//!
+//! Unsupported action — a plan asking for a non-declared action is rejected.
+//! Mac adapter evidence — the mac-jenkins-v1 conformance fixture emits
+//! evidence that matches the generic Linux schema.
+//! Health failure — a deployment that fails its declared health check
+//! MUST NOT report Ready.
+fn deployment_adapters_unsupported_action() {}
+fn deployment_adapters_mac_adapter_evidence() {}
+fn deployment_adapters_health_failure() {}
+TEST
+
+# Domain MUST NOT import app; layering re-assertion in the new context.
+cat > "${DA}/crates/openpanel-domain/src/deployment_adapters/mod.rs" <<'DOMAIN'
+//! Fixtured deployment-adapter domain module that violates layering.
+#![allow(dead_code)]
+use openpanel_app::something;
+pub struct AdapterManifest;
+pub struct DeploymentPlan;
+pub struct DeploymentEvidence;
+pub trait DeploymentAdapter {}
+DOMAIN
+# checker: deployment-adapters negative
+assert "deployment-adapters: domain depending on app fails" 1 \
+  env OPENSPEC_CRATES_DIR="${DA}/crates" \
+      OPENSPEC_SPECS_DIR="${DA}/openspec/specs" \
+      OPENSPEC_TESTS_DIR="${DA}/tests/integration" \
+      "${DA}/scripts/check-deployment-adapters.sh"
 
 # --- release-evidence (new) ---------------------------------------------
 # Per the release-evidence spec, a publication workflow MUST fail when

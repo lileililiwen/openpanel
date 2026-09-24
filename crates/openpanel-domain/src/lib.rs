@@ -136,6 +136,12 @@ pub mod db_pitr;
 /// short-lived single-use SSO tokens for the admin tool launcher.
 pub mod db_privileges;
 pub mod deliverability;
+/// Deployment adapters bounded context: provider-neutral action
+/// lifecycle, idempotency, secret references, evidence schema,
+/// and the typed `DeploymentAdapter` trait. Adapters own
+/// transport and host policy; this module owns the action
+/// lifecycle and the contract they speak.
+pub mod deployment_adapters;
 /// DNSSEC + secondary DNS bounded context: zone signing keys,
 /// secondary nameserver ACLs, glue records, and DS records.
 pub mod dnssec_secondary;
@@ -285,6 +291,13 @@ pub use db_pitr::{
 pub use db_privileges::{
     AdminToolSession, DbGrant, DbPrivilegeError, DbPrivilegeRepository, GrantScope, Privilege,
     RemoteAccess,
+};
+pub use deployment_adapters::{
+    AdapterManifest, DeploymentAction, DeploymentAdapter, DeploymentAdapterError,
+    DeploymentEvidence, DeploymentPlan, DeploymentState, HealthMethod, IdempotencyDecision,
+    MAX_DECLARED_ACTIONS, MAX_DIAGNOSTIC_LEN, MAX_IDENTIFIER_LEN, OperationKey,
+    RUNTIME_CONTRACT_VERSION, RollbackPolicy, SecretRef, decide_replay, operation_record_id,
+    redact_diagnostic, validate_plan,
 };
 pub use dnssec_secondary::{
     DnsSecError, DnsSecPolicy, DnsSecRepository, DsRecord, GlueRecord, KeyRole, KskRolloverState,

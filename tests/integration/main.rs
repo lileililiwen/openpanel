@@ -28,6 +28,9 @@ mod databases;
 mod db_pitr;
 /// Database remote-access integration tests.
 mod db_remote_access;
+/// Deployment-adapter contract integration tests (conformance
+/// fixture, idempotency replay, dry-run, audit redaction).
+mod deployment_adapters;
 mod dns;
 mod docker;
 mod files;

@@ -49,6 +49,12 @@ pub mod db_pitr;
 /// short-lived single-use SSO tokens for the admin tool launcher.
 pub mod db_privileges;
 pub mod deliverability;
+/// Deployment adapters bounded context: provider-neutral action
+/// lifecycle, idempotency, evidence schema, and the
+/// `DeploymentAdapterService` that the API, the CLI, and the
+/// integration tests share. Concrete adapters (and the
+/// conformance fixture) live outside this crate's product code.
+pub mod deployment_adapters;
 pub mod dns;
 /// DNSSEC + secondary DNS bounded context: zone signing keys,
 /// secondary nameserver ACLs, glue records, and DS records.
@@ -223,6 +229,11 @@ pub use db_privileges::{
     MySqlShellGrantPort, PrivilegeService, RemoteAccessController, SqliteDbPrivilegeRepository,
 };
 pub use deliverability::{DeliverabilityModule, DeliverabilityService};
+/// Deployment-adapter service (idempotency, evidence, audit
+/// fan-out). The Mac/Jenkins conformance fixture and any
+/// production adapter implementations live outside this
+/// crate's product code.
+pub use deployment_adapters::{DeploymentAdapterService, DeploymentServiceError};
 pub use dns::{DnsModule, DnsService};
 pub use dnssec_secondary::{
     AxfrSender, DnsSecSecondaryModule, DnsSecService, GlueRecordService, KeyRolloverEngine,
