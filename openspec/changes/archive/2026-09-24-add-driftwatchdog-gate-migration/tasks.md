@@ -6,11 +6,11 @@
 
 - [x] Map every step in the current `Makefile` `check:` target
   to a corresponding `commands:` entry under
-  `.ai-gate/gate.yaml`. *(All 24 `check:` prerequisites (minus
+  `.ai-gate/gate.yaml`. *(All 25 `check:` prerequisites (minus
   `ensure-lint-tools`, which is setup, not a gate) are bound:
-  `fmt`→`format`, `clippy`→`lint`, `test`→`tests`, the other 21
+  `fmt`→`format`, `clippy`→`lint`, `test`→`tests`, the other 22
   by hyphen→underscore mapping, plus three profile-native extras
-  (`repository_integrity`, `build`, `security`) — 27 `commands:`
+  (`repository_integrity`, `build`, `security`) — 28 `commands:`
   entries total. The mapping is enforced by
   `scripts/check-driftwatch-gate.sh` step (2).)*
 

@@ -90,9 +90,9 @@ surface drifts.
 - **End-to-end**: `driftwatchdog gate` (or `make gate`) runs every
   check in the policy order. The result is recorded in
   `.driftwatch/state.db` (one `gate_runs` row per invocation).
-  HANDOFF records `driftwatchdog gate 8/8 PASS` after the change
+  HANDOFF records `driftwatchdog gate 28/28 PASS` after the change
   is archived (labrys convention, adjusted to the actual number of
-  checks the design picks).
+  checks the design picked: 28).
 - **Regression**: `make check` (developer convenience) still passes
   on a clean tree after the change. The new self-test fixture
   asserts this; the focused 9-gate run (the P4 evidence) is the
@@ -168,9 +168,10 @@ in this design.
   - `tasks.md` (exists; 12-box skeleton)
   - `design.md` (this file)
 - `.ai-gate/gate.yaml` (rewritten: `profile: rust-platform`,
-  `rule_pack: rust-platform@0.1.0`, 8 `checks:`, 8 `commands:`)
-- `Makefile` (added `gate` target = `driftwatchdog gate`; the
-  existing `check:` target is unchanged)
+  `rule_pack: rust-platform@0.1.0`, 28 `checks:`, 28 `commands:`)
+- `Makefile` (added `gate` target = `driftwatchdog gate` and the
+  `driftwatch-gate` lockstep step into the `check:` chain between
+  `test-gates` and `test`; every other `check:` step is unchanged)
 - `AGENTS.md` (the "Quality gate" line updated to declare
   `driftwatchdog gate` as canonical)
 - `HANDOFF.md` (the "Required execution protocol" updated to
