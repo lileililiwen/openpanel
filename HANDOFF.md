@@ -8,10 +8,11 @@ current_spec_file: openspec/changes/add-portable-deployment-adapters
 completed:
   - repair-release-security-and-evidence
   - add-portable-runtime-packaging
+  - add-portable-deployment-adapters
 unresolved: []
-next_action: implement-add-portable-deployment-adapters
-next_spec: add-portable-deployment-adapters
-updated_at: '2026-09-24T15:30:00+00:00'
+next_action: implement-add-git-application-delivery
+next_spec: add-git-application-delivery
+updated_at: '2026-09-24T16:00:00+00:00'
 ---
 # OpenPanel Roadmap Handoff
 
@@ -25,13 +26,15 @@ and `web-ui-styling` specs. The active repo is on a green `make check`
 and `make test-gates` baseline.
 
 The portable production maturity queue (P1–P6) has started: P1
-`repair-release-security-and-evidence` and P2 `add-portable-runtime-packaging`
-are implemented, archived, and committed
-(`0f3745d` and `0b8217c`; both design.md files were pre-approved by
+`repair-release-security-and-evidence`, P2 `add-portable-runtime-packaging`,
+and P3 `add-portable-deployment-adapters` are implemented, archived, and
+committed
+(`0f3745d`, `0b8217c`, and `a4a7dbb`; design.md files were pre-approved by
 the human principal per the AGENTS.md review gate and the HANDOFF
-required execution protocol). The actionable `rustls 0.23.43` advisory
-`RUSTSEC-2026-0285` is resolved by the P1 dependency upgrade. P3–P6
-remain planning-only and unblocked by P1 + P2.
+required execution protocol — P3 used the principal's "auto approve, no
+ask" directive). The actionable `rustls 0.23.43` advisory
+`RUSTSEC-2026-0285` is resolved by the P1 dependency upgrade. P4–P6
+remain planning-only and unblocked by P1 + P2 + P3.
 
 The next roadmap is planning-only and portable. It does not make macOS,
 Docker Desktop, Jenkins, Cloudflare, `/Users/allen`, or any maintainer
@@ -44,7 +47,7 @@ optional deployment-adapter conformance target.
 |---:|---|---|---|
 | P1 | `repair-release-security-and-evidence` | `[x] implemented & archived & committed (0f3745d; design.md pre-approved)` | none |
 | P2 | `add-portable-runtime-packaging` | `[x] implemented & archived & committed (0b8217c; design.md pre-approved)` | P1 |
-| P3 | `add-portable-deployment-adapters` | `[ ] planning-only; human design approval required` | P1, P2 |
+| P3 | `add-portable-deployment-adapters` | `[x] implemented & archived & committed (a4a7dbb; design.md auto-approved per "auto approve, no ask" directive)` | P1, P2 |
 | P4 | `add-git-application-delivery` | `[ ] planning-only; human design approval required` | P1–P3 |
 | P5 | `add-verified-service-catalog` | `[ ] planning-only; human design approval required` | P1–P4 |
 | P6 | `add-portable-host-operations-and-migration` | `[ ] planning-only; human design approval required` | P1–P5 |
@@ -118,6 +121,47 @@ P2 implementation result (2026-09-24, commit `0b8217c`):
   target-manifest line is parseable). Registered in
   `tests/integration/main.rs` so the spec-test-drift gate maps them
   to the new capability.
+
+P3 implementation result (2026-09-24, commit `a4a7dbb`):
+- New `deployment-adapters` spec with four requirements (Adapter Capability
+  Declaration, Idempotent Deployment Lifecycle, Provider-Neutral Evidence,
+  Safe Failure and Rollback) — the formal home for the typed adapter
+  contract that OpenPanel, the CLI, and the integration tests share.
+- Modified spec deltas in `release-deployment-governance` (Adapter-Based
+  Deployment Is Provider-Neutral), `monitoring-fleet-operations` (Fleet
+  Operations Compose With Deployment Adapters), `terminal-host-fleet`
+  (Deployment Adapter Operations Are Per-Host and Auditable), and
+  `quality` (Deployment-Adapter Contract Gate, the new
+  `scripts/check-deployment-adapters.sh`).
+- Production code: `crates/openpanel-domain/src/deployment_adapters/mod.rs`
+  defines the `DeploymentAdapter` trait, `AdapterManifest`, `DeploymentPlan`,
+  `DeploymentEvidence`, `OperationKey`, `SecretRef`, `HealthMethod`,
+  `DeploymentState`, `RollbackPolicy`, `IdempotencyDecision`, plus
+  `decide_replay` / `validate_plan` / `redact_diagnostic` helpers
+  (16 unit + 2 proptest cases). `crates/openpanel-app/src/deployment_adapters/`
+  ships the `DeploymentAdapterService` with an idempotency cache, dry-run
+  path, replay path, and audit fan-out that routes every event through the
+  canonical `openpanel_core::audit::redact_metadata` allowlist
+  (5 unit tests). `crates/openpanel-app/src/migrations/deployment_adapters/
+  V001__init.sql` is the ready-to-swap SQLite schema for the evidence +
+  idempotency tables. The Mac/Jenkins fixture (`ConformanceAdapter`,
+  id `mac-jenkins-v1`) lives in `tests/integration/deployment_adapters.rs`
+  only — it is a test fixture, not product code, and no product crate
+  references Mac, Jenkins, or the developer's workstation.
+- 14 new integration tests in `tests/integration/deployment_adapters.rs`
+  (full lifecycle, replay, rerun, dry-run, non-operator denial, failure
+  redaction, replay_candidate, list_manifests, idempotency decision,
+  audit metadata allowlist, SecretRef validation, Unsupported action,
+  Mac adapter evidence schema parity, Health failure), registered in
+  `tests/integration/main.rs`.
+- `scripts/check-deployment-adapters.sh` (new gate) reads the live spec
+  (or the in-flight change delta) and asserts the domain trait + types,
+  the app service, the integration test file, the layering invariant for
+  the new bounded context, and that every scenario in the spec is
+  referenced by the test file. Wired into `make check` between
+  `portable-runtime` and `tasks-testing-first`. `scripts/test-gates.sh`
+  gains 3 new fixtures (clean wiring passes, missing test file fails,
+  domain depending on app fails) for a 92/92 self-test suite.
 
 The style-baseline roadmap (changes #8–#10) is now complete:
 #8 `add-web-ui-element-baseline` is implemented, archived as
