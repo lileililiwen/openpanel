@@ -50,9 +50,39 @@ assert() { # assert <desc> <expected_exit> <cmd...>
   fi
 }
 
+# --- budget tracking (per `Gate Self-Test Budget Compliance`) -----------
+# The `gate-selftest-budget` library is sourced at the tail (just
+# before the final summary) and reads the runtime values set here.
+# The propagation reentry (`TEST_GATES_REENTRY=1`) sets
+# `TEST_GATES_BUDGET_BYPASS=1`, which the tail block honours, so the
+# inner run does not re-assert against the outer wrapper's start
+# time. We default `GATE_SELFTEST_START` to `date +%s` so the values
+# are always defined even when this script is sourced from a test.
+GATE_SELFTEST_START=${GATE_SELFTEST_START:-$(date +%s)}
+GATE_SELFTEST_SLOWEST_GROUP=${GATE_SELFTEST_SLOWEST_GROUP:-unknown}
+GATE_SELFTEST_SLOWEST_SECS=${GATE_SELFTEST_SLOWEST_SECS:-0}
+GATE_SELFTEST_LAST_TS=${GATE_SELFTEST_LAST_TS:-${GATE_SELFTEST_START}}
+
+# __budget_section <name> — record the wall time since the last
+# section boundary and update the running "slowest group" if this
+# section is the slowest so far. Called once per `# --- <name> ---`
+# fixture group so a regression is attributable to the group that
+# caused it.
+__budget_section() {
+  local name="$1"
+  local now; now=$(date +%s)
+  local elapsed=$((now - GATE_SELFTEST_LAST_TS))
+  if [ "${elapsed}" -gt "${GATE_SELFTEST_SLOWEST_SECS}" ]; then
+    GATE_SELFTEST_SLOWEST_SECS="${elapsed}"
+    GATE_SELFTEST_SLOWEST_GROUP="${name}"
+  fi
+  GATE_SELFTEST_LAST_TS="${now}"
+}
+
 # --- tasks-testing-first -------------------------------------------------
 # Script globs <CHANGES_DIR>/<change>/tasks.md. Use a SEPARATE dir per
 # case so one bad change can't poison the "good" assertion.
+__budget_section "tasks-testing-first"
 TS_GOOD="${TMP}/changes_good"; mkdir -p "${TS_GOOD}/c"
 printf '# T\n\n## 1. Testing\n- [ ] x\n\n## 2. Implementation\n- [ ] y\n' > "${TS_GOOD}/c/tasks.md"
 # The propagation check below injects a broken tree here: one failing
@@ -68,6 +98,7 @@ assert "tasks: correctly ordered passes" 0 env OPENSPEC_CHANGES_DIR="${TS_GOOD}"
 assert "tasks: reordered fails" 1 env OPENSPEC_CHANGES_DIR="${TS_BAD}" ./scripts/check-tasks-testing-first.sh
 
 # --- layering ------------------------------------------------------------
+__budget_section "layering"
 LAY="${TMP}/crates"
 mkdir -p "${LAY}/openpanel-domain/src/x" "${LAY}/openpanel-app/src/y"
 printf 'use openpanel_app::Foo;\n' > "${LAY}/openpanel-domain/src/x/mod.rs"
@@ -80,6 +111,7 @@ printf 'pub fn ok() {}\n' > "${LAY}/openpanel-domain/src/x/mod.rs"
 assert "layering: clean tree passes" 0 env OPENSPEC_CRATES_DIR="${LAY}" ./scripts/check-layering.sh
 
 # --- reuse ---------------------------------------------------------------
+__budget_section "reuse"
 RU="${TMP}/crates2"
 mkdir -p "${RU}/openpanel-core/src" "${RU}/openpanel-app/src"
 printf 'pub fn compute_widget() {}\n' > "${RU}/openpanel-core/src/lib.rs"
@@ -93,6 +125,7 @@ printf 'pub fn other_unique() {}\n' > "${RU}/openpanel-app/src/lib.rs"
 assert "reuse: unique names pass" 0 env OPENSPEC_CRATES_DIR="${RU}" ./scripts/check-reuse.sh
 
 # --- spec-test-drift -----------------------------------------------------
+__budget_section "spec-test-drift"
 # The script resolves its root from its own location and globs
 # `tests/**/*.rs` + `crates/**/*.rs`, so a fixture tree is enough.
 ST="${TMP}/spec_test_drift"
@@ -113,6 +146,7 @@ printf '# c\n' > "${ST}/crates/c/src/lib.rs"
 assert "spec-test-drift: default mode never fails" 0 "${ST}/scripts/check-spec-test-drift.sh"
 
 # --- spec-drift ----------------------------------------------------------
+__budget_section "spec-drift"
 # check-spec-drift.sh resolves its root via `$(dirname "$0")/..`, so to
 # fixture it we copy the script into a tmp tree that mirrors
 # openspec/changes/archive and openspec/specs.
@@ -139,6 +173,7 @@ printf '# example spec\n\n### Requirement: Fixture Requirement\n' \
   > "${SD_ROOT}/openspec/specs/example/spec.md"
 
 # --- scan-literal --------------------------------------------------------
+__budget_section "scan-literal"
 # scan-template-literals.sh resolves its root from its own location and
 # scans `crates/**/*.{rs,maud,html,css}`, so a fixture tree is enough.
 SL_ROOT="${TMP}/scan_literal"
@@ -161,6 +196,7 @@ printf '.x { color: #4f8cff; }\n' > "${SL_ROOT}/crates/openpanel-web/assets/app.
 assert "scan-literal: literal hex in app.css fails" 1 "${SL_ROOT}/scripts/scan-template-literals.sh"
 
 # --- class-coverage ------------------------------------------------------
+__budget_section "class-coverage"
 # check-class-coverage.sh resolves its root from its own location and
 # reads the source tree under OPENSPEC_WEB_SRC_DIR + the stylesheet at
 # OPENSPEC_WEB_CSS_FILE, so a fixture tree is enough.
@@ -185,6 +221,7 @@ assert "class-coverage: undefined class fails" 1 \
       "${CC_ROOT}/scripts/check-class-coverage.sh"
 
 # --- governance-contract -------------------------------------------------
+__budget_section "governance-contract"
 # Ratchet for archived governance requirements: the manifest pins each
 # protected requirement by digest + scenario count and maps it to a
 # checker that has both a positive and a negative fixture above.
@@ -355,6 +392,7 @@ else
 fi
 
 # --- agent-governance ----------------------------------------------------
+__budget_section "agent-governance"
 # Per the agent-quality spec: `scripts/check-agent-governance.sh` MUST
 # verify that openspec/config.yaml has a non-empty context and all four
 # rules blocks, that `openspec context` does not report an empty
@@ -571,6 +609,7 @@ else
 fi
 
 # --- ci configuration ----------------------------------------------------
+__budget_section "ci configuration"
 # Required checks per spec:
 #   - CI runs `make check` on every push/PR
 #   - required steps MUST NOT use `continue-on-error`
@@ -605,6 +644,7 @@ else
 fi
 
 # --- spec-test-drift strict-baseline (ratchet) ------------------------
+__budget_section "spec-test-drift strict-baseline"
 # Per the quality-maturity-ratchet spec, --strict MUST only fail on
 # capabilities NOT in the reviewed baseline; pre-existing gaps listed
 # in the baseline are tracked debt and pass strict. The fallback when
@@ -637,6 +677,7 @@ assert "spec-test-drift: new uncovered cap not in baseline fails (strict)" 1 \
       "${STB}/scripts/check-spec-test-drift.sh" --strict
 
 # --- reuse strict-classified (ratchet) ---------------------------------
+__budget_section "reuse strict-classified"
 # Per the quality-maturity-ratchet spec, --strict MUST only fail on
 # unclassified new duplicates; pre-existing duplicates listed in the
 # reviewed classified-duplicates baseline are tracked debt.
@@ -671,6 +712,7 @@ assert "reuse: unclassified new dup fails (strict)" 1 \
       "${RUC}/scripts/check-reuse.sh" --strict
 
 # --- coverage floor (ratchet) ------------------------------------------
+__budget_section "coverage floor"
 # Per the quality-maturity-ratchet spec, a required CI coverage job
 # MUST fail when its tool is unavailable or its measured line coverage
 # drops below the configured floor. Tool-absent + not-required keeps
@@ -710,6 +752,7 @@ assert "coverage-floor: tool missing + required fails" 1 \
       "${COV}/scripts/check-coverage-floor.sh"
 
 # --- maturity evidence (ratchet) --------------------------------------
+__budget_section "maturity evidence"
 # Per the quality-maturity-ratchet spec, every production TODO/FIXME
 # marker MUST have a reviewed entry in the evidence manifest; the
 # manifest may also be empty (no markers → no required records).
@@ -749,6 +792,7 @@ assert "maturity: untracked TODO fails" 1 \
       "${ME}/scripts/check-maturity.sh"
 
 # --- release-governance --------------------------------------------------
+__budget_section "release-governance"
 # Per the release-deployment-governance spec, every release artifact in
 # OPENPANEL_DIST_DIR MUST ship with a .sha256 + .sbom.json + .sig and
 # be listed in provenance.json. A missing sidecar, an unlisted
@@ -818,6 +862,7 @@ assert "release-governance: missing dist dir skips cleanly" 0 \
       "${RG}/scripts/check-release-governance.sh"
 
 # --- audit (ratchet) ----------------------------------------------------
+__budget_section "audit"
 # Per the release-evidence spec, the audit gate MUST fail on actionable
 # vulnerabilities and MUST NOT classify unmaintained / yanked /
 # notice / unsound findings as vulnerabilities. The gate MUST also
@@ -871,6 +916,7 @@ assert "audit: tool missing + not required skips cleanly" 0 \
       "${AU}/scripts/check-audit.sh"
 
 # --- portable-runtime --------------------------------------------------
+__budget_section "portable-runtime"
 # Per the portable-runtime spec, the runtime contract is the union of a
 # published target manifest, a secret-free OCI image, a native installer
 # that preflights the manifest, an upgrade path that runs a
@@ -987,6 +1033,7 @@ if command -v make >/dev/null 2>&1; then
 fi
 
 # --- deployment-adapters -------------------------------------------------
+__budget_section "deployment-adapters"
 # Per the deployment-adapters spec, the contract is a typed
 # `DeploymentAdapter` trait, a `DeploymentAdapterService` that owns the
 # lifecycle, idempotency, evidence, and audit fan-out, and a covering
@@ -1116,6 +1163,7 @@ assert "deployment-adapters: domain depending on app fails" 1 \
       "${DA}/scripts/check-deployment-adapters.sh"
 
 # --- application-delivery (new) -----------------------------------------
+__budget_section "application-delivery"
 # Per the application-delivery spec, OpenPanel exposes a typed
 # `Application` aggregate above the existing site Git, container,
 # preview, and release services. The gate asserts the wiring of the
@@ -1228,6 +1276,7 @@ assert "application-delivery: domain depending on app fails" 1 \
       "${AD}/scripts/check-application-delivery.sh"
 
 # --- release-evidence (new) ---------------------------------------------
+__budget_section "release-evidence"
 # Per the release-evidence spec, a publication workflow MUST fail when
 # any required coverage / browser / SBOM / signature / provenance /
 # smoke evidence record is missing, stale, malformed, or in a
@@ -1328,6 +1377,7 @@ assert "release-evidence: not required skips cleanly" 0 \
       "${RE}/scripts/check-release-evidence.sh"
 
 # --- propagation: a failing fixture must yield non-zero overall ---------
+__budget_section "propagation"
 # Spec: "self-test MUST NOT silently skip because a target is absent."
 # Run the script recursively with a broken fixture; the inner call MUST
 # exit non-zero. The TEST_GATES_REENTRY sentinel breaks infinite
@@ -1338,7 +1388,7 @@ if [ -z "${TEST_GATES_REENTRY:-}" ]; then
   # fixture below).
   # checker: gate-self-test positive
   assert "gate-self-test: clean self-test run passes" 0 \
-    env TEST_GATES_REENTRY=1 ./scripts/test-gates.sh
+    env TEST_GATES_REENTRY=1 TEST_GATES_BUDGET_BYPASS=1 ./scripts/test-gates.sh
 
   # The broken tree is injected through TEST_GATES_TASKS_GOOD so a real
   # assertion fails inside the inner run — the self-test must propagate
@@ -1348,7 +1398,7 @@ if [ -z "${TEST_GATES_REENTRY:-}" ]; then
   mkdir -p "${BAD_TS_DIR}/c"
   printf '# T\n\n## 2. Implementation\n- [ ] y\n' > "${BAD_TS_DIR}/c/tasks.md"
   if env TEST_GATES_TASKS_GOOD="${BAD_TS_DIR}" TEST_GATES_REENTRY=1 \
-       ./scripts/test-gates.sh >/dev/null 2>&1; then
+       TEST_GATES_BUDGET_BYPASS=1 ./scripts/test-gates.sh >/dev/null 2>&1; then
     fail=$((fail+1)); echo "  FAIL - propagation: broken tasks fixture should yield non-zero"
   else
     pass=$((pass+1)); echo "  ok   - propagation: broken tasks fixture yields non-zero"
@@ -1366,6 +1416,7 @@ fi
 
 if [ "${TEST_GATES_REENTRY:-0}" -ne 1 ]; then
 # --- driftwatch-gate (P5) -------------------------------------------------
+__budget_section "driftwatch-gate"
 # Per the DriftWatchdog Local Gate quality requirement, the canonical
 # pre-archive gate is `driftwatchdog gate`; .ai-gate/gate.yaml is the
 # policy surface. The new self-test exercises three properties:
@@ -1445,6 +1496,137 @@ print(d['commands'].get('${yaml_key}', ''))
     fi
 done
 fi  # end TEST_GATES_REENTRY guard for driftwatch-gate fixtures
+
+# --- gate-selftest-budget (new) -----------------------------------------
+__budget_section "gate-selftest-budget"
+# Per the new `Gate Self-Test Budget Compliance` quality requirement,
+# `scripts/test-gates.sh` MUST time itself and fail when the
+# configured warm budget is exceeded, while a `0` or unset budget
+# degrades the measurement to an advisory `slow-test-gates: <n>s`
+# line. The suite also MUST keep reporting its self-test count, and
+# the count MUST NOT drop below the pinned minimum without a reviewed
+# spec change. The reusable library lives in
+# `scripts/lib/gate-selftest-budget.sh`; this block exercises both
+# functions in isolation AND the integration at the end of the suite.
+#
+# The library is sourced once; the fixtures run as a guarded group
+# so the recursive `gate-self-test: clean self-test run passes`
+# propagation reentry (which sets TEST_GATES_REENTRY=1) does not
+# recurse into this block.
+if [ -z "${TEST_GATES_BUDGET_BYPASS:-}" ]; then
+  # shellcheck source=lib/gate-selftest-budget.sh
+  . "${REPO_ROOT}/scripts/lib/gate-selftest-budget.sh"
+  GTB="${TMP}/gate_selftest_budget"
+  mkdir -p "${GTB}/scripts/lib"
+  cp ./scripts/lib/gate-selftest-budget.sh "${GTB}/scripts/lib/gate-selftest-budget.sh"
+
+  # (a) Positive budget exceeded → exit non-zero + error line.
+  # The library uses epoch seconds; we set GATE_SELFTEST_START to a
+  # time in the past and pass a `now` argument that is five seconds
+  # in the future of the start, so the elapsed time is provably > 0
+  # against a budget of 1.
+  # checker: gate-selftest-budget positive
+  now_a="$(date +%s)"
+  if env OPENPANEL_GATE_SELFTEST_BUDGET_SECS=1 \
+        GATE_SELFTEST_START=$((now_a - 5)) \
+        bash -c ". '${GTB}/scripts/lib/gate-selftest-budget.sh'; gate_selftest_check_budget ${now_a}" \
+        >/dev/null 2>"${GTB}/a_err"; then
+    fail=$((fail+1)); echo "  FAIL - gate-selftest-budget: budget=1 elapsed=5s should fail"
+  else
+    pass=$((pass+1)); echo "  ok   - gate-selftest-budget: budget=1 exceeded fails"
+  fi
+  if grep -qE '^gate-selftest-budget: elapsed 5s exceeds budget 1s' "${GTB}/a_err"; then
+    pass=$((pass+1)); echo "  ok   - gate-selftest-budget: diagnostic names elapsed + budget"
+  else
+    fail=$((fail+1)); echo "  FAIL - gate-selftest-budget: diagnostic missing elapsed/budget"
+    sed 's/^/    /' "${GTB}/a_err"
+  fi
+
+  # (b) Budget `0` → advisory `slow-test-gates: <n>s` line; exit 0.
+  # checker: gate-selftest-budget positive
+  now_b="$(date +%s)"
+  b_out="$(env OPENPANEL_GATE_SELFTEST_BUDGET_SECS=0 \
+            GATE_SELFTEST_START=$((now_b - 5)) \
+            bash -c ". '${GTB}/scripts/lib/gate-selftest-budget.sh'; gate_selftest_check_budget ${now_b}" 2>&1)"
+  if printf '%s' "${b_out}" | grep -qE '^slow-test-gates: 5s$'; then
+    pass=$((pass+1)); echo "  ok   - gate-selftest-budget: budget=0 emits advisory line"
+  else
+    fail=$((fail+1)); echo "  FAIL - gate-selftest-budget: budget=0 missing advisory: ${b_out}"
+  fi
+  if printf '%s' "${b_out}" | grep -qE '^gate-selftest-budget:'; then
+    fail=$((fail+1)); echo "  FAIL - gate-selftest-budget: budget=0 should NOT print error line"
+  else
+    pass=$((pass+1)); echo "  ok   - gate-selftest-budget: budget=0 keeps advisory-only"
+  fi
+
+  # (c) Fixture count non-decreasing: a count at or above the pinned
+  # minimum passes; a count below fails. The library defaults the
+  # minimum to 118, matching the pre-change count.
+  # checker: gate-selftest-budget positive
+  if env GATE_SELFTEST_MIN_PASS_COUNT=118 \
+        bash -c ". '${GTB}/scripts/lib/gate-selftest-budget.sh'; gate_selftest_check_count 120" \
+        >/dev/null 2>&1; then
+    pass=$((pass+1)); echo "  ok   - gate-selftest-budget: count 120 >= 118 passes"
+  else
+    fail=$((fail+1)); echo "  FAIL - gate-selftest-budget: count 120 should pass"
+  fi
+  # checker: gate-selftest-budget negative
+  if env GATE_SELFTEST_MIN_PASS_COUNT=118 \
+        bash -c ". '${GTB}/scripts/lib/gate-selftest-budget.sh'; gate_selftest_check_count 117" \
+        >/dev/null 2>&1; then
+    fail=$((fail+1)); echo "  FAIL - gate-selftest-budget: count 117 < 118 should fail"
+  else
+    pass=$((pass+1)); echo "  ok   - gate-selftest-budget: count 117 < 118 fails"
+  fi
+
+  # (d) Integration: the library functions are also wired into the
+  # suite's tail so the assertions hold at runtime. Re-source the
+  # library from the real scripts dir and run the integration in a
+  # controlled subshell to avoid side-effects on `${pass}` /
+  # `${fail}` (the assertion framework). The fixture explicitly sets
+  # `OPENPANEL_GATE_SELFTEST_BUDGET_SECS=0` so the advisory path is
+  # the one under test, regardless of the parent env.
+  integration_rc=0
+  now_d="$(date +%s)"
+  integration_out="$(env OPENPANEL_GATE_SELFTEST_BUDGET_SECS=0 \
+                              GATE_SELFTEST_START="$((now_d - 5))" \
+                              bash -c ". '${REPO_ROOT}/scripts/lib/gate-selftest-budget.sh'; gate_selftest_check_count 120 && gate_selftest_check_budget ${now_d}" 2>&1)"
+  integration_rc=$?
+  if [ "${integration_rc}" -eq 0 ] \
+       && printf '%s' "${integration_out}" | grep -qE '^slow-test-gates: 5s$'; then
+    pass=$((pass+1)); echo "  ok   - gate-selftest-budget: integration count + budget advisory"
+  else
+    fail=$((fail+1)); echo "  FAIL - gate-selftest-budget: integration broken (rc=${integration_rc})"
+    printf '   output: %s\n' "${integration_out}" | sed 's/^/   /'
+  fi
+fi  # end TEST_GATES_BUDGET_BYPASS guard for the budget fixtures
+
+# --- gate self-test budget assertion (real runtime wiring) -----------
+# Per the new `Gate Self-Test Budget Compliance` quality requirement,
+# the suite MUST time itself and fail when a positive
+# `OPENPANEL_GATE_SELFTEST_BUDGET_SECS` is exceeded, and emit an
+# advisory `slow-test-gates: <n>s` line when the budget is `0` or
+# unset (the cold-CI default). The propagation reentry sets
+# `TEST_GATES_BUDGET_BYPASS=1` to skip this block on the inner run
+# (the inner call would otherwise re-assert against the outer
+# wrapper's start time and always appear to exceed the budget).
+#
+# The library functions are exercised in isolation by the
+# gate-selftest-budget fixture block above; this tail call wires
+# them into the suite's pass count and elapsed time so the assertion
+# holds at every real run. A non-zero return from either function
+# increments `fail` so the final summary line reports the regression
+# alongside the fixture failures.
+if [ -z "${TEST_GATES_BUDGET_BYPASS:-}" ]; then
+  # shellcheck source=lib/gate-selftest-budget.sh
+  . "${REPO_ROOT}/scripts/lib/gate-selftest-budget.sh"
+  if ! gate_selftest_check_count "${pass}"; then
+    fail=$((fail+1))
+  fi
+  if ! gate_selftest_check_budget; then
+    fail=$((fail+1))
+  fi
+fi
 
 echo ""
 echo "gate self-tests: ${pass} passed, ${fail} failed"

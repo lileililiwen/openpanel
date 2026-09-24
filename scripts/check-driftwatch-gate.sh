@@ -124,4 +124,24 @@ if ! make -n gate 2>&1 | grep -q 'driftwatchdog gate'; then
     exit 1
 fi
 
+# --- (5) the `test_gates` binding names the self-test suite --------------
+# Per the `Gate Self-Test Budget Compliance` quality requirement, the
+# driftwatchdog plan's `test_gates` check MUST bind to the governance
+# self-test suite (`scripts/test-gates.sh`) so a budget regression in
+# the suite is caught by the same surface the operator invokes. The
+# make-check↔`commands:` lockstep above only proves the binding
+# *exists*, not that it points at the right script; this check fills
+# that gap. Read-only — does not affect the lockstep, the manifest,
+# or any other surface.
+test_gates_cmd=$(python3 -c "
+import sys, yaml
+with open('${GATE_YAML}') as f:
+    d = yaml.safe_load(f)
+print(d.get('commands', {}).get('test_gates', ''))
+")
+if [ "${test_gates_cmd}" != "scripts/test-gates.sh" ]; then
+    echo "step: driftwatch-gate status: failed (\`commands.test_gates\` is '${test_gates_cmd}', expected 'scripts/test-gates.sh')"
+    exit 1
+fi
+
 step "driftwatch-gate" true

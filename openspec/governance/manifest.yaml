@@ -296,3 +296,20 @@ requirements:
     digest: sha256:e7c8a31291251510bfdcc11ad2e7865ad42857103d1fcd3e4f00a6e8c696dd38
     scenarios: 4
     checkers: [driftwatch-gate]
+
+  # The new `Gate Self-Test Budget Compliance` quality requirement
+  # keeps the driftwatchdog `test_gates` binding under its 60 s
+  # per-check budget on a warm cache by self-enforcing the suite's
+  # own elapsed wall time. Executable protection is the same
+  # `driftwatch-gate` gate (which now also asserts that the
+  # `commands.test_gates` binding names the self-test suite —
+  # check (5) in `scripts/check-driftwatch-gate.sh`), paired with
+  # positive and negative fixtures in `scripts/test-gates.sh`
+  # (`# checker: gate-selftest-budget positive` / `negative`) and
+  # the tail wiring in `scripts/lib/gate-selftest-budget.sh`.
+  - archive: openspec/changes/archive/2026-09-24-add-gate-selftest-budget-compliance/specs/quality/spec.md
+    capability: quality
+    requirement: "Gate Self-Test Budget Compliance"
+    digest: sha256:64a411b8a94600951363fc7a0854112d3dd97f9669b8c78fbbaf22565fe52a12
+    scenarios: 4
+    checkers: [driftwatch-gate]
