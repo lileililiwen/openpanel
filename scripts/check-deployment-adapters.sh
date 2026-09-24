@@ -81,25 +81,30 @@ else
 fi
 
 # --- 2. the domain module exists and exposes the contract ---------------
+# The deployment-adapters bounded context is split across
+# `mod.rs` (module decl + re-exports), `types.rs` (the data
+# shapes), and `logic.rs` (the trait + pure helpers). The
+# gate searches the whole directory so the split does not
+# hide any of the four required items.
 DOMAIN_DIR="${CRATES_DIR}/openpanel-domain/src/deployment_adapters"
 DOMAIN_MOD="${DOMAIN_DIR}/mod.rs"
 if [ ! -f "${DOMAIN_MOD}" ]; then
     record "missing domain module: ${DOMAIN_MOD}"
 else
-    # The trait + the three typed data items must be present.
-    if ! rg -q 'pub trait DeploymentAdapter\b' "${DOMAIN_MOD}"; then
+    if ! rg -q 'pub trait DeploymentAdapter\b' "${DOMAIN_DIR}"; then
         record "domain module does not define pub trait DeploymentAdapter"
     fi
-    if ! rg -q 'pub struct AdapterManifest\b' "${DOMAIN_MOD}"; then
+    if ! rg -q 'pub struct AdapterManifest\b' "${DOMAIN_DIR}"; then
         record "domain module does not define pub struct AdapterManifest"
     fi
-    if ! rg -q 'pub struct DeploymentPlan\b' "${DOMAIN_MOD}"; then
+    if ! rg -q 'pub struct DeploymentPlan\b' "${DOMAIN_DIR}"; then
         record "domain module does not define pub struct DeploymentPlan"
     fi
-    if ! rg -q 'pub struct DeploymentEvidence\b' "${DOMAIN_MOD}"; then
+    if ! rg -q 'pub struct DeploymentEvidence\b' "${DOMAIN_DIR}"; then
         record "domain module does not define pub struct DeploymentEvidence"
     fi
-    # Domain MUST NOT import app or api.
+    # Domain MUST NOT import app or api. The check recursively
+    # walks the whole bounded-context directory.
     while IFS= read -r f; do
         [ -z "${f}" ] && continue
         record "${f} (domain MUST NOT import app/api)"

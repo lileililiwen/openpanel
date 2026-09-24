@@ -817,7 +817,7 @@ fn deployment_adapters_secret_ref_is_bounded() {
     // Empty / whitespace / oversize names are rejected.
     assert!(SecretRef::new("", None).is_err());
     assert!(SecretRef::new("   ", None).is_err());
-    assert!(SecretRef::new(&"a".repeat(255), None).is_err());
+    assert!(SecretRef::new("a".repeat(255), None).is_err());
 
     // Empty versions are rejected.
     assert!(SecretRef::new("mac-token", Some(String::new())).is_err());

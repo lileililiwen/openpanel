@@ -251,3 +251,19 @@ requirements:
     digest: sha256:aac590538ac17cc2756eb5cdb4040b28e344f9d3c140e7115bf89d971a4308a5
     scenarios: 5
     checkers: [release-governance]
+
+  # The new deployment-adapters capability ships a contract gate
+  # (`scripts/check-deployment-adapters.sh`) that asserts the
+  # domain trait + types, the app service, the integration test
+  # fixture, the layering invariant, and the scenario coverage
+  # for `deployment-adapters`. The gate is paired with positive
+  # and negative fixtures in `scripts/test-gates.sh`
+  # (`# checker: deployment-adapters positive` / `negative`), so
+  # any future regression of the gate is caught by the test-gates
+  # self-test.
+  - archive: openspec/changes/archive/2026-09-24-add-portable-deployment-adapters/specs/quality/spec.md
+    capability: quality
+    requirement: "Deployment-Adapter Contract Gate"
+    digest: sha256:78d4d34bd419fd02542a657a95b421fd8e27b2f411fc823f6c2d8003cf22ad9a
+    scenarios: 3
+    checkers: [deployment-adapters]

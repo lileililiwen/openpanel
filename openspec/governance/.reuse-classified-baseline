@@ -1,6 +1,7 @@
 #
 action	per-aggregate business method, not a shared utility
 active	per-aggregate business method, not a shared utility
+actor	per-aggregate business method, not a shared utility
 add_key	per-aggregate business method, not a shared utility
 advance	per-aggregate business method, not a shared utility
 aliases	per-aggregate business method, not a shared utility
@@ -47,6 +48,7 @@ disable_site	per-aggregate business method, not a shared utility
 disable_subscription	per-aggregate business method, not a shared utility
 disable_user	per-aggregate business method, not a shared utility
 domains	per-aggregate business method, not a shared utility
+dry_run	per-aggregate business method, not a shared utility
 effective	per-aggregate business method, not a shared utility
 email	per-aggregate business method, not a shared utility
 empty	per-aggregate business method, not a shared utility
@@ -141,6 +143,7 @@ status	per-aggregate business method, not a shared utility
 stub	per-aggregate business method, not a shared utility
 submit	per-aggregate business method, not a shared utility
 supported	per-aggregate business method, not a shared utility
+supports_rollback	per-aggregate business method, not a shared utility
 target	per-aggregate business method, not a shared utility
 try_acquire	per-aggregate business method, not a shared utility
 unblock	per-aggregate business method, not a shared utility
