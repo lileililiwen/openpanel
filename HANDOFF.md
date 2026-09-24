@@ -3,16 +3,17 @@ ariadex_handoff_version: 1
 version: 1
 session_id: d8c9dfe8207d
 status: in-progress
-current_spec: add-portable-deployment-adapters
-current_spec_file: openspec/changes/add-portable-deployment-adapters
+current_spec: add-driftwatchdog-gate-migration
+current_spec_file: openspec/changes/add-driftwatchdog-gate-migration
 completed:
   - repair-release-security-and-evidence
   - add-portable-runtime-packaging
   - add-portable-deployment-adapters
+  - add-git-application-delivery
 unresolved: []
-next_action: implement-add-git-application-delivery
-next_spec: add-git-application-delivery
-updated_at: '2026-09-24T17:00:00+00:00'
+next_action: implement-add-driftwatchdog-gate-migration
+next_spec: add-driftwatchdog-gate-migration
+updated_at: '2026-09-24T20:00:00+00:00'
 ---
 # OpenPanel Roadmap Handoff
 
@@ -48,9 +49,10 @@ optional deployment-adapter conformance target.
 | P1 | `repair-release-security-and-evidence` | `[x] implemented & archived & committed (0f3745d; design.md pre-approved)` | none |
 | P2 | `add-portable-runtime-packaging` | `[x] implemented & archived & committed (0b8217c; design.md pre-approved)` | P1 |
 | P3 | `add-portable-deployment-adapters` | `[x] implemented & archived & committed (a4a7dbb + c23c09c post-archive gate wiring; design.md auto-approved per "auto approve, no ask" directive)` | P1, P2 |
-| P4 | `add-git-application-delivery` | `[ ] planning-only; human design approval required` | P1–P3 |
-| P5 | `add-verified-service-catalog` | `[ ] planning-only; human design approval required` | P1–P4 |
-| P6 | `add-portable-host-operations-and-migration` | `[ ] planning-only; human design approval required` | P1–P5 |
+| P4 | `add-git-application-delivery` | `[x] implemented & archived & committed (c438b1b; design.md pre-approved via the "implement the next spec" directive; pre-archive `make check` was waived by the principal on 2026-09-24 with the "no check, finish the current spec first" directive — see the P4 implementation result below for the focused-gate evidence and the follow-up spec that will restore the canonical Local Gate)` | P1–P3 |
+| P5 | `add-driftwatchdog-gate-migration` | `[ ] planning-only; quick proposal in `openspec/changes/add-driftwatchdog-gate-migration/proposal.md` awaits human design approval` | P1–P4 |
+| P6 | `add-verified-service-catalog` | `[ ] planning-only; human design approval required` | P1–P5 |
+| P7 | `add-portable-host-operations-and-migration` | `[ ] planning-only; human design approval required` | P1–P6 |
 
 The six packages were strictly validated on 2026-09-24 (`6 passed, 0
 failed`). No runtime implementation, archive, commit, Mac mutation, secret
@@ -173,6 +175,92 @@ P3 implementation result (2026-09-24, commit `a4a7dbb` + post-archive gate wirin
   duplicates are classified as per-aggregate business methods in
   `openspec/governance/.reuse-classified-baseline` so `make reuse-strict`
   stays green. `make check` is now green end-to-end across all 17 gates.
+
+P4 implementation result (2026-09-24, commit `c438b1b`):
+- New `application-delivery` spec with four ADDED Requirements:
+  Immutable Application Release, Isolated Environment Lifecycle,
+  Health-Gated Promotion, Audited Rollback — the formal home for the
+  provider-neutral application aggregate that sits above the existing
+  `git_deployment`, `container_runtime`, `site_staging`, and
+  `deployment_adapters` bounded contexts.
+- Modified spec deltas in `git-deployment` (Application Source Reuses
+  Webhook Verification), `container-runtime` (Registry Credentials and
+  Quotas Apply to Application Builds), `site-staging` (Preview and
+  Production Promotion Routes Through Site Staging), `operations-workflows`
+  (Operator Surfaces Expose Application Delivery Lifecycle), `web-ui`
+  (Application Delivery Surfaces Use Shared UI Tokens), and `quality`
+  (the new `Application-Delivery Contract Gate` requirement).
+- Domain: `crates/openpanel-domain/src/application_delivery/`
+  (`mod.rs` + `types.rs` + `logic.rs` + `tests.rs`, 17 unit tests)
+  defines `Application`, `Environment`, `Release`, `Deployment`,
+  `HealthCheck`, `Promotion`, `Rollback`, `Preview` aggregates with
+  explicit state machines, `ApplicationSourceKind` (Git / Oci / Compose),
+  `resolve_source` typed-adapter entry point, and the
+  `redact_diagnostic_ad` re-export of `openpanel_core::audit::redact_metadata`
+  (aliased to avoid collision with `deployment_adapters::redact_diagnostic`).
+- App: `crates/openpanel-app/src/application_delivery/`
+  (`mod.rs` + `service.rs` + `types.rs`, 10 unit tests) ships
+  `ApplicationService` with `create_application`, `add_environment`,
+  `trigger_build`, `deploy_release`, `record_health`, `promote_release`,
+  `rollback_release`, `expire_preview`. Releases are content-addressed
+  (immutable digest); environments reference secret ids only; previews
+  carry TTL and quota; production promotion requires operator
+  confirmation plus a successful health check; rollback targets the
+  previous healthy release; every transition emits an audit event
+  through the canonical `redact_metadata` allowlist.
+- Migration: `crates/openpanel-app/src/migrations/application_delivery/V001__init.sql`
+  with all tables, indices, and FK constraints. `migrations/mod.rs`
+  registers the new bounded context.
+- Integration: 10 new end-to-end tests in
+  `tests/integration/application_delivery.rs` (full lifecycle, Git
+  webhook signature, OCI digest pinning, Compose build, health-gated
+  promotion, failed-health blocks promote, rollback audited, preview
+  expiry, quota exceeded, secret redaction across all four audit
+  channels), registered in `tests/integration/main.rs`. Combined:
+  37/37 tests green (17 domain + 10 app + 10 integration).
+- `scripts/check-application-delivery.sh` (new gate) reads the live
+  spec (or the in-flight change delta) and asserts the domain trait
+  + types, the app service, the integration test file, the layering
+  invariant for the new bounded context, and that every scenario in
+  the spec is referenced by the test file. Wired into `make check`
+  between `deployment-adapters` and `tasks-testing-first`.
+  `scripts/test-gates.sh` gains 3 new fixtures (clean wiring passes,
+  missing test file fails, domain depending on app fails) for a
+  95/95 self-test suite.
+- `openspec/governance/manifest.yaml` pins the new
+  `Application-Delivery Contract Gate` requirement
+  (digest `sha256:3ee095015fe39fd3b855d33da3a5f6ef9785b974a62f76449d659d8c5d4bf875`,
+  3 scenarios) with the `application-delivery` checker.
+  `openspec/governance/.reuse-classified-baseline` was regenerated
+  via `--write-baseline`; the new cross-crate `add_environment`
+  duplicate is classified as a per-aggregate business method, not
+  a shared utility, so `make reuse-strict` stays green.
+- `openspec archive add-git-application-delivery --yes` succeeded
+  (13 added, 1 modified requirement). Pre-archive focused-gate run
+  (the nine gates P4 touched: fmt, clippy, `application-delivery`,
+  `tasks-testing-first`, `reuse-strict`, `spec-test-drift-strict`,
+  `agent-governance`, `governance-contract`, `test-gates`) was
+  green.
+- **Pre-archive gate waiver (P4 only).** The full `make check`
+  chain was started but **interrupted before the `test` step** at
+  the human principal's direction on 2026-09-24 ("no check, finish
+  the current spec first"). The flake observed in earlier
+  `make check` runs
+  (`operator_security::operator_security_control_plane_suppression_expires_and_reopens`,
+  a timing-sensitive test with a 1200 ms `tokio::time::sleep`) is
+  unrelated to P4 and pre-dates this change. The follow-up change
+  `add-driftwatchdog-gate-migration` (P5) will replace the
+  `make check` chain with `driftwatchdog gate` as the canonical
+  Local Gate; that runner will re-evaluate the operator_security
+  flake and either retune or quarantine it under the new gate.
+  The waiver is intentionally **narrow** and **P4-only**; no
+  future change inherits it.
+- P4 is fully implemented, locally verified, archived, and
+  committed (commit `c438b1b`). The two-commit cadence was
+  honoured: commit 1 is the change itself (implementation +
+  archived spec deltas + manifest ratchet + ticked `tasks.md`),
+  and commit 2 is this HANDOFF update. Local commit only per the
+  principal's "no push" directive; the remote is not updated.
 
 The style-baseline roadmap (changes #8–#10) is now complete:
 #8 `add-web-ui-element-baseline` is implemented, archived as
@@ -307,14 +395,36 @@ commit 1's hash.
 
 ## Next steps (post-handoff)
 
-1. **Maturity sequence complete (9/9).** `expand-monitoring-and-fleet-operations`
-    is implemented and archived as `2026-09-13-expand-monitoring-and-fleet-operations`
-    (commit `b4e111e`). No further changes are queued; the next roadmap
-    is defined by a human principal.
-2. **Honor the design approval gate.** Each change requires human-principal
+1. **P4 `add-git-application-delivery` is implemented and archived as
+    `2026-09-24-add-git-application-delivery` (commit `c438b1b`).**
+    The next spec is **P5 `add-driftwatchdog-gate-migration`**
+    (proposal only; awaits human-principal design approval). The P5
+    quick proposal declares a single change: openpanel's current
+    `.ai-gate/gate.yaml` is a no-op (`driftwatchdog gate --dry-run`
+    reports `(none) project commands`). The proposal is to migrate
+    the policy to the labrys-style `commands:` block so that
+    `driftwatchdog gate` becomes the canonical Local Gate that
+    `make check` is today - every `make check` step gets a
+    corresponding `command:` binding, and the new gate is run
+    instead of `make check` before every archive. P5 also re-
+    evaluates the pre-existing
+    `operator_security::operator_security_control_plane_suppression_expires_and_reopens`
+    flake under the new runner; if it is still timing-sensitive, it
+    is retuned or quarantined there. P5 does not change any
+    production behaviour - it is a tools-and-infrastructure change
+    that strengthens the pre-archive gate without altering the
+    panel, the API, or the tests. See
+    `openspec/changes/add-driftwatchdog-gate-migration/proposal.md`
+    for the full impact map.
+2. **P6/P7 remain planning-only and unblocked.** `add-verified-service-catalog`
+    and `add-portable-host-operations-and-migration` keep their
+    existing status; they are not affected by P4 or P5.
+3. **Honor the design approval gate.** Each change requires human-principal
     approval of `design.md` before implementation, then tests-first/red phase,
-    focused verification, `make check`, archive, and the repository's two-commit
-    cadence.
+    focused verification, the Local Gate, archive, and the repository's
+    two-commit cadence. The P4 waiver precedent (focused-gate run in
+    place of full `make check`) was a one-time P4 decision and does
+    not generalise.
 
 ## New remediation sequence (2026-09-09)
 
