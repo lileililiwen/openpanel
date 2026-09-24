@@ -3,17 +3,18 @@ ariadex_handoff_version: 1
 version: 1
 session_id: d8c9dfe8207d
 status: in-progress
-current_spec: null
-current_spec_file: null
-completed: []
+current_spec: add-portable-runtime-packaging
+current_spec_file: openspec/changes/add-portable-runtime-packaging
+completed:
+  - repair-release-security-and-evidence
 unresolved: []
-next_action: roadmap-complete
-next_spec: null
-updated_at: '2026-09-13T09:30:00+00:00'
+next_action: implement-add-portable-runtime-packaging
+next_spec: add-portable-runtime-packaging
+updated_at: '2026-09-24T13:30:00+00:00'
 ---
 # OpenPanel Roadmap Handoff
 
-Updated: 2026-09-13
+Updated: 2026-09-24
 Scope: the UI/UX gap roadmap (changes #1–#7) and the governance ratchet
 roadmap (changes G1–G4) are all implemented and archived. The final spec
 `2026-09-04-restore-make-check-green` (G4) is now archived as
@@ -21,6 +22,53 @@ roadmap (changes G1–G4) are all implemented and archived. The final spec
 folded into the live `audit-activity`, `operations-dashboard`, `sites`,
 and `web-ui-styling` specs. The active repo is on a green `make check`
 and `make test-gates` baseline.
+
+The portable production maturity queue (P1–P6) has started: P1
+`repair-release-security-and-evidence` is implemented, archived as
+`2026-09-24-repair-release-security-and-evidence`, and committed
+(`0f3745d`; design.md was pre-approved by the human principal per the
+AGENTS.md review gate and the HANDOFF required execution protocol).
+The actionable `rustls 0.23.43` advisory `RUSTSEC-2026-0285` is
+resolved by the dependency upgrade in this change. P2–P6 remain
+planning-only and unblocked by P1.
+
+The next roadmap is planning-only and portable. It does not make macOS,
+Docker Desktop, Jenkins, Cloudflare, `/Users/allen`, or any maintainer
+workstation a product dependency. The Mac/Jenkins environment is only an
+optional deployment-adapter conformance target.
+
+## Portable production maturity queue
+
+| Order | Change | Status | Depends on |
+|---:|---|---|---|
+| P1 | `repair-release-security-and-evidence` | `[x] implemented & archived & committed (0f3745d; design.md pre-approved)` | none |
+| P2 | `add-portable-runtime-packaging` | `[ ] planning-only; human design approval required` | P1 |
+| P3 | `add-portable-deployment-adapters` | `[ ] planning-only; human design approval required` | P1, P2 |
+| P4 | `add-git-application-delivery` | `[ ] planning-only; human design approval required` | P1–P3 |
+| P5 | `add-verified-service-catalog` | `[ ] planning-only; human design approval required` | P1–P4 |
+| P6 | `add-portable-host-operations-and-migration` | `[ ] planning-only; human design approval required` | P1–P5 |
+
+The six packages were strictly validated on 2026-09-24 (`6 passed, 0
+failed`). No runtime implementation, archive, commit, Mac mutation, secret
+creation, or deployment was performed by this planning pass.
+
+P1 implementation result (2026-09-24, commit `0f3745d`):
+- `rustls` 0.23.43 → 0.23.45 (clears `RUSTSEC-2026-0285`); matched
+  `rustls-webpki` 0.103.13 → 0.103.15. Workspace still compiles with
+  `cargo check --workspace --locked`.
+- New `release-evidence` spec with three requirements; cross-references
+  added to `quality`, `release-deployment-governance`,
+  `browser-ui-quality`, and `quality-maturity-ratchet`.
+- New `make release-evidence` gate (fail-closed via
+  `OPENPANEL_RELEASE_EVIDENCE_REQUIRED=1`, skips cleanly otherwise)
+  validates `dist/evidence-manifest.json` against the required record
+  set + per-record schema + stale-evidence rejection.
+- `scripts/check-audit.sh` rewritten to parse `cargo audit --json`,
+  distinguish actionable vulnerabilities from informational warnings,
+  and fail closed when `OPENPANEL_AUDIT_REQUIRED=1`.
+- 12 new test fixtures in `scripts/test-gates.sh` (5 audit + 6
+  release-evidence + 1 make-check wiring); full self-test suite is
+  83/83 green.
 
 The style-baseline roadmap (changes #8–#10) is now complete:
 #8 `add-web-ui-element-baseline` is implemented, archived as
