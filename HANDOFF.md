@@ -539,6 +539,26 @@ commit 1's hash.
     two-commit cadence. The P4 waiver precedent (focused-gate run in
     place of full `make check`) was a one-time P4 decision and does
     not generalise.
+5. **Tracked follow-up — gate self-test budget compliance.** Per-check
+    wall timings for all 28 `commands:` bindings (2026-09-24, warm
+    cache): `test_gates` = 65 s, `tests` = 34 s, `spec_test_drift_strict`
+    = 18 s, `reuse_strict` = 11 s; everything else ≤ 2 s. `test_gates`
+    sits at driftwatchdog's hard 60 s per-check budget and therefore
+    flaps between PASS (warm runs) and a "pending review" (loaded/
+    cold runs). The live quality spec's `DriftWatchdog Local Gate`
+    requirement deliberately tolerates pending reviews for cold cargo
+    builds, so this is not a violation — but P5 sized
+    `check-tests-gate.sh` to be "machine-decidable inside the 60 s
+    budget", and the self-test suite should honor that convention.
+    Proper home: a small standalone `quality` change (suggested
+    `add-gate-selftest-budget-compliance`) that (a) speeds
+    `scripts/test-gates.sh` (parallelize/cache fixtures) to a reliable
+    sub-60 s warm run and (b) adds a new budget-compliance requirement
+    pinned in `openspec/governance/manifest.yaml`. Do NOT fold it into
+    P7 (whose approved scope is host operations), and do NOT edit the
+    protected `DriftWatchdog Local Gate` text (manifest digest
+    `sha256:e7c8a31291251510bfdcc11ad2e7865ad42857103d1fcd3e4f00a6e8c696dd38`)
+    — a standalone requirement keeps the digest untouched.
 
 ## New remediation sequence (2026-09-09)
 
