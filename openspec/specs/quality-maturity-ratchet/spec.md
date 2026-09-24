@@ -54,3 +54,26 @@ condition.
 - **WHEN** a production stub is introduced without an evidence record
 - **THEN** the maturity gate fails.
 
+### Requirement: Ratchet Gates Emit Release Evidence
+
+The ratchet-protected gates (coverage-floor, maturity, layering, reuse,
+spec-test-drift) whose CI results are required publication evidence
+MUST produce records consumable by the `release-evidence` contract. A
+gating regression in any of these ratchets MUST surface as a
+non-`PASS` `coverage` or `maturity` record in
+`dist/evidence-manifest.json` and MUST block publication. The detailed
+schema and the stale-evidence rejection rules are owned by
+`openspec/specs/release-evidence/spec.md`.
+
+#### Scenario: Coverage floor regression blocks upload
+
+- **WHEN** `make coverage-floor` exits non-zero for the release commit
+- **THEN** the `coverage` evidence record is recorded as `FAIL` (or
+  `BLOCKED` when the tool is missing) and publication is blocked.
+
+#### Scenario: Maturity regression blocks upload
+
+- **WHEN** a new untracked TODO or stub lands in production
+- **THEN** the `maturity` evidence record is recorded as `FAIL` and
+  publication is blocked.
+

@@ -59,6 +59,8 @@ mod plugin_extension;
 /// Plugin marketplace HTTP integration tests.
 mod plugin_marketplace;
 mod quality;
+/// Release-evidence contract integration tests.
+mod release_evidence;
 /// Runtime environment integration tests.
 mod runtime_env;
 mod security;

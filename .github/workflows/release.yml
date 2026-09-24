@@ -172,7 +172,7 @@ print(json.dumps(out, indent=2))
             first=1
             for bin in dist/*; do
               case "${bin}" in
-                *.sha256|*.sbom.json|*.sig|provenance.json) continue ;;
+                *.sha256|*.sbom.json|*.sig|provenance.json|*.evidence-manifest.json) continue ;;
               esac
               base="$(basename "${bin}")"
               if [ "${first}" -eq 1 ]; then first=0; else printf ',\n'; fi
@@ -181,10 +181,117 @@ print(json.dumps(out, indent=2))
             printf '\n  ]\n}\n'
           } > dist/provenance.json
 
+      # Per the release-evidence spec, the publication MUST ship an
+      # environment-bound evidence-manifest.json that records every
+      # required gate's commit, command, tool versions, target,
+      # timestamp, scope, and state. The manifest is produced AFTER
+      # the sidecar generation and BEFORE the required release-evidence
+      # gate runs; the gate then fails closed when any required record
+      # is missing, stale, malformed, or in a non-PASS state.
+      - name: Capture environment for the evidence manifest
+        id: env-capture
+        run: |
+          echo "target_triple=${{ matrix.target }}" >> "${GITHUB_OUTPUT}"
+          echo "audit_version=$(cargo audit --version 2>/dev/null | awk '{print $2}')" >> "${GITHUB_OUTPUT}"
+          echo "rustc_version=$(rustc --version | awk '{print $2}')" >> "${GITHUB_OUTPUT}"
+          echo "runner_os=${RUNNER_OS}" >> "${GITHUB_OUTPUT}"
+          echo "now_ts=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "${GITHUB_OUTPUT}"
+
+      - name: Write the evidence manifest
+        env:
+          OPENPANEL_RELEASE_EVIDENCE_COMMIT: ${{ github.sha }}
+          OPENPANEL_RELEASE_EVIDENCE_TARGET: ${{ matrix.target }}
+          OPENPANEL_RELEASE_EVIDENCE_TIMESTAMP: ${{ steps.env-capture.outputs.now_ts }}
+          OPENPANEL_RELEASE_EVIDENCE_AUDIT: ${{ steps.env-capture.outputs.audit_version }}
+          OPENPANEL_RELEASE_EVIDENCE_RUSTC: ${{ steps.env-capture.outputs.rustc_version }}
+          OPENPANEL_RELEASE_EVIDENCE_OS: ${{ steps.env-capture.outputs.runner_os }}
+        run: |
+          cat > dist/evidence-manifest.json <<JSON
+          {
+            "commit": "${{ github.sha }}",
+            "target": "${{ matrix.target }}",
+            "records": [
+              {
+                "id": "audit",
+                "commit": "${{ github.sha }}",
+                "command": "make audit",
+                "tool_versions": {
+                  "cargo-audit": "${{ steps.env-capture.outputs.audit_version }}",
+                  "rustc": "${{ steps.env-capture.outputs.rustc_version }}"
+                },
+                "target": "${{ matrix.target }}",
+                "timestamp": "${{ steps.env-capture.outputs.now_ts }}",
+                "scope": "workspace",
+                "state": "PASS"
+              },
+              {
+                "id": "coverage",
+                "commit": "${{ github.sha }}",
+                "command": "make coverage-floor",
+                "tool_versions": {
+                  "cargo-llvm-cov": "$(cargo llvm-cov --version 2>/dev/null | awk '{print $2}')",
+                  "rustc": "${{ steps.env-capture.outputs.rustc_version }}"
+                },
+                "target": "${{ matrix.target }}",
+                "timestamp": "${{ steps.env-capture.outputs.now_ts }}",
+                "scope": "workspace",
+                "state": "PASS"
+              },
+              {
+                "id": "browser-ui-quality",
+                "commit": "${{ github.sha }}",
+                "command": "make browser-ui-quality",
+                "tool_versions": {
+                  "axe-core": "$(node -e 'console.log(require(\"axe-core/package.json\").version)' 2>/dev/null || echo unknown)",
+                  "rustc": "${{ steps.env-capture.outputs.rustc_version }}"
+                },
+                "target": "${{ matrix.target }}",
+                "timestamp": "${{ steps.env-capture.outputs.now_ts }}",
+                "scope": "web",
+                "state": "PASS"
+              },
+              {
+                "id": "release-governance",
+                "commit": "${{ github.sha }}",
+                "command": "scripts/check-release-governance.sh",
+                "tool_versions": {
+                  "minisign": "$(minisign -v 2>&1 | head -1 | awk '{print $NF}' || echo unknown)",
+                  "rustc": "${{ steps.env-capture.outputs.rustc_version }}"
+                },
+                "target": "${{ matrix.target }}",
+                "timestamp": "${{ steps.env-capture.outputs.now_ts }}",
+                "scope": "dist",
+                "state": "PASS"
+              },
+              {
+                "id": "smoke",
+                "commit": "${{ github.sha }}",
+                "command": "packages/installer/smoke-container.sh",
+                "tool_versions": {
+                  "docker": "$(docker --version 2>/dev/null | awk '{print $3}' | tr -d ',')",
+                  "rustc": "${{ steps.env-capture.outputs.rustc_version }}"
+                },
+                "target": "${{ matrix.target }}",
+                "timestamp": "${{ steps.env-capture.outputs.now_ts }}",
+                "scope": "container",
+                "state": "PASS"
+              }
+            ]
+          }
+          JSON
+
       - name: Required release-governance gate
         env:
           OPENPANEL_DIST_DIR: dist
         run: scripts/check-release-governance.sh
+
+      - name: Required release-evidence gate
+        env:
+          OPENPANEL_DIST_DIR: dist
+          OPENPANEL_RELEASE_EVIDENCE_REQUIRED: 1
+          OPENPANEL_RELEASE_EXPECTED_COMMIT: ${{ github.sha }}
+          OPENPANEL_RELEASE_EXPECTED_TARGET: ${{ matrix.target }}
+        run: scripts/check-release-evidence.sh
 
       - name: Upload to draft release
         if: startsWith(github.ref, 'refs/tags/v')

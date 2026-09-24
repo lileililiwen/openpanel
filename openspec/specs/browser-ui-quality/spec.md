@@ -47,3 +47,28 @@ without removing status information or keyboard operation.
 - **THEN** transitions/animations are suppressed while state changes remain
   perceivable.
 
+### Requirement: Browser Evidence Record
+
+The `make browser-ui-quality` gate's CI result MUST be captured as a
+`browser-ui-quality` record in `dist/evidence-manifest.json` for every
+release. The record MUST carry the build commit, target, command
+(`make browser-ui-quality`), tool versions (axe-core / playwright where
+present), timestamp, scope (`web`), and result state. A missing or
+non-`PASS` record MUST block publication. The detailed record schema and
+the fail-closed behaviour live in
+`openspec/specs/release-evidence/spec.md`.
+
+#### Scenario: Browser record present
+
+- **WHEN** a release is published and the browser gate ran for the
+  same commit
+- **THEN** the `browser-ui-quality` record is in
+  `dist/evidence-manifest.json` with `state: PASS` and a non-empty
+  `tool_versions` object.
+
+#### Scenario: Browser record missing blocks upload
+
+- **WHEN** the release-evidence gate finds no `browser-ui-quality`
+  record in the manifest
+- **THEN** publication is blocked.
+

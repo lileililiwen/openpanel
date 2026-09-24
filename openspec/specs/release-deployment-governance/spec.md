@@ -55,3 +55,30 @@ platform smoke jobs MUST succeed.
 - **WHEN** `make check` fails in the release workflow
 - **THEN** publication is blocked.
 
+### Requirement: Publication Evidence Manifest
+
+The release workflow MUST emit `dist/evidence-manifest.json` whose records
+identify the build commit, target, timestamp, command, tool versions, scope,
+and per-gate result state. The manifest MUST be validated by the
+`make release-evidence` gate before any artifact is uploaded; a missing,
+malformed, stale, or non-`PASS` record on any required gate (audit,
+coverage, browser-ui-quality, release-governance, smoke) MUST block
+publication with `BLOCKED` evidence. The detailed contract — required
+record ids, field schema, and the `STALE` / `BLOCKED` / `FAIL`
+classification — is owned by
+`openspec/specs/release-evidence/spec.md`.
+
+#### Scenario: Missing coverage record blocks upload
+
+- **WHEN** `dist/evidence-manifest.json` is present but lacks the
+  `coverage` record
+- **THEN** the release-evidence gate fails and the upload step does not
+  run.
+
+#### Scenario: Stale evidence is rejected
+
+- **WHEN** an evidence record was produced for a different commit or
+  target than the one currently being published
+- **THEN** the release-evidence gate rejects it as stale and publication
+  is blocked.
+

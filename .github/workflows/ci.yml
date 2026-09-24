@@ -87,6 +87,43 @@ jobs:
       - name: Required coverage floor
         run: make coverage-floor
 
+  release-audit:
+    name: Release Audit
+    runs-on: ubuntu-latest
+    # Required by the release-evidence spec (Audited Dependency
+    # Baseline): a required publication job MUST fail closed when
+    # `cargo-audit` is unavailable; no stub report replaces the real
+    # check. The job sets OPENPANEL_AUDIT_REQUIRED=1 so the gate
+    # distinguishes the publication path from the lenient local-dev
+    # default (OPENPANEL_AUDIT_REQUIRED=0).
+    env:
+      OPENPANEL_AUDIT_REQUIRED: 1
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install cargo-audit
+        run: cargo install --locked cargo-audit
+      - name: Required dependency audit
+        run: make audit
+
+  release-evidence:
+    name: Release Evidence
+    # The release-evidence gate itself only validates a manifest when
+    # one exists. In CI the manifest is only present in a release
+    # workflow run, not on every push, so this job runs `make
+    # release-evidence` in required mode and asserts that an empty /
+    # missing manifest fails closed (the local-dev skip path is
+    # exercised in `make check`).
+    runs-on: ubuntu-latest
+    env:
+      OPENPANEL_RELEASE_EVIDENCE_REQUIRED: 1
+      OPENPANEL_RELEASE_EXPECTED_COMMIT: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Required release evidence (no manifest in CI = fail closed)
+        run: make release-evidence
+
   agent-quality:
     name: Agent Quality Gates
     runs-on: ubuntu-latest

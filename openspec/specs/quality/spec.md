@@ -56,19 +56,47 @@ fail on any diff.
 ### Requirement: Dependency Audit
 
 `cargo-audit` (already a workspace dev-dep candidate) MUST run on
-every CI build. Any advisory with severity `warning` or higher MUST
-fail the build.
+every CI build. The audit gate MUST classify every finding as either
+an actionable vulnerability (which fails the build) or an
+informational warning such as `unmaintained`, `yanked`, `notice`, or
+`unsound` (which is reported separately but does not fail the
+build). Each actionable finding MUST be reported with the affected
+crate, version, advisory identifier, and remediation boundary
+(patched versions or reviewed exception).
 
 The repo MUST contain an `.cargo/audit.toml` (auto-managed) for
 advisories the team has triaged. Each entry MUST have a `reason`.
 Entries with a known upstream fix MUST have an `expires_on` date.
 
+The required publication job MUST set `OPENPANEL_AUDIT_REQUIRED=1`
+so a missing `cargo-audit` binary fails the job; local development
+keeps the lenient `OPENPANEL_AUDIT_REQUIRED=0` (default) so
+`make check` reports a skipped status instead of blocking unrelated
+work. The publication-side failure mode and the env-bound evidence
+record it produces are owned by the
+`openspec/specs/release-evidence/spec.md` contract.
+
 #### Scenario: Transitive dep has a known RUSTSEC advisory
 
 - **WHEN** `cargo audit` detects `RUSTSEC-2024-XXXX` in the dep graph
-- **THEN** the audit gate fails (`make check` exits non-zero) and the
-  PR cannot be merged until the advisory is resolved or explicitly
-  suppressed with an expiry.
+- **THEN** the audit gate fails (`make check` exits non-zero), names
+  the crate / version / advisory / remediation, and the PR cannot
+  be merged until the advisory is resolved or explicitly suppressed
+  with an expiry.
+
+#### Scenario: Unmaintained warning is informational, not a fail
+
+- **WHEN** `cargo audit` reports only an `unmaintained` advisory
+  whose identifier is in `.cargo/audit.toml` `ignore` (or has no
+  patched version)
+- **THEN** the gate prints `[info]` for the finding and exits 0.
+
+#### Scenario: Required publication job fails when tool missing
+
+- **WHEN** `OPENPANEL_AUDIT_REQUIRED=1` and the runner cannot find
+  `cargo-audit`
+- **THEN** the gate fails closed; no stub report replaces the real
+  check.
 
 ### Requirement: Documentation Link Check
 

@@ -538,6 +538,11 @@ if command -v make >/dev/null 2>&1; then
   else
     fail=$((fail+1)); echo "  FAIL - make check does NOT include coverage-floor"
   fi
+  if printf '%s' "${plan}" | grep -q 'scripts/check-release-evidence.sh'; then
+    pass=$((pass+1)); echo "  ok   - make check includes release-evidence"
+  else
+    fail=$((fail+1)); echo "  FAIL - make check does NOT include release-evidence"
+  fi
   if printf '%s' "${plan}" | grep -q 'scripts/test-gates.sh'; then
     pass=$((pass+1)); echo "  ok   - make test-gates target runs the script"
   else
@@ -811,6 +816,159 @@ rm -rf "${RG}/dist"
 assert "release-governance: missing dist dir skips cleanly" 0 \
   env OPENPANEL_DIST_DIR="${RG}/dist" \
       "${RG}/scripts/check-release-governance.sh"
+
+# --- audit (ratchet) ----------------------------------------------------
+# Per the release-evidence spec, the audit gate MUST fail on actionable
+# vulnerabilities and MUST NOT classify unmaintained / yanked /
+# notice / unsound findings as vulnerabilities. The gate MUST also
+# fail-closed (exit non-zero) when OPENPANEL_AUDIT_REQUIRED=1 and the
+# tool is unavailable. The script's interface accepts a shimmed
+# `cargo-audit` on PATH (set OPENPANEL_AUDIT_BIN), so the fixture can
+# substitute canned JSON output for real `cargo audit --json`.
+AU="${TMP}/audit"
+mkdir -p "${AU}/scripts/lib" "${AU}/bin"
+cp ./scripts/check-audit.sh "${AU}/scripts/check-audit.sh"
+cp ./scripts/lib/step.sh "${AU}/scripts/lib/step.sh"
+
+write_audit_json() { # write_audit_json <path> <json>
+  printf '%s' "$2" > "$1"
+}
+
+# Empty database, no advisories — clean.
+write_audit_json "${AU}/audit_clean.json" \
+  '{"vulnerabilities":{"found":false,"count":0,"list":[]},"warnings":{"unmaintained":[],"yanked":[]}}'
+# Only an unmaintained warning — informational; MUST pass.
+write_audit_json "${AU}/audit_info.json" \
+  '{"vulnerabilities":{"found":false,"count":0,"list":[]},"warnings":{"unmaintained":[{"kind":"unmaintained","package":{"name":"rustls-pemfile","version":"2.2.0"},"advisory":{"id":"RUSTSEC-2025-0134","title":"unmaintained"}}]}}'
+# One actionable vulnerability — MUST fail.
+write_audit_json "${AU}/audit_vuln.json" \
+  '{"vulnerabilities":{"found":true,"count":1,"list":[{"advisory":{"id":"RUSTSEC-2026-9999","title":"Actionable"},"package":{"name":"some-crate","version":"0.1.0"},"versions":{"patched":[">=0.1.1"]}}]},"warnings":{"unmaintained":[],"yanked":[]}}'
+
+# Checker: audit positive (clean)
+assert "audit: clean advisory database passes" 0 \
+  env OPENPANEL_AUDIT_BIN="sh -c 'cat ${AU}/audit_clean.json'" \
+      OPENPANEL_AUDIT_REQUIRED=0 \
+      "${AU}/scripts/check-audit.sh"
+# Checker: audit positive (informational only)
+assert "audit: only unmaintained warnings pass" 0 \
+  env OPENPANEL_AUDIT_BIN="sh -c 'cat ${AU}/audit_info.json'" \
+      OPENPANEL_AUDIT_REQUIRED=0 \
+      "${AU}/scripts/check-audit.sh"
+# Checker: audit negative (actionable vulnerability)
+assert "audit: actionable vulnerability fails" 1 \
+  env OPENPANEL_AUDIT_BIN="sh -c 'cat ${AU}/audit_vuln.json'" \
+      OPENPANEL_AUDIT_REQUIRED=0 \
+      "${AU}/scripts/check-audit.sh"
+# Checker: audit negative (tool missing + required)
+assert "audit: tool missing + required fails" 1 \
+  env OPENPANEL_AUDIT_BIN="/no/such/cargo-audit-binary" \
+      OPENPANEL_AUDIT_REQUIRED=1 \
+      "${AU}/scripts/check-audit.sh"
+# Local-friendliness: tool missing + not required MUST pass.
+assert "audit: tool missing + not required skips cleanly" 0 \
+  env OPENPANEL_AUDIT_BIN="/no/such/cargo-audit-binary" \
+      OPENPANEL_AUDIT_REQUIRED=0 \
+      "${AU}/scripts/check-audit.sh"
+
+# --- release-evidence (new) ---------------------------------------------
+# Per the release-evidence spec, a publication workflow MUST fail when
+# any required coverage / browser / SBOM / signature / provenance /
+# smoke evidence record is missing, stale, malformed, or in a
+# non-PASS state. The gate consumes dist/evidence-manifest.json
+# (only when OPENPANEL_RELEASE_EVIDENCE_REQUIRED=1); without that
+# flag set, the gate skips so local work is not blocked.
+RE="${TMP}/release_evidence"
+mkdir -p "${RE}/scripts/lib" "${RE}/dist"
+cp ./scripts/check-release-evidence.sh "${RE}/scripts/check-release-evidence.sh" 2>/dev/null || true
+cp ./scripts/lib/step.sh "${RE}/scripts/lib/step.sh"
+
+build_evidence_manifest() { # build_evidence_manifest <path> <commit> <target> <variant>
+  local path="$1"; local commit="$2"; local target="$3"; local variant="$4"
+  cat > "${path}" <<JSON
+{
+  "commit": "${commit}",
+  "target": "${target}",
+  "records": [
+    { "id": "audit", "commit": "${commit}", "command": "make audit", "tool_versions": { "cargo-audit": "0.21.1" }, "target": "${target}", "timestamp": "2026-09-24T00:00:00Z", "scope": "workspace", "state": "PASS" },
+    { "id": "coverage", "commit": "${commit}", "command": "make coverage-floor", "tool_versions": { "cargo-llvm-cov": "0.6.0" }, "target": "${target}", "timestamp": "2026-09-24T00:00:00Z", "scope": "workspace", "state": "PASS" },
+    { "id": "browser-ui-quality", "commit": "${commit}", "command": "make browser-ui-quality", "tool_versions": { "axe-core": "4.10.0" }, "target": "${target}", "timestamp": "2026-09-24T00:00:00Z", "scope": "web", "state": "PASS" },
+    { "id": "release-governance", "commit": "${commit}", "command": "scripts/check-release-governance.sh", "tool_versions": { "minisign": "0.11" }, "target": "${target}", "timestamp": "2026-09-24T00:00:00Z", "scope": "dist", "state": "PASS" },
+    { "id": "smoke", "commit": "${commit}", "command": "packages/installer/smoke-container.sh", "tool_versions": { "docker": "24.0" }, "target": "${target}", "timestamp": "2026-09-24T00:00:00Z", "scope": "container", "state": "PASS" }
+  ]
+}
+JSON
+  case "${variant}" in
+    missing-record)
+      # Drop the smoke record entirely.
+      python3 -c "import json,sys; d=json.load(open('${path}')); d['records']=[r for r in d['records'] if r['id']!='smoke']; json.dump(d, open('${path}','w'), indent=2)" 2>/dev/null \
+        || sed -i '/"id": "smoke"/,/state.*PASS/d' "${path}"
+      ;;
+    stale-commit)
+      sed -i "s/${commit}/0000000000000000000000000000000000000000/g" "${path}"
+      ;;
+    blocked-state)
+      sed -i 's/"id": "coverage".*"state": "PASS"/"id": "coverage", "command": "make coverage-floor", "tool_versions": { "cargo-llvm-cov": "0.6.0" }, "target": "x86_64-unknown-linux-gnu", "timestamp": "2026-09-24T00:00:00Z", "scope": "workspace", "state": "BLOCKED"/' "${path}"
+      ;;
+    malformed)
+      sed -i 's/"command": "make audit",//' "${path}"
+      ;;
+  esac
+}
+
+# Clean: complete manifest, matching commit + target — MUST pass.
+build_evidence_manifest "${RE}/dist/evidence-manifest.json" "abc123def" "x86_64-unknown-linux-gnu" complete
+# checker: release-evidence positive
+assert "release-evidence: complete manifest passes" 0 \
+  env OPENPANEL_DIST_DIR="${RE}/dist" \
+      OPENPANEL_RELEASE_EVIDENCE_REQUIRED=1 \
+      OPENPANEL_RELEASE_EXPECTED_COMMIT="abc123def" \
+      OPENPANEL_RELEASE_EXPECTED_TARGET="x86_64-unknown-linux-gnu" \
+      "${RE}/scripts/check-release-evidence.sh"
+# Missing required record MUST fail.
+build_evidence_manifest "${RE}/dist/evidence-manifest.json" "abc123def" "x86_64-unknown-linux-gnu" missing-record
+# checker: release-evidence negative
+assert "release-evidence: missing required record fails" 1 \
+  env OPENPANEL_DIST_DIR="${RE}/dist" \
+      OPENPANEL_RELEASE_EVIDENCE_REQUIRED=1 \
+      OPENPANEL_RELEASE_EXPECTED_COMMIT="abc123def" \
+      OPENPANEL_RELEASE_EXPECTED_TARGET="x86_64-unknown-linux-gnu" \
+      "${RE}/scripts/check-release-evidence.sh"
+# Stale commit (record for a different commit) MUST fail.
+build_evidence_manifest "${RE}/dist/evidence-manifest.json" "abc123def" "x86_64-unknown-linux-gnu" stale-commit
+# checker: release-evidence negative
+assert "release-evidence: stale commit fails" 1 \
+  env OPENPANEL_DIST_DIR="${RE}/dist" \
+      OPENPANEL_RELEASE_EVIDENCE_REQUIRED=1 \
+      OPENPANEL_RELEASE_EXPECTED_COMMIT="abc123def" \
+      OPENPANEL_RELEASE_EXPECTED_TARGET="x86_64-unknown-linux-gnu" \
+      "${RE}/scripts/check-release-evidence.sh"
+# BLOCKED state on a required record MUST fail.
+build_evidence_manifest "${RE}/dist/evidence-manifest.json" "abc123def" "x86_64-unknown-linux-gnu" blocked-state
+# checker: release-evidence negative
+assert "release-evidence: BLOCKED state fails" 1 \
+  env OPENPANEL_DIST_DIR="${RE}/dist" \
+      OPENPANEL_RELEASE_EVIDENCE_REQUIRED=1 \
+      OPENPANEL_RELEASE_EXPECTED_COMMIT="abc123def" \
+      OPENPANEL_RELEASE_EXPECTED_TARGET="x86_64-unknown-linux-gnu" \
+      "${RE}/scripts/check-release-evidence.sh"
+# Malformed record (missing required field) MUST fail.
+build_evidence_manifest "${RE}/dist/evidence-manifest.json" "abc123def" "x86_64-unknown-linux-gnu" malformed
+# checker: release-evidence negative
+assert "release-evidence: malformed record fails" 1 \
+  env OPENPANEL_DIST_DIR="${RE}/dist" \
+      OPENPANEL_RELEASE_EVIDENCE_REQUIRED=1 \
+      OPENPANEL_RELEASE_EXPECTED_COMMIT="abc123def" \
+      OPENPANEL_RELEASE_EXPECTED_TARGET="x86_64-unknown-linux-gnu" \
+      "${RE}/scripts/check-release-evidence.sh"
+# Not-required (default) MUST skip so local work is unblocked.
+# Wipe the dist/ so the script hits the no-OPENPANEL_DIST_DIR path
+# rather than validating the previous test's (deliberately broken)
+# manifest.
+rm -rf "${RE}/dist"
+assert "release-evidence: not required skips cleanly" 0 \
+  env OPENPANEL_DIST_DIR="${RE}/dist" \
+      OPENPANEL_RELEASE_EVIDENCE_REQUIRED=0 \
+      "${RE}/scripts/check-release-evidence.sh"
 
 # --- propagation: a failing fixture must yield non-zero overall ---------
 # Spec: "self-test MUST NOT silently skip because a target is absent."
