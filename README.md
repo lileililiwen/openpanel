@@ -188,6 +188,23 @@ cargo run --release -- serve
 xdg-open http://127.0.0.1:8080/login
 ```
 
+### Docker Compose runtime
+
+`compose.yaml` runs the same packaged release image as the checked-in
+`Dockerfile`. From a source checkout, stage the binary and build the image
+before starting Compose:
+
+```bash
+cargo build --release --bin openpanel
+cp target/release/openpanel ./openpanel
+docker build -t openpanel:dev .
+OPENPANEL_MASTER_KEY="$(openssl rand -base64 32)" docker compose up -d
+curl -fsS http://127.0.0.1:8080/health
+```
+
+The data volume is SQLite-backed at `/var/lib/openpanel`; the master key is
+runtime-only and must be retained for the lifetime of that data volume.
+
 ## Configuration layering
 
 Lower-numbered sources are overridden by higher-numbered ones:

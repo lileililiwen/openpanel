@@ -1,0 +1,31 @@
+# OpenPanel runs the release artifact packaged by Dockerfile.
+# Build the image first when working from source:
+#   cargo build --release --bin openpanel
+#   cp target/release/openpanel ./openpanel
+#   docker build -t openpanel:dev .
+name: openpanel-local
+
+services:
+  openpanel:
+    image: ${OPENPANEL_IMAGE:-openpanel:dev}
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${OPENPANEL_HOST_PORT:-8080}:8080"
+    environment:
+      OPENPANEL__SERVER__BIND: 0.0.0.0
+      OPENPANEL__SERVER__PORT: "8080"
+      OPENPANEL__DATABASE__DRIVER: sqlite
+      OPENPANEL__DATABASE__URL: /var/lib/openpanel/openpanel.db
+      OPENPANEL__DATABASE__MASTER_KEY: ${OPENPANEL_MASTER_KEY:?set OPENPANEL_MASTER_KEY to a base64-encoded 32-byte key}
+      OPENPANEL__LOG__LEVEL: ${OPENPANEL_LOG_LEVEL:-info}
+    volumes:
+      - openpanel-data:/var/lib/openpanel
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/openpanel", "healthcheck"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  openpanel-data:
