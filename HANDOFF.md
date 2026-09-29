@@ -2,9 +2,9 @@
 ariadex_handoff_version: 1
 version: 1
 session_id: d8c9dfe8207d
-status: in-progress
-current_spec: add-portable-host-operations-and-migration
-current_spec_file: openspec/changes/add-portable-host-operations-and-migration
+status: complete
+current_spec: forge-publish-provider
+current_spec_file: openspec/changes/forge-publish-provider
 completed:
   - repair-release-security-and-evidence
   - add-portable-runtime-packaging
@@ -13,10 +13,11 @@ completed:
   - add-driftwatchdog-gate-migration
   - add-verified-service-catalog
   - add-gate-selftest-budget-compliance
+  - add-portable-host-operations-and-migration
 unresolved: []
-next_action: implement-add-portable-host-operations-and-migration
-next_spec: add-portable-host-operations-and-migration
-updated_at: '2026-09-24T23:50:00+00:00'
+next_action: implement-forge-publish-provider
+next_spec: forge-publish-provider
+updated_at: '2026-09-30T06:10:00+08:00'
 ---
 # OpenPanel Roadmap Handoff
 
@@ -37,9 +38,10 @@ committed
 the human principal per the AGENTS.md review gate and the HANDOFF
 required execution protocol — P3 used the principal's "auto approve, no
 ask" directive). The actionable `rustls 0.23.43` advisory
-`RUSTSEC-2026-0285` is resolved by the P1 dependency upgrade. P4, P5, and
-P6 are implemented, archived, and committed (`c438b1b`, `7b81bf3`, and
-`2de9b31`); P7 remains planning-only and unblocked by the completed work.
+`RUSTSEC-2026-0285` is resolved by the P1 dependency upgrade. P4, P5,
+P6, P7, and P8 are implemented, archived, and committed (`c438b1b`,
+`7b81bf3`, `2de9b31`, `7a25a69`, and `99c1d11`); the portable
+production maturity queue is now complete.
 
 The next roadmap is planning-only and portable. It does not make macOS,
 Docker Desktop, Jenkins, Cloudflare, `/Users/allen`, or any maintainer
@@ -56,7 +58,7 @@ optional deployment-adapter conformance target.
 | P4 | `add-git-application-delivery` | `[x] implemented & archived & committed (c438b1b; design.md pre-approved via the "implement the next spec" directive; pre-archive `make check` was waived by the principal on 2026-09-24 with the "no check, finish the current spec first" directive — see the P4 implementation result below for the focused-gate evidence and the follow-up spec that will restore the canonical Local Gate)` | P1–P3 |
 | P5 | `add-driftwatchdog-gate-migration` | `[x] implemented & archived & committed (7b81bf3; design.md approved via the "begin the next spec impl" directive; driftwatchdog gate 28/28 PASS pre- and post-archive, exit 0, zero pending reviews; the canonical Local Gate is now `make gate` — see the P5 implementation result below)` | P1–P4 |
 | P6 | `add-verified-service-catalog` | `[x] implemented & archived & committed (2de9b31; design.md approved via the "move to next spec and implement" directive; driftwatchdog gate 28/28 PASS pre- and post-archive, zero blocking failures, zero pending reviews on the warm cache — see the P6 implementation result below)` | P1–P5 |
-| P7 | `add-portable-host-operations-and-migration` | `[ ] planning-only; human design approval required` | P1–P6 |
+| P7 | `add-portable-host-operations-and-migration` | `[x] implemented & archived & committed (7a25a69; design.md approved via the "implement the next spec" directive; new `host-migration-interoperability` capability + 8 modified capability specs; `make gate` PASS pre- and post-archive with the `lint`/`tests` pending reviews resolved by running the bound commands — see the P7 implementation result below)` | P1–P6 |
 | P8 | `add-gate-selftest-budget-compliance` | `[x] implemented & archived & committed (99c1d11; design.md approved via the "implement the next spec" directive; the governance self-test suite is now self-enforcing under the 60 s driftwatchdog per-check budget — see the P8 implementation result below)` | P1–P6 (post-P6 governance follow-up) |
 
 The six packages were strictly validated on 2026-09-24 (`6 passed, 0
@@ -376,6 +378,74 @@ P6 implementation result (2026-09-24, commit `2de9b31`):
   spec); every archived `tasks.md` box is ticked with dated evidence.
   Local commit only per the principal's "no push" directive.
 
+P7 implementation result (2026-09-30, commit `7a25a69`):
+- New `host-migration-interoperability` capability with four ADDED
+  Requirements: Host Capability Contract, Migration Preview and
+  Conflict Policy, Scoped Verified Import, Reversible Cutover — the
+  formal home for portable multi-host operations and cPanel / Baota /
+  generic-bundle migration. Eight existing capabilities gain modified
+  deltas (`terminal-host-fleet`, `monitoring-fleet-operations`,
+  `migration-importers`, `backup-dr-operations`, `sites`, `mail`,
+  `dns`, `ssl`) plus a new `Host-Migration Interoperability Contract
+  Gate` requirement on `quality` (9 spec deltas).
+- Domain: `crates/openpanel-domain/src/agent/mod.rs` gains the typed
+  `HostCapability` profile (OS/arch, runtime adapters, supported
+  operations reusing the plugin `CapabilitySet`, version, health) and
+  `HostHealth`; `AgentError::CapabilityMismatch`. The
+  `migration_importers` domain gains the operator-confirmed
+  `ConflictPolicy` (Block / Replace / Skip / RequireExplicit) wired
+  into `ImportConflict`, and `MigrationRunStatus::PartiallyCompleted`.
+- App: `crates/openpanel-app/src/agent/host_capability.rs` ships the
+  `HostAdapter` port, `MemoryHostAdapter`, and `HostAdapterService`
+  façade (reusing `host_fleet::classify_command` for
+  `authorize_command`). `migration_importers/verifiers` adds the
+  `PostImportVerifier` port plus four per-bounded-context verifiers
+  (sites, mail, DNS, SSL) and a `FailingVerifier` test double;
+  `MigrationService` gains `preview_with_policy` / `run_with_verifiers`
+  and marks a run `PartiallyCompleted` (refusing cutover) on any
+  verification failure. `crates/openpanel-app/src/host_ops/cutover.rs`
+  adds `CutoverService`, `CutoverEvidence`, and the `DnsCutover` /
+  `MailCutover` / `SslCutover` ports (per-type preflight + audit +
+  rollback TTL, reusing the `deployment_adapters::DeploymentEvidence`
+  shape and `openpanel_core::audit::redact_metadata`).
+- Drivers (parsing / translation only; source scripts are never
+  executed): `CpanelPkgacctDriver` and `CpanelLegacyBackupDriver`
+  (`migration_importers/drivers/`), and `BaotaBackupDriver`, all
+  reusing the existing `ManifestTranslator` hook and typed `SecretRef`
+  imports. Fixture bundles live under `tests/fixtures/cpanel/` and
+  `tests/fixtures/baota/`; an operator runbook ships as
+  `docs/HOST_MIGRATION_REHEARSAL.md`.
+- Gate: `scripts/check-host-migration-interoperability.sh` wired into
+  `make check` and `.ai-gate/gate.yaml` (`host_migration_interoperability`
+  binding, lockstep with `scripts/check-driftwatch-gate.sh`), backed
+  by positive and negative fixtures in `scripts/test-gates.sh`. The
+  new `Host-Migration Interoperability Contract Gate` quality
+  requirement is pinned in `openspec/governance/manifest.yaml`
+  (digest
+  `sha256:8e33a37d7a5379a06f362d14531286a1dfb1299cc262bf316aeb8183469f751b`,
+  3 scenarios, checker `host-migration-interoperability`).
+- Tests: integration coverage in `tests/integration/host_ops.rs` and
+  the extended `tests/integration/migration_importers.rs`, both
+  registered in `tests/integration/main.rs` for the spec-test-drift
+  mapping. `cargo test -p openpanel --test integration` 360/360,
+  `openpanel-domain` lib 11/11, `openpanel-app` lib 181/181.
+- Gate evidence: `make gate` PASS pre- and post-archive; the two
+  cold-cache pending reviews (`lint`, `tests`) were resolved by
+  running the bound commands to completion (`cargo clippy ...
+  -D warnings` clean; integration suite 360/360). `make test-gates`,
+  `make governance-contract`, `make agent-governance`, and `make
+  host-migration-interoperability` are green; `openspec validate
+  add-portable-host-operations-and-migration --strict` was green
+  before archive.
+- `openspec archive add-portable-host-operations-and-migration --yes`
+  succeeded (archived as
+  `2026-09-29-add-portable-host-operations-and-migration`); every
+  archived `tasks.md` box is ticked with dated evidence. Local commit
+  only per the principal's "no push" directive.
+- Deferred (recorded in the archived `progress.md`): a live migration
+  rehearsal on an isolated target, and a test-only
+  `ConformanceHostAdapter` (the P3 `ConformanceAdapter` precedent).
+
 P8 implementation result (2026-09-24, commit `99c1d11`):
 - The governance self-test suite (`scripts/test-gates.sh`) is the
   driftwatchdog `test_gates` binding and was sitting at exactly the
@@ -591,15 +661,20 @@ commit 1's hash.
 
 ## Next steps (post-handoff)
 
-1. **P6 `add-verified-service-catalog` is implemented and archived
-    as `2026-09-24-add-verified-service-catalog` (commit `2de9b31`).**
-    The new `verified-service-catalog` spec (4 requirements) is live;
-    the domain + app bounded contexts, SQLite migration, and 45 tests
-    are green; `driftwatchdog gate` passed 28/28 with zero pending
-    reviews pre- and post-archive. The next spec is **P7
-    `add-portable-host-operations-and-migration`** (planning folder at
-    `openspec/changes/add-portable-host-operations-and-migration/`;
-    awaits human-principal design approval per the review gate).
+1. **P7 `add-portable-host-operations-and-migration` is implemented
+    and archived as
+    `2026-09-29-add-portable-host-operations-and-migration`
+    (commit `7a25a69`).** The new `host-migration-interoperability`
+    spec (4 requirements) plus 8 modified capability specs and the
+    `Host-Migration Interoperability Contract Gate` are live; the
+    domain + app bounded contexts, the cPanel / Baota drivers, the
+    integration suite (360/360), and `make gate` are green pre- and
+    post-archive. The portable production maturity queue (P1–P8) is
+    now complete. The next candidate is the untracked proposal
+    `forge-publish-provider`
+    (`openspec/changes/forge-publish-provider/`; awaits
+    human-principal design approval per the review gate);
+    `post-mvp-readiness` is the other untracked proposal.
 2. **Optional CI follow-up.** `.github/workflows/ci.yml` still
     runs `make check`, which is unaffected by P5 (the chain now
     includes the `driftwatch-gate` lockstep step, so CI enforces
@@ -607,9 +682,11 @@ commit 1's hash.
     `driftwatchdog gate` is a deliberate, separate decision
     (driftwatchdog is not on the CI runner today); raise it as
     its own change if the principal wants it.
-3. **P7 is the next spec and remains planning-only.**
-    `add-portable-host-operations-and-migration` keeps its
-    existing status; it is not affected by P4–P6.
+3. **P7 is complete (no longer planning-only).** The portable
+    production maturity queue is `[x]` through P8; no P-series work
+    remains. The two untracked proposal folders
+    (`forge-publish-provider`, `post-mvp-readiness`) are outside the
+    portable queue and are not started here.
 4. **Honor the design approval gate.** Each change requires human-principal
     approval of `design.md` before implementation, then tests-first/red phase,
     focused verification, the canonical Local Gate (`make gate`) plus the
