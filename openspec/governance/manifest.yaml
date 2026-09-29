@@ -313,3 +313,19 @@ requirements:
     digest: sha256:64a411b8a94600951363fc7a0854112d3dd97f9669b8c78fbbaf22565fe52a12
     scenarios: 4
     checkers: [driftwatch-gate]
+
+  # The new host-migration-interoperability capability ships a contract
+  # gate (`scripts/check-host-migration-interoperability.sh`) that
+  # asserts the spec, the domain capability/conflict types, the host
+  # adapter port, the cutover facade, the verifier port, the cPanel and
+  # Baota drivers, and the scenario coverage. The gate is paired with
+  # positive and negative fixtures in `scripts/test-gates.sh`
+  # (`# checker: host-migration-interoperability positive` /
+  # `negative`), so any future regression of the gate is caught by the
+  # test-gates self-test.
+  - archive: openspec/changes/archive/2026-09-29-add-portable-host-operations-and-migration/specs/quality/spec.md
+    capability: quality
+    requirement: "Host-Migration Interoperability Contract Gate"
+    digest: sha256:8e33a37d7a5379a06f362d14531286a1dfb1299cc262bf316aeb8183469f751b
+    scenarios: 3
+    checkers: [host-migration-interoperability]

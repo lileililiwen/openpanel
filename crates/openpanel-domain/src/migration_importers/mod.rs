@@ -199,6 +199,8 @@ pub struct MigrationPlan {
     resources: Vec<PlannedResource>,
     conflicts: Vec<ImportConflict>,
     warnings: Vec<MigrationWarning>,
+    #[serde(default)]
+    conflict_policy: Option<ConflictPolicy>,
     created_at: DateTime<Utc>,
 }
 
@@ -218,8 +220,16 @@ impl MigrationPlan {
             resources,
             conflicts,
             warnings,
+            conflict_policy: None,
             created_at,
         }
+    }
+
+    /// Attach a conflict policy to the plan. The policy is required
+    /// on the `preview → run` path when conflicts exist.
+    pub fn with_conflict_policy(mut self, policy: ConflictPolicy) -> Self {
+        self.conflict_policy = Some(policy);
+        self
     }
 
     /// Identifier.
@@ -245,6 +255,32 @@ impl MigrationPlan {
     /// Non-blocking observations.
     pub fn warnings(&self) -> &[MigrationWarning] {
         &self.warnings
+    }
+
+    /// Conflict policy confirmed by the operator, if any.
+    pub fn conflict_policy(&self) -> Option<ConflictPolicy> {
+        self.conflict_policy
+    }
+
+    /// Whether the plan's conflict policy blocks a commit without
+    /// an explicit confirmation token.
+    pub fn requires_explicit_policy(&self) -> bool {
+        !self.conflicts.is_empty()
+            && !matches!(
+                self.conflict_policy,
+                Some(ConflictPolicy::Replace) | Some(ConflictPolicy::Skip)
+            )
+    }
+
+    /// Whether the plan's conflict policy blocks a commit.
+    pub fn policy_blocks_commit(&self) -> bool {
+        if self.conflicts.is_empty() {
+            return false;
+        }
+        match self.conflict_policy {
+            None => true,
+            Some(policy) => !policy.allows_commit_without_confirmation(true),
+        }
     }
 
     /// When the plan was created.
@@ -538,14 +574,25 @@ impl MigrationRun {
         match self.status {
             MigrationRunStatus::InProgress => "in_progress",
             MigrationRunStatus::Completed => "completed",
+            MigrationRunStatus::PartiallyCompleted => "partially_completed",
             MigrationRunStatus::Failed => "failed",
             MigrationRunStatus::RolledBack => "rolled_back",
         }
     }
 
+    /// Whether this run allows automatic DNS/mail/SSL cutover.
+    pub fn allows_cutover(&self) -> bool {
+        matches!(self.status, MigrationRunStatus::Completed)
+    }
+
     /// Mark the run as completed.
     pub fn mark_completed(&mut self) {
         self.status = MigrationRunStatus::Completed;
+    }
+
+    /// Mark the run as partially completed (verification failed).
+    pub fn mark_partially_completed(&mut self) {
+        self.status = MigrationRunStatus::PartiallyCompleted;
     }
 
     /// Mark the run as failed and rolled back.
@@ -579,6 +626,40 @@ impl MigrationRun {
     }
 }
 
+/// Conflict policy for an import preview.
+///
+/// Per the `Migration Preview and Conflict Policy` requirement of
+/// `host-migration-interoperability`, every migration MUST produce
+/// a bounded plan listing conflicts and the operator MUST confirm
+/// the policy before commit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ConflictPolicy {
+    /// Block the commit when any conflict exists.
+    Block,
+    /// Replace conflicting resources (records a warning).
+    Replace,
+    /// Skip conflicting resources.
+    Skip,
+    /// Require an explicit confirmation token when conflicts exist.
+    RequireExplicit,
+}
+
+impl ConflictPolicy {
+    /// Whether the policy allows a commit when `has_conflicts` is true
+    /// without an explicit confirmation token.
+    pub fn allows_commit_without_confirmation(&self, has_conflicts: bool) -> bool {
+        if !has_conflicts {
+            return true;
+        }
+        match self {
+            ConflictPolicy::Block => false,
+            ConflictPolicy::RequireExplicit => false,
+            ConflictPolicy::Replace | ConflictPolicy::Skip => true,
+        }
+    }
+}
+
 /// Lifecycle status of an import run.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -587,6 +668,9 @@ pub enum MigrationRunStatus {
     InProgress,
     /// The run committed successfully.
     Completed,
+    /// The run committed but post-import verification failed for one
+    /// or more bounded contexts. No automatic cutover is performed.
+    PartiallyCompleted,
     /// The run failed and was rolled back.
     Failed,
     /// A completed run was rolled back by the operator.
@@ -759,5 +843,93 @@ mod tests {
         *counts.entry(ImportedResourceKind::Database).or_insert(0) += 1;
         assert_eq!(counts.get(&ImportedResourceKind::Site), Some(&2));
         assert_eq!(counts.len(), 2);
+    }
+
+    #[test]
+    fn conflict_policy_block_blocks_commit() {
+        let conflict = ImportConflict {
+            kind: ImportedResourceKind::Site,
+            source_key: "example.com".to_string(),
+            reason: "already exists".to_string(),
+        };
+        let blocked = MigrationPlan::new(
+            MigrationPlanId::new(),
+            DriverKind::CpanelPkgacct,
+            vec![
+                PlannedResource::new(ImportedResourceKind::Site, "example.com", "vhost", 1)
+                    .unwrap(),
+            ],
+            vec![conflict.clone()],
+            Vec::new(),
+            Utc::now(),
+        )
+        .with_conflict_policy(ConflictPolicy::Block);
+        assert!(blocked.policy_blocks_commit());
+        assert!(blocked.requires_explicit_policy());
+    }
+
+    #[test]
+    fn conflict_policy_replace_records_warning() {
+        let plan = MigrationPlan::new(
+            MigrationPlanId::new(),
+            DriverKind::CpanelPkgacct,
+            vec![
+                PlannedResource::new(ImportedResourceKind::Site, "example.com", "vhost", 1)
+                    .unwrap(),
+            ],
+            vec![ImportConflict {
+                kind: ImportedResourceKind::Site,
+                source_key: "example.com".to_string(),
+                reason: "already exists".to_string(),
+            }],
+            vec![MigrationWarning {
+                message: "replacing example.com".to_string(),
+            }],
+            Utc::now(),
+        )
+        .with_conflict_policy(ConflictPolicy::Replace);
+        assert!(!plan.policy_blocks_commit());
+        assert!(!plan.requires_explicit_policy());
+        assert_eq!(plan.warnings().len(), 1);
+    }
+
+    #[test]
+    fn conflict_policy_require_explicit_blocks_without_confirmation() {
+        let plan = MigrationPlan::new(
+            MigrationPlanId::new(),
+            DriverKind::CpanelPkgacct,
+            vec![
+                PlannedResource::new(ImportedResourceKind::Site, "example.com", "vhost", 1)
+                    .unwrap(),
+            ],
+            vec![ImportConflict {
+                kind: ImportedResourceKind::Site,
+                source_key: "example.com".to_string(),
+                reason: "already exists".to_string(),
+            }],
+            Vec::new(),
+            Utc::now(),
+        )
+        .with_conflict_policy(ConflictPolicy::RequireExplicit);
+        assert!(plan.policy_blocks_commit());
+        assert!(plan.requires_explicit_policy());
+        assert!(!ConflictPolicy::RequireExplicit.allows_commit_without_confirmation(true));
+        assert!(ConflictPolicy::Replace.allows_commit_without_confirmation(true));
+    }
+
+    #[test]
+    fn partially_completed_blocks_cutover() {
+        let mut run = MigrationRun::new(
+            MigrationRunId::new(),
+            MigrationPlanId::new(),
+            DriverKind::BaotaBackup,
+            Uuid::new_v4(),
+            Utc::now(),
+        );
+        run.mark_partially_completed();
+        assert_eq!(run.status_str(), "partially_completed");
+        assert!(!run.allows_cutover());
+        run.mark_completed();
+        assert!(run.allows_cutover());
     }
 }

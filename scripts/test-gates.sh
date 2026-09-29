@@ -1275,6 +1275,126 @@ assert "application-delivery: domain depending on app fails" 1 \
       OPENSPEC_TESTS_DIR="${AD}/tests/integration" \
       "${AD}/scripts/check-application-delivery.sh"
 
+# --- host-migration-interoperability (new) ------------------------------
+__budget_section "host-migration-interoperability"
+# Per the host-migration-interoperability spec, OpenPanel exposes a typed
+# `HostCapability` profile, a `HostAdapter` port, a `ConflictPolicy`, a
+# `PostImportVerifier` port, a `CutoverService`, and cPanel / Baota source
+# drivers. The gate asserts the wiring of the contract: the capability
+# types, conflict policy, host-adapter port, cutover facade, verifier
+# port, source drivers, and scenario coverage.
+HMI="${TMP}/host_migration_interoperability"
+mkdir -p "${HMI}/crates/openpanel-domain/src/agent" \
+         "${HMI}/crates/openpanel-domain/src/migration_importers" \
+         "${HMI}/crates/openpanel-app/src/agent" \
+         "${HMI}/crates/openpanel-app/src/host_ops" \
+         "${HMI}/crates/openpanel-app/src/migration_importers/verifiers" \
+         "${HMI}/crates/openpanel-app/src/migration_importers/drivers/cpanel" \
+         "${HMI}/crates/openpanel-app/src/migration_importers/drivers/baota" \
+         "${HMI}/openspec/specs/host-migration-interoperability" \
+         "${HMI}/tests/integration" \
+         "${HMI}/scripts/lib"
+cp ./scripts/check-host-migration-interoperability.sh "${HMI}/scripts/check-host-migration-interoperability.sh"
+cp ./scripts/lib/step.sh "${HMI}/scripts/lib/step.sh"
+
+cat > "${HMI}/crates/openpanel-domain/src/agent/mod.rs" <<'DOMAIN'
+//! Fixtured agent domain module.
+#![allow(dead_code)]
+pub struct HostCapability;
+pub enum HostHealth { Healthy }
+pub enum AgentError { CapabilityMismatch }
+DOMAIN
+
+cat > "${HMI}/crates/openpanel-domain/src/migration_importers/mod.rs" <<'DOMAIN'
+//! Fixtured migration domain module.
+#![allow(dead_code)]
+pub enum ConflictPolicy { Block, Replace, Skip, RequireExplicit }
+pub enum MigrationRunStatus { PartiallyCompleted, Completed }
+DOMAIN
+
+cat > "${HMI}/crates/openpanel-app/src/agent/host_capability.rs" <<'APP'
+//! Fixtured host-adapter port.
+#![allow(dead_code)]
+pub trait HostAdapter {}
+APP
+
+cat > "${HMI}/crates/openpanel-app/src/host_ops/mod.rs" <<'APP'
+//! Fixtured cutover facade.
+#![allow(dead_code)]
+pub struct CutoverService;
+APP
+
+cat > "${HMI}/crates/openpanel-app/src/migration_importers/verifiers/mod.rs" <<'APP'
+//! Fixtured post-import verifier port.
+#![allow(dead_code)]
+pub trait PostImportVerifier {}
+APP
+
+cat > "${HMI}/crates/openpanel-app/src/migration_importers/drivers/cpanel/mod.rs" <<'APP'
+//! Fixtured cPanel source drivers.
+#![allow(dead_code)]
+pub struct CpanelPkgacctDriver;
+pub struct CpanelLegacyBackupDriver;
+APP
+
+cat > "${HMI}/crates/openpanel-app/src/migration_importers/drivers/baota/mod.rs" <<'APP'
+//! Fixtured Baota source driver.
+#![allow(dead_code)]
+pub struct BaotaBackupDriver;
+APP
+
+cat > "${HMI}/openspec/specs/host-migration-interoperability/spec.md" <<'SPEC'
+# Fixtured host-migration-interoperability spec.
+
+## ADDED Requirements
+
+### Requirement: Host Capability Contract
+
+#### Scenario: Capability mismatch
+
+### Requirement: Migration Preview and Conflict Policy
+
+#### Scenario: Existing domain conflict
+
+### Requirement: Scoped Verified Import
+
+#### Scenario: Partial verification
+
+### Requirement: Reversible Cutover
+
+#### Scenario: Cutover rejected
+SPEC
+
+cat > "${HMI}/tests/integration/host_ops.rs" <<'TEST'
+//! Fixtured host-ops integration test.
+//! Scenarios covered: Capability mismatch, Cutover rejected.
+fn capability_mismatch() {}
+fn cutover_rejected() {}
+TEST
+
+cat > "${HMI}/tests/integration/migration_importers.rs" <<'TEST'
+//! Fixtured migration integration test.
+//! Scenarios covered: Existing domain conflict, Partial verification.
+fn existing_domain_conflict() {}
+fn partial_verification() {}
+TEST
+
+# checker: host-migration-interoperability positive
+assert "host-migration-interoperability: all wiring present passes" 0 \
+  env OPENSPEC_CRATES_DIR="${HMI}/crates" \
+      OPENSPEC_SPECS_DIR="${HMI}/openspec/specs" \
+      OPENSPEC_TESTS_DIR="${HMI}/tests/integration" \
+      "${HMI}/scripts/check-host-migration-interoperability.sh"
+
+# Remove the Baota driver so the driver coverage check fails.
+rm "${HMI}/crates/openpanel-app/src/migration_importers/drivers/baota/mod.rs"
+# checker: host-migration-interoperability negative
+assert "host-migration-interoperability: missing source driver fails" 1 \
+  env OPENSPEC_CRATES_DIR="${HMI}/crates" \
+      OPENSPEC_SPECS_DIR="${HMI}/openspec/specs" \
+      OPENSPEC_TESTS_DIR="${HMI}/tests/integration" \
+      "${HMI}/scripts/check-host-migration-interoperability.sh"
+
 # --- release-evidence (new) ---------------------------------------------
 __budget_section "release-evidence"
 # Per the release-evidence spec, a publication workflow MUST fail when

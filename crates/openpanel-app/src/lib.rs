@@ -75,6 +75,7 @@ pub mod ftp;
 /// Git deployment bounded context: a per-site git repo, deploy
 /// runs, and webhook HMAC verification.
 pub mod git_deployment;
+pub mod host_ops;
 /// Hosting plans bounded context: plan definitions, quota caps,
 /// feature toggles, the read-side resolver, and the assignment
 /// table that backs `User.hosting_plan_id`.

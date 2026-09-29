@@ -11,8 +11,14 @@
 //! but are parsed from their native tar layouts; they ship in the
 //! follow-on change once the bundle fixtures are in place.
 
+pub mod baota;
+pub mod cpanel;
 pub mod tar_json_manifest;
 
+pub use baota::{BaotaBackupDriver, BaotaBundle};
+pub use cpanel::{
+    CpanelLegacyBackupDriver, CpanelLegacyBundle, CpanelPkgacctBundle, CpanelPkgacctDriver,
+};
 pub use tar_json_manifest::{
     JsonManifest, JsonManifestBundle, ManifestResource, ManifestResourceExt, ManifestTranslator,
     RefuseAll, TarWithJsonManifestDriver, parse_manifest, sniff_tar_manifest,

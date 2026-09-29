@@ -39,6 +39,10 @@ mod dns;
 mod docker;
 mod files;
 mod ftp;
+/// Host operations and migration interoperability integration
+/// tests: host capability contract, capability mismatch blocks
+/// operation with remediation.
+mod host_ops;
 /// Admin SSH host-key integration tests.
 mod host_ssh_keys;
 /// Hosting plans HTTP integration tests.

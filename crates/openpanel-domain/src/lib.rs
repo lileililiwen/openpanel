@@ -240,8 +240,8 @@ pub use admin_ip_allowlist::{
 };
 pub use agent::{
     AgentError, AgentId, AgentRegistration, AgentRepository, AgentStatus, FleetToken,
-    FleetTokenScope, RecipeAction, RecipeManifest, RecipeManifest as _RecipeManifest,
-    is_manifest_signature_valid,
+    FleetTokenScope, HostCapability, HostHealth, RecipeAction, RecipeManifest,
+    RecipeManifest as _RecipeManifest, is_manifest_signature_valid,
 };
 pub use ai_ops::{
     AiAction, AiActionId, AiActionStatus, AiMessage, AiOpsError, AiOpsRepository, AiSession,
@@ -398,10 +398,11 @@ pub use malware_scanner::{
     ScanEngine, ScanFinding, ScanProfile, ScanRun, Severity,
 };
 pub use migration_importers::{
-    DriverKind, ImportConflict, ImportedResource, ImportedResourceKind, MigrationDriver,
-    MigrationError, MigrationPlan, MigrationPlanId, MigrationRepository, MigrationRun,
-    MigrationRunId, MigrationRunStatus, MigrationSource, MigrationWarning, PlannedResource,
-    SharedMigrationDriver, TranslationLog, TranslationLogEntry, TranslationOutcome,
+    ConflictPolicy, DriverKind, ImportConflict, ImportedResource, ImportedResourceKind,
+    MigrationDriver, MigrationError, MigrationPlan, MigrationPlanId, MigrationRepository,
+    MigrationRun, MigrationRunId, MigrationRunStatus, MigrationSource, MigrationWarning,
+    PlannedResource, SharedMigrationDriver, TranslationLog, TranslationLogEntry,
+    TranslationOutcome,
 };
 pub use monitoring::{
     Alert, AlertRule, DiskReading, MetricKind, MetricSample, MonitoringError, NetworkReading,

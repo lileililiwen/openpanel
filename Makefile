@@ -35,7 +35,7 @@
 #   → fmt → clippy → docs → audit → file-length → scan-literal
 #   → class-coverage → browser-ui-quality → release-governance
 #   → release-evidence → portable-runtime → deployment-adapters
-#   → application-delivery
+#   → application-delivery → host-migration-interoperability
 #   → tasks-testing-first
 #   → reuse --strict → layering
 #   → spec-test-drift --strict → spec-drift → agent-governance
@@ -46,9 +46,9 @@
 # Every per-check script prints `step: <name> status: ok | failed` and
 # exits non-zero on failure; `make` short-circuits on the first one.
 
-.PHONY: check fmt clippy docs audit file-length test coverage coverage-floor maturity install-lint-tools ensure-lint-tools split a11y scan-literal class-coverage browser-ui-quality release-governance release-evidence portable-runtime deployment-adapters application-delivery tasks-testing-first reuse layering spec-test-drift spec-drift repo-map test-gates agent-governance governance-contract gate driftwatch-gate
+.PHONY: check fmt clippy docs audit file-length test coverage coverage-floor maturity install-lint-tools ensure-lint-tools split a11y scan-literal class-coverage browser-ui-quality release-governance release-evidence portable-runtime deployment-adapters application-delivery host-migration-interoperability tasks-testing-first reuse layering spec-test-drift spec-drift repo-map test-gates agent-governance governance-contract gate driftwatch-gate
 
-check: ensure-lint-tools fmt clippy docs audit file-length scan-literal class-coverage browser-ui-quality release-governance release-evidence portable-runtime deployment-adapters application-delivery tasks-testing-first reuse-strict layering spec-test-drift-strict spec-drift agent-governance governance-contract coverage-floor maturity test-gates driftwatch-gate test
+check: ensure-lint-tools fmt clippy docs audit file-length scan-literal class-coverage browser-ui-quality release-governance release-evidence portable-runtime deployment-adapters application-delivery host-migration-interoperability tasks-testing-first reuse-strict layering spec-test-drift-strict spec-drift agent-governance governance-contract coverage-floor maturity test-gates driftwatch-gate test
 	@echo ""
 	@echo "=== All quality checks passed ==="
 
@@ -100,6 +100,9 @@ deployment-adapters:
 
 application-delivery:
 	@scripts/check-application-delivery.sh
+
+host-migration-interoperability:
+	@scripts/check-host-migration-interoperability.sh
 
 tasks-testing-first:
 	@scripts/check-tasks-testing-first.sh

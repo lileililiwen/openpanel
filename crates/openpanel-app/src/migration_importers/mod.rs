@@ -4,6 +4,7 @@ pub mod drivers;
 mod module;
 mod repo;
 mod service;
+pub mod verifiers;
 
 pub use drivers::{
     JsonManifest, JsonManifestBundle, ManifestResource, ManifestResourceExt, ManifestTranslator,

@@ -6,9 +6,7 @@ The DNS bounded context covers provider accounts, zones, records,
 and lifecycle. After this refinement, it also owns the
 `ZoneTemplate`, `TemplateRecord`, and `TemplateName` value
 objects that the template applier consumes at zone enable time.
-
 ## Requirements
-
 ### Requirement: Zone Template
 
 The DNS bounded context SHALL model a `ZoneTemplate` carrying `name: TemplateName` (`Strict | Relaxed | Parked`) and `records: Vec<TemplateRecord>`. The constructor rejects empty template record lists.
@@ -44,7 +42,6 @@ The DNS bounded context SHALL expose `ZoneTemplate::strict(domain)`, `ZoneTempla
 ### Requirement: Behaviour Parity
 
 The refinement SHALL introduce the new template types without changing the existing zone lifecycle. The follow-on `apply-template` change wires the applier into `DnsService::enable`.
-
 
 #### Scenario: Existing behaviour unchanged
 
@@ -137,3 +134,18 @@ delegated vanity nameservers of a zone.
         `glue_ip`
 - **THEN** the glue A/AAAA record is created and served for the NS
         delegation.
+
+### Requirement: Imported Zones Reuse DNS Validation Before Cutover
+
+DNS zones imported by a migration MUST reuse the existing zone-template and
+`DnsValidation` surfaces. The imported records MUST be staged without changing
+authoritative answers, and DNS cutover MUST be a separate confirmed action that
+runs its own validation preflight and remains reversible for its declared
+window.
+
+#### Scenario: Imported zone validates before cutover
+
+- **WHEN** a migration imports a domain's DNS zone
+- **THEN** the records land through the existing zone surfaces without changing
+  authoritative answers, and a DNS cutover is refused until its validation
+  preflight passes.

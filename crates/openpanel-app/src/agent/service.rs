@@ -260,3 +260,62 @@ impl AgentService {
         Ok(manifest)
     }
 }
+
+// --- P7 Step 1 red phase: HostAdapter port -----------------------------
+// Per the `Host Capability Contract` requirement of
+// `host-migration-interoperability`, an operation that requires a
+// capability absent from the host profile MUST be rejected before
+// mutation with a remediation. The port is the application-layer
+// surface over the domain `HostCapability` value object.
+//
+// This test exercises the port: the in-memory adapter's
+// `requires_capability` MUST return `Err(CapabilityMismatch)`
+// when the cap is missing, and `Ok(())` when the cap is present.
+// The test is EXPECTED to fail to compile in the red phase
+// because the `HostAdapter` trait, the `HostAdapterService`,
+// and the `CapabilityMismatch` error variant do not exist yet.
+#[cfg(test)]
+mod host_capability_tests {
+    use super::*;
+    use crate::agent::{HostAdapterService, MemoryHostAdapter};
+    use openpanel_domain::agent::{HostCapability, HostHealth};
+
+    #[tokio::test]
+    async fn requires_capability_returns_err_when_missing() {
+        let adapter = MemoryHostAdapter::with_capability(
+            HostCapability::new(
+                "linux",
+                "x86_64",
+                vec!["docker".to_string()],
+                "openpanel-1.2.3",
+            )
+            .with_health(HostHealth::Healthy),
+        );
+        let service = HostAdapterService::new(adapter);
+
+        // Present capability: no error.
+        service
+            .requires_capability("docker")
+            .await
+            .expect("docker is declared");
+
+        // Missing capability: explicit error with remediation.
+        let err = service
+            .requires_capability("kubernetes")
+            .await
+            .expect_err("kubernetes is not declared");
+        match err {
+            AgentError::CapabilityMismatch {
+                capability,
+                remediation,
+            } => {
+                assert_eq!(capability, "kubernetes");
+                assert!(
+                    remediation.contains("kubernetes"),
+                    "remediation must name the missing capability: {remediation}",
+                );
+            }
+            other => panic!("expected CapabilityMismatch, got {other:?}"),
+        }
+    }
+}

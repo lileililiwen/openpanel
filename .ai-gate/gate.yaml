@@ -21,6 +21,7 @@ checks:
   portable_runtime: true
   deployment_adapters: true
   application_delivery: true
+  host_migration_interoperability: true
   tasks_testing_first: true
   reuse_strict: true
   layering: true
@@ -64,6 +65,7 @@ commands:
   portable_runtime: "scripts/check-portable-runtime.sh"
   deployment_adapters: "scripts/check-deployment-adapters.sh"
   application_delivery: "scripts/check-application-delivery.sh"
+  host_migration_interoperability: "scripts/check-host-migration-interoperability.sh"
   tasks_testing_first: "scripts/check-tasks-testing-first.sh"
   reuse_strict: "scripts/check-reuse.sh --strict"
   layering: "scripts/check-layering.sh"

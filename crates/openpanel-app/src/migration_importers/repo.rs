@@ -39,6 +39,7 @@ fn status_str(status: MigrationRunStatus) -> &'static str {
     match status {
         MigrationRunStatus::InProgress => "in_progress",
         MigrationRunStatus::Completed => "completed",
+        MigrationRunStatus::PartiallyCompleted => "partially_completed",
         MigrationRunStatus::Failed => "failed",
         MigrationRunStatus::RolledBack => "rolled_back",
     }
@@ -47,6 +48,7 @@ fn status_str(status: MigrationRunStatus) -> &'static str {
 fn status_from_str(s: &str) -> MigrationRunStatus {
     match s {
         "completed" => MigrationRunStatus::Completed,
+        "partially_completed" => MigrationRunStatus::PartiallyCompleted,
         "failed" => MigrationRunStatus::Failed,
         "rolled_back" => MigrationRunStatus::RolledBack,
         _ => MigrationRunStatus::InProgress,

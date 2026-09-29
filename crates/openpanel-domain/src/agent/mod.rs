@@ -506,6 +506,18 @@ pub enum AgentError {
     /// The manifest has expired.
     #[error("manifest expired")]
     ManifestExpired,
+    /// The host profile does not declare the capability an
+    /// operation requires. Per the `Host Capability Contract`
+    /// requirement of `host-migration-interoperability`, the
+    /// operation is rejected before mutation with a remediation
+    /// that names the missing capability.
+    #[error("host capability mismatch: {capability} — {remediation}")]
+    CapabilityMismatch {
+        /// The capability token the operation required.
+        capability: String,
+        /// Human-readable remediation that names the missing cap.
+        remediation: String,
+    },
     /// Persistence failure.
     #[error("agent persistence error: {0}")]
     Persistence(String),
@@ -527,6 +539,113 @@ pub fn is_manifest_signature_valid(manifest: &RecipeManifest, expected_prefix: &
         return false;
     }
     manifest.signature().starts_with(expected_prefix)
+}
+
+/// Health state a host reports through its capability profile.
+///
+/// `Healthy` means the host responded to its most recent probe
+/// and all declared runtime adapters are reachable. `Degraded`
+/// carries a non-empty diagnostic string that names the
+/// unavailable adapter or the failed probe. The variant is
+/// intentionally minimal: the canonical redaction layer in
+/// `openpanel_core::audit::redact_metadata` strips credentials
+/// from the diagnostic before it ever reaches the audit log.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum HostHealth {
+    /// Host responded and all declared adapters are reachable.
+    Healthy,
+    /// Host responded but one or more adapters are unavailable.
+    Degraded(String),
+}
+
+impl HostHealth {
+    /// True if the host is `Healthy`.
+    pub fn is_healthy(&self) -> bool {
+        matches!(self, HostHealth::Healthy)
+    }
+}
+
+/// Authenticated capability profile for one managed host.
+///
+/// Per the `Host Capability Contract` requirement of
+/// `host-migration-interoperability`, each managed host MUST
+/// expose an authenticated capability profile containing
+/// OS/architecture, runtime adapters, supported operations,
+/// version, and health state without exposing credentials or
+/// command material. The value object's public surface is
+/// intentionally limited to those five fields: no `password`,
+/// no `token`, no `secret`, no `command` field. The compile-time
+/// test `host_capability_profile_is_secret_free` documents the
+/// contract.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HostCapability {
+    os: String,
+    arch: String,
+    runtime_adapters: Vec<String>,
+    panel_version: String,
+    health: HostHealth,
+}
+
+impl HostCapability {
+    /// Build a capability profile with `health = Healthy`.
+    pub fn new(
+        os: impl Into<String>,
+        arch: impl Into<String>,
+        runtime_adapters: Vec<String>,
+        panel_version: impl Into<String>,
+    ) -> Self {
+        Self {
+            os: os.into(),
+            arch: arch.into(),
+            runtime_adapters,
+            panel_version: panel_version.into(),
+            health: HostHealth::Healthy,
+        }
+    }
+
+    /// Replace the health state.
+    pub fn with_health(mut self, health: HostHealth) -> Self {
+        self.health = health;
+        self
+    }
+
+    /// Operating system string (e.g. `"linux"`, `"freebsd"`).
+    pub fn os(&self) -> &str {
+        &self.os
+    }
+
+    /// CPU architecture string (e.g. `"x86_64"`, `"aarch64"`).
+    pub fn arch(&self) -> &str {
+        &self.arch
+    }
+
+    /// Runtime adapter names the host supports (e.g. `"docker"`,
+    /// `"systemd"`, `"podman"`).
+    pub fn runtime_adapters(&self) -> &[String] {
+        &self.runtime_adapters
+    }
+
+    /// Panel version the host runs.
+    pub fn panel_version(&self) -> &str {
+        &self.panel_version
+    }
+
+    /// Health state.
+    pub fn health(&self) -> &HostHealth {
+        &self.health
+    }
+
+    /// True if the host declares the given capability.
+    ///
+    /// A capability is "declared" if its name appears in the
+    /// host's `runtime_adapters` list. The query is the
+    /// application-layer port's primitive: a `false` result is
+    /// the signal the port uses to raise
+    /// `AgentError::CapabilityMismatch` before any mutation.
+    pub fn requires(&self, capability: &str) -> bool {
+        self.runtime_adapters.iter().any(|c| c == capability)
+    }
 }
 
 #[cfg(test)]
@@ -682,5 +801,75 @@ mod tests {
         assert!(token.is_usable_at(Utc::now()));
         token.revoke();
         assert!(!token.is_usable_at(Utc::now()));
+    }
+
+    // --- P7 Step 1 red phase: HostCapability value object --------------
+    // Per the `Host Capability Contract` requirement of
+    // `host-migration-interoperability`, each managed host MUST
+    // expose an authenticated capability profile containing
+    // OS/architecture, runtime adapters, supported operations,
+    // version, and health state without exposing credentials or
+    // command material. These tests exercise the pure domain
+    // value object; the `HostAdapter` port and the
+    // `CapabilityMismatch` error variant land in the green phase.
+    // The tests are EXPECTED to fail to compile in the red phase.
+
+    #[test]
+    fn host_capability_requires_returns_true_for_declared_cap() {
+        let cap = HostCapability::new(
+            "linux",
+            "x86_64",
+            vec!["docker".to_string(), "systemd".to_string()],
+            "openpanel-1.2.3",
+        );
+        assert!(cap.requires("docker"));
+        assert!(cap.requires("systemd"));
+        assert!(!cap.requires("kubernetes"));
+    }
+
+    #[test]
+    fn host_capability_profile_is_secret_free() {
+        // The value object's public surface MUST NOT expose any
+        // field that could carry a credential, token, or command
+        // material. This compile-time assertion documents the
+        // contract: `HostCapability` carries only OS, arch, the
+        // list of supported runtime adapters, the panel version,
+        // and the health state.
+        let cap = HostCapability::new(
+            "linux",
+            "x86_64",
+            vec!["docker".to_string()],
+            "openpanel-1.2.3",
+        );
+        let serialized = serde_json::to_string(&cap).expect("serialize");
+        // None of the secret markers may appear in the
+        // serialized form, even if a future caller accidentally
+        // puts a value in one of the string fields (the
+        // allowlist redaction layer in `openpanel_core::audit`
+        // is the runtime guarantee; this test is the
+        // structural guarantee).
+        for marker in ["password", "passwd", "secret", "token", "apikey", "api_key"] {
+            assert!(
+                !serialized.to_ascii_lowercase().contains(marker),
+                "HostCapability serialised form leaked marker `{marker}`: {serialized}",
+            );
+        }
+    }
+
+    #[test]
+    fn host_health_reflects_aggregate_state() {
+        let cap = HostCapability::new(
+            "linux",
+            "x86_64",
+            vec!["docker".to_string()],
+            "openpanel-1.2.3",
+        )
+        .with_health(HostHealth::Healthy);
+        assert_eq!(cap.health(), &HostHealth::Healthy);
+        let degraded = cap.with_health(HostHealth::Degraded("docker daemon unreachable".into()));
+        assert_eq!(
+            degraded.health(),
+            &HostHealth::Degraded("docker daemon unreachable".into())
+        );
     }
 }

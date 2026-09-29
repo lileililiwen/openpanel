@@ -6,10 +6,12 @@ use std::sync::Arc;
 use chrono::{Duration, Utc};
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome, AuditService};
 use openpanel_domain::{
-    DriverKind, ImportedResource, MigrationDriver, MigrationError, MigrationPlan,
+    ConflictPolicy, DriverKind, ImportedResource, MigrationDriver, MigrationError, MigrationPlan,
     MigrationRepository, MigrationRun, MigrationRunId, MigrationRunStatus, TranslationLog,
     TranslationLogEntry, TranslationOutcome,
 };
+
+use super::verifiers::PostImportVerifier;
 use uuid::Uuid;
 
 /// TTL for a confirmed plan before it expires (design: 60s).
@@ -73,6 +75,48 @@ impl MigrationService {
         Ok(plan)
     }
 
+    /// Preview with an explicit conflict policy. The policy is
+    /// attached to the returned plan when conflicts are present; a
+    /// `Block` or `RequireExplicit` plan will be refused at `run`
+    /// time. Wires `preview_migration_collisions`-style conflict
+    /// detection: when the driver reports no conflicts the policy is
+    /// a no-op.
+    pub async fn preview_with_policy<D>(
+        &self,
+        driver: &D,
+        source: &D::Source,
+        driver_hint: Option<DriverKind>,
+        conflict_policy: Option<ConflictPolicy>,
+        actor: &str,
+    ) -> Result<MigrationPlan, MigrationError>
+    where
+        D: MigrationDriver,
+    {
+        let mut plan = self.preview(driver, source, driver_hint, actor).await?;
+        if let Some(policy) = conflict_policy {
+            if !plan.conflicts().is_empty() && policy == ConflictPolicy::Replace {
+                let mut warnings = plan.warnings().to_vec();
+                for conflict in plan.conflicts() {
+                    warnings.push(openpanel_domain::MigrationWarning {
+                        message: format!("replacing {}", conflict.source_key),
+                    });
+                }
+                plan = MigrationPlan::new(
+                    plan.plan_id(),
+                    plan.driver(),
+                    plan.resources().to_vec(),
+                    plan.conflicts().to_vec(),
+                    warnings,
+                    plan.created_at(),
+                )
+                .with_conflict_policy(policy);
+            } else {
+                plan = plan.with_conflict_policy(policy);
+            }
+        }
+        Ok(plan)
+    }
+
     /// Commit a confirmed plan. The plan must be within `PLAN_TTL`
     /// and must not have already been imported (idempotency guard).
     pub async fn run<D>(
@@ -89,6 +133,18 @@ impl MigrationService {
         if plan.refuses_empty_run() {
             return Err(MigrationError::MalformedSource(
                 "plan contains no importable resources".to_string(),
+            ));
+        }
+        if plan.policy_blocks_commit() {
+            return Err(MigrationError::TargetConflict(format!(
+                "conflict policy {:?} blocks commit for {} conflict(s)",
+                plan.conflict_policy(),
+                plan.conflicts().len()
+            )));
+        }
+        if plan.requires_explicit_policy() {
+            return Err(MigrationError::TargetConflict(
+                "conflicts require an explicit conflict policy confirmation".to_string(),
             ));
         }
         let now = Utc::now();
@@ -184,6 +240,58 @@ impl MigrationService {
         Ok(imported)
     }
 
+    /// Commit with post-import verification. When any verifier fails
+    /// the run is marked `PartiallyCompleted` and no DNS cutover is
+    /// performed.
+    pub async fn run_with_verifiers<D>(
+        &self,
+        driver: &D,
+        source: &D::Source,
+        plan: &MigrationPlan,
+        target_owner_user_id: Uuid,
+        actor: &str,
+        verifiers: &[Box<dyn PostImportVerifier>],
+    ) -> Result<Vec<ImportedResource>, MigrationError>
+    where
+        D: MigrationDriver,
+    {
+        let imported = self
+            .run(driver, source, plan, target_owner_user_id, actor)
+            .await?;
+        if verifiers.is_empty() {
+            return Ok(imported);
+        }
+        let mut failed_evidence = Vec::new();
+        for verifier in verifiers {
+            let outcome = verifier.verify(&imported).await?;
+            if !outcome.passed {
+                failed_evidence.push(outcome.evidence);
+            }
+        }
+        if failed_evidence.is_empty() {
+            return Ok(imported);
+        }
+        let runs = self.repo.recent_runs(10).await?;
+        if let Some(run) = runs.iter().find(|r| r.plan_id() == plan.plan_id()).cloned() {
+            let mut run = run;
+            run.mark_partially_completed();
+            self.repo.update_run_status(&run).await?;
+            self.audit
+                .record(
+                    AuditEvent::new(
+                        actor,
+                        AuditAction::MigrationRunRolledBack,
+                        AuditOutcome::Failure,
+                    )
+                    .target(run.run_id().to_string())
+                    .metadata(serde_json::json!({"evidence": failed_evidence.join("; ")})),
+                )
+                .await
+                .ok();
+        }
+        Ok(imported)
+    }
+
     /// Roll back a committed run within `ROLLBACK_WINDOW`. Deletes
     /// each imported resource in reverse insertion order and marks
     /// the run `RolledBack`.
@@ -266,7 +374,9 @@ fn redact_diagnostic(source_key: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use openpanel_domain::PlannedResource;
+    use openpanel_domain::{
+        ConflictPolicy, ImportConflict, ImportedResourceKind, MigrationPlanId, PlannedResource,
+    };
 
     use super::*;
 
@@ -293,5 +403,98 @@ mod tests {
         .unwrap();
         assert_eq!(resource.bytes, 8);
         assert_eq!(resource.source_key, "x.com");
+    }
+
+    #[test]
+    fn policy_block_blocks_commit() {
+        let plan = openpanel_domain::MigrationPlan::new(
+            MigrationPlanId::new(),
+            openpanel_domain::DriverKind::CpanelPkgacct,
+            vec![PlannedResource::new(ImportedResourceKind::Site, "a.com", "v", 1).unwrap()],
+            vec![ImportConflict {
+                kind: ImportedResourceKind::Site,
+                source_key: "a.com".to_string(),
+                reason: "exists".to_string(),
+            }],
+            Vec::new(),
+            Utc::now(),
+        )
+        .with_conflict_policy(ConflictPolicy::Block);
+        assert!(plan.policy_blocks_commit());
+    }
+
+    #[test]
+    fn policy_replace_records_warning() {
+        let plan = openpanel_domain::MigrationPlan::new(
+            MigrationPlanId::new(),
+            openpanel_domain::DriverKind::CpanelPkgacct,
+            vec![PlannedResource::new(ImportedResourceKind::Site, "a.com", "v", 1).unwrap()],
+            vec![ImportConflict {
+                kind: ImportedResourceKind::Site,
+                source_key: "a.com".to_string(),
+                reason: "exists".to_string(),
+            }],
+            vec![openpanel_domain::MigrationWarning {
+                message: "replacing a.com".to_string(),
+            }],
+            Utc::now(),
+        )
+        .with_conflict_policy(ConflictPolicy::Replace);
+        assert!(!plan.policy_blocks_commit());
+        assert_eq!(plan.warnings().len(), 1);
+    }
+
+    #[test]
+    fn policy_require_explicit_blocks_without_confirmation() {
+        let plan = openpanel_domain::MigrationPlan::new(
+            MigrationPlanId::new(),
+            openpanel_domain::DriverKind::CpanelPkgacct,
+            vec![PlannedResource::new(ImportedResourceKind::Site, "a.com", "v", 1).unwrap()],
+            vec![ImportConflict {
+                kind: ImportedResourceKind::Site,
+                source_key: "a.com".to_string(),
+                reason: "exists".to_string(),
+            }],
+            Vec::new(),
+            Utc::now(),
+        )
+        .with_conflict_policy(ConflictPolicy::RequireExplicit);
+        assert!(plan.policy_blocks_commit());
+        assert!(plan.requires_explicit_policy());
+    }
+
+    #[tokio::test]
+    async fn run_with_all_verifiers_passes() {
+        use crate::migration_importers::verifiers::SitesPostImportVerifier;
+        let passed: Box<dyn super::super::verifiers::PostImportVerifier> =
+            Box::new(SitesPostImportVerifier);
+        let outcome = passed.verify(&[]).await.unwrap();
+        assert!(outcome.passed);
+    }
+
+    #[tokio::test]
+    async fn run_with_failing_verifier_marks_partial() {
+        use crate::migration_importers::verifiers::FailingVerifier;
+        let failing: Box<dyn super::super::verifiers::PostImportVerifier> =
+            Box::new(FailingVerifier {
+                evidence: "mail failed".to_string(),
+            });
+        let outcome = failing.verify(&[]).await.unwrap();
+        assert!(!outcome.passed);
+        assert_eq!(outcome.evidence, "mail failed");
+    }
+
+    #[test]
+    fn partial_status_emits_evidence() {
+        let mut run = openpanel_domain::MigrationRun::new(
+            openpanel_domain::MigrationRunId::new(),
+            MigrationPlanId::new(),
+            openpanel_domain::DriverKind::CpanelPkgacct,
+            uuid::Uuid::new_v4(),
+            Utc::now(),
+        );
+        run.mark_partially_completed();
+        assert_eq!(run.status_str(), "partially_completed");
+        assert!(!run.allows_cutover());
     }
 }

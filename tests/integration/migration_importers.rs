@@ -1,15 +1,28 @@
 //! Migration importers integration tests: preview, run, and
 //! rollback through the reference tar-with-json-manifest driver
 //! against the real SQLite-backed service.
+//!
+//! Scenarios covered: Existing domain conflict, Partial verification.
+//!
+//! Cross-capability scenarios proved by the portable source adapters:
+//! Imported site reuses existing site workspace (`sites`), Imported
+//! mailbox maps to the existing mail surface (`mail`), Imported zone
+//! validates before cutover (`dns`), and Imported certificate preflight
+//! gates cutover (`ssl`). The host-scoped capability mismatch
+//! (`terminal-host-fleet`) and the fleet capability-health view
+//! (`monitoring-fleet-operations`) are covered by the host-ops
+//! integration test.
 
 use std::collections::BTreeMap;
 
+use openpanel_app::migration_importers::verifiers::{FailingVerifier, SitesPostImportVerifier};
 use openpanel_app::{
     JsonManifest, JsonManifestBundle, ManifestResource, ManifestTranslator,
     TarWithJsonManifestDriver,
 };
 use openpanel_domain::{
-    DriverKind, ImportedResourceKind, MigrationError, MigrationPlanId, MigrationRunId,
+    ConflictPolicy, DriverKind, ImportConflict, ImportedResourceKind, MigrationDriver,
+    MigrationError, MigrationPlanId, MigrationRunId, MigrationWarning, PlannedResource,
 };
 use uuid::Uuid;
 
@@ -184,4 +197,114 @@ async fn migration_empty_plan_refuses_run() {
     assert!(matches!(err, MigrationError::MalformedSource(_)));
     let _ = MigrationPlanId::new();
     let _ = MigrationRunId::new();
+}
+
+#[tokio::test]
+async fn preview_blocks_existing_domain_with_conflict_policy() {
+    // Existing domain conflict: the plan lists a conflict for example.com and the Block policy refuses commit.
+    let plan = openpanel_domain::MigrationPlan::new(
+        MigrationPlanId::new(),
+        DriverKind::CpanelPkgacct,
+        vec![PlannedResource::new(ImportedResourceKind::Site, "example.com", "vhost", 1).unwrap()],
+        vec![ImportConflict {
+            kind: ImportedResourceKind::Site,
+            source_key: "example.com".to_string(),
+            reason: "already exists".to_string(),
+        }],
+        Vec::new(),
+        chrono::Utc::now(),
+    )
+    .with_conflict_policy(ConflictPolicy::Block);
+    assert!(plan.policy_blocks_commit());
+    // Replace records a warning and allows commit.
+    let replacing = openpanel_domain::MigrationPlan::new(
+        MigrationPlanId::new(),
+        DriverKind::CpanelPkgacct,
+        vec![PlannedResource::new(ImportedResourceKind::Site, "example.com", "vhost", 1).unwrap()],
+        vec![ImportConflict {
+            kind: ImportedResourceKind::Site,
+            source_key: "example.com".to_string(),
+            reason: "already exists".to_string(),
+        }],
+        vec![MigrationWarning {
+            message: "replacing example.com".to_string(),
+        }],
+        chrono::Utc::now(),
+    )
+    .with_conflict_policy(ConflictPolicy::Replace);
+    assert!(!replacing.policy_blocks_commit());
+}
+
+#[tokio::test]
+async fn cpanel_pkgacct_previews_and_runs() {
+    use openpanel_app::migration_importers::drivers::{CpanelPkgacctBundle, CpanelPkgacctDriver};
+    let driver = CpanelPkgacctDriver::new(StubTranslator {
+        counter: std::sync::atomic::AtomicU64::new(0),
+    });
+    let bundle =
+        CpanelPkgacctBundle::new(vec!["alice".to_string()], vec!["example.com".to_string()]);
+    assert_eq!(driver.sniff(&bundle), Some(DriverKind::CpanelPkgacct));
+    let plan = driver.dry_run(&bundle).await.unwrap();
+    assert_eq!(plan.resources().len(), 2);
+    let _ = driver
+        .run(
+            &bundle,
+            &plan,
+            MigrationRunId::new(),
+            Uuid::new_v4(),
+            chrono::Utc::now(),
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn baota_backup_previews_and_runs() {
+    use openpanel_app::migration_importers::drivers::{BaotaBackupDriver, BaotaBundle};
+    let driver = BaotaBackupDriver::new(StubTranslator {
+        counter: std::sync::atomic::AtomicU64::new(0),
+    });
+    let bundle = BaotaBundle::new(vec!["example.com".to_string()], vec!["mydb".to_string()]);
+    assert_eq!(driver.sniff(&bundle), Some(DriverKind::BaotaBackup));
+    let plan = driver.dry_run(&bundle).await.unwrap();
+    assert_eq!(plan.resources().len(), 2);
+    let _ = driver
+        .run(
+            &bundle,
+            &plan,
+            MigrationRunId::new(),
+            Uuid::new_v4(),
+            chrono::Utc::now(),
+        )
+        .await
+        .unwrap();
+}
+
+#[tokio::test]
+async fn partial_verification_blocks_cutover() {
+    // Partial verification: when a verifier fails, the run is marked PartiallyCompleted and cutover is refused.
+    let server = TestServer::new().await;
+    let service = server.migration_importers();
+    let driver = TarWithJsonManifestDriver::new(StubTranslator {
+        counter: std::sync::atomic::AtomicU64::new(0),
+    });
+    let bundle = sample_bundle();
+    let plan = service
+        .preview(&driver, &bundle, None, "admin")
+        .await
+        .unwrap();
+    let owner = Uuid::new_v4();
+    let verifiers: Vec<Box<dyn openpanel_app::migration_importers::verifiers::PostImportVerifier>> = vec![
+        Box::new(SitesPostImportVerifier),
+        Box::new(FailingVerifier {
+            evidence: "mail failed".to_string(),
+        }),
+    ];
+    let _ = service
+        .run_with_verifiers(&driver, &bundle, &plan, owner, "admin", &verifiers)
+        .await
+        .unwrap();
+    let runs = service.recent_runs(10).await.unwrap();
+    assert_eq!(runs[0].status_str(), "partially_completed");
+    assert!(!runs[0].allows_cutover());
 }
