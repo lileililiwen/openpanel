@@ -4,7 +4,7 @@ version: 1
 session_id: d8c9dfe8207d
 status: complete
 current_spec: forge-publish-provider
-current_spec_file: openspec/changes/forge-publish-provider
+current_spec_file: openspec/changes/archive/2026-09-30-forge-publish-provider
 completed:
   - repair-release-security-and-evidence
   - add-portable-runtime-packaging
@@ -14,10 +14,11 @@ completed:
   - add-verified-service-catalog
   - add-gate-selftest-budget-compliance
   - add-portable-host-operations-and-migration
+  - forge-publish-provider
 unresolved: []
-next_action: implement-forge-publish-provider
-next_spec: forge-publish-provider
-updated_at: '2026-09-30T06:10:00+08:00'
+next_action: none
+next_spec: null
+updated_at: '2026-09-30T09:30:00+08:00'
 ---
 # OpenPanel Roadmap Handoff
 
@@ -520,6 +521,54 @@ P8 implementation result (2026-09-24, commit `99c1d11`):
   `quality` spec); every archived `tasks.md` box is ticked with
   dated evidence. Local commit only per the principal's "no push"
   directive.
+
+forge-publish-provider implementation result (2026-09-30, commit `bb7335b`):
+- New `forge-publish-provider` capability with four ADDED
+  Requirements: Forge Provider Facade, Independent Lifecycle,
+  Idempotency and Rollback, Secret and Diagnostic Redaction.
+- Domain: `crates/openpanel-domain/src/forge_publish_provider/`
+  (`mod.rs` + `types.rs` + `logic.rs` + `tests.rs`) owns the
+  `forge-publish-provider/0.1.0` wire shapes (request / response /
+  capabilities / terminal evidence / rollback / typed error) with
+  `deny_unknown_fields`, protocol/project/revision/operation-id
+  validation, source-kind mapping, and `redact_diagnostic`
+  (`[REDACTED]` on sensitive markers; 36 unit tests).
+- App: `crates/openpanel-app/src/forge_publish_provider/`
+  (`facade.rs` + `protocol.rs` + `lifecycle.rs` + `tests.rs`,
+  19 tests) reuses `ApplicationDeliveryService` for every
+  release/rollback mutation and `DeploymentAdapterService::run` for
+  every plan (`Preflight` / `Deploy` / `Verify` / `Rollback`);
+  `protocol.rs` is the newline-framed JSON-RPC codec with typed
+  error mapping; `lifecycle.rs` is the opt-in process harness
+  (`OPENPANEL_FORGE_PUBLISH_PROVIDER`) whose
+  `main_service_operational()` is always `true`, so provider
+  absence/failure never blocks OpenPanel.
+- Five new `ForgeProvider*` audit actions in
+  `crates/openpanel-core/src/audit/action.rs`; every request fans
+  out through the canonical `redact_metadata` allowlist.
+- Tests: 36 domain lib + 19 app lib + 8 integration
+  (`tests/integration/forge_publish_provider.rs`, registered in
+  `tests/integration/main.rs` for the spec-test-drift mapping) plus
+  on-disk conformance frames under
+  `tests/fixtures/forge-publish-provider/`.
+- Gate evidence (2026-09-30): fmt, clippy (`-D warnings`), docs,
+  audit, file-length, scan-literal, class-coverage,
+  browser-ui-quality, portable-runtime, deployment-adapters,
+  application-delivery, host-migration-interoperability,
+  tasks-testing-first, reuse-strict, layering, spec-test-drift
+  (`--strict`), spec-drift, agent-governance, governance-contract,
+  coverage-floor, maturity, test-gates (127/127), driftwatch-gate,
+  `scripts/check-tests.sh`, and `make gate` all green. The
+  `make gate` `tests` pending review (60 s budget) was resolved by
+  running `scripts/check-tests-gate.sh` to completion.
+- `reuse-strict` collision on the new `JsonRpcParseError::code`
+  method was resolved by renaming it to `json_rpc_code` rather than
+  growing the classified baseline.
+- `openspec validate forge-publish-provider --strict` was green
+  before archive; `openspec archive forge-publish-provider --yes`
+  succeeded (+4 requirements promoted to the live spec); every
+  archived `tasks.md` box is ticked with dated evidence. Local
+  commit only per the principal's "no push" directive.
 
 The style-baseline roadmap (changes #8–#10) is now complete:
 #8 `add-web-ui-element-baseline` is implemented, archived as
