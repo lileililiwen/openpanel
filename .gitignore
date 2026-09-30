@@ -16,6 +16,7 @@ dist/
 .vscode/
 .idea/
 .qoder/sessions/
+.commandcode/
 *.swp
 *.swo
 .DS_Store

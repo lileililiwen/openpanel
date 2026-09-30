@@ -7,11 +7,11 @@
   "verification": {
     "command": "cargo test --workspace",
     "gate_runtime": "driftwatchdog",
-    "evidence_status": "planned"
+    "evidence_status": "implemented"
   },
   "deployment": {
     "deployable": false,
     "jenkins_job": null,
-    "compose_file": null
+    "compose_file": "compose.yaml"
   }
 }
