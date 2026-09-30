@@ -62,7 +62,9 @@
   is a "pending review" and MUST be resolved by running the
   underlying script before archive). `make check` (fmt, clippy,
   docs, audit, file-length, scan-literal, class-coverage,
-  browser-ui-quality, tasks-testing-first, reuse-strict,
+  browser-ui-quality, release-governance, release-evidence,
+  portable-runtime, deployment-adapters, application-delivery,
+  host-migration-interoperability, tasks-testing-first, reuse-strict,
   layering, spec-test-drift-strict, spec-drift, agent-governance,
   governance-contract, coverage-floor, maturity, test-gates,
   driftwatch-gate, tests) is preserved as the full developer / CI

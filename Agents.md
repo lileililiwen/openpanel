@@ -15,12 +15,12 @@ single static binary with no script engine at runtime. MIT licensed.
 
 **Status:** v0.x in active development. Identity + auth, sites,
 databases, files, SSL, mail, DNS, monitoring, cron, software center,
-owner-only audit activity center, an mTLS agent fleet, and a pure-Rust
-HTMX web UI ship. OpenSpec has 83 live capabilities and 124 archived
-changes. The `make check` quality gate is green end-to-end on `main`;
-the active change folder `openspec/changes/2026-09-04-restore-make-check-green/`
-is awaiting archive + principal ratification of `design.md`. See
-`HANDOFF.md` for the current roadmap.
+owner-only audit activity center, an mTLS agent fleet, a pure-Rust
+HTMX web UI, and the portable runtime / deployment / application
+delivery / host-migration capabilities ship. OpenSpec has 99 live
+capabilities and 147 archived changes, with no active change folder.
+The `make gate` / `make check` quality gate is green end-to-end on
+`main`. See `HANDOFF.md` for the current roadmap.
 
 ---
 
@@ -243,21 +243,27 @@ Local invocation runs the same gates as CI, in this order:
 6. `make scan-literal` — literal colour / string scan
 7. `make class-coverage` — every `class="..."` literal has a rule in `app.css`
 8. `make browser-ui-quality` — rendered axe/WCAG, responsive, localization, reduced-motion
-9. `make tasks-testing-first` — `## 1. Testing` comes first in `tasks.md`
-10. `make reuse-strict` — no *unclassified* duplicated public item across crates
-11. `make layering` — domain MUST NOT import app/api
-12. `make spec-test-drift-strict` — every new / modified spec has a covering test
-13. `make spec-drift` — every archived delta exists in the live spec
-14. `make agent-governance` — OpenSpec context + runtime contract integrity
-15. `make governance-contract` — archived governance content ratchet
-16. `make coverage-floor` — measured coverage ≥ configured floor; required CI
+9. `make release-governance` — release artifact integrity (sha256, SBOM, signature, provenance)
+10. `make release-evidence` — release-evidence manifest contract (fail-closed when required)
+11. `make portable-runtime` — portable runtime contract (target manifest, OCI image, installer, upgrades)
+12. `make deployment-adapters` — typed `DeploymentAdapter` contract wiring
+13. `make application-delivery` — typed `Application` aggregate contract wiring
+14. `make host-migration-interoperability` — host-migration interoperability contract
+15. `make tasks-testing-first` — `## 1. Testing` comes first in `tasks.md`
+16. `make reuse-strict` — no *unclassified* duplicated public item across crates
+17. `make layering` — domain MUST NOT import app/api
+18. `make spec-test-drift-strict` — every new / modified spec has a covering test
+19. `make spec-drift` — every archived delta exists in the live spec
+20. `make agent-governance` — OpenSpec context + runtime contract integrity
+21. `make governance-contract` — archived governance content ratchet
+22. `make coverage-floor` — measured coverage ≥ configured floor; required CI
     job fails when its tool is missing
-17. `make maturity` — every production TODO / FIXME / stub marker has a
+23. `make maturity` — every production TODO / FIXME / stub marker has a
     reviewed entry in `openspec/governance/evidence.yaml`
-18. `make test-gates` — the governance gates' own positive/negative fixtures
-19. `make driftwatch-gate` — the `make check` chain and the
+24. `make test-gates` — the governance gates' own positive/negative fixtures
+25. `make driftwatch-gate` — the `make check` chain and the
     `.ai-gate/gate.yaml` `commands:` block are in lockstep
-20. `make test` — full test suite
+26. `make test` — full test suite
 
 `add-quality-engineering-infrastructure` defines the full policy. The
 strict gates (`reuse-strict`, `spec-test-drift-strict`,
@@ -625,9 +631,9 @@ gated by the suite and the two shell gates.
 - `openspec/specs/ssl/spec.md` — TLS certificate lifecycle
 - `openspec/specs/monitoring/spec.md` — host resource monitoring
 - `openspec/specs/mail/spec.md` — hosted mail domains, mailboxes, and safe MTA/IMAP configuration
-- `openspec/changes/add-web-ui-foundation/specs/web-ui/spec.md` — web UI (login, shell, CSRF)
-- `openspec/specs/testing/spec.md` — TDD infrastructure (TBD)
-- `openspec/specs/quality/spec.md` — quality engineering (TBD)
+- `openspec/specs/web-ui/spec.md` — web UI (login, shell, CSRF)
+- `openspec/specs/testing/spec.md` — TDD infrastructure
+- `openspec/specs/quality/spec.md` — quality engineering
 - `openspec/changes/archive/` — frozen history of every shipped change
 - `crates/openpanel-test-support/README.md` — test helpers API
 - `crates/openpanel-app/src/ssl/README.md` — SSL module internals

@@ -23,16 +23,20 @@ updated_at: '2026-09-30T18:10:00+08:00'
 ---
 # OpenPanel Roadmap Handoff
 
-Updated: 2026-09-24
+Updated: 2026-09-30
 Scope: the UI/UX gap roadmap (changes #1–#7) and the governance ratchet
 roadmap (changes G1–G4) are all implemented and archived. The final spec
 `2026-09-04-restore-make-check-green` (G4) is now archived as
 `2026-09-06-2026-09-04-restore-make-check-green`; the four deltas are
 folded into the live `audit-activity`, `operations-dashboard`, `sites`,
-and `web-ui-styling` specs. The active repo is on a green `make check`
-and `make test-gates` baseline.
+and `web-ui-styling` specs. The active repo is on a green `make gate` /
+`make check` and `make test-gates` baseline.
 
-The portable production maturity queue (P1–P6) has started: P1
+The portable production maturity queue (P1–P8) and the
+`post-mvp-readiness` follow-up are implemented and archived; there is no
+active change folder.
+
+The portable production maturity queue (P1–P6) ran as follows: P1
 `repair-release-security-and-evidence`, P2 `add-portable-runtime-packaging`,
 and P3 `add-portable-deployment-adapters` are implemented, archived, and
 committed
