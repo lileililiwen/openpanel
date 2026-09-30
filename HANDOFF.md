@@ -3,8 +3,8 @@ ariadex_handoff_version: 1
 version: 1
 session_id: d8c9dfe8207d
 status: complete
-current_spec: forge-publish-provider
-current_spec_file: openspec/changes/archive/2026-09-30-forge-publish-provider
+current_spec: post-mvp-readiness
+current_spec_file: openspec/changes/archive/2026-09-30-post-mvp-readiness
 completed:
   - repair-release-security-and-evidence
   - add-portable-runtime-packaging
@@ -15,10 +15,11 @@ completed:
   - add-gate-selftest-budget-compliance
   - add-portable-host-operations-and-migration
   - forge-publish-provider
+  - post-mvp-readiness
 unresolved: []
 next_action: none
 next_spec: null
-updated_at: '2026-09-30T09:30:00+08:00'
+updated_at: '2026-09-30T18:10:00+08:00'
 ---
 # OpenPanel Roadmap Handoff
 
@@ -568,6 +569,56 @@ forge-publish-provider implementation result (2026-09-30, commit `bb7335b`):
   before archive; `openspec archive forge-publish-provider --yes`
   succeeded (+4 requirements promoted to the live spec); every
   archived `tasks.md` box is ticked with dated evidence. Local
+  commit only per the principal's "no push" directive.
+
+post-mvp-readiness implementation result (2026-09-30, commit `848b113`):
+- New `readiness` capability with four ADDED Requirements: Web UI
+  screenshot evidence, capability catalog linkage, documentation
+  readiness enforced, and README gate description matches the
+  repository. Documentation-only — no runtime, API, CLI, schema,
+  migration, or capability behavior change.
+- `README.md` gains a **Screenshots** subsection (login/shell,
+  operations dashboard, site workspace, audit activity center,
+  software center) with captions and a synthetic-demo-data/no-secret
+  note, plus a link to the generated catalog from the spec-first
+  section. The `make check` chain descriptions (spec-first + Local
+  checks) were corrected to match the `Makefile` `check:` target
+  (they had omitted `ensure-lint-tools`, `browser-ui-quality`,
+  `release-governance`, `release-evidence`, `portable-runtime`,
+  `deployment-adapters`, `application-delivery`,
+  `host-migration-interoperability`, `governance-contract`,
+  `coverage-floor`, `maturity`, and `driftwatch-gate`).
+- `scripts/capabilities.sh` (new) generates `docs/CAPABILITIES.md`
+  from `openspec/specs/` (99 live capabilities), with a "Shipped nav"
+  cross-check column derived from
+  `crates/openpanel-web/src/capability_registry.rs` and an explicit
+  registry reconciliation section. Output is deterministic
+  (idempotent).
+- `scripts/check-docs.sh` gains a `docs-readiness` step: every README
+  relative link/image must resolve, and the catalog must be
+  byte-identical to a fresh regeneration. `--readiness-only` runs the
+  rule alone for the self-test; the shipped gate (`make docs`, and the
+  driftwatchdog `docs` binding) runs both legs. No
+  `.ai-gate/gate.yaml` change.
+- `scripts/test-gates.sh` gains 4 docs-readiness fixtures (positive
+  clean tree; negative missing README image, diagnostic names the
+  path; negative stale catalog); suite is now **131/131 green** (was
+  127).
+- Screenshots captured with `shot-scraper` 1.12 (Playwright-driven,
+  system Chrome) from the `openpanel dev` bootstrap seeded with
+  synthetic `.example` sites/databases/audit rows — 5 PNGs, 376 KB
+  total, no secret or real host/user data (visually reviewed).
+- Gate evidence (2026-09-30): `make check` printed
+  `=== All quality checks passed ===` (exit 0); `make gate`
+  (`driftwatchdog gate`) → `Gate passed locally.` with 30/30 checks
+  PASS, exit 0, zero pending reviews; `make test-gates` 131/131;
+  `reuse --strict`, `file-length`, `layering`, `spec-drift`,
+  `spec-test-drift --strict`, `agent-governance`, `governance-contract`
+  (32 protected / 38 unprotected / 0 failures), `tasks-testing-first`
+  all green. `openspec validate post-mvp-readiness --strict` was green
+  before archive; `openspec archive post-mvp-readiness --yes`
+  succeeded (+4 requirements promoted to the live `readiness` spec);
+  every archived `tasks.md` box is ticked with dated evidence. Local
   commit only per the principal's "no push" directive.
 
 The style-baseline roadmap (changes #8–#10) is now complete:
