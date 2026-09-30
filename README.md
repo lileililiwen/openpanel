@@ -8,7 +8,9 @@ runtime. MIT licensed.
 > files, SSL, mail, DNS, monitoring, cron, software center, an
 > owner-only audit activity center, an mTLS agent fleet, and a pure-Rust
 > HTMX web UI ship as bounded contexts against this architectural
-> baseline. OpenSpec has 83 live capabilities and 124 archived changes.
+> baseline. OpenSpec has 99 live capabilities — enumerated in the
+> generated [capability catalog](docs/CAPABILITIES.md) — and a frozen
+> archive of every shipped change.
 > The `make check` quality gate is green end-to-end on `main`.
 
 ## Quick start (dev)
@@ -107,7 +109,11 @@ Specs live in `openspec/`:
 - `openspec/changes/<name>/` — proposed change with proposal, design,
   specs delta, and task list
 - `openspec/changes/archive/<date>-<name>/` — frozen history of every
-  shipped change (currently 124 archives)
+  shipped change
+- `docs/CAPABILITIES.md` — generated catalog of every live capability
+  with a link to its spec (regenerate with
+  `scripts/capabilities.sh > docs/CAPABILITIES.md`; `make docs` fails
+  when it drifts)
 - `openspec/governance/manifest.yaml` — ratchet pinning the four
   governance capabilities (`agent-quality`, `quality`, `testing`,
   `architecture`); `make governance-contract` enforces text + scenario
@@ -115,14 +121,18 @@ Specs live in `openspec/`:
 
 Workflow: `propose → validate → implement (apply) → archive`.
 `make check` is the single quality-gate entry point and runs:
-`fmt → clippy → docs → audit → file-length → scan-literal →
-class-coverage → tasks-testing-first → reuse → layering →
-spec-test-drift → spec-drift → test-gates → test`. `make
-test-gates` runs the governance self-test harness in isolation
-(50+ fixture-based self-tests, positive + negative for every
-gate). `make agent-governance` re-verifies the OpenSpec context
-and every runtime contract link. See `HANDOFF.md` for the current
-roadmap and the latest spec status.
+`ensure-lint-tools → fmt → clippy → docs → audit → file-length →
+scan-literal → class-coverage → browser-ui-quality → release-governance →
+release-evidence → portable-runtime → deployment-adapters →
+application-delivery → host-migration-interoperability →
+tasks-testing-first → reuse --strict → layering →
+spec-test-drift --strict → spec-drift → agent-governance →
+governance-contract → coverage-floor → maturity → test-gates →
+driftwatch-gate → test`. `make test-gates` runs the governance
+self-test harness in isolation (fixture-based self-tests, positive +
+negative for every gate). `make agent-governance` re-verifies the
+OpenSpec context and every runtime contract link. See `HANDOFF.md` for
+the current roadmap and the latest spec status.
 
 ## Quickstart
 
@@ -179,6 +189,38 @@ the web UI, so there is a single auth system.
 - **Software Center** — production storefront at `/software` with
   category tabs, search, filters, detail page (Overview/Versions/
   Changelog/Dependencies/Source), install wizard, and job progress.
+
+### Screenshots
+
+Captured from the zero-config dev bootstrap (`cargo run -p openpanel-cli -- dev`)
+with synthetic demo data only — no real host, user, site, database, or secret
+appears in any image.
+
+**Login** — the single unauthenticated entry point; the same
+`openpanel_session` cookie backs the Web UI and the API.
+
+![OpenPanel login screen](docs/screenshots/login.png)
+
+**Operations dashboard** — role-aware widgets, host gauges, the attention
+queue, and the shell (sidebar + topbar) that wraps every surface.
+
+![Operations dashboard](docs/screenshots/operations-dashboard.png)
+
+**Site workspace** — per-site tabbed navigation (Overview, Domains, Runtime,
+Files, SSL, HTTP, WAF, Logs, Backups, Staging, Previews, Cache + CDN, FTP,
+Collaborators).
+
+![Site workspace](docs/screenshots/site-workspace.png)
+
+**Audit activity center** — owner-only `/audit` with a redaction-aware event
+list, filtering, cursor pagination, and CSV export.
+
+![Audit activity center](docs/screenshots/audit-activity.png)
+
+**Software Center** — the `/software` storefront with category tabs, search,
+install wizard, and job progress.
+
+![Software Center](docs/screenshots/software-center.png)
 
 ```bash
 # Boot the panel (API + web UI on :8080)
@@ -382,8 +424,8 @@ compile time rather than in production.
 **Local checks:**
 
 ```bash
-make check                 # full gate: fmt, clippy, docs, audit, file-length, scan-literal, class-coverage, tasks-testing-first, reuse, layering, spec-test-drift, spec-drift, test-gates, test
-make test-gates            # the governance self-tests in isolation (50+ fixture-based checks)
+make check                 # full gate: fmt, clippy, docs, audit, file-length, scan-literal, class-coverage, browser-ui-quality, release-governance, release-evidence, portable-runtime, deployment-adapters, application-delivery, host-migration-interoperability, tasks-testing-first, reuse --strict, layering, spec-test-drift --strict, spec-drift, agent-governance, governance-contract, coverage-floor, maturity, test-gates, driftwatch-gate, test
+make test-gates            # the governance self-tests in isolation (131 fixture-based checks)
 make agent-governance      # OpenSpec context + runtime contract integrity
 make governance-contract   # archived governance content ratchet
 make fmt                   # or run a single gate: make clippy, ...
@@ -504,8 +546,8 @@ crates/
 ├── openpanel-agent/         standalone mTLS agent binary
 ├── openpanel-web/           server-rendered HTMX web UI (maud templates)
 └── openpanel-test-support/  TestDb, TestServer, mocks (dev-only)
-openspec/                    OpenSpec specs (83 capabilities) and change proposals (124 archived)
-docs/                        operator guides (TODOS, software-center, firewall-recovery, competitive gap)
+openspec/                    OpenSpec specs (99 capabilities; see docs/CAPABILITIES.md) and change proposals
+docs/                        operator guides, the generated capability catalog, and UI screenshots
 scripts/                     check-fmt/clippy/docs/audit/file-length/test-gates.sh, repo-map.sh, coverage.sh
 tests/                       integration + CLI E2E + web-ui styling tests
 .github/workflows/           CI pipeline

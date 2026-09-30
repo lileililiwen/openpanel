@@ -220,6 +220,67 @@ assert "class-coverage: undefined class fails" 1 \
       OPENSPEC_WEB_CSS_FILE="${CC_ROOT}/crates/openpanel-web/assets/app.css" \
       "${CC_ROOT}/scripts/check-class-coverage.sh"
 
+# --- docs-readiness (new) ------------------------------------------------
+__budget_section "docs-readiness"
+# check-docs.sh --readiness-only resolves its root from its own location
+# and verifies (a) every README relative link/image resolves and (b) the
+# generated capability catalog matches a fresh regeneration from the live
+# spec set. `--readiness-only` skips `cargo doc` so the fixture tree stays
+# tiny; the shipped gate always runs both legs.
+DX_ROOT="${TMP}/docs_readiness"
+mkdir -p "${DX_ROOT}/scripts/lib" "${DX_ROOT}/docs/screenshots" \
+         "${DX_ROOT}/openspec/specs/alpha" "${DX_ROOT}/openspec/specs/beta"
+cp ./scripts/check-docs.sh "${DX_ROOT}/scripts/check-docs.sh"
+cp ./scripts/capabilities.sh "${DX_ROOT}/scripts/capabilities.sh"
+cp ./scripts/lib/step.sh "${DX_ROOT}/scripts/lib/step.sh"
+printf '# alpha\n' > "${DX_ROOT}/openspec/specs/alpha/spec.md"
+printf '# beta\n' > "${DX_ROOT}/openspec/specs/beta/spec.md"
+printf 'PNG' > "${DX_ROOT}/docs/screenshots/login.png"
+cat > "${DX_ROOT}/README.md" <<'MD'
+# Fixture
+
+![Login](docs/screenshots/login.png)
+
+See [the capability catalog](docs/CAPABILITIES.md).
+MD
+# Generate the catalog inside the fixture (no registry → blank nav column).
+(cd "${DX_ROOT}" && scripts/capabilities.sh > docs/CAPABILITIES.md)
+# checker: readiness positive
+assert "docs-readiness: current assets, links and catalog pass" 0 \
+  bash -c "cd '${DX_ROOT}' && bash scripts/check-docs.sh --readiness-only"
+
+# Negative: a README image asset that does not resolve fails, and the
+# diagnostic names the offending path.
+cat > "${DX_ROOT}/README.md" <<'MD'
+# Fixture
+
+![Login](docs/screenshots/login.png)
+
+![Missing](docs/screenshots/does-not-exist.png)
+MD
+# checker: readiness negative
+assert "docs-readiness: missing README image fails" 1 \
+  bash -c "cd '${DX_ROOT}' && bash scripts/check-docs.sh --readiness-only"
+missing_out="$(cd "${DX_ROOT}" && bash scripts/check-docs.sh --readiness-only 2>&1 || true)"
+if printf '%s' "${missing_out}" | grep -q 'docs/screenshots/does-not-exist.png'; then
+  pass=$((pass+1)); echo "  ok   - docs-readiness: failure names the missing asset"
+else
+  fail=$((fail+1)); echo "  FAIL - docs-readiness: failure does not name the missing asset"
+fi
+
+# Negative: the catalog is stale relative to the live spec set (a new
+# capability was added and the catalog was not regenerated).
+cat > "${DX_ROOT}/README.md" <<'MD'
+# Fixture
+
+![Login](docs/screenshots/login.png)
+MD
+mkdir -p "${DX_ROOT}/openspec/specs/gamma"
+printf '# gamma\n' > "${DX_ROOT}/openspec/specs/gamma/spec.md"
+# checker: readiness negative
+assert "docs-readiness: stale capability catalog fails" 1 \
+  bash -c "cd '${DX_ROOT}' && bash scripts/check-docs.sh --readiness-only"
+
 # --- governance-contract -------------------------------------------------
 __budget_section "governance-contract"
 # Ratchet for archived governance requirements: the manifest pins each
