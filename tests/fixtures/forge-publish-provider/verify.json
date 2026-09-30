@@ -1,0 +1,23 @@
+{
+  "jsonrpc": "2.0",
+  "id": "fixture-verify",
+  "method": "forge.publish",
+  "params": {
+    "protocol": "forge-publish-provider/0.1.0",
+    "operation": "verify",
+    "project": { "slug": "acme/web", "label": null },
+    "revision": {
+      "kind": "oci",
+      "url": "oci://registry.example.com/acme/web",
+      "source_ref": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "release_digest": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "environment": "production"
+    },
+    "operation_id": {
+      "operation_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3303",
+      "dedupe_key": null
+    },
+    "secret_set": null,
+    "dry_run": false
+  }
+}

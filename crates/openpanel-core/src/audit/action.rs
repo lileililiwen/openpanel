@@ -137,6 +137,18 @@ pub enum AuditAction {
     SieveApplied,
     /// A git deploy was triggered for a site.
     GitDeployed,
+    /// A Forge publish provider request was accepted (capabilities,
+    /// preflight, verify, or metadata-only).
+    ForgeProviderRequestAccepted,
+    /// A Forge publish provider mutation (publish, rollback)
+    /// completed successfully.
+    ForgeProviderMutationSucceeded,
+    /// A Forge publish provider mutation was denied by a guard.
+    ForgeProviderMutationDenied,
+    /// A Forge publish provider mutation failed (terminal).
+    ForgeProviderMutationFailed,
+    /// A Forge publish provider idempotency replay matched.
+    ForgeProviderIdempotencyReplay,
     /// A maintenance window was created.
     MaintenanceWindowCreated,
     /// OpenPanel firewall rules were applied or rolled back.
@@ -629,6 +641,11 @@ impl AuditAction {
             AuditAction::AntispamChanged => "antispam_changed",
             AuditAction::SieveApplied => "sieve_applied",
             AuditAction::GitDeployed => "git_deployed",
+            AuditAction::ForgeProviderRequestAccepted => "forge_provider_request_accepted",
+            AuditAction::ForgeProviderMutationSucceeded => "forge_provider_mutation_succeeded",
+            AuditAction::ForgeProviderMutationDenied => "forge_provider_mutation_denied",
+            AuditAction::ForgeProviderMutationFailed => "forge_provider_mutation_failed",
+            AuditAction::ForgeProviderIdempotencyReplay => "forge_provider_idempotency_replay",
             AuditAction::MaintenanceWindowCreated => "maintenance_window_created",
             AuditAction::OsUpdateApplied => "os_update_applied",
             AuditAction::ContainerStartQuotaBlocked => "container_start_quota_blocked",

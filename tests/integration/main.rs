@@ -38,6 +38,10 @@ mod deployment_adapters;
 mod dns;
 mod docker;
 mod files;
+/// Forge publish provider facade integration tests: capabilities,
+/// preflight, publish, verify, rollback, idempotency, redaction,
+/// and independent lifecycle.
+mod forge_publish_provider;
 mod ftp;
 /// Host operations and migration interoperability integration
 /// tests: host capability contract, capability mismatch blocks

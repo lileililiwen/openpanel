@@ -71,6 +71,7 @@ pub mod docker;
 /// Feedback widget submissions: SQLite repository, service, module.
 pub mod feedback;
 pub mod files;
+pub mod forge_publish_provider;
 pub mod ftp;
 /// Git deployment bounded context: a per-site git repo, deploy
 /// runs, and webhook HMAC verification.
@@ -262,6 +263,13 @@ pub use docker::{
 /// Feedback widget module.
 pub use feedback::{FeedbackModule, FeedbackService, SqliteFeedbackRepository};
 pub use files::{FilesModule, service::FilesService};
+/// Optional Forge publish provider facade (`forge-publish-provider/0.1.0`).
+pub use forge_publish_provider::{
+    FORGE_JSONRPC_METHOD, FORGE_PROVIDER_ENABLE_ENV, ForgeProviderProcessHandle,
+    ForgeProviderProcessStatus, ForgePublishProvider, ForgePublishProviderConfig,
+    ForgePublishProviderError, ForgePublishProviderStats, JsonRpcCodec, JsonRpcParseError,
+    decode_request, encode_response,
+};
 pub use ftp::{
     ChrootStorage, CreateFtpAccount, CreatedFtpAccount, FtpAccountView, FtpAuthenticator,
     FtpModule, FtpServerConfig, FtpServerTask, FtpService, FtpSessionRegistry, SqliteFtpRepository,

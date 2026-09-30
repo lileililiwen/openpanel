@@ -1,0 +1,14 @@
+{
+  "jsonrpc": "2.0",
+  "id": "fixture-capabilities",
+  "method": "forge.publish",
+  "params": {
+    "protocol": "forge-publish-provider/0.1.0",
+    "operation": "capabilities",
+    "project": { "slug": "acme/web", "label": null },
+    "revision": null,
+    "operation_id": null,
+    "secret_set": null,
+    "dry_run": false
+  }
+}

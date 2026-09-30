@@ -33,6 +33,11 @@ pub mod docker;
 /// `FeedbackEntry`, `Sentiment`, `FeedbackRepository`, `FeedbackError`.
 pub mod feedback;
 pub mod files;
+/// Optional Forge publish provider facade wire shapes
+/// (`forge-publish-provider/0.1.0`): typed request / response /
+/// error envelope, validation, parsing, and redaction. The
+/// provider itself lives in `openpanel-app`.
+pub mod forge_publish_provider;
 /// Per-site FTP accounts, limits, and chroot path policy.
 pub mod ftp;
 /// Infrastructure-as-Code bounded context: SDK and Terraform

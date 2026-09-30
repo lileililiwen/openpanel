@@ -1,0 +1,23 @@
+{
+  "jsonrpc": "2.0",
+  "id": "fixture-rollback",
+  "method": "forge.publish",
+  "params": {
+    "protocol": "forge-publish-provider/0.1.0",
+    "operation": "rollback",
+    "project": { "slug": "acme/web", "label": null },
+    "revision": {
+      "kind": "git",
+      "url": "https://example.com/acme/web.git",
+      "source_ref": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b",
+      "release_digest": "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+      "environment": "production"
+    },
+    "operation_id": {
+      "operation_id": "3f2504e0-4f89-41d3-9a0c-0305e82c3304",
+      "dedupe_key": null
+    },
+    "secret_set": { "secret_set": "prod", "version": null },
+    "dry_run": false
+  }
+}
