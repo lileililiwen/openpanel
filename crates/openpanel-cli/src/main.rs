@@ -20,7 +20,9 @@ use openpanel_core::{Config, init_tracing};
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
     let config = Config::load()?;
-    init_tracing(config.log().level.as_str());
+    if !matches!(&cli.command, Command::ForgeProvider) {
+        init_tracing(config.log().level.as_str());
+    }
 
     match cli.command {
         Command::Serve => handlers::serve(config).await,
@@ -849,5 +851,6 @@ async fn main() -> anyhow::Result<()> {
                 handlers::container_runtime_registry_credential_remove(config, id).await
             }
         },
+        Command::ForgeProvider => handlers::forge_provider(config).await,
     }
 }

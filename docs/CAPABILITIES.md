@@ -25,8 +25,8 @@ reference, not a second source of truth.
 | `agent-quality` | [spec](../openspec/specs/agent-quality/spec.md) |  |
 | `ai-ops` | [spec](../openspec/specs/ai-ops/spec.md) |  |
 | `api-tokens` | [spec](../openspec/specs/api-tokens/spec.md) |  |
-| `application-delivery` | [spec](../openspec/specs/application-delivery/spec.md) |  |
 | `app-runtimes` | [spec](../openspec/specs/app-runtimes/spec.md) |  |
+| `application-delivery` | [spec](../openspec/specs/application-delivery/spec.md) |  |
 | `architecture` | [spec](../openspec/specs/architecture/spec.md) |  |
 | `audit-activity` | [spec](../openspec/specs/audit-activity/spec.md) |  |
 | `backup-dr-operations` | [spec](../openspec/specs/backup-dr-operations/spec.md) |  |
@@ -53,9 +53,9 @@ reference, not a second source of truth.
 | `forge-publish-provider` | [spec](../openspec/specs/forge-publish-provider/spec.md) |  |
 | `ftp` | [spec](../openspec/specs/ftp/spec.md) | yes |
 | `git-deployment` | [spec](../openspec/specs/git-deployment/spec.md) |  |
-| `hosting-plans` | [spec](../openspec/specs/hosting-plans/spec.md) |  |
 | `host-migration-interoperability` | [spec](../openspec/specs/host-migration-interoperability/spec.md) |  |
 | `host-security` | [spec](../openspec/specs/host-security/spec.md) | yes |
+| `hosting-plans` | [spec](../openspec/specs/hosting-plans/spec.md) |  |
 | `i18n` | [spec](../openspec/specs/i18n/spec.md) |  |
 | `iac` | [spec](../openspec/specs/iac/spec.md) |  |
 | `identity` | [spec](../openspec/specs/identity/spec.md) |  |
@@ -63,8 +63,8 @@ reference, not a second source of truth.
 | `ip-allocation` | [spec](../openspec/specs/ip-allocation/spec.md) |  |
 | `kernel-isolation` | [spec](../openspec/specs/kernel-isolation/spec.md) |  |
 | `load-balancing` | [spec](../openspec/specs/load-balancing/spec.md) |  |
-| `logs` | [spec](../openspec/specs/logs/spec.md) | yes |
 | `log-viewer` | [spec](../openspec/specs/log-viewer/spec.md) |  |
+| `logs` | [spec](../openspec/specs/logs/spec.md) | yes |
 | `mail` | [spec](../openspec/specs/mail/spec.md) | yes |
 | `mailbox-surfaces` | [spec](../openspec/specs/mailbox-surfaces/spec.md) |  |
 | `maintenance-windows` | [spec](../openspec/specs/maintenance-windows/spec.md) |  |
@@ -96,9 +96,9 @@ reference, not a second source of truth.
 | `site-cache-cdn` | [spec](../openspec/specs/site-cache-cdn/spec.md) |  |
 | `site-clone-template` | [spec](../openspec/specs/site-clone-template/spec.md) |  |
 | `site-http-controls` | [spec](../openspec/specs/site-http-controls/spec.md) |  |
-| `sites` | [spec](../openspec/specs/sites/spec.md) | yes |
 | `site-staging` | [spec](../openspec/specs/site-staging/spec.md) |  |
 | `site-workspace` | [spec](../openspec/specs/site-workspace/spec.md) |  |
+| `sites` | [spec](../openspec/specs/sites/spec.md) | yes |
 | `software-center` | [spec](../openspec/specs/software-center/spec.md) | yes |
 | `software-center-trust` | [spec](../openspec/specs/software-center-trust/spec.md) |  |
 | `ssl` | [spec](../openspec/specs/ssl/spec.md) | yes |
@@ -112,11 +112,11 @@ reference, not a second source of truth.
 | `verified-service-catalog` | [spec](../openspec/specs/verified-service-catalog/spec.md) |  |
 | `waf` | [spec](../openspec/specs/waf/spec.md) |  |
 | `web-application-installer` | [spec](../openspec/specs/web-application-installer/spec.md) |  |
-| `webmail-client` | [spec](../openspec/specs/webmail-client/spec.md) |  |
 | `web-terminal` | [spec](../openspec/specs/web-terminal/spec.md) |  |
 | `web-ui` | [spec](../openspec/specs/web-ui/spec.md) |  |
 | `web-ui-discoverability` | [spec](../openspec/specs/web-ui-discoverability/spec.md) |  |
 | `web-ui-styling` | [spec](../openspec/specs/web-ui-styling/spec.md) |  |
+| `webmail-client` | [spec](../openspec/specs/webmail-client/spec.md) |  |
 | `wordpress-toolkit` | [spec](../openspec/specs/wordpress-toolkit/spec.md) |  |
 
 **Total live capabilities: 99.**

@@ -209,6 +209,16 @@ pub enum Command {
         #[command(subcommand)]
         action: ContainerRuntimeCommand,
     },
+    /// Run the `forge-publish-provider/0.1.0` JSON-RPC over stdio
+    /// loop. Reads frames from stdin, writes one response line per
+    /// request to stdout. The toggle is
+    /// `OPENPANEL_FORGE_PUBLISH_PROVIDER=1` and the operator
+    /// caller is `OPENPANEL_FORGE_PUBLISH_OPERATOR=<username>`;
+    /// both must resolve before the loop starts or the binary
+    /// exits with the config error code and reads no stdin
+    /// (independent-lifecycle requirement; OpenPanel itself stays
+    /// operational whether this subcommand is invoked or not).
+    ForgeProvider,
 }
 
 /// Notification CLI operations.

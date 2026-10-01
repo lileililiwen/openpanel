@@ -15,8 +15,15 @@
 //!   mapping.
 //! - `lifecycle` — the process-level start / stop harness and the
 //!   `is_enabled` toggle.
+//! - `transport` — the newline-delimited JSON-RPC over stdio loop
+//!   that drives the facade from a Forge CLI process.
+//! - `unavailable` — fail-closed `BuildAdapter` / `RuntimeAdapter`
+//!   markers used until the docker-backed
+//!   adapters land in the follow-up
+//!   `application-delivery-docker-adapters` change.
 //! - `tests` — contract tests for capabilities, preflight, publish,
-//!   verify, rollback, idempotency, redaction, and lifecycle.
+//!   verify, rollback, idempotency, redaction, lifecycle, transport,
+//!   and the unavailable markers.
 //!
 //! The provider is optional: OpenPanel starts and serves traffic
 //! successfully whether the provider is enabled or not. When
@@ -30,6 +37,8 @@ mod lifecycle;
 mod protocol;
 #[cfg(test)]
 mod tests;
+pub mod transport;
+pub mod unavailable;
 
 pub use facade::{
     ForgePublishProvider, ForgePublishProviderConfig, ForgePublishProviderError,
@@ -44,3 +53,6 @@ pub use protocol::{
     ForgeProviderResponseEnvelope, JsonRpcCodec, JsonRpcParseError, decode_envelope,
     decode_request, encode_error, encode_response,
 };
+
+#[cfg(test)]
+mod transport_tests;

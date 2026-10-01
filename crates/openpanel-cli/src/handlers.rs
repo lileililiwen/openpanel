@@ -6893,3 +6893,10 @@ pub async fn server_snapshot_restore(
     println!("restored {applied} resources from snapshot {snapshot_id}");
     Ok(())
 }
+
+/// Run the independently enabled Forge stdio provider.
+pub async fn forge_provider(config: Arc<Config>) -> anyhow::Result<()> {
+    forge_provider::serve(config).await
+}
+#[path = "forge_provider.rs"]
+mod forge_provider;

@@ -16,6 +16,7 @@ mod database;
 mod dns;
 mod docker;
 mod file;
+mod forge_provider;
 mod ftp;
 mod host;
 mod logs;

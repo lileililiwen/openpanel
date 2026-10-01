@@ -263,7 +263,7 @@ async fn operator_security_control_plane_suppression_expires_and_reopens() {
     let stored: Vec<serde_json::Value> = ingested.json().await.expect("json");
     let id = stored[0]["id"].as_str().expect("id").to_string();
 
-    let expires_at = chrono::Utc::now() + chrono::Duration::seconds(1);
+    let expires_at = chrono::Utc::now() + chrono::Duration::hours(1);
     let suppressed = server
         .client()
         .post(format!(
@@ -291,14 +291,29 @@ async fn operator_security_control_plane_suppression_expires_and_reopens() {
     let items: Vec<serde_json::Value> = queue.json().await.expect("queue json");
     assert!(items.is_empty(), "suppressed hides: {items:?}");
 
-    // P5 retune: 1200 ms was too tight against the 1 s suppression
-    // window under full-suite parallel load (the test flaked in the
-    // `make check` `test` step whenever the box was busy — see the
-    // pre-existing-failure note in
-    // openspec/changes/archive/2026-09-24-add-git-application-delivery/tasks.md).
-    // 2000 ms keeps the asserted contract (a 1 s expiry reopens the
-    // finding) with a 1 s observation margin.
-    tokio::time::sleep(std::time::Duration::from_millis(2000)).await;
+    // Exercise the service's existing explicit-clock seam at the exact expiry
+    // boundary instead of racing HTTP requests against a one-second wall clock.
+    let caller = server
+        .identity()
+        .users()
+        .find_by_username("admin")
+        .await
+        .expect("lookup owner")
+        .expect("owner exists");
+    let service = server.operator_security();
+    assert!(
+        service
+            .queue(&caller, expires_at - chrono::Duration::nanoseconds(1))
+            .await
+            .expect("queue before expiry")
+            .is_empty()
+    );
+    let reopened = service
+        .queue(&caller, expires_at)
+        .await
+        .expect("queue at expiry");
+    assert_eq!(reopened.len(), 1, "exact expiry reopens");
+    assert_eq!(reopened[0].state().as_str(), "open");
     let queue = server
         .client()
         .get(format!("{}/api/v1/security/findings", server.base_url()))

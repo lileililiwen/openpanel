@@ -264,11 +264,17 @@ pub use docker::{
 pub use feedback::{FeedbackModule, FeedbackService, SqliteFeedbackRepository};
 pub use files::{FilesModule, service::FilesService};
 /// Optional Forge publish provider facade (`forge-publish-provider/0.1.0`).
+/// The transport / unavailable markers / codec error-frame encoder are
+/// re-exported here so the CLI handler can compose them without reaching
+/// into the module's private layout (STD-003).
 pub use forge_publish_provider::{
-    FORGE_JSONRPC_METHOD, FORGE_PROVIDER_ENABLE_ENV, ForgeProviderProcessHandle,
-    ForgeProviderProcessStatus, ForgePublishProvider, ForgePublishProviderConfig,
+    FORGE_JSONRPC_METHOD, FORGE_PROVIDER_ENABLE_ENV, ForgeProviderErrorObject,
+    ForgeProviderProcessHandle, ForgeProviderProcessStatus, ForgeProviderRequestEnvelope,
+    ForgeProviderResponseEnvelope, ForgePublishProvider, ForgePublishProviderConfig,
     ForgePublishProviderError, ForgePublishProviderStats, JsonRpcCodec, JsonRpcParseError,
-    decode_request, encode_response,
+    decode_envelope, decode_request, encode_error, encode_response,
+    transport::{ForgeProviderAudit, MAX_LINE_LEN, TransportError, run_loop},
+    unavailable::{UnavailableBuildAdapter, UnavailableRuntimeAdapter},
 };
 pub use ftp::{
     ChrootStorage, CreateFtpAccount, CreatedFtpAccount, FtpAccountView, FtpAuthenticator,

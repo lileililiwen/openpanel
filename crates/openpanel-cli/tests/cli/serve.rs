@@ -41,6 +41,8 @@ async fn cli_serve_health_roundtrip() {
 
         let mut child: Child = Command::new(&runner.bin)
             .args(["serve"])
+            .env_remove("OPENPANEL_FORGE_PUBLISH_PROVIDER")
+            .env_remove("OPENPANEL_FORGE_PUBLISH_OPERATOR")
             .env("OPENPANEL__DATABASE__URL", &base)
             .env("OPENPANEL__SERVER__BIND", "127.0.0.1")
             .env("OPENPANEL__SERVER__PORT", port.to_string())
