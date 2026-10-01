@@ -3,8 +3,8 @@ ariadex_handoff_version: 1
 version: 1
 session_id: d8c9dfe8207d
 status: complete
-current_spec: post-mvp-readiness
-current_spec_file: openspec/changes/archive/2026-09-30-post-mvp-readiness
+current_spec: application-delivery-docker-adapters
+current_spec_file: openspec/changes/application-delivery-docker-adapters
 completed:
   - repair-release-security-and-evidence
   - add-portable-runtime-packaging
@@ -15,11 +15,12 @@ completed:
   - add-gate-selftest-budget-compliance
   - add-portable-host-operations-and-migration
   - forge-publish-provider
+  - forge-publish-provider-stdio
   - post-mvp-readiness
 unresolved: []
-next_action: none
-next_spec: null
-updated_at: '2026-09-30T18:10:00+08:00'
+next_action: implement application-delivery-docker-adapters
+next_spec: application-delivery-docker-adapters
+updated_at: '2026-10-01T22:24:00+08:00'
 ---
 # OpenPanel Roadmap Handoff
 
@@ -575,6 +576,23 @@ forge-publish-provider implementation result (2026-09-30, commit `bb7335b`):
   archived `tasks.md` box is ticked with dated evidence. Local
   commit only per the principal's "no push" directive.
 
+forge-publish-provider-stdio implementation result (2026-10-01, commit
+`6ce9a5040e8a2a64a8d6cd314881647451200c1e`):
+- `openpanel-cli forge-provider` serves newline-delimited JSON-RPC over
+  stdio with an explicit enable toggle and Owner/Admin operator binding.
+  It uses the existing facade and codec; unavailable delivery adapters
+  return structured refusal until the next change supplies real adapters.
+- Transport, startup refusal, notification, redaction and audit tests
+  passed. `make -j1 check` and an independent `make -j1 test` repeat
+  each reported 2,100 passed, zero failed, two ignored. `make gate`
+  exited 0; its 60-second test pending review was resolved by those
+  completed bound test runs. Strict OpenSpec validation passed 100/100
+  after archive, and post-archive spec drift gates passed.
+- The change is archived at
+  `openspec/changes/archive/2026-10-01-forge-publish-provider-stdio/`.
+  Real Docker delivery remains in the active
+  `application-delivery-docker-adapters` change.
+
 post-mvp-readiness implementation result (2026-09-30, commit `848b113`):
 - New `readiness` capability with four ADDED Requirements: Web UI
   screenshot evidence, capability catalog linkage, documentation
@@ -765,20 +783,9 @@ commit 1's hash.
 
 ## Next steps (post-handoff)
 
-1. **P7 `add-portable-host-operations-and-migration` is implemented
-    and archived as
-    `2026-09-29-add-portable-host-operations-and-migration`
-    (commit `7a25a69`).** The new `host-migration-interoperability`
-    spec (4 requirements) plus 8 modified capability specs and the
-    `Host-Migration Interoperability Contract Gate` are live; the
-    domain + app bounded contexts, the cPanel / Baota drivers, the
-    integration suite (360/360), and `make gate` are green pre- and
-    post-archive. The portable production maturity queue (P1–P8) is
-    now complete. The next candidate is the untracked proposal
-    `forge-publish-provider`
-    (`openspec/changes/forge-publish-provider/`; awaits
-    human-principal design approval per the review gate);
-    `post-mvp-readiness` is the other untracked proposal.
+1. **Next active change:** `application-delivery-docker-adapters` in
+    `openspec/changes/application-delivery-docker-adapters/` supplies the
+    real delivery adapters behind the archived Forge stdio transport.
 2. **Optional CI follow-up.** `.github/workflows/ci.yml` still
     runs `make check`, which is unaffected by P5 (the chain now
     includes the `driftwatch-gate` lockstep step, so CI enforces
