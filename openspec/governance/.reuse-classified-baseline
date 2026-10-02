@@ -156,3 +156,10 @@ upsert	per-aggregate business method, not a shared utility
 url	per-aggregate business method, not a shared utility
 verify	per-aggregate business method, not a shared utility
 with_ttl	per-aggregate business method, not a shared utility
+
+application_id	per-aggregate business method, not a shared utility
+environment_id	per-aggregate business method, not a shared utility
+release_id	per-aggregate business method, not a shared utility
+digest	per-aggregate business method, not a shared utility
+labels	per-aggregate business method, not a shared utility
+with_health	per-aggregate business method, not a shared utility

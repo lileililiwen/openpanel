@@ -199,7 +199,9 @@ pub use app_runtimes::{
     SqliteRuntimeRepository, SupervisorUnitBuilder,
 };
 pub use application_delivery::{
-    ApplicationDeliveryService, ApplicationDeliveryServiceError, ApplicationRecord, ReleaseRecord,
+    ApplicationDeliveryService, ApplicationDeliveryServiceError, ApplicationRecord,
+    ConvergeRegistry, ConvergeTarget, DeliveryTargetResolver, DockerBuildAdapter,
+    DockerRuntimeAdapter, PlanTargetResolver, ReleaseRecord,
 };
 pub use backups::{
     BackupService, BackupsModule,
@@ -250,7 +252,10 @@ pub use deliverability::{DeliverabilityModule, DeliverabilityService};
 /// fan-out). The Mac/Jenkins conformance fixture and any
 /// production adapter implementations live outside this
 /// crate's product code.
-pub use deployment_adapters::{DeploymentAdapterService, DeploymentServiceError};
+pub use deployment_adapters::{
+    DOCKER_DEPLOYMENT_ADAPTER_ID, DeploymentAdapterService, DeploymentServiceError,
+    DockerDeploymentAdapter,
+};
 pub use dns::{DnsModule, DnsService};
 pub use dnssec_secondary::{
     AxfrSender, DnsSecSecondaryModule, DnsSecService, GlueRecordService, KeyRolloverEngine,
@@ -264,9 +269,9 @@ pub use docker::{
 pub use feedback::{FeedbackModule, FeedbackService, SqliteFeedbackRepository};
 pub use files::{FilesModule, service::FilesService};
 /// Optional Forge publish provider facade (`forge-publish-provider/0.1.0`).
-/// The transport / unavailable markers / codec error-frame encoder are
-/// re-exported here so the CLI handler can compose them without reaching
-/// into the module's private layout (STD-003).
+/// The transport / codec error-frame encoder are re-exported here so the
+/// CLI handler can compose them without reaching into the module's
+/// private layout (STD-003).
 pub use forge_publish_provider::{
     FORGE_JSONRPC_METHOD, FORGE_PROVIDER_ENABLE_ENV, ForgeProviderErrorObject,
     ForgeProviderProcessHandle, ForgeProviderProcessStatus, ForgeProviderRequestEnvelope,
@@ -274,7 +279,6 @@ pub use forge_publish_provider::{
     ForgePublishProviderError, ForgePublishProviderStats, JsonRpcCodec, JsonRpcParseError,
     decode_envelope, decode_request, encode_error, encode_response,
     transport::{ForgeProviderAudit, MAX_LINE_LEN, TransportError, run_loop},
-    unavailable::{UnavailableBuildAdapter, UnavailableRuntimeAdapter},
 };
 pub use ftp::{
     ChrootStorage, CreateFtpAccount, CreatedFtpAccount, FtpAccountView, FtpAuthenticator,

@@ -14,8 +14,21 @@
 //! and audit metadata is redacted by the canonical
 //! `openpanel_core::audit::redact_metadata` allowlist.
 
+mod docker_build;
+#[cfg(test)]
+mod docker_build_tests;
+mod docker_runtime;
+#[cfg(test)]
+mod docker_runtime_tests;
 mod service;
+#[doc(hidden)]
+pub mod testing;
 mod types;
 
+pub use docker_build::DockerBuildAdapter;
+pub use docker_runtime::{
+    ConvergeRegistry, ConvergeTarget, DeliveryTargetResolver, DockerRuntimeAdapter,
+    PlanTargetResolver,
+};
 pub use service::ApplicationDeliveryService;
 pub use types::{ApplicationDeliveryServiceError, ApplicationRecord, ReleaseRecord};

@@ -18,6 +18,12 @@ use crate::RepoError;
 /// delivery.
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 pub enum ApplicationDeliveryError {
+    /// Docker engine is unavailable; upstream details are deliberately hidden.
+    #[error("docker runtime unavailable")]
+    RuntimeUnavailable,
+    /// Registry rejected authorization; credentials and upstream text are hidden.
+    #[error("registry authorization rejected")]
+    RegistryUnauthorized,
     /// A required field is missing or malformed.
     #[error("invalid application-delivery value: {0}")]
     Invalid(String),

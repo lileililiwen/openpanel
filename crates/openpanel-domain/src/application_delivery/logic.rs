@@ -250,13 +250,14 @@ pub trait BuildAdapter: Send + Sync + 'static {
     /// Adapter id (e.g. `fake-build-v1`, `oci-build-v1`).
     fn adapter_id(&self) -> &'static str;
     /// Resolve an application source into an immutable
-    /// `ReleaseDigest`. The function is async because real
-    /// adapters clone / pull; the fake adapter returns a
-    /// deterministic digest synchronously.
+    /// `ReleaseDigest`. The build command is passed unchanged from the
+    /// application record; concrete adapters decide how to supply it to
+    /// the build context. The function is synchronous by contract.
     fn resolve_digest(
         &self,
         application_id: Uuid,
         source: &ApplicationSource,
+        build_command: &str,
     ) -> Result<ReleaseDigest, ApplicationDeliveryError>;
 }
 

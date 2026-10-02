@@ -17,13 +17,13 @@
 //!   `is_enabled` toggle.
 //! - `transport` — the newline-delimited JSON-RPC over stdio loop
 //!   that drives the facade from a Forge CLI process.
-//! - `unavailable` — fail-closed `BuildAdapter` / `RuntimeAdapter`
-//!   markers used until the docker-backed
-//!   adapters land in the follow-up
-//!   `application-delivery-docker-adapters` change.
 //! - `tests` — contract tests for capabilities, preflight, publish,
-//!   verify, rollback, idempotency, redaction, lifecycle, transport,
-//!   and the unavailable markers.
+//!   verify, rollback, idempotency, redaction, and lifecycle. The
+//!   delivery adapters the facade runs against are the production
+//!   docker adapters in `application_delivery` and
+//!   `deployment_adapters`; the fail-closed `Unavailable` markers
+//!   that preceded them were deleted rather than kept as
+//!   alternates.
 //!
 //! The provider is optional: OpenPanel starts and serves traffic
 //! successfully whether the provider is enabled or not. When
@@ -35,10 +35,11 @@
 mod facade;
 mod lifecycle;
 mod protocol;
+#[doc(hidden)]
+pub mod testing;
 #[cfg(test)]
 mod tests;
 pub mod transport;
-pub mod unavailable;
 
 pub use facade::{
     ForgePublishProvider, ForgePublishProviderConfig, ForgePublishProviderError,

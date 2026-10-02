@@ -1,10 +1,12 @@
 //! Bollard adapter exposing only vetted daemon operations.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use async_trait::async_trait;
 use bollard::{
     Docker,
+    auth::DockerCredentials,
+    body_full,
     container::LogOutput,
     exec::{CreateExecOptions, StartExecResults},
     models::{
@@ -13,8 +15,9 @@ use bollard::{
         RestartPolicyNameEnum,
     },
     query_parameters::{
-        CreateContainerOptionsBuilder, CreateImageOptionsBuilder, ListContainersOptionsBuilder,
-        LogsOptionsBuilder, RemoveContainerOptionsBuilder,
+        BuildImageOptionsBuilder, CreateContainerOptionsBuilder, CreateImageOptionsBuilder,
+        ListContainersOptionsBuilder, LogsOptionsBuilder, PushImageOptionsBuilder,
+        RemoveContainerOptionsBuilder,
     },
 };
 use futures_util::StreamExt;
@@ -30,19 +33,53 @@ use super::{ApplyReport, DockerAdapter, ExecResult, NetworkAdapter, RuntimeConta
 /// Runtime adapter backed by Docker Engine HTTP over its configured socket.
 pub struct BollardDockerAdapter {
     docker: Docker,
+    registry_credentials: Option<DockerCredentials>,
 }
 
 impl BollardDockerAdapter {
     /// Connect using local Docker/Podman socket discovery.
     pub fn connect() -> Result<Self, DockerError> {
         Docker::connect_with_local_defaults()
-            .map(|docker| Self { docker })
+            .map(|docker| Self {
+                docker,
+                registry_credentials: None,
+            })
             .map_err(adapter)
     }
 
     /// Construct around an already configured Bollard client.
     pub fn new(docker: Docker) -> Self {
-        Self { docker }
+        Self {
+            docker,
+            registry_credentials: None,
+        }
+    }
+
+    /// Connect and configure registry push credentials from delivery
+    /// settings. Credentials are optional: without them the adapter
+    /// pushes anonymously, which is what a local registry expects.
+    pub fn connect_with_registry_credentials(
+        username: Option<String>,
+        password: Option<String>,
+    ) -> Result<Self, DockerError> {
+        let adapter = Self::connect()?;
+        match (username, password) {
+            (Some(username), Some(password)) => {
+                Ok(adapter.with_registry_credentials(DockerCredentials {
+                    username: Some(username),
+                    password: Some(password),
+                    ..Default::default()
+                }))
+            }
+            _ => Ok(adapter),
+        }
+    }
+
+    /// Configure registry credentials resolved from provider delivery settings.
+    /// They are never included in diagnostics or debug output.
+    pub fn with_registry_credentials(mut self, credentials: DockerCredentials) -> Self {
+        self.registry_credentials = Some(credentials);
+        self
     }
 }
 
@@ -76,7 +113,91 @@ impl DockerAdapter for BollardDockerAdapter {
             .ok_or_else(|| DockerError::Adapter("pulled image has no repository digest".into()))
     }
 
+    async fn image_exists(&self, image: &str) -> Result<bool, DockerError> {
+        match self.docker.inspect_image(image).await {
+            Ok(_) => Ok(true),
+            Err(bollard::errors::Error::DockerResponseServerError {
+                status_code: 404, ..
+            }) => Ok(false),
+            Err(_) => Err(DockerError::Adapter("image inspection failed".into())),
+        }
+    }
+
+    async fn build_image(
+        &self,
+        context: Vec<u8>,
+        image: &str,
+        build_command: &str,
+    ) -> Result<(), DockerError> {
+        let args = HashMap::from([(
+            "OPENPANEL_BUILD_COMMAND".to_string(),
+            build_command.to_string(),
+        )]);
+        let options = BuildImageOptionsBuilder::default()
+            .dockerfile("Dockerfile")
+            .t(image)
+            .buildargs(&args)
+            .rm(true)
+            .build();
+        let mut stream = self
+            .docker
+            .build_image(options, None, Some(body_full(context.into())));
+        let mut saw_success = false;
+        while let Some(item) = stream.next().await {
+            let info = item.map_err(|_| DockerError::Adapter("image build failed".into()))?;
+            if info.error_detail.is_some() {
+                return Err(DockerError::Adapter("image build failed".into()));
+            }
+            if info.aux.is_some() {
+                saw_success = true;
+            }
+        }
+        if !saw_success {
+            // Docker's classic builder may not emit `aux`; verify the tag exists.
+            self.docker
+                .inspect_image(image)
+                .await
+                .map_err(|_| DockerError::Adapter("image build produced no image".into()))?;
+        }
+        Ok(())
+    }
+
+    async fn push_image(&self, image: &str) -> Result<String, DockerError> {
+        let (repository, tag) = image
+            .rsplit_once(':')
+            .ok_or_else(|| DockerError::Invalid("push image must be tagged".into()))?;
+        let options = PushImageOptionsBuilder::default().tag(tag).build();
+        let mut stream =
+            self.docker
+                .push_image(repository, Some(options), self.registry_credentials.clone());
+        let mut digest = None;
+        while let Some(item) = stream.next().await {
+            let info = item.map_err(push_error)?;
+            if let Some(error) = info.error_detail {
+                let message = error.message.unwrap_or_default();
+                return Err(classify_push_message(&message));
+            }
+            if let Some(status) = info.status
+                && let Some(value) = status.split("digest: ").nth(1)
+            {
+                let candidate = value.split_whitespace().next().unwrap_or_default();
+                if valid_sha256(candidate) {
+                    digest = Some(candidate.to_string());
+                }
+            }
+        }
+        digest.ok_or_else(|| DockerError::Adapter("registry did not confirm a digest".into()))
+    }
+
     async fn create(&self, spec: &ContainerSpec) -> Result<String, DockerError> {
+        self.create_labeled(spec, &BTreeMap::new()).await
+    }
+
+    async fn create_labeled(
+        &self,
+        spec: &ContainerSpec,
+        labels: &BTreeMap<String, String>,
+    ) -> Result<String, DockerError> {
         let network = spec
             .site_id
             .map(|site| format!("openpanel-{site}"))
@@ -152,10 +273,16 @@ impl DockerAdapter for BollardDockerAdapter {
                     .collect(),
             ),
             host_config: Some(host_config),
-            labels: Some(HashMap::from([(
-                "openpanel.container_id".into(),
-                spec.id.to_string(),
-            )])),
+            labels: Some(
+                HashMap::from([("openpanel.container_id".into(), spec.id.to_string())])
+                    .into_iter()
+                    .chain(
+                        labels
+                            .iter()
+                            .map(|(key, value)| (key.clone(), value.clone())),
+                    )
+                    .collect(),
+            ),
             ..Default::default()
         };
         self.docker
@@ -214,7 +341,17 @@ impl DockerAdapter for BollardDockerAdapter {
                 .and_then(|value| value.status)
                 .map(|value| value.to_string())
                 .unwrap_or_else(|| "unknown".into()),
-            oom_killed: state.and_then(|value| value.oom_killed).unwrap_or(false),
+            oom_killed: state
+                .as_ref()
+                .and_then(|value| value.oom_killed)
+                .unwrap_or(false),
+            // Only an image-declared HEALTHCHECK produces a verdict;
+            // `None` tells the caller to fall back to the status.
+            health: state
+                .as_ref()
+                .and_then(|value| value.health.as_ref())
+                .and_then(|health| health.status.as_ref())
+                .map(|status| status.to_string()),
         })
     }
 
@@ -452,4 +589,33 @@ fn network_name(site_id: Option<Uuid>) -> String {
 
 fn adapter(error: impl std::fmt::Display) -> DockerError {
     DockerError::Adapter(error.to_string().chars().take(1024).collect())
+}
+
+fn push_error(error: bollard::errors::Error) -> DockerError {
+    match error {
+        bollard::errors::Error::DockerResponseServerError {
+            status_code: 401 | 403,
+            ..
+        } => DockerError::Forbidden,
+        other => classify_push_message(&other.to_string()),
+    }
+}
+
+fn classify_push_message(message: &str) -> DockerError {
+    let lower = message.to_ascii_lowercase();
+    if lower.contains("unauthorized")
+        || lower.contains("authentication required")
+        || lower.contains("denied")
+        || lower.contains("forbidden")
+    {
+        DockerError::Forbidden
+    } else {
+        DockerError::Adapter("registry push failed".into())
+    }
+}
+
+fn valid_sha256(value: &str) -> bool {
+    value.len() == 71
+        && value.starts_with("sha256:")
+        && value[7..].bytes().all(|byte| byte.is_ascii_hexdigit())
 }

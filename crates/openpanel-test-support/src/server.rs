@@ -77,6 +77,7 @@ impl DockerAdapter for MemoryDocker {
             openpanel_app::RuntimeContainerState {
                 status: "created".into(),
                 oom_killed: false,
+                health: None,
             },
         );
         Ok(id)

@@ -107,6 +107,12 @@ impl From<ApplicationDeliveryServiceError> for ForgePublishProviderError {
         use ApplicationDeliveryServiceError as E;
         match value {
             E::Domain(err) => match err {
+                ApplicationDeliveryError::RuntimeUnavailable => {
+                    Self::Adapter("docker runtime unavailable".into())
+                }
+                ApplicationDeliveryError::RegistryUnauthorized => {
+                    Self::Adapter("registry authorization rejected".into())
+                }
                 ApplicationDeliveryError::Invalid(message) => Self::Delivery(message),
                 ApplicationDeliveryError::IllegalTransition(message) => {
                     Self::ReleaseNotReady(message)

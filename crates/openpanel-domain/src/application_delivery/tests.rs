@@ -23,6 +23,18 @@ mod tests {
         Utc::now()
     }
 
+    #[test]
+    fn test_runtime_and_registry_errors_are_typed_and_redacted() {
+        assert_eq!(
+            ApplicationDeliveryError::RuntimeUnavailable.to_string(),
+            "docker runtime unavailable"
+        );
+        assert_eq!(
+            ApplicationDeliveryError::RegistryUnauthorized.to_string(),
+            "registry authorization rejected"
+        );
+    }
+
     fn make_release(state: ReleaseState) -> (Release, Environment) {
         let app_id = Uuid::new_v4();
         let env_id = Uuid::new_v4();

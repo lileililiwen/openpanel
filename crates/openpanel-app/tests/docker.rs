@@ -179,6 +179,7 @@ impl DockerAdapter for Adapter {
         Ok(RuntimeContainerState {
             status: "running".into(),
             oom_killed: self.oom,
+            health: None,
         })
     }
 

@@ -1,6 +1,6 @@
 //! Owner-only container lifecycle orchestration.
 
-use std::{ops::RangeInclusive, sync::Arc};
+use std::{collections::BTreeMap, ops::RangeInclusive, sync::Arc};
 
 use async_trait::async_trait;
 use base64::Engine;
@@ -26,6 +26,11 @@ pub struct RuntimeContainerState {
     pub status: String,
     /// Whether the kernel OOM-killed the process.
     pub oom_killed: bool,
+    /// Engine-reported HEALTHCHECK verdict (`healthy`, `unhealthy`,
+    /// `starting`, ...). `None` when the image declares no health
+    /// check; callers must then fall back to the runtime status.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub health: Option<String>,
 }
 
 /// Bounded exec result.
@@ -64,8 +69,34 @@ pub trait DockerAdapter: Send + Sync + 'static {
     async fn ping(&self) -> Result<(), DockerError>;
     /// Pull an image and return its digest.
     async fn pull(&self, image: &str) -> Result<String, DockerError>;
+    /// Check that an immutable OCI reference is present in the engine image store.
+    async fn image_exists(&self, _image: &str) -> Result<bool, DockerError> {
+        Err(DockerError::Adapter("image inspection unavailable".into()))
+    }
+    /// Build an image from a bounded tar context. The command is an unchanged
+    /// build argument; the Dockerfile decides whether to consume it.
+    async fn build_image(
+        &self,
+        _context: Vec<u8>,
+        _image: &str,
+        _build_command: &str,
+    ) -> Result<(), DockerError> {
+        Err(DockerError::Adapter("image build unavailable".into()))
+    }
+    /// Push a tagged image and return its immutable registry manifest digest.
+    async fn push_image(&self, _image: &str) -> Result<String, DockerError> {
+        Err(DockerError::Adapter("image push unavailable".into()))
+    }
     /// Create a validated container and its site network.
     async fn create(&self, spec: &ContainerSpec) -> Result<String, DockerError>;
+    /// Create a validated container with delivery identity labels.
+    async fn create_labeled(
+        &self,
+        _spec: &ContainerSpec,
+        _labels: &BTreeMap<String, String>,
+    ) -> Result<String, DockerError> {
+        Err(DockerError::Adapter("labeled create unavailable".into()))
+    }
     /// Start a container.
     async fn start(&self, id: &str) -> Result<(), DockerError>;
     /// Stop a container.

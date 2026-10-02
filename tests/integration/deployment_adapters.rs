@@ -822,3 +822,113 @@ fn deployment_adapters_secret_ref_is_bounded() {
     // Empty versions are rejected.
     assert!(SecretRef::new("mac-token", Some(String::new())).is_err());
 }
+
+// --- Docker delivery adapter (DCK-003) -----------------------------
+//
+// The production `docker-deploy-v1` adapter is exercised over the
+// recording docker double so the plan contract is proven against
+// the real implementation, not only the conformance fixture.
+
+/// The docker double reports the image present and a running
+/// container, so a matching plan converges.
+fn docker_adapter(
+    docker: Arc<openpanel_app::docker::testing::FakeDocker>,
+) -> Arc<openpanel_app::DockerDeploymentAdapter> {
+    let runtime = Arc::new(
+        openpanel_app::DockerRuntimeAdapter::new(
+            docker,
+            Arc::new(openpanel_app::docker::testing::FakeNetwork::new()),
+            "registry.example/openpanel",
+            Arc::new(openpanel_app::ConvergeRegistry::new()),
+        )
+        .expect("valid runtime adapter"),
+    );
+    Arc::new(
+        openpanel_app::DockerDeploymentAdapter::new(
+            runtime,
+            Arc::new(
+                openpanel_app::application_delivery::testing::FixedTargetResolver::with_target(
+                    openpanel_app::application_delivery::testing::target_for(
+                        "web",
+                        "production",
+                        openpanel_app::docker::testing::PUSHED_DIGEST,
+                    ),
+                ),
+            ),
+        )
+        .expect("valid adapter"),
+    )
+}
+
+fn docker_plan(action: DeploymentAction, adapter_id: &str, dry_run: bool) -> DeploymentPlan {
+    let target = "forge:acme/web:production".to_string();
+    DeploymentPlan::new(
+        target,
+        action,
+        action.is_mutating().then(|| {
+            OperationKey::new("forge:acme/web:production", action, "operation-1").expect("static")
+        }),
+        openpanel_app::docker::testing::PUSHED_DIGEST,
+        Vec::new(),
+        adapter_id,
+        "publisher",
+        dry_run,
+    )
+    .expect("static")
+}
+
+#[test]
+fn docker_adapter_manifest_declares_dry_run_capability() {
+    let adapter = docker_adapter(Arc::new(openpanel_app::docker::testing::FakeDocker::new()));
+    let manifest = adapter.manifest();
+    assert_eq!(manifest.id(), "docker-deploy-v1");
+    assert!(manifest.supports(DeploymentAction::Preflight));
+    assert!(manifest.supports_rollback());
+}
+
+/// Scenario fingerprint: "Foreign plan refused". A plan naming
+/// another adapter id is refused before any host call.
+#[test]
+fn docker_adapter_refuses_a_foreign_plan_without_touching_the_host() {
+    let docker = Arc::new(openpanel_app::docker::testing::FakeDocker::new());
+    let adapter = docker_adapter(docker.clone());
+    let evidence = adapter.execute(
+        &docker_plan(DeploymentAction::Deploy, "mac-jenkins-v1", false),
+        None,
+    );
+    assert_eq!(evidence.state(), DeploymentState::PreflightRejected);
+    assert!(docker.calls().is_empty());
+}
+
+/// Scenario fingerprint: "Dry-run mutates nothing". The read-only
+/// converge check runs, the host does not move.
+#[test]
+fn docker_adapter_dry_run_records_zero_mutations() {
+    let docker = Arc::new(openpanel_app::docker::testing::FakeDocker::new());
+    let adapter = docker_adapter(docker.clone());
+    let evidence = adapter.execute(
+        &docker_plan(DeploymentAction::Preflight, "docker-deploy-v1", true),
+        None,
+    );
+    assert!(evidence.state().is_terminal());
+    assert_eq!(evidence.state(), DeploymentState::Ready);
+    assert!(
+        openpanel_app::docker::testing::mutating_calls(&docker.calls()).is_empty(),
+        "dry-run mutated: {:?}",
+        docker.calls()
+    );
+}
+
+/// Scenario fingerprint: "Replay returns cached evidence". The
+/// cached record comes back verbatim with no new host operation.
+#[test]
+fn docker_adapter_replay_returns_cached_evidence_unchanged() {
+    let docker = Arc::new(openpanel_app::docker::testing::FakeDocker::new());
+    let adapter = docker_adapter(docker.clone());
+    let plan = docker_plan(DeploymentAction::Deploy, "docker-deploy-v1", false);
+    let first = adapter.execute(&plan, None);
+    let before = docker.call_count();
+    let replay = adapter.execute(&plan, Some(&first));
+    assert_eq!(replay, first);
+    assert_eq!(docker.call_count(), before);
+}

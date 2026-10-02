@@ -5,6 +5,7 @@ mod module;
 mod repo;
 mod service;
 mod task;
+pub mod testing;
 
 pub use adapter::BollardDockerAdapter;
 pub use module::DockerModule;

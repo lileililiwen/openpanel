@@ -58,6 +58,7 @@ impl BuildAdapter for FixedBuildAdapter {
         &self,
         _application_id: Uuid,
         _source: &ApplicationSource,
+        _build_command: &str,
     ) -> Result<ReleaseDigest, ApplicationDeliveryError> {
         ReleaseDigest::new(RELEASE_DIGEST, Utc::now())
     }

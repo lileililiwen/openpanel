@@ -16,7 +16,11 @@
 # folder name is expected and is reconciled explicitly below the table.
 #
 # The output is deterministic (no timestamps) so regeneration is
-# idempotent.
+# idempotent. Sorting runs under `LC_ALL=C`: byte order, not the
+# developer's locale collation. Without it the catalog reorders itself
+# on a machine whose locale ignores ASCII punctuation (e.g. zh_CN),
+# which fails the `docs` gate for a change that never touched the
+# capability set.
 #
 # Usage:
 #   scripts/capabilities.sh                        # catalog to stdout
@@ -41,12 +45,12 @@ reg_caps=""
 reg_entry_count=0
 if [ -f "${REGISTRY}" ]; then
     reg_caps="$(grep -oE 'capability: "[^"]+"' "${REGISTRY}" \
-        | sed -E 's/capability: "([^"]+)"/\1/' | sort -u || true)"
+        | sed -E 's/capability: "([^"]+)"/\1/' | LC_ALL=C sort -u || true)"
     reg_entry_count="$(grep -cE '^[[:space:]]*RouteMeta \{$' "${REGISTRY}" || true)"
 fi
 reg_cap_count="$(printf '%s\n' "${reg_caps}" | grep -c . || true)"
 
-live_caps="$(ls "${SPECS_DIR}" | sort)"
+live_caps="$(ls "${SPECS_DIR}" | LC_ALL=C sort)"
 
 count=0
 {

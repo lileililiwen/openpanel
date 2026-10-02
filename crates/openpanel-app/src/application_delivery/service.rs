@@ -221,7 +221,11 @@ impl ApplicationDeliveryService {
             .map_err(ApplicationDeliveryServiceError::Domain)?;
         let digest = self
             .build_adapter
-            .resolve_digest(application_id, application.source())
+            .resolve_digest(
+                application_id,
+                application.source(),
+                application.build_command(),
+            )
             .map_err(ApplicationDeliveryServiceError::Domain)?;
         if digest.value().len() > MAX_DIGEST_LEN {
             return Err(ApplicationDeliveryServiceError::Domain(
@@ -642,9 +646,68 @@ mod tests {
             &self,
             _application_id: Uuid,
             _source: &ApplicationSource,
+            _build_command: &str,
         ) -> Result<openpanel_domain::ReleaseDigest, ApplicationDeliveryError> {
             openpanel_domain::ReleaseDigest::new("sha256:cafef00ddeadbeef", Utc::now())
         }
+    }
+
+    struct RecordingBuildAdapter(std::sync::Mutex<Vec<String>>);
+
+    impl BuildAdapter for RecordingBuildAdapter {
+        fn adapter_id(&self) -> &'static str {
+            "recording-build-v1"
+        }
+
+        fn resolve_digest(
+            &self,
+            _application_id: Uuid,
+            _source: &ApplicationSource,
+            build_command: &str,
+        ) -> Result<openpanel_domain::ReleaseDigest, ApplicationDeliveryError> {
+            self.0
+                .lock()
+                .expect("invariant: test lock")
+                .push(build_command.into());
+            openpanel_domain::ReleaseDigest::new("sha256:cafef00ddeadbeef", Utc::now())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_build_release_passes_build_command_unchanged() {
+        let adapter = Arc::new(RecordingBuildAdapter(std::sync::Mutex::new(Vec::new())));
+        let service = ApplicationDeliveryService::new(
+            adapter.clone(),
+            Arc::new(FakeRuntimeAdapter),
+            Arc::new(NoopAuditService),
+        );
+        let caller = owner();
+        let application = service
+            .register_application(
+                &caller,
+                "build-command",
+                git_source(),
+                "npm ci && npm run build",
+            )
+            .expect("valid application");
+        service
+            .add_environment(
+                &caller,
+                application.id(),
+                EnvironmentKind::Production,
+                "production",
+                4,
+                SecretSetRef::new("prod-secrets", None).expect("valid secret set"),
+                None,
+            )
+            .expect("valid environment");
+        service
+            .build_release(&caller, application.id(), "production")
+            .expect("release built");
+        assert_eq!(
+            adapter.0.lock().expect("invariant: test lock").as_slice(),
+            &["npm ci && npm run build"]
+        );
     }
 
     struct FakeRuntimeAdapter;

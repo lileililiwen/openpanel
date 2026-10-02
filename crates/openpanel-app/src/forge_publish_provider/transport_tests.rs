@@ -1,8 +1,9 @@
 //! STD-001/STD-003: stdio transport, bounded framing, errors, notifications and public exports.
 use crate::{
-    ApplicationDeliveryService, DeploymentAdapterService, ForgeProviderAudit,
-    ForgeProviderProcessHandle, ForgeProviderProcessStatus, ForgePublishProvider,
-    ForgePublishProviderConfig, MAX_LINE_LEN, UnavailableBuildAdapter, UnavailableRuntimeAdapter,
+    ApplicationDeliveryService, ConvergeRegistry, DeploymentAdapterService, DockerBuildAdapter,
+    DockerRuntimeAdapter, ForgeProviderAudit, ForgeProviderProcessHandle,
+    ForgeProviderProcessStatus, ForgePublishProvider, ForgePublishProviderConfig, MAX_LINE_LEN,
+    docker::testing::{FakeDocker, FakeNetwork},
     run_loop,
 };
 use openpanel_core::{
@@ -35,12 +36,28 @@ fn frame(operation: &str, id: Option<i64>) -> String {
     }
     v.to_string()
 }
+/// Compose the provider over the production docker adapters backed by
+/// the shared docker double: the transport suite exercises the real
+/// composition, not a fail-closed marker.
 fn provider(audit: Arc<ForgeProviderAudit>) -> Arc<ForgePublishProvider> {
+    let docker = Arc::new(FakeDocker::new());
+    let runtime = Arc::new(
+        DockerRuntimeAdapter::new(
+            docker.clone(),
+            Arc::new(FakeNetwork::new()),
+            "registry.example/openpanel",
+            Arc::new(ConvergeRegistry::new()),
+        )
+        .expect("valid runtime adapter"),
+    );
     Arc::new(ForgePublishProvider::new(
         ForgePublishProviderConfig::default(),
         Arc::new(ApplicationDeliveryService::new(
-            Arc::new(UnavailableBuildAdapter),
-            Arc::new(UnavailableRuntimeAdapter),
+            Arc::new(
+                DockerBuildAdapter::new(docker, "registry.example/openpanel".into(), 1024 * 1024)
+                    .expect("valid build adapter"),
+            ),
+            runtime,
             audit.clone(),
         )),
         Arc::new(DeploymentAdapterService::new(vec![], audit.clone())),
@@ -271,55 +288,4 @@ async fn handler_panic_and_audit_failure_are_internal_errors_and_loop_survives()
                 .contains("payload-secret-needle")
         );
     }
-}
-#[test]
-fn unavailable_adapters_refuse_all_mutations() {
-    use openpanel_domain::{
-        ApplicationSource, ApplicationSourceKind, BuildAdapter, Environment, EnvironmentKind,
-        Release, ReleaseDigest, RuntimeAdapter, SecretSetRef,
-    };
-    let now = chrono::Utc::now();
-    let app = Uuid::new_v4();
-    let source = ApplicationSource::new(
-        ApplicationSourceKind::Git,
-        "https://example.com/web.git",
-        "abcdef1",
-    )
-    .unwrap();
-    let env = Environment::new(
-        Uuid::new_v4(),
-        app,
-        EnvironmentKind::Production,
-        "production",
-        1,
-        SecretSetRef::new("prod-web", None).unwrap(),
-        now,
-        None,
-    )
-    .unwrap();
-    let release = Release::new(
-        Uuid::new_v4(),
-        app,
-        env.id(),
-        ReleaseDigest::new("sha256:abcd", now).unwrap(),
-        source.clone(),
-        now,
-        None,
-    );
-    assert_eq!(UnavailableBuildAdapter.adapter_id(), "unavailable-build-v1");
-    assert!(
-        UnavailableBuildAdapter
-            .resolve_digest(app, &source)
-            .is_err()
-    );
-    assert_eq!(
-        UnavailableRuntimeAdapter.adapter_id(),
-        "unavailable-runtime-v1"
-    );
-    assert!(UnavailableRuntimeAdapter.deploy(&release, &env).is_err());
-    assert!(
-        UnavailableRuntimeAdapter
-            .rollback(&release, &env, Uuid::new_v4())
-            .is_err()
-    );
 }
