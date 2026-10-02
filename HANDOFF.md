@@ -3,8 +3,8 @@ ariadex_handoff_version: 1
 version: 1
 session_id: d8c9dfe8207d
 status: complete
-current_spec: application-delivery-docker-adapters
-current_spec_file: openspec/changes/application-delivery-docker-adapters
+current_spec: none
+current_spec_file: none
 completed:
   - repair-release-security-and-evidence
   - add-portable-runtime-packaging
@@ -17,10 +17,11 @@ completed:
   - forge-publish-provider
   - forge-publish-provider-stdio
   - post-mvp-readiness
+  - application-delivery-docker-adapters
 unresolved: []
-next_action: implement application-delivery-docker-adapters
-next_spec: application-delivery-docker-adapters
-updated_at: '2026-10-01T22:24:00+08:00'
+next_action: propose application-delivery-sqlite-state
+next_spec: none (no active change folder; propose the next change first)
+updated_at: '2026-10-02T13:35:00+08:00'
 ---
 # OpenPanel Roadmap Handoff
 
@@ -580,8 +581,10 @@ forge-publish-provider-stdio implementation result (2026-10-01, commit
 `6ce9a5040e8a2a64a8d6cd314881647451200c1e`):
 - `openpanel-cli forge-provider` serves newline-delimited JSON-RPC over
   stdio with an explicit enable toggle and Owner/Admin operator binding.
-  It uses the existing facade and codec; unavailable delivery adapters
-  return structured refusal until the next change supplies real adapters.
+  It uses the existing facade and codec; at that time the delivery
+  adapters were the fail-closed `Unavailable` markers, which returned
+  structured refusal. `application-delivery-docker-adapters` (below)
+  replaced them.
 - Transport, startup refusal, notification, redaction and audit tests
   passed. `make -j1 check` and an independent `make -j1 test` repeat
   each reported 2,100 passed, zero failed, two ignored. `make gate`
@@ -590,8 +593,79 @@ forge-publish-provider-stdio implementation result (2026-10-01, commit
   after archive, and post-archive spec drift gates passed.
 - The change is archived at
   `openspec/changes/archive/2026-10-01-forge-publish-provider-stdio/`.
-  Real Docker delivery remains in the active
-  `application-delivery-docker-adapters` change.
+  Real Docker delivery shipped in the following change, now archived as
+  `openspec/changes/archive/2026-10-02-application-delivery-docker-adapters/`.
+
+application-delivery-docker-adapters implementation result (2026-10-02, commit `5a47d61`):
+- The Forge stdio transport no longer answers through fail-closed
+  markers. `DockerBuildAdapter`, `DockerRuntimeAdapter`, and
+  `DockerDeploymentAdapter` (`docker-deploy-v1`) are composed by
+  `crates/openpanel-cli/src/forge_provider.rs` over one shared runtime
+  adapter, and `forge_publish_provider/unavailable.rs` is deleted
+  rather than kept as an alternate seam.
+- Build: an OCI source verifies its pinned digest; a git source is
+  cloned shallow at the named commit, built with the application's build
+  command threaded through the port unchanged, and pushed. Daemon-down
+  and registry rejections map to existing typed delivery errors
+  (`RuntimeUnavailable`, `RegistryUnauthorized`) with fixed,
+  credential-free text — no new domain error variant was needed.
+- Runtime: the environment container is converged by immutable digest,
+  labeled `openpanel.application` / `openpanel.environment` /
+  `openpanel.release`, started, and projected onto a terminal outcome.
+  The health policy honors an image-declared HEALTHCHECK verdict and
+  otherwise accepts `running`, which is what adding
+  `RuntimeContainerState::health` to the docker port made possible. A
+  new converge retires the container the previous release used, so a
+  release loop cannot accumulate containers on the host.
+- Deployment adapter: a foreign plan is refused before any host call,
+  a dry-run is a full read-only converge check (zero mutating verbs in
+  the double's call log), and a replayed plan returns cached evidence
+  verbatim. `DeploymentAdapterService` was deliberately NOT modified:
+  its unmodified suite pins the synthetic dry-run path, so the dry-run
+  contract is honored inside the adapter instead (design ruling 1).
+- Three rulings were forced by frozen contracts, all recorded in the
+  archived `design.md` § Implementation rulings: plan targets resolve
+  through an explicit `PlanTargetResolver`; secret references are
+  declared by the composition via `with_declared_secret_refs`, because
+  `validate_plan` matches them exactly and the names belong to the
+  operator's environments; and the health verdict comes from the port.
+- One recording docker double now serves every suite
+  (`crates/openpanel-app/src/docker/testing.rs`), with
+  `forge_publish_provider::testing::double_harness` building the full
+  graph for the integration and CLI suites. The double lives in
+  `openpanel-app`, not `openpanel-test-support`, because a double in a
+  crate that depends on `openpanel-app` cannot satisfy the trait the
+  unit tests see. No shipped code path reads a "pretend to publish"
+  switch, so the CLI subprocess tests still prove the real entry point.
+- Tests: 9 build-adapter, 13 runtime-adapter, and 10 deployment-adapter
+  unit tests; 6 application-delivery integration tests (including the
+  `dry_run` → `succeeded` publish sequence and a contrast test proving
+  an unregistered adapter is still refused); 4 deployment-adapter
+  integration tests carrying the DCK-003 scenario fingerprints; and one
+  CLI test driving the production `run_loop` over the double-backed
+  harness. Workspace suite: 2,143 passed, zero failed.
+- Gates: `make check` and `make gate` both exit 0. The gate's two
+  pending reviews were resolved by running their bound scripts, as the
+  contract requires: `make test-gates` reported 131 passed, and
+  `scripts/check-tests-gate.sh` reported 1,519 passed with exit 0.
+  `openspec validate --strict` reported the change valid, and
+  post-archive spec drift is 0 new / 99 tracked baseline.
+- One gate fix rode along: `scripts/capabilities.sh` now sorts under
+  `LC_ALL=C`. It previously sorted with the ambient locale, so the
+  capability catalog reordered itself on machines whose locale ignores
+  ASCII punctuation (this one is `zh_CN.UTF-8`) and failed `make docs`
+  for changes that never touched the capability set. The regenerated
+  `docs/CAPABILITIES.md` is byte-identical to the committed one, so
+  this is a determinism fix, not a content change.
+- Archived as `2026-10-02-application-delivery-docker-adapters`; the
+  four new requirements (three in `application-delivery`, one in
+  `deployment-adapters`) are folded into the live specs.
+- **Evidence boundary:** rollback durability is per-process. The
+  converge projection lives in `ConvergeRegistry`, so a rollback to a
+  release converged by an earlier process returns a typed "never
+  converged by this provider" error and mutates nothing. The durable
+  projection is `application-delivery-sqlite-state`, which does not
+  exist yet; this change does not claim it.
 
 post-mvp-readiness implementation result (2026-09-30, commit `848b113`):
 - New `readiness` capability with four ADDED Requirements: Web UI
@@ -783,9 +857,13 @@ commit 1's hash.
 
 ## Next steps (post-handoff)
 
-1. **Next active change:** `application-delivery-docker-adapters` in
-    `openspec/changes/application-delivery-docker-adapters/` supplies the
-    real delivery adapters behind the archived Forge stdio transport.
+1. **No active change folder.** `application-delivery-docker-adapters` is
+    implemented and archived, so the Forge publish path is complete
+    end-to-end. The natural successor is
+    `application-delivery-sqlite-state`: the converge projection is
+    per-process today, and a restart currently costs the ability to roll
+    back to a release an earlier process converged. Propose that change
+    before starting any other delivery work.
 2. **Optional CI follow-up.** `.github/workflows/ci.yml` still
     runs `make check`, which is unaffected by P5 (the chain now
     includes the `driftwatch-gate` lockstep step, so CI enforces
