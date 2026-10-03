@@ -2,6 +2,8 @@
   "schema_version": 1,
   "id": "openpanel",
   "kind": "rust-product",
+  "role": "product",
+  "stack": "rust",
   "profile": "rust-product",
   "lifecycle": "active",
   "verification": {
