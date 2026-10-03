@@ -1,7 +1,8 @@
 # site-staging Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-13-add-site-staging. Update Purpose after archive.
+
+`refine-sites-with-multi-php-clone-fields` introduced the `instance_origin_id` so a cloned site can be tracked, and `add-site-clone-and-template-export` will use that field. Sites that ship code, however, also need a safe place to test changes before they hit production. Modern hosts (Forge, RunCloud, Laravel Vapor) ship **per-site staging** at a subdomain like `staging.<domain>`, with promotion (atomic swap) when ready. OpenPanel currently lacks that abstraction; this change adds it.
 ## Requirements
 ### Requirement: StagingSlot Lifecycle
 

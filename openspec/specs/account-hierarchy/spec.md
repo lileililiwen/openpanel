@@ -2,8 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change add-account-hierarchy. Update Purpose after archive.
-
+`openspec/specs/identity/spec.md` already supports the `Owner / Admin / User` roles. It does not yet model a **reseller hierarchy** where one account owns child accounts that share part of a parent quota pool (a "reseller plan"). cPanel's WHM, Plesk's reseller tier, and Baota's commercial edition all support this. OpenPanel RBAC currently treats every account as a peer. This change adds a `parent_account_id` relationship, child-account creation by parents, and quota inheritance — forming the foundation of a multi-tenant SaaS deployment.
 ## Requirements
 
 ### Requirement: Hierarchy Tree and Cycle Detection

@@ -1,7 +1,8 @@
 # site-workspace Specification
 
 ## Purpose
-TBD - created by archiving change add-site-workspace-ux. Update Purpose after archive.
+
+OpenPanel currently distributes site operations across separate pages and links. aaPanel and BaoTa make the site the primary workspace, grouping domains, runtime, files, SSL, redirects, proxy, security, logs, backups, and deployment actions.
 ## Requirements
 ### Requirement: Site operations share a workspace
 

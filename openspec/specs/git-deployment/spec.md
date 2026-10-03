@@ -1,7 +1,8 @@
 # git-deployment Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-14-add-git-deployment. Update Purpose after archive.
+
+OpenPanel already provisions sites, PHP runtimes, staging, and clone/template export, but has **no first-class Git deployment** path. Modern hosts (Plesk Git, cPanel Git™ Version Control, CloudPanel, 1Panel, Forge, RunCloud) let a developer link a repository, pick a branch, and deploy on push via webhook — or on demand — with atomic swaps and clear build steps. Without it, OpenPanel users fall back to SFTP uploads or manual `git pull` over SSH, losing auditability, atomicity, and rollback. This change adds a `git-deployment` bounded context.
 ## Requirements
 ### Requirement: Link Repository
 

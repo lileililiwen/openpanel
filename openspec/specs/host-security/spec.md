@@ -1,7 +1,8 @@
 # host-security Specification
 
 ## Purpose
-TBD - created by archiving change add-host-security. Update Purpose after archive.
+
+OpenPanel protects application secrets but has no host firewall or login-abuse controls. A server panel must safely expose network policy and panel brute-force defense without letting an operator lock out the panel or SSH accidentally.
 ## Requirements
 ### Requirement: Managed Firewall Rules
 

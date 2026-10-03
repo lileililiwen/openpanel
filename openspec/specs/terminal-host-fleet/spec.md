@@ -1,7 +1,8 @@
 # terminal-host-fleet Specification
 
 ## Purpose
-TBD - created by archiving change add-terminal-and-host-fleet-ux. Update Purpose after archive.
+
+aaPanel supports local and remote SSH terminal workflows, while BaoTa documents node management, remote service state, logs, jobs, databases, and terminal access. OpenPanel has agent, SSH-key, web-terminal, and host-security domains, but they are not presented as one safe operator workflow.
 ## Requirements
 ### Requirement: Terminal sessions are host-scoped
 

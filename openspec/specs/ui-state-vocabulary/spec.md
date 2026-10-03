@@ -1,7 +1,8 @@
 # ui-state-vocabulary Specification
 
 ## Purpose
-TBD - created by archiving change add-admin-interaction-surface. Update Purpose after archive.
+
+A UX audit against aaPanel (verified source: `aaPanel/BTPanel/static/js/public.js`, `layout.html`) and NN/g form-error heuristics (`nngroup.com/articles/errors-forms-design-guidelines/`) found that OpenPanel's reported "interaction feels weird" stems from a **structural gap**: the admin shell has no centralized interaction grammar. aaPanel funnels every modal, toast, confirmation, tooltip, and load overlay through one component (`layui.layer`) and reserves modals strictly for destructive actions; OpenPanel's 40+ route files each roll their own HTMX swap with no modal/toast surface, no inline-validation hooks, and no feedback rail.
 ## Requirements
 ### Requirement: Reusable UI State Components
 

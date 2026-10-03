@@ -1,7 +1,8 @@
 # ip-allocation Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-14-add-ipv6-and-address-pools. Update Purpose after archive.
+
+No spec in OpenPanel models IPv6 or per-site IP allocation. Sites today share the host address with no notion of dedicated or shared IPv4/IPv6 assignment. Modern hosts (cPanel/WHM with IPv6 ranges, Plesk, CloudPanel, 1Panel) assign dedicated or shared IPv4 and IPv6 addresses to sites and expose IP pool management. This change adds an `ip-allocation` bounded context that enables IPv6 per site and manages address pools so that vhosts bind to assigned IPs.
 ## Requirements
 ### Requirement: Manage Address Pools
 

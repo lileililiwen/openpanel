@@ -1,7 +1,8 @@
 # control-menu Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-13-add-control-menu-cli. Update Purpose after archive.
+
+OpenPanel today exposes a typed, multi-command CLI (`openpanel-cli`) for ad-hoc operator work, but it does not ship the **interactive numbered-menu** experience that Baota operators have standardised on for years. Nor does it give Linux installers a one-liner that works regardless of distribution. Two concrete consequences: - A first-time operator who only knows the Baota UX runs `opctl`, types `1`, and gets a panel restart — without reading any docs. - A distro-packager or CDN sales engineer hands a customer one line, `curl -fsSL https://openpanel.dev/install.sh | bash`, and the customer is interactive-ready on any major Linux distribution without first installing Node.js. This change introduces a **new sibling npm package** `openpanel-menu` that ships exactly that UX. It is *not* a replacement for `openpanel-cli`; it is a thin interactive shell that, for each menu item, either delegates to `openpanel-cli` (when a command exists) or talks to the panel's runtime directly via systemd + config files (when a command does not yet exist). Implementations of this OpenSpec change produce two parts: 1. The backend package (`packages/openpanel-menu/`) — menu loop, typed command handlers, npm distribution metadata. 2. The distribution scripts — `scripts/install.sh` for the curl|bash one-liner, plus the npm `bin`, `files`, and `postinstall` fields on `package.json`. OpenPanel-specific scope, decided up-front in the pre-change requirements conversation: this menu tool wraps `openpanel-cli` and systemd for OpenPanel. It does NOT attempt to manage nginx, MySQL, Redis, Docker, etc. directly — those are owned by the `software-center` and `sites`/`databases`/`system-services` capabilities and are configured through the panel UI.
 ## Requirements
 ### Requirement: Menu Table Is Stable
 

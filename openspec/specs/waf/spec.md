@@ -1,7 +1,8 @@
 # waf Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-12-add-waf-rules. Update Purpose after archive.
+
+Baota and cPanel both ship a "firewall" panel for web traffic: bad bots, geo blocking, rate limits, simple signature rules. OpenPanel already has a host firewall module (iptables/nftables via `host-security`), but no per-site request filtering. Without a WAF, a single site on the panel can be hammered with no per-site knob to turn. This change adds a `waf` bounded context that compiles typed rule sets into nginx `limit_req`, `limit_conn`, `geo`, `map`, and `if` blocks — generated into the existing per-site nginx config, validated with `nginx -t`, and rolled back on failure. The panel never edits nginx by hand.
 ## Requirements
 ### Requirement: Typed Rule Set
 

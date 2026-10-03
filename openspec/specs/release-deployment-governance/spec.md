@@ -1,7 +1,8 @@
 # release-deployment-governance Specification
 
 ## Purpose
-TBD - created by archiving change add-release-and-deployment-governance. Update Purpose after archive.
+
+OpenPanel currently has source CI and an installer package, but no repository evidence for reproducible server releases, signed artifacts, container publishing, upgrade/rollback behavior, or a supported-platform matrix. A server-management panel must make installation and recovery trustworthy before it can compete with mature panels.
 ## Requirements
 ### Requirement: Reproducible Supported Artifacts
 

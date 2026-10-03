@@ -2,8 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change add-admin-ip-allowlist.
-
+`openspec/specs/host-security/spec.md` covers the host firewall (nftables) but does not pin a **panel-login IP allowlist**. cPanel's "IP Blocker" (and the administrative login restrict) is a network- level gate in front of the panel UI/API independent of the host firewall. OpenPanel currently has only RBAC. Adding this gate gives a meaningful "remote-only-from-my-LAN" control before any auth attempt, including failed passwords and CSRF probing.
 ## Requirements
 
 ### Requirement: IP Allowlist

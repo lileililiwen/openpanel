@@ -2,8 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change add-per-site-php-runtime.
-
+`refine-sites-with-multi-php-clone-fields` introduced `Site.php_runtime` as an optional `PhpRuntimeRef` field but did not yet populate it. cPanel's MultiPHP Manager and Baota's per-site PHP switcher let operators install multiple PHP versions and assign any one to any site, with a live atomic swap. This change implements the install / assign / swap operations, the FPM pool management, and the audit trail.
 ## Requirements
 
 ### Requirement: PHP Runtime Reference

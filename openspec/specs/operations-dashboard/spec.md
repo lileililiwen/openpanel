@@ -1,7 +1,8 @@
 # operations-dashboard Specification
 
 ## Purpose
-TBD - created by archiving change redesign-operations-dashboard. Update Purpose after archive.
+
+The current dashboard contains host gauges, five counts, and recent alerts. aaPanel presents server identity, operating system, CPU, memory, disk, network, website/database counts, security risks, and software status on the home page. OpenPanel's security and reliability strengths are not visible at first use.
 ## Requirements
 ### Requirement: Dashboard exposes operational health
 

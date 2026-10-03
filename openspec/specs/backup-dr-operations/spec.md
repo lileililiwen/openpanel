@@ -1,7 +1,8 @@
 # backup-dr-operations Specification
 
 ## Purpose
-TBD - created by archiving change complete-backup-dr-and-migration-operations. Update Purpose after archive.
+
+OpenPanel has backup plans, offsite targets, snapshots, restore previews, and restore-drill domain logic, but operators need a reliable end-to-end workflow: verify remote storage, see RPO/RTO, schedule drills, inspect failures, and migrate a host. Mature panels make granular restore and remote backup behavior visible and actionable.
 ## Requirements
 ### Requirement: Backup Health Is Actionable
 

@@ -1,7 +1,8 @@
 # i18n Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-13-add-i18n-and-localization. Update Purpose after archive.
+
+`refine-web-ui-with-audit-accessibility-theming` registered the `T(key)` string-table contract; `refine-quality-with-i18n-and-theme-policy` registered the lint that rejects literal strings outside the table. To turn those hooks into a real product feature, the panel needs locale negotiation per request, message catalogs, right-to-left support, locale-aware number / date / time formatting, and translation workflows. cPanel and Baota both ship i18n; OpenPanel currently has none. This change implements the runtime.
 ## Requirements
 ### Requirement: Locale Negotiation
 

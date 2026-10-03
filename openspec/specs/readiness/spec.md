@@ -1,7 +1,8 @@
 # readiness Specification
 
 ## Purpose
-TBD - created by archiving change post-mvp-readiness. Update Purpose after archive.
+
+OpenPanel ships 83 live capabilities and 124 archived changes, a pure-Rust HTMX Web UI, and a green `make check` gate — yet its `README.md` shows no screenshot and points at `openspec/specs/` without ever listing what is there. The gap is visibility, not capability: a reader cannot see the panel they are being asked to trust, and cannot navigate a capability surface that has outgrown prose. This change closes that documentation-readiness gap; it changes no runtime behavior and adds no product capability.
 ## Requirements
 ### Requirement: Web UI screenshot evidence
 

@@ -1,7 +1,8 @@
 # databases Specification
 
 ## Purpose
-TBD - created by archiving change add-databases-management. Update Purpose after archive.
+
+Sites management ships in v0.1-alpha +sites but operators still can't provision a MySQL database for a site. To run a WordPress / Ghost / custom-PHP site, the operator needs a database, a database user, and the ability to set/rotate that user's password. Without this, sites are purely static. This change adds the `databases` bounded context: provision a MySQL database + DB user tied to a panel user, encrypted credential storage, and the same per-user RBAC as sites.
 ## Requirements
 ### Requirement: Database Aggregate
 

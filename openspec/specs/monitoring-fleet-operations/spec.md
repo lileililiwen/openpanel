@@ -1,7 +1,8 @@
 # monitoring-fleet-operations Specification
 
 ## Purpose
-TBD - created by archiving change expand-monitoring-and-fleet-operations. Update Purpose after archive.
+
+OpenPanel has host gauges, history, synthetic monitoring, notifications, and an mTLS agent model, but the operator experience does not yet match mature panels with configurable dashboards, external uptime checks, threshold policy, and fleet-level views.
 ## Requirements
 ### Requirement: Monitoring Views Are Configurable
 

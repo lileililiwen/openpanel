@@ -1,7 +1,8 @@
 # logs Specification
 
 ## Purpose
-TBD - created by archiving change add-logs-and-traffic-insights. Update Purpose after archive.
+
+Monitoring shows host utilization but operators cannot inspect site access/errors or correlate changes with audit events. aaPanel and cPanel both expose recent errors, raw access, traffic, and operational logs as core troubleshooting tools.
 ## Requirements
 ### Requirement: Authorized Log Sources
 

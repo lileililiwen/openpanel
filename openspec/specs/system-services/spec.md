@@ -1,7 +1,8 @@
 # system-services Specification
 
 ## Purpose
-TBD - created by archiving change add-system-services-management. Update Purpose after archive.
+
+Sites, databases, and TLS depend on nginx, MySQL, and PHP-FPM, yet OpenPanel cannot report or recover those services. Service health and controlled lifecycle actions are a smaller and safer foundation than an app store or arbitrary package installer.
 ## Requirements
 ### Requirement: Allowlisted Service Inventory
 

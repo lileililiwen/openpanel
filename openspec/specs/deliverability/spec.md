@@ -1,7 +1,8 @@
 # deliverability Specification
 
 ## Purpose
-TBD - created by archiving change add-deliverability-monitoring. Update Purpose after archive.
+
+OpenPanel generates DKIM keys and enforces SPF/DMARC policies (`openspec/specs/mail/spec.md`) but has zero visibility into actual deliverability reputation: greps for `dnsbl|blacklist|deliverability| reputation` return nothing across specs and crates. cPanel ships an Email Deliverability UI; KeyHelp ships Rspamd reputation tooling; mail-heavy hosts otherwise discover listing problems from angry users.
 ## Requirements
 ### Requirement: DNSBL Listing Checks
 

@@ -1,7 +1,8 @@
 # ssl-production-lifecycle Specification
 
 ## Purpose
-TBD - created by archiving change complete-production-acme-lifecycle. Update Purpose after archive.
+
+The certificate model, challenge server, nginx rendering, and renewal contract exist, but `RustlsAcmeClient::issue` still returns a skeleton error. This is a critical production gap because a panel cannot claim automated HTTPS while its main issuance path is non-functional.
 ## Requirements
 ### Requirement: Complete HTTP-01 Issuance
 

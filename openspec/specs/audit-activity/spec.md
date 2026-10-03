@@ -1,7 +1,8 @@
 # audit-activity Specification
 
 ## Purpose
-TBD - created by archiving change add-audit-activity-center. Update Purpose after archive.
+
+The UI exposes security, deployment, backup, DNS, SSL, service, and user mutations, but `/audit` still returns HTTP 501. Operators cannot answer who changed a resource, what happened, whether a job failed, or which action caused an outage.
 ## Requirements
 ### Requirement: Searchable audit history
 

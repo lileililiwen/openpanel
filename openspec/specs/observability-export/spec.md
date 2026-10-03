@@ -1,7 +1,8 @@
 # observability-export Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-13-add-observability-export. Update Purpose after archive.
+
+OpenPanel records monitoring, audit, and quota events in- process. Operators want to see these in their existing dashboards (Prometheus, OpenTelemetry-compatible backends). This change exposes a typed `ObservabilityExporter` with Prometheus `/metrics` and OpenTelemetry OTLP endpoints, so the panel can plug into existing observability stacks without modifying the bounded contexts that emit events.
 ## Requirements
 ### Requirement: Prometheus Exposition
 

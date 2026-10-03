@@ -1,7 +1,8 @@
 # synthetic-monitoring Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-14-add-synthetic-monitoring. Update Purpose after archive.
+
+`monitoring` (archived) and `refine-monitoring-with-bandwidth-accounting` (active) cover host metrics, bandwidth accounting, and host uptime, but there is **no external HTTP probe or SSL-expiry alerting**. Operators cannot tell whether a site is reachable from the outside, whether a TCP port is accepting connections, or whether a certificate is about to expire until a customer complains. This change adds a `synthetic-monitoring` bounded context so checks run from outside the host and failures are surfaced through the existing notification path.
 ## Requirements
 ### Requirement: Define Synthetic Check
 

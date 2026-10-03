@@ -1,7 +1,8 @@
 # app-runtimes Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-14-add-non-php-runtimes. Update Purpose after archive.
+
+OpenPanel today supports only PHP (via `per-site-php-runtime`) and arbitrary Docker containers (via `container-runtime`). CloudPanel, 1Panel, Plesk, and cPanel all expose managed Node.js, Python, Ruby, and Go runtimes natively; developers expect to pick a language and a version pin for a site without hand-rolling a container. Without first-class non-PHP runtimes, OpenPanel users must drop to Docker or manage supervisor/process files by hand, losing per-site isolation, version governance, and a single reverse-proxy story. This change adds an `app-runtimes` bounded context that mirrors the `per-site-php-runtime` pattern for the common languages.
 ## Requirements
 ### Requirement: Select Runtime and Version
 

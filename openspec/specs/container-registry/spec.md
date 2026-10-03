@@ -1,7 +1,8 @@
 # container-registry Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-14-add-container-image-registry. Update Purpose after archive.
+
+`container-runtime` (active) adds registry credentials and egress for pulling external images, but the panel hosts **no registry of its own** — teams cannot push, store, and pull their own images through OpenPanel. This change adds a `container-registry` bounded context: a panel-hosted OCI Distribution-compliant image registry with per-user namespaces, push/pull through the panel, a retention policy, and a vulnerability-scan hook invoked after each push.
 ## Requirements
 ### Requirement: Hosted OCI Registry
 

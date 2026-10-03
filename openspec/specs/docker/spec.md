@@ -1,7 +1,8 @@
 # docker Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-12-add-docker-management. Update Purpose after archive.
+
+Modern Baota ships a Docker module. A web owner who wants to run a Redis sidecar, a Ghost container, or a static-site builder in isolation can do so with a single click. OpenPanel currently has no container story at all. This change adds a `docker` bounded context that talks to the host's Docker daemon through a vetted Rust client (`bollard`), restricted to a fixed allowlist of actions, and runs every container as a non-root user inside a per-site network namespace. No `docker.sock` mount-from-the-app — the panel uses `HTTP over a unix socket` with explicit capability declarations.
 ## Requirements
 ### Requirement: Image Allowlist and Provenance
 

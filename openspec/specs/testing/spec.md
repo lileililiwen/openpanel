@@ -1,7 +1,8 @@
 # testing Specification
 
 ## Purpose
-TBD - created by archiving change add-tdd-infrastructure. Update Purpose after archive.
+
+OpenPanel has accumulated 36 unit tests across 4 implementation changes, but the test layer has no shared conventions, no repeatable isolation, no property-based coverage, and no integration tests that exercise the HTTP stack end-to-end. This makes it easy to write tests that pass against the current implementation while hiding real bugs — exactly what the project standard (see `Agents.md`) forbids: > Tests exist to verify correctness, not to accommodate the code so it > passes checks; tests act as overseers of the code, not its allies. This change establishes a **repeatable TDD infrastructure** with: - Per-test isolation (every test gets a fresh DB; no shared mutable state; no assumption about prior runs). - A fixture library that seeds only what each test needs. - Mocking at ports (repository traits, audit service, time, randomness) via `mockall`. - Property-based tests via `proptest` for domain invariants. - HTTP mocking for outbound calls via `wiremock`. - Optional Docker fixtures via `testcontainers` (for real MySQL/Postgres in integration suites). - An integration test harness that boots the real axum server against an isolated SQLite file and exercises it via `reqwest`. Every future change MUST include a "Testing" task group as the first group in `tasks.md`, with cases listed in the format defined in this spec.
 ## Requirements
 ### Requirement: Test Categories and File Locations
 

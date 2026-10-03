@@ -1,7 +1,8 @@
 # operator-security-control-plane Specification
 
 ## Purpose
-TBD - created by archiving change add-operator-security-control-plane. Update Purpose after archive.
+
+The dashboard can show selected security attention items, and OpenPanel has firewall, malware, WAF, service-health, audit, and compliance capabilities, but there is no unified remediation workflow. Mature panels make findings prioritized, explainable, actionable, suppressible with expiry, and verifiable after repair.
 ## Requirements
 ### Requirement: Findings Are Normalized and Prioritized
 

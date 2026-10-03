@@ -1,7 +1,8 @@
 # notifications Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-12-add-notification-channels. Update Purpose after archive.
+
+Monitoring ships alerts that write to the audit log, but there is no way to actually be told about them. Baota has email/SMS push; cPanel has contact channels; every modern panel can notify its operator when something goes wrong. Without delivery, `AlertFired` events are a diary nobody reads. This change closes the loop with first-party **notification channels**: email (SMTP, pure-Rust `lettre`) and generic webhook (HMAC-signed JSON), wired into monitoring and into a new "operator event" subscription. No SMS, no third-party push — that keeps the surface tight and the dependency footprint small.
 ## Requirements
 ### Requirement: Notification Channels
 

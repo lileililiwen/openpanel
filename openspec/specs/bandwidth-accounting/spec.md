@@ -2,8 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change add-bandwidth-accounting.
-
+`refine-monitoring-with-bandwidth-accounting` introduced bandwidth counter shapes and the observer hook but did not persist counters or compute quota thresholds. The proposed `add-resource-quotas` and `add-notification-channels` changes need a real `BandwidthReader` that returns the rolling-window bytes for a `(owner, period)`. cPanel's bandwidth meter and Baota's per-site bandwidth view both compute and surface this. This change implements the SQLite-backed observer and the threshold-crossing consumer.
 ## Requirements
 
 ### Requirement: Bandwidth Counter Storage

@@ -1,7 +1,8 @@
 # webmail-client Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-13-add-webmail-client. Update Purpose after archive.
+
+`openspec/specs/mail/spec.md` covers mail domains, mailboxes, aliases, and DKIM/quota refinement, but it does not include a **webmail client**. cPanel ships Roundcube; Baota ships RainLoop / Roundcube. Operators rarely want to ask every user to configure a desktop mail client. This change adds a webmail client that runs under the panel session — so authentication is delegated and never exposes the user's mailbox password to the panel UI surface.
 ## Requirements
 ### Requirement: Session Credential Lifecycle
 

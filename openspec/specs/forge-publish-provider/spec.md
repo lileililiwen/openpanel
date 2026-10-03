@@ -1,7 +1,8 @@
 # forge-publish-provider Specification
 
 ## Purpose
-TBD - created by archiving change forge-publish-provider. Update Purpose after archive.
+
+OpenPanel already owns application delivery, Git deployment, deployment adapters, audit, idempotency, and rollback. It should be testable as an optional Forge provider without moving those responsibilities into Forge or turning OpenPanel into a narrow deployment utility.
 ## Requirements
 ### Requirement: Forge provider facade
 

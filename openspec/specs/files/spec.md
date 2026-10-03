@@ -1,7 +1,8 @@
 # files Specification
 
 ## Purpose
-TBD - created by archiving change add-files-management. Update Purpose after archive.
+
+Sites and databases ship in v0.1-alpha. Operators can provision vhosts and MySQL databases but cannot upload the actual site contents. To deploy a WordPress theme, a static site, or any web content, the operator needs a file manager scoped to a site's document root. This change adds the `files` bounded context: a chrooted file manager for sites. Every operation is restricted to the site's document root (no path traversal), and every mutation is audited.
 ## Requirements
 ### Requirement: Path Value Object
 

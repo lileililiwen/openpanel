@@ -1,7 +1,8 @@
 # quality-maturity-ratchet Specification
 
 ## Purpose
-TBD - created by archiving change ratchet-quality-and-spec-maturity. Update Purpose after archive.
+
+OpenPanel has a broad governance chain, but several important checks remain warning-only or informational. The current spec-test drift gate reports uncovered capabilities without failing, coverage can emit a stub report, and reuse reports duplicated public items without failing by default. This lets a new feature appear complete while its requirements, tests, and production proof diverge.
 ## Requirements
 ### Requirement: New and Modified Spec Scenarios Are Covered
 

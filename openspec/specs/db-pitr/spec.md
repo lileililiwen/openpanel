@@ -1,7 +1,8 @@
 # db-pitr Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-14-add-database-pitr. Update Purpose after archive.
+
+`refine-backups-with-resource-restore-and-policies` (active) adds offsite targets and resource-scoped restore; `add-offsite-backup-targets` (active) adds S3/B2/rsync destinations — but there is **no point-in-time or incremental database backup**. Today a database restore can only return the cluster to the last full snapshot, losing everything between snapshots. For production databases this is unacceptable: a dropped table or a bad migration at 14:02 cannot be undone without losing the 13:30– 14:02 window. This change adds a `db-pitr` bounded context.
 ## Requirements
 ### Requirement: Continuous Binlog Streaming
 

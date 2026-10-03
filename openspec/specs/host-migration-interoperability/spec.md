@@ -1,7 +1,8 @@
 # host-migration-interoperability Specification
 
 ## Purpose
-TBD - created by archiving change add-portable-host-operations-and-migration. Update Purpose after archive.
+
+Real-world adoption depends on operating more than one host and importing existing sites safely. Virtualmin and other panels make domain-level backup, restore, migration, quota, mail, and connectivity behavior explicit. OpenPanel has agent fleet, backup/DR, and migration foundations, but needs a portable operator workflow with dry-run plans, scoped changes, and source adapters.
 ## Requirements
 ### Requirement: Host Capability Contract
 

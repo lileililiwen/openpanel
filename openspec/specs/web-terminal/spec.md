@@ -1,7 +1,8 @@
 # web-terminal Specification
 
 ## Purpose
-TBD - created by archiving change add-web-terminal. Update Purpose after archive.
+
+A browser terminal is de-facto baseline: cPanel (Terminal), Plesk, HestiaCP 1.9+, Virtualmin, aaPanel/BaoTa, 1Panel, Coolify and Easypanel all ship one. OpenPanel has none — the only trace is a doc-comment label in the software-center recipe list. Users must fall back to raw SSH, which the panel cannot scope, audit, or revoke per site.
 ## Requirements
 ### Requirement: One-Time Terminal Tickets
 

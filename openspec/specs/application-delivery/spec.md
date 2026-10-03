@@ -1,7 +1,8 @@
 # application-delivery Specification
 
 ## Purpose
-TBD - created by archiving change add-git-application-delivery. Update Purpose after archive.
+
+Coolify demonstrates that a modern panel must manage the full application lifecycle—source or image, build, deploy, health, logs, domains, previews, rollback—not only server resources. OpenPanel already has site Git deployment, preview models, containers, and release contracts, but they are not one coherent application delivery workflow.
 ## Requirements
 ### Requirement: Immutable Application Release
 

@@ -1,7 +1,8 @@
 # api-tokens Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-12-add-api-tokens. Update Purpose after archive.
+
+Baota, cPanel, and every commercial panel have an automation problem: scripts use either (a) the owner password, which leaks via logs and CI, or (b) a long-lived cookie, which is unbounded. OpenPanel currently has no non-interactive credential. This change introduces first-class **API tokens**: scoped, expiring, auditable bearer credentials that replace password reuse for automation. Tokens are stored hashed at rest, returned to the caller exactly once at creation, and presented to the API via a header (never a cookie). This is the canonical mitigation for "I need to curl the panel from cron".
 ## Requirements
 ### Requirement: Personal Access Token Lifecycle
 

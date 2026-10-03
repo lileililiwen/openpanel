@@ -1,7 +1,8 @@
 # web-ui-discoverability Specification
 
 ## Purpose
-TBD - created by archiving change repair-ui-discoverability. Update Purpose after archive.
+
+OpenPanel contains many web routes, but `CapabilitySet::shipped()` exposes only a small subset. Mail, DNS, cron, services, backups, logs, security, software, Docker, webmail, and related workflows can therefore be absent from the sidebar. The status-page item also references an unregistered `pulse` icon; the existing web crate test fails on this defect.
 ## Requirements
 ### Requirement: Shipped capabilities are discoverable
 

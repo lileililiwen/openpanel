@@ -1,7 +1,8 @@
 # mailbox-surfaces Specification
 
 ## Purpose
-TBD - created by archiving change bind-mailbox-surfaces-to-accounts. Update Purpose after archive.
+
+OpenPanel contains mail-domain and filtering logic, but the webmail entry path currently mints a fixed demo mailbox and several end-user operations are not reachable through complete web/API/CLI surfaces. This prevents safe delegation and makes the mail product appear functional when it is not account-bound.
 ## Requirements
 ### Requirement: Mailbox Access Is Account-Bound
 

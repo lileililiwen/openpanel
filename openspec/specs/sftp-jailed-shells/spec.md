@@ -2,8 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change add-sftp-jailed-shells.
-
+`openspec/.../add-ftp-accounts` is in flight for FTP per site. cPanel and Baota additionally ship **per-site SSH / SFTP** with a chrooted shell so an operator can hand a developer a file- upload key without giving them a real shell. OpenPanel's files module is HTTP-only and chrooted through the panel; SSH/SFTP is missing. This change adds a typed `jailed_shell` capability mapped onto OpenSSH's `internal-sftp` + `ForceCommand` so a user can be granted SFTP-only access scopped to one site root.
 ## Requirements
 
 ### Requirement: SFTP Jail Grant

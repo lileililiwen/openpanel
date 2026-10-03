@@ -1,7 +1,8 @@
 # ssl Specification
 
 ## Purpose
-TBD - created by archiving change add-ssl-management. Update Purpose after archive.
+
+A server-control panel without SSL is a half-product: every site served on `:80` triggers browser "Not Secure" warnings, blocks payment / login flows, and caps search-engine ranking. baota (宝塔) and cPanel both treat TLS provisioning as a first-class feature with one-click issuance, manual upload, and automatic renewal. OpenPanel needs the same. This change establishes the **ssl bounded context** end-to-end so an operator can: - Issue a real Let's Encrypt certificate for a domain with one click (HTTP-01 challenge, production or staging endpoint). - Upload an existing PEM (cert + chain + private key) for a domain — essential for migrating sites from cPanel / baota. - Generate a self-signed certificate for dev / internal services. - Have the panel auto-renew ACME certificates before they expire, with zero operator action. - Force-redirect HTTP → HTTPS on every protected site. All of this runs as a pure-Rust TLS pipeline (`rustls` + `rustls-acme`) with no shelling out to `certbot` / `acme.sh`. That keeps the memory footprint low (Rust's allocator + zero-copy PEM parsing), eliminates an attack surface (no child process / pipe to a privileged binary), and makes the renewal scheduler deterministic.
 ## Requirements
 ### Requirement: Certificate Aggregate
 

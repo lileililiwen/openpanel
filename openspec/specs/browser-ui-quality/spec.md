@@ -1,7 +1,8 @@
 # browser-ui-quality Specification
 
 ## Purpose
-TBD - created by archiving change enforce-browser-ui-quality-and-localization. Update Purpose after archive.
+
+OpenPanel has tokenized CSS, static HTML checks, focus rules, and reusable UI states, but its declared accessibility workflow is not a live browser gate. The web UI also contains many literal strings despite the typed translation contract. Static scans cannot prove rendered contrast, focus visibility, keyboard behavior, responsive layout, or real localization quality.
 ## Requirements
 ### Requirement: Rendered Accessibility Gate
 

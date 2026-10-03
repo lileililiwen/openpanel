@@ -1,7 +1,8 @@
 # load-balancing Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-14-add-load-balancing-and-failover. Update Purpose after archive.
+
+The `cluster-data-model` bounded context (active) defines node roles, topology, shared storage, and a replicated database, but specifies **no load-balancing or failover behaviour**. A multi-node cluster therefore has no way to spread traffic across healthy site backends or to recover when a node dies. Production hosts (cPanel/WHM with a load balancer, Plesk with Keepalived, CloudPanel, 1Panel) treat HA traffic routing as a base expectation. This change adds a `load-balancing` bounded context so HTTP/TCP traffic can be routed across site backends on multiple cluster nodes with health checks and automatic failover.
 ## Requirements
 ### Requirement: Define Pool
 

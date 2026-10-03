@@ -2,8 +2,7 @@
 
 ## Purpose
 
-TBD - created by archiving change add-cluster-data-model.
-
+`openspec/.../add-multi-host-agent` introduces a control-plane protocol and per-host registration. The proposal assumes a flat fleet with one control plane per host set. A real multi-host deployment also needs **role topology** (primary / replica / edge), **shared-storage declarations**, and **replicated databases**. This change adds the formal machine- readable description of a host's role so the panel can route recipes, queries, and traffic correctly across the fleet.
 ## Requirements
 
 ### Requirement: Node Role Topology

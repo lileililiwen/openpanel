@@ -1,7 +1,8 @@
 # os-updates Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-14-add-os-update-management. Update Purpose after archive.
+
+There is **no OS / package security-update management UI** in OpenPanel. Servers drift on unapplied CVEs because operators must drop to the shell and run `apt` by hand, with no visibility into which updates are security-related, whether unattended upgrades are enabled, or whether a reboot is pending after a kernel update. This change adds an `os-updates` bounded context exposed to administrators.
 ## Requirements
 ### Requirement: List Updates
 

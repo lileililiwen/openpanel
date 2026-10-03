@@ -1,7 +1,8 @@
 # collaborators Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-14-add-per-site-collaborator-permissions. Update Purpose after archive.
+
+`account-hierarchy` (active) models account-level organisation, but there is **no per-site sub-account with scoped permissions** — the Plesk "additional users" / cPanel subaccounts pattern. Today a site owner must share a full account credential to let a contractor touch one site's files, database, or mail. This change adds a `collaborators` bounded context: collaborator accounts scoped to specific sites with limited permission sets (file / database / mail / cron), kept separate from the global account roles.
 ## Requirements
 ### Requirement: Invite Collaborator
 

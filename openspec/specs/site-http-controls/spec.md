@@ -1,7 +1,8 @@
 # site-http-controls Specification
 
 ## Purpose
-TBD - created by archiving change add-site-http-controls. Update Purpose after archive.
+
+Every classic panel we benchmark against — cPanel (Error Pages, Redirects, Directory Privacy, Hotlink Protection), Plesk (error documents, password-protected directories), Froxlor (directory protection, web-forwarders), CloudPanel (Basic Auth sites, IP & bot blocking) and KeyHelp — ships per-site HTTP controls. OpenPanel's nginx renderer (`crates/openpanel-app/src/sites/nginx.rs`) hardcodes `index index.html index.htm` and only emits the force-HTTPS redirect; the WAF rule set has no per-site client-IP CIDR kind. This is the largest single baseline-parity gap.
 ## Requirements
 ### Requirement: Custom Error Pages
 

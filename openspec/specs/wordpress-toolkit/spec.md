@@ -1,7 +1,8 @@
 # wordpress-toolkit Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-14-add-wordpress-toolkit. Update Purpose after archive.
+
+The `web-application-installer` change provides a generic one-click install for any web app, but WordPress operators need WP-specific operations that a generic installer does not cover. Plesk WordPress Toolkit and cPanel WP Manager offer staging, cloning, core/plugin/theme update management with rollback, a security scan (file permissions, versions, known-vuln checks), and a caching toggle. Without a dedicated toolkit, OpenPanel users manage WordPress manually over SSH, losing safe staging, atomic update rollback, and a security baseline. This change adds a `wordpress-toolkit` bounded context that operates on sites where WordPress is installed.
 ## Requirements
 ### Requirement: WordPress Staging
 

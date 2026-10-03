@@ -1,7 +1,8 @@
 # deployment-adapters Specification
 
 ## Purpose
-TBD - created by archiving change add-portable-deployment-adapters. Update Purpose after archive.
+
+The current Mac deployment repository is useful operational infrastructure, but it cannot become part of OpenPanel's product contract. OpenPanel needs a small adapter boundary so operators can deploy it through Compose, systemd, Podman, Kubernetes, or another remote host workflow while keeping host paths, credentials, DNS, and ingress outside the application.
 ## Requirements
 ### Requirement: Adapter Capability Declaration
 

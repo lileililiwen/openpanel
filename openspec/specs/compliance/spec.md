@@ -1,7 +1,8 @@
 # compliance Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-14-add-compliance-tooling. Update Purpose after archive.
+
+OpenPanel has **no CIS hardening wizard, GDPR data export, or audit-retention policy**. Enterprise buyers expect documented security hardening, the ability to export a user's personal data on request, and a configurable audit-log retention policy. Without these, sales into regulated environments stall. This change adds a `compliance` bounded context.
 ## Requirements
 ### Requirement: CIS Hardening Wizard
 

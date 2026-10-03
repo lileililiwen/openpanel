@@ -1,7 +1,8 @@
 # web-ui-styling Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-14-add-web-ui-styling-and-responsive-layout. Update Purpose after archive.
+
+The web UI today has only **ad-hoc, opt-in form classes** (`.form`, `.login`) and exactly **one** `@media (max-width: 768px)` block that only collapses the sidebar. The result is two compounding regressions: 1. **Inputs are unstyled.** Most `<form>` elements ship without a class at all (`crates/openpanel-web/src/cron.rs`, `docker.rs`, `mail.rs`, `api_tokens.rs`, `two_factor.rs`, `db_pitr.rs`, …), so their `<input>` / `<textarea>` / `<button>` fall back to the browser's default look. New pages silently regress to the ugly default because there is no global contract. 2. **The layout is desktop-only.** A 360 px mobile viewport gets a 220 px sidebar plus an oversized content area that forces horizontal scroll. There is no tablet breakpoint either. The follow-on `add-themeable-ui-and-white-label` change adds token *vocabulary* (`tokens.css`) but no global **form**, **grid**, or **responsive layout** rules. This change ships that vocabulary as a real contract: every `<form>` MUST use the shared classes, every page MUST work at three breakpoints, and CI MUST fail when a regression slips through.
 ## Requirements
 ### Requirement: Global Form Contract
 

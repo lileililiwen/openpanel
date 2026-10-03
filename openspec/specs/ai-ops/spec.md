@@ -1,7 +1,8 @@
 # ai-ops Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-14-add-ai-ops-agent. Update Purpose after archive.
+
+Modern panels are shipping embedded AI ops assistants — 1Panel ships OpenClaw, an agent that answers operational questions and can take scoped remediation actions. OpenPanel has no equivalent surface, so operators fall back to manual CLI work, grep through logs, and run ad-hoc scripts with no trail. This change adds an `ai-ops` bounded context: a conversational surface that answers ops questions and can run **scoped, audited remediation** against the panel. The agent is a read-mostly tool: it may read panel state freely, but any write action must come from a fixed allowlist and require explicit human approval.
 ## Requirements
 ### Requirement: Ask Questions
 

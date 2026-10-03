@@ -1,7 +1,8 @@
 # operations-workflows Specification
 
 ## Purpose
-TBD - created by archiving change complete-file-database-backup-workflows. Update Purpose after archive.
+
+aaPanel and BaoTa reduce operational work with recycle bin, archive operations, remote download, content search, database import/export/restore, permissions, backup destinations, capacity checks, progress, cancellation, and restore verification. OpenPanel has primitives for files, databases, backups, PITR, and drills, but the UI does not present a coherent end-to-end workflow.
 ## Requirements
 ### Requirement: File actions are recoverable
 

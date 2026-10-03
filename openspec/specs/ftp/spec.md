@@ -1,7 +1,8 @@
 # ftp Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-12-add-ftp-accounts. Update Purpose after archive.
+
+Baota, cPanel, and DirectAdmin all expose per-site FTP. A web owner who uploads through FileZilla or `curlftpfs` is the canonical panel workflow. OpenPanel's files module is HTTP-only and chrooted through the panel; nothing in the codebase currently serves FTP. This change adds a first-class `ftp` bounded context that integrates with a vetted pure-Rust FTP server (`libunftp`), chroots each account to its site's document root, and authenticates against the same identity store as the panel — no separate password DB.
 ## Requirements
 ### Requirement: Per-Site FTP Account
 

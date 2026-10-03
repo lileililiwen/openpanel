@@ -1,7 +1,8 @@
 # reduce-todo-debt Specification
 
 ## Purpose
-TBD - created by archiving change reduce-todo-debt. Update Purpose after archive.
+
+There are 6 real TODO/FIXME markers across crates (e.g. crates/openpanel-web/src/audit.rs, monitoring.rs). They are minor debt but untracked, so they may never be resolved.
 ## Requirements
 ### Requirement: TODO tracking
 Source TODO/FIXME markers SHALL be tracked and resolved or converted to issues.

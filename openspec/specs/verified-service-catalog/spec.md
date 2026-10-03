@@ -1,7 +1,8 @@
 # verified-service-catalog Specification
 
 ## Purpose
-TBD - created by archiving change add-verified-service-catalog. Update Purpose after archive.
+
+1Panel and aaPanel reduce adoption friction through curated application and service catalogs. OpenPanel has a software center and installer types, but a real ecosystem needs signed, versioned, reviewable templates with upgrade, backup, health, and removal semantics that do not turn the panel into an unbounded arbitrary-script runner.
 ## Requirements
 ### Requirement: Signed Declarative Manifest
 

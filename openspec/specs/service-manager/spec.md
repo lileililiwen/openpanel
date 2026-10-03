@@ -1,7 +1,8 @@
 # service-manager Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-14-add-service-manager. Update Purpose after archive.
+
+There is **no service-manager UI** in OpenPanel to start, stop, restart, enable, or disable system services such as `nginx`, `php-fpm`, `mysql`, or `redis`. Operators today must SSH in and run `systemctl` by hand, losing auditability and a safe, role-gated surface. This change adds a `service-manager` bounded context guarded by the Admin role.
 ## Requirements
 ### Requirement: List Services
 

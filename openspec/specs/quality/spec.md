@@ -1,7 +1,8 @@
 # quality Specification
 
 ## Purpose
-TBD - created by archiving change add-quality-engineering-infrastructure. Update Purpose after archive.
+
+The TDD infrastructure change (`add-tdd-infrastructure`) gives us repeatable tests, but it does not by itself enforce code-quality standards. A test that exercises production code does not catch production code that: - calls `.unwrap()` and panics under load, - depends on an audit vulnerability in a transitive dep, - formats inconsistently with the rest of the codebase, - panics on input that the unit tests never exercised (the tests were written to match the code, not to verify behaviour). This change establishes **quality engineering infrastructure** that prevents these regressions: - Lint deny for `unwrap` / `expect` / `panic` / `todo` / `unimplemented` in non-test code (clippy's `unwrap_used`, `expect_used`, `panic_used`, `todo` lints). - Format enforcement via `cargo fmt --check` in CI. - Dependency advisories via `cargo audit`. - A coverage baseline via `cargo llvm-cov` (informational in v0.1). - A documentation linter that rejects broken intra-doc links. The principle (see `Agents.md`): > Use open-source tools to implement checks that prevent runtime > panics caused by issues like `unwrap`.
 ## Requirements
 ### Requirement: Lint Policy — No `unwrap` / `expect` / `panic` in Production Code
 

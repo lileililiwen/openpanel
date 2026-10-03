@@ -1,7 +1,8 @@
 # capability-navigation Specification
 
 ## Purpose
-TBD - created by archiving change unify-capability-navigation-and-site-workspaces. Update Purpose after archive.
+
+The shell has capability filtering and the site workspace has shared tabs, but the router, capability inventory, navigation, and tab definitions are separate lists. This causes mounted workflows to be undiscoverable and causes site tabs for Domains, Runtime, Logs, and Backups to be intentionally absent.
 ## Requirements
 ### Requirement: One Discoverability Inventory
 

@@ -1,7 +1,8 @@
 # billing Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-14-add-reseller-billing-integration. Update Purpose after archive.
+
+The `account-hierarchy` and `hosting-plans` bounded contexts (both active) model resellers and the plans assigned to them, but contain **no billing, chargeback, or metering** behaviour. cPanel's entire ecosystem is billing-centric — WHMCS, Blesta, and FOSSBilling provision and bill resellers and their customers through provisioning events. Without a billing surface, OpenPanel cannot drive chargeback or integrate with those billing platforms. This change adds a `billing` bounded context that exports per-owner usage and exposes integration points for provisioning/deprovisioning events.
 ## Requirements
 ### Requirement: Export Usage
 

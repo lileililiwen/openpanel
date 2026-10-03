@@ -1,7 +1,8 @@
 # maintenance-windows Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-13-add-scheduled-maintenance-windows. Update Purpose after archive.
+
+Operators sometimes need a maintenance window during which destructive mutations are blocked (e.g. "no installations during peak hours"). The `cron`, `backups`, and `software-center` capabilities all emit such mutations. cPanel has no formal freeze mechanic; Baota allows cron-driven freeze. This change adds a typed `MaintenanceWindow` that gates destructive operations across the panel, with a typed override path for break-glass scenarios.
 ## Requirements
 ### Requirement: MaintenanceWindow Lifecycle
 

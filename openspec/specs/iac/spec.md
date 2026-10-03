@@ -1,7 +1,8 @@
 # iac Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-14-add-terraform-provider-and-sdk. Update Purpose after archive.
+
+OpenPanel already maintains a generated OpenAPI JSON (`openapi.rs`), but there is **no client SDK and no Terraform provider** — the only way to drive the panel programmatically is hand-rolled HTTP calls. Competitors and modern infra teams expect first-class IaC: typed clients in common languages and a Terraform provider for declaring sites, users, DNS, and backups as code. This change adds an `iac` bounded context that generates a typed client SDK from the OpenAPI spec and publishes a Terraform provider, with CI keeping them in sync with the API contract.
 ## Requirements
 ### Requirement: Generated Client SDK
 

@@ -1,7 +1,8 @@
 # identity Specification
 
 ## Purpose
-TBD - created by archiving change bootstrap-ddd-architecture. Update Purpose after archive.
+
+OpenPanel's current scaffold declares crate boundaries (`openpanel-domain`, `openpanel-app`, `openpanel-api`, `openpanel-cli`, `openpanel-agent`) but has no documented contracts between them, no module registry, no config layering, and no domain code. Without an architectural baseline, every new bounded context (sites, ssl, databases, files, monitoring, cron, audit) will leak into a single god-file and the codebase will not scale to the MVP. We need a DDD-style layered architecture with explicit extension points established before any feature code lands.
 ## Requirements
 ### Requirement: User Aggregate
 

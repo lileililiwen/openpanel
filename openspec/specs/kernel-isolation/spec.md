@@ -1,7 +1,8 @@
 # kernel-isolation Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-14-add-kernel-resource-isolation. Update Purpose after archive.
+
+The 2026 baseline (Panelica's 5-layer isolation, CloudLinux) expects per-user cgroup v2 plus namespace isolation for safe multi-tenant hosting. OpenPanel's active `resource-quotas` spec tracks per-plan quotas but enforces nothing at the kernel level; cgroup currently appears only as a CPU-calculation nuance in archived `monitoring`. For untrusted multi-tenant hosting this is a hard requirement: without kernel isolation, one user's runaway process can starve or escape into neighbours. This change adds a new `kernel-isolation` bounded context that enforces real limits and bridges to the `resource-quotas` quota axis so plan caps become cgroup limits.
 ## Requirements
 ### Requirement: Per-User cgroup v2 Limits
 

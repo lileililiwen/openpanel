@@ -1,7 +1,8 @@
 # software-center-trust Specification
 
 ## Purpose
-TBD - created by archiving change strengthen-software-center-ux. Update Purpose after archive.
+
+aaPanel and BaoTa make runtime managers, plugins, storage integrations, and one-click deployments central to the product. OpenPanel has a typed Software Center with previews and rollback concepts, but placeholder-digest and refresh-required states can make the catalog look broken or unsafe without enough explanation.
 ## Requirements
 ### Requirement: Catalog trust is visible
 

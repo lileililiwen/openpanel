@@ -1,7 +1,8 @@
 # panel-navigation Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-18-refine-panel-navigation. Update Purpose after archive.
+
+OpenPanel is a Baota / aaPanel-class server panel, but its sidebar has drifted into a flat, capability-shaped list: **24 items across five sections**, no icons, no collapsible groups, no search, and no visual hierarchy. aaPanel and Baota both organize the same feature set into a compact, user-centered sidebar — a dashboard entry, then per-workload groups (Websites, Databases, Mail, Files), an operations group (Monitor, Cron, Logs, Backups), and a system/apps group — each with icons, collapsible subgroups, and a filter box. Operators switching from those panels expect that model; our flat list makes Owner-only administration items indistinguishable from daily-driver items and forces scrolling through 24 entries. This change refactors the `openpanel-web` Shell navigation into that grouped, icon-augmented model while keeping the existing capability/role gating exactly as it works today.
 ## Requirements
 ### Requirement: Section Grouping
 

@@ -1,7 +1,8 @@
 # log-viewer Specification
 
 ## Purpose
-TBD - created by archiving change 2026-08-14-add-log-viewer. Update Purpose after archive.
+
+`observability-export` (active) exports Prometheus / OTLP metrics and JSONL logs, but the panel provides **no in-panel log viewer or per-site log aggregation**. Operators must SSH in and `tail` files to troubleshoot, and owners have no self-service visibility into their own sites' access/error logs. This change adds a `log-viewer` bounded context that brings logs where the operator already is — the panel.
 ## Requirements
 ### Requirement: Per-Site Access and Error Logs
 
