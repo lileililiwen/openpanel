@@ -83,3 +83,9 @@
 - Architecture: strict DDD, four layers; domain is I/O-free; adding a
   bounded context is one `app.register(XModule)` call.
 - Repo map: `scripts/repo-map.sh`.
+
+## Git workflow
+
+- Work on `main`. Do not create a branch or a worktree unless the user explicitly asks.
+- Never push. The user owns publishing.
+- Stage explicit paths; never `git add -A`.
