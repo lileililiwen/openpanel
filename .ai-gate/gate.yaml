@@ -33,6 +33,7 @@ checks:
   maturity: true
   test_gates: true
   driftwatch_gate: true
+  declared-verification: true
 blocking:
   # FAIL = the command exited non-zero within its 60 s budget: a
   # machine-decided violation that blocks archive. Timeout / signal /
@@ -77,3 +78,7 @@ commands:
   maturity: "scripts/check-maturity.sh"
   test_gates: "scripts/test-gates.sh"
   driftwatch_gate: "scripts/check-driftwatch-gate.sh"
+  # Generated from .project.json verification.command by workspace-governance/scripts/bind_verification_command.py.
+  # A verifier that no gate runs does not gate (ruling D18). Re-run the
+  # generator to update it; do not hand-edit.
+  declared-verification: 'cargo test --workspace'
