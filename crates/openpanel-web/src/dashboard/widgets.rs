@@ -89,9 +89,18 @@ pub fn panel_shortcuts_for(is_owner: bool) -> Vec<QuickAction> {
         return vec![];
     }
     vec![
-        QuickAction { label: "Update", href: "/software" },
-        QuickAction { label: "Fix", href: "/settings" },
-        QuickAction { label: "Restart", href: "/services" },
+        QuickAction {
+            label: "Update",
+            href: "/software",
+        },
+        QuickAction {
+            label: "Fix",
+            href: "/settings",
+        },
+        QuickAction {
+            label: "Restart",
+            href: "/services",
+        },
     ]
 }
 
@@ -111,7 +120,10 @@ pub fn count_ftp_accounts(results: &[Result<usize, String>]) -> (usize, Option<S
 /// Project open-findings counts into the risk card. Count only; finding
 /// evidence stays redacted by construction.
 pub fn security_risk_card(counts: &HashMap<String, usize>) -> SecurityRiskCard {
-    SecurityRiskCard { open: counts.values().sum(), error: None }
+    SecurityRiskCard {
+        open: counts.values().sum(),
+        error: None,
+    }
 }
 
 /// Filter catalog `(id, name)` hits by the Display-on-dashboard toggle. An
@@ -126,7 +138,10 @@ pub fn software_shortcuts(
         .iter()
         .filter(|(id, _)| pinned.is_empty() || pinned.contains(id))
         .take(6)
-        .map(|(id, name)| SoftwareShortcut { id: id.clone(), name: name.clone() })
+        .map(|(id, name)| SoftwareShortcut {
+            id: id.clone(),
+            name: name.clone(),
+        })
         .collect()
 }
 

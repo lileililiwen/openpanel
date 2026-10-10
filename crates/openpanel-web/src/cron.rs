@@ -9,8 +9,8 @@ use axum::{
 use maud::html;
 use openpanel_app::cron::{CronInput, PresetRequest, preset_to_cron_input};
 use openpanel_core::{AuditAction, AuditEvent, AuditOutcome};
-use openpanel_domain::cron::{ChainLink, CronPresetType, FailureReminder};
 use openpanel_domain::Role;
+use openpanel_domain::cron::{ChainLink, CronPresetType, FailureReminder};
 use serde::Deserialize;
 use uuid::Uuid;
 
@@ -248,7 +248,10 @@ pub async fn create(
     };
     let input = match preset_to_cron_input(
         &request,
-        &[std::path::PathBuf::from("/var/www"), std::path::PathBuf::from("/")],
+        &[
+            std::path::PathBuf::from("/var/www"),
+            std::path::PathBuf::from("/"),
+        ],
         &preset_allow_list(),
     ) {
         Ok(input) => input,
@@ -260,10 +263,10 @@ pub async fn create(
             // existing channel id; no new transport is constructed.
             // The subscription record is validated here (both ids
             // must parse); delivery stays on the notification path.
-            if !form.reminder_channel.is_empty() {
-                if let Ok(channel_id) = form.reminder_channel.parse::<Uuid>() {
-                    let _reminder = FailureReminder::subscribe(job.id(), channel_id);
-                }
+            if !form.reminder_channel.is_empty()
+                && let Ok(channel_id) = form.reminder_channel.parse::<Uuid>()
+            {
+                let _reminder = FailureReminder::subscribe(job.id(), channel_id);
             }
             Redirect::to("/cron").into_response()
         }
@@ -492,7 +495,10 @@ pub async fn chain(
         Err(_) => return (StatusCode::UNPROCESSABLE_ENTITY, "invalid next job id").into_response(),
     };
     if ChainLink::new(id, next).is_err() {
-        return (StatusCode::UNPROCESSABLE_ENTITY, "chain link must target another job")
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "chain link must target another job",
+        )
             .into_response();
     }
     if state.cron.get(user.id(), all(&user), next).await.is_err() {

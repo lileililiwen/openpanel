@@ -100,7 +100,10 @@ async fn migrate_wizard_upload_form() {
     let body = resp.text().await.expect("body");
     assert!(body.contains("<h1>Migrate</h1>"), "wizard title: {body}");
     assert!(body.contains("Driver hint"), "hint select: {body}");
-    assert!(body.contains("name=\"bundle_text\""), "bundle input: {body}");
+    assert!(
+        body.contains("name=\"bundle_text\""),
+        "bundle input: {body}"
+    );
     assert!(body.contains("name=\"_csrf\""), "csrf field: {body}");
 
     let anon = server
@@ -152,8 +155,8 @@ async fn migrate_wizard_preview_plan() {
         "preview commits nothing: {body}"
     );
 
-    let preview_csrf = csrf_token_from_html(&{
-        let b = server
+    let preview_csrf = csrf_token_from_html(
+        &server
             .client()
             .get(format!("{}/migrate", server.base_url()))
             .header(reqwest::header::COOKIE, &cookie)
@@ -162,9 +165,8 @@ async fn migrate_wizard_preview_plan() {
             .expect("re-get")
             .text()
             .await
-            .expect("body");
-        b
-    });
+            .expect("body"),
+    );
     let resp = server
         .client()
         .post(format!("{}/migrate/preview", server.base_url()))
@@ -328,7 +330,9 @@ async fn migrate_wizard_discoverable() {
     assert_eq!(entry.key, "migrate");
     assert_eq!(entry.capability, "migration");
     assert_eq!(entry.min_role, Role::Owner);
-    assert!(capability_registry::template_matches("/migrate", "/migrate"));
+    assert!(capability_registry::template_matches(
+        "/migrate", "/migrate"
+    ));
     assert!(capability_registry::role_may_see(Role::Owner, entry));
     assert!(!capability_registry::role_may_see(Role::User, entry));
 
@@ -358,10 +362,7 @@ async fn migrate_wizard_discoverable() {
         .text()
         .await
         .expect("body");
-    assert!(
-        !body.contains("/migrate"),
-        "user nav hides Migrate: {body}"
-    );
+    assert!(!body.contains("/migrate"), "user nav hides Migrate: {body}");
 }
 
 /// Property: preview with any policy over arbitrary fixture bundles
@@ -390,8 +391,7 @@ fn prop_migrate_policy_never_destructive_on_preview() {
                 any::<bool>(),
             ),
             |(driver, policy, with_conflict)| {
-                let plan: MigrationPlan =
-                    plan_for_fixture(driver, Some(policy), with_conflict);
+                let plan: MigrationPlan = plan_for_fixture(driver, Some(policy), with_conflict);
                 // UI gate and service predicate must agree on every input.
                 prop_assert_eq!(
                     commit_enabled(policy, with_conflict),
@@ -426,10 +426,7 @@ fn prop_migrate_partial_never_auto_cutover() {
                 let out = run_view(MigrationRunStatus::PartiallyCompleted, &evidence, "csrf")
                     .into_string();
                 prop_assert!(out.contains("PartiallyCompleted"));
-                prop_assert_eq!(
-                    out.matches("<button type=\"submit\" disabled>").count(),
-                    3
-                );
+                prop_assert_eq!(out.matches("<button type=\"submit\" disabled>").count(), 3);
                 Ok(())
             },
         )

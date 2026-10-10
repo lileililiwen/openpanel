@@ -63,7 +63,9 @@ pub fn preset_to_cron_input(
         if request.url.is_empty()
             || !(request.url.starts_with("http://") || request.url.starts_with("https://"))
         {
-            return Err(PresetError::InvalidCycle("access-url requires http(s) URL".into()));
+            return Err(PresetError::InvalidCycle(
+                "access-url requires http(s) URL".into(),
+            ));
         }
         return Ok(CronInput {
             name: request.name.clone(),

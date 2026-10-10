@@ -62,10 +62,10 @@ mod mail;
 /// Mail end-user surface integration tests.
 mod mail_surfaces;
 mod malware_scanner;
-/// Migration importers preview / run / rollback integration tests.
-mod migration_importers;
 /// Migration wizard web UI (`/migrate`) integration tests.
 mod migrate_wizard;
+/// Migration importers preview / run / rollback integration tests.
+mod migration_importers;
 mod monitoring;
 /// Monitoring-fleet operations integration tests.
 mod monitoring_fleet;
@@ -103,10 +103,10 @@ mod ssl;
 mod ssl_production_lifecycle;
 mod sso;
 mod system_services;
-/// Themeable UI / white-label integration tests.
-mod themeable_ui;
 /// Terminal navigation + saved servers/commands integration tests.
 mod terminal_nav;
+/// Themeable UI / white-label integration tests.
+mod themeable_ui;
 /// Verified-service-catalog integration tests: signed manifests,
 /// reviewable plans, bounded-retry lifecycle jobs, and trust
 /// revocation (capability `verified-service-catalog`).

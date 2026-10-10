@@ -138,22 +138,23 @@ pub fn plan_for_fixture(
     policy: Option<ConflictPolicy>,
     with_conflict: bool,
 ) -> MigrationPlan {
-    let resources = vec![
+    let resources = match (
         PlannedResource::new(
             ImportedResourceKind::Site,
             "example.com",
             "website vhost",
             5,
-        )
-        .expect("invariant: fixture source keys are non-empty"),
+        ),
         PlannedResource::new(
             ImportedResourceKind::Database,
             "example_db",
             "managed database",
             5,
-        )
-        .expect("invariant: fixture source keys are non-empty"),
-    ];
+        ),
+    ) {
+        (Ok(site), Ok(database)) => vec![site, database],
+        _ => Vec::new(),
+    };
     let conflicts = if with_conflict {
         vec![ImportConflict {
             kind: ImportedResourceKind::Site,
@@ -187,21 +188,26 @@ pub fn plan_for_fixture(
 
 /// Only the panel Owner may use the wizard (registry `min_role:
 /// Owner`); direct access returns 403 without leaking plan content.
-fn owner_or_forbidden(user: &User) -> Result<(), Response> {
+fn owner_or_forbidden(user: &User) -> Option<Response> {
     if matches!(user.role(), Role::Owner) {
-        Ok(())
+        None
     } else {
-        Err(crate::audit::forbidden())
+        Some(crate::audit::forbidden())
     }
 }
 
 /// Verify the `_csrf` form field against the session store.
-fn csrf_or_forbidden(state: &WebState, user: &User, session_id: Uuid, token: &str) -> Result<(), Response> {
+fn csrf_or_forbidden(
+    state: &WebState,
+    user: &User,
+    session_id: Uuid,
+    token: &str,
+) -> Option<Response> {
     let _ = user;
     if state.csrf.verify(session_id, token) {
-        Ok(())
+        None
     } else {
-        Err((StatusCode::FORBIDDEN, "invalid csrf token").into_response())
+        Some((StatusCode::FORBIDDEN, "invalid csrf token").into_response())
     }
 }
 
@@ -231,7 +237,13 @@ pub fn upload_page(csrf: &str) -> Markup {
 
 /// Step 2: sniff result, or the inline `UnknownSource` /
 /// `MalformedSource` error with no upload id minted.
-pub fn sniff_view(kind: Option<DriverKind>, bytes: usize, csrf: &str, bundle_text: &str, hint: &str) -> Markup {
+pub fn sniff_view(
+    kind: Option<DriverKind>,
+    bytes: usize,
+    csrf: &str,
+    bundle_text: &str,
+    hint: &str,
+) -> Markup {
     html! {
         h1 { "Migrate" }
         @if let Some(driver) = kind {
@@ -307,7 +319,13 @@ pub fn preview_view(plan: &MigrationPlan, csrf: &str, bundle_text: &str) -> Mark
 
 /// Step 4: policy confirm — the commit button is disabled exactly
 /// when the domain predicate refuses the commit.
-pub fn policy_view(policy: ConflictPolicy, has_conflicts: bool, csrf: &str, driver: &str, conflicts: usize) -> Markup {
+pub fn policy_view(
+    policy: ConflictPolicy,
+    has_conflicts: bool,
+    csrf: &str,
+    driver: &str,
+    conflicts: usize,
+) -> Markup {
     let enabled = commit_enabled(policy, has_conflicts);
     html! {
         h1 { "Confirm conflict policy" }
@@ -380,7 +398,12 @@ pub fn run_view(status: MigrationRunStatus, evidence: &[String], csrf: &str) -> 
 /// Step 6: cutover result — preflight failure (or a partial run)
 /// refuses with the source left isolated; success carries the
 /// rollback/TTL note and redacted diagnostics.
-pub fn cutover_view(kind: &str, preflight_passed: bool, partial: bool, evidence: Option<&CutoverEvidence>) -> Markup {
+pub fn cutover_view(
+    kind: &str,
+    preflight_passed: bool,
+    partial: bool,
+    evidence: Option<&CutoverEvidence>,
+) -> Markup {
     html! {
         h1 { "Cutover " (kind) }
         @if !cutover_enabled(partial, preflight_passed) {
@@ -402,7 +425,7 @@ pub fn cutover_view(kind: &str, preflight_passed: bool, partial: bool, evidence:
 
 /// GET /migrate — upload form (Owner only; others get 403).
 pub async fn page(State(state): State<WebState>, WebUser(user, session): WebUser) -> Response {
-    if let Err(denied) = owner_or_forbidden(&user) {
+    if let Some(denied) = owner_or_forbidden(&user) {
         return denied;
     }
     let csrf = state.csrf.token_for(session.id());
@@ -427,10 +450,10 @@ pub async fn upload(
     WebUser(user, session): WebUser,
     Form(form): Form<UploadForm>,
 ) -> Response {
-    if let Err(denied) = owner_or_forbidden(&user) {
+    if let Some(denied) = owner_or_forbidden(&user) {
         return denied;
     }
-    if let Err(denied) = csrf_or_forbidden(&state, &user, session.id(), &form._csrf) {
+    if let Some(denied) = csrf_or_forbidden(&state, &user, session.id(), &form._csrf) {
         return denied;
     }
     let csrf = state.csrf.token_for(session.id());
@@ -495,10 +518,10 @@ pub async fn preview(
     WebUser(user, session): WebUser,
     Form(form): Form<PreviewForm>,
 ) -> Response {
-    if let Err(denied) = owner_or_forbidden(&user) {
+    if let Some(denied) = owner_or_forbidden(&user) {
         return denied;
     }
-    if let Err(denied) = csrf_or_forbidden(&state, &user, session.id(), &form._csrf) {
+    if let Some(denied) = csrf_or_forbidden(&state, &user, session.id(), &form._csrf) {
         return denied;
     }
     let csrf = state.csrf.token_for(session.id());
@@ -555,15 +578,21 @@ pub async fn confirm(
     WebUser(user, session): WebUser,
     Form(form): Form<ConfirmForm>,
 ) -> Response {
-    if let Err(denied) = owner_or_forbidden(&user) {
+    if let Some(denied) = owner_or_forbidden(&user) {
         return denied;
     }
-    if let Err(denied) = csrf_or_forbidden(&state, &user, session.id(), &form._csrf) {
+    if let Some(denied) = csrf_or_forbidden(&state, &user, session.id(), &form._csrf) {
         return denied;
     }
     let csrf = state.csrf.token_for(session.id());
     let policy = parse_policy(&form.policy).unwrap_or(ConflictPolicy::Block);
-    let content = policy_view(policy, form.conflicts > 0, &csrf, &form.driver, form.conflicts);
+    let content = policy_view(
+        policy,
+        form.conflicts > 0,
+        &csrf,
+        &form.driver,
+        form.conflicts,
+    );
     state
         .render_shell(&user, &csrf, "/migrate", content)
         .await
@@ -614,10 +643,10 @@ pub async fn run(
     WebUser(user, session): WebUser,
     Form(form): Form<RunForm>,
 ) -> Response {
-    if let Err(denied) = owner_or_forbidden(&user) {
+    if let Some(denied) = owner_or_forbidden(&user) {
         return denied;
     }
-    if let Err(denied) = csrf_or_forbidden(&state, &user, session.id(), &form._csrf) {
+    if let Some(denied) = csrf_or_forbidden(&state, &user, session.id(), &form._csrf) {
         return denied;
     }
     let csrf = state.csrf.token_for(session.id());
@@ -751,10 +780,10 @@ pub async fn cutover(
     Path(kind): Path<String>,
     Form(form): Form<CutoverForm>,
 ) -> Response {
-    if let Err(denied) = owner_or_forbidden(&user) {
+    if let Some(denied) = owner_or_forbidden(&user) {
         return denied;
     }
-    if let Err(denied) = csrf_or_forbidden(&state, &user, session.id(), &form._csrf) {
+    if let Some(denied) = csrf_or_forbidden(&state, &user, session.id(), &form._csrf) {
         return denied;
     }
     if kind != "dns" && kind != "mail" && kind != "ssl" {
@@ -817,26 +846,17 @@ mod tests {
             message.contains("8 MiB"),
             "inline form-error names the cap: {message}"
         );
-        assert_eq!(check_upload_size(MAX_UPLOAD_BYTES).is_ok(), true);
-        assert_eq!(check_upload_size(0).is_ok(), true);
+        assert!(check_upload_size(MAX_UPLOAD_BYTES).is_ok());
+        assert!(check_upload_size(0).is_ok());
     }
 
     #[test]
     fn sniff_view_maps_every_driver_kind_and_unknown() {
         for (kind, label) in [
-            (
-                DriverKind::CpanelPkgacct,
-                "cpanel-pkgacct",
-            ),
-            (
-                DriverKind::CpanelLegacyBackup,
-                "cpanel-legacy-backup",
-            ),
+            (DriverKind::CpanelPkgacct, "cpanel-pkgacct"),
+            (DriverKind::CpanelLegacyBackup, "cpanel-legacy-backup"),
             (DriverKind::BaotaBackup, "baota-backup"),
-            (
-                DriverKind::TarWithJsonManifest,
-                "tar-with-json-manifest",
-            ),
+            (DriverKind::TarWithJsonManifest, "tar-with-json-manifest"),
         ] {
             assert_eq!(sniff_label(Some(kind)), label);
             let out = sniff_view(Some(kind), 12, "csrf", "baota", "auto").into_string();
@@ -865,7 +885,8 @@ mod tests {
                 policy
             );
         }
-        let clean = policy_view(ConflictPolicy::Block, false, "csrf", "baota-backup", 0).into_string();
+        let clean =
+            policy_view(ConflictPolicy::Block, false, "csrf", "baota-backup", 0).into_string();
         assert!(
             !clean.contains("disabled"),
             "no conflicts always enables: {clean}"
@@ -875,7 +896,8 @@ mod tests {
     #[test]
     fn run_view_marks_partial_and_gates_cutover_buttons() {
         let evidence = vec!["FAILED: sites verifier failed".to_string()];
-        let partial = run_view(MigrationRunStatus::PartiallyCompleted, &evidence, "csrf").into_string();
+        let partial =
+            run_view(MigrationRunStatus::PartiallyCompleted, &evidence, "csrf").into_string();
         assert!(
             partial.contains("PartiallyCompleted"),
             "partial banner: {partial}"
@@ -890,7 +912,10 @@ mod tests {
             "all three cutover buttons disabled: {partial}"
         );
         let done = run_view(MigrationRunStatus::Completed, &[], "csrf").into_string();
-        assert!(!done.contains("disabled"), "success enables cutover: {done}");
+        assert!(
+            !done.contains("disabled"),
+            "success enables cutover: {done}"
+        );
         assert!(!done.contains("PartiallyCompleted"), "no banner: {done}");
     }
 

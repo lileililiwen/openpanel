@@ -148,11 +148,7 @@ pub struct FtpGlobalRow {
 
 impl FtpGlobalRow {
     /// Build an aggregate row from a site identity and an account view.
-    pub fn new(
-        site_id: Uuid,
-        site_domain: &str,
-        account: &openpanel_app::FtpAccountView,
-    ) -> Self {
+    pub fn new(site_id: Uuid, site_domain: &str, account: &openpanel_app::FtpAccountView) -> Self {
         Self {
             site_id,
             site_domain: site_domain.to_string(),
@@ -227,11 +223,7 @@ pub async fn global_page(
         for site in &sites {
             if let Ok(accounts) = state.ftp.list(&user, site.id()).await {
                 for account in &accounts {
-                    rows.push(FtpGlobalRow::new(
-                        site.id(),
-                        site.primary_domain(),
-                        account,
-                    ));
+                    rows.push(FtpGlobalRow::new(site.id(), site.primary_domain(), account));
                 }
             }
         }
@@ -304,7 +296,10 @@ mod tests {
 
     #[test]
     fn aggregate_view_lists_accounts_from_n_sites_with_site_links() {
-        let rows = vec![row("a.example.test", "uploads"), row("b.example.test", "deploy")];
+        let rows = vec![
+            row("a.example.test", "uploads"),
+            row("b.example.test", "deploy"),
+        ];
         let site_ids: Vec<String> = rows.iter().map(|r| r.site_id.to_string()).collect();
         let out = aggregate_view(&rows, "csrf-token").into_string();
         assert!(out.contains("<h1>FTP</h1>"), "single h1: {out}");

@@ -373,11 +373,11 @@ pub fn terminal_page(
 /// Only the panel Owner may use the terminal (registry `min_role:
 /// Owner`); direct access returns 403 without leaking server
 /// credentials or command bodies.
-fn owner_or_forbidden(user: &User) -> Result<(), Response> {
+fn owner_or_forbidden(user: &User) -> Option<Response> {
     if matches!(user.role(), Role::Owner) {
-        Ok(())
+        None
     } else {
-        Err(crate::audit::forbidden())
+        Some(crate::audit::forbidden())
     }
 }
 
@@ -387,12 +387,12 @@ fn csrf_or_forbidden(
     user: &User,
     session_id: Uuid,
     token: &str,
-) -> Result<(), Response> {
+) -> Option<Response> {
     let _ = user;
     if state.csrf.verify(session_id, token) {
-        Ok(())
+        None
     } else {
-        Err((StatusCode::FORBIDDEN, "invalid csrf token").into_response())
+        Some((StatusCode::FORBIDDEN, "invalid csrf token").into_response())
     }
 }
 
@@ -412,7 +412,7 @@ fn local_session(session_id: Uuid) -> SessionSummary {
 
 /// GET /terminal — the three panels (Owner only; others get 403).
 pub async fn page(State(state): State<WebState>, WebUser(user, session): WebUser) -> Response {
-    if let Err(denied) = owner_or_forbidden(&user) {
+    if let Some(denied) = owner_or_forbidden(&user) {
         return denied;
     }
     let csrf = state.csrf.token_for(session.id());
@@ -446,10 +446,10 @@ pub async fn create_server(
     WebUser(user, session): WebUser,
     Form(form): Form<ServerForm>,
 ) -> Response {
-    if let Err(denied) = owner_or_forbidden(&user) {
+    if let Some(denied) = owner_or_forbidden(&user) {
         return denied;
     }
-    if let Err(denied) = csrf_or_forbidden(&state, &user, session.id(), &form._csrf) {
+    if let Some(denied) = csrf_or_forbidden(&state, &user, session.id(), &form._csrf) {
         return denied;
     }
     let csrf = state.csrf.token_for(session.id());
@@ -493,10 +493,10 @@ pub async fn delete_server(
     Path(_id): Path<String>,
     Form(form): Form<ServerForm>,
 ) -> Response {
-    if let Err(denied) = owner_or_forbidden(&user) {
+    if let Some(denied) = owner_or_forbidden(&user) {
         return denied;
     }
-    if let Err(denied) = csrf_or_forbidden(&state, &user, session.id(), &form._csrf) {
+    if let Some(denied) = csrf_or_forbidden(&state, &user, session.id(), &form._csrf) {
         return denied;
     }
     let csrf = state.csrf.token_for(session.id());
@@ -526,10 +526,10 @@ pub async fn create_command(
     WebUser(user, session): WebUser,
     Form(form): Form<CommandForm>,
 ) -> Response {
-    if let Err(denied) = owner_or_forbidden(&user) {
+    if let Some(denied) = owner_or_forbidden(&user) {
         return denied;
     }
-    if let Err(denied) = csrf_or_forbidden(&state, &user, session.id(), &form._csrf) {
+    if let Some(denied) = csrf_or_forbidden(&state, &user, session.id(), &form._csrf) {
         return denied;
     }
     let csrf = state.csrf.token_for(session.id());
@@ -563,10 +563,10 @@ pub async fn delete_command(
     Path(_id): Path<String>,
     Form(form): Form<CommandForm>,
 ) -> Response {
-    if let Err(denied) = owner_or_forbidden(&user) {
+    if let Some(denied) = owner_or_forbidden(&user) {
         return denied;
     }
-    if let Err(denied) = csrf_or_forbidden(&state, &user, session.id(), &form._csrf) {
+    if let Some(denied) = csrf_or_forbidden(&state, &user, session.id(), &form._csrf) {
         return denied;
     }
     let csrf = state.csrf.token_for(session.id());
@@ -670,12 +670,18 @@ mod tests {
         );
         let live = fixture_session(false);
         let live_out = session_panel(&live, now).into_string();
-        assert!(live_out.contains("Session is live"), "live state: {live_out}");
+        assert!(
+            live_out.contains("Session is live"),
+            "live state: {live_out}"
+        );
         assert!(
             !live_out.contains("Session expired"),
             "no expired banner: {live_out}"
         );
-        assert!(live_out.contains(live.host_id.to_string().as_str()), "host: {live_out}");
+        assert!(
+            live_out.contains(live.host_id.to_string().as_str()),
+            "host: {live_out}"
+        );
     }
 
     #[test]
@@ -691,14 +697,17 @@ mod tests {
             !rendered.contains("systemctl restart openpanel"),
             "no command body in audit: {rendered}"
         );
-        assert!(rendered.contains("refused: unclassified command"), "{rendered}");
+        assert!(
+            rendered.contains("refused: unclassified command"),
+            "{rendered}"
+        );
     }
 
     #[test]
     fn terminal_page_renders_three_panels_with_single_h1() {
         let now = Utc::now();
         let live = fixture_session(false);
-        let out = terminal_page(&"csrf", &live, &[], &[], now).into_string();
+        let out = terminal_page("csrf", &live, &[], &[], now).into_string();
         assert_eq!(out.matches("<h1>").count(), 1, "single h1: {out}");
         assert!(out.contains("Local session"), "session panel: {out}");
         assert!(out.contains("Server List"), "server panel: {out}");
@@ -717,16 +726,12 @@ mod tests {
                 ("s3cr3t-Pass-0001", "key-bytes-AAAA-0001"),
                 ("correct horse battery staple", "hunter2-hunter2-hunter2"),
                 ("-----BEGIN PRIVATE KEY-----\nMIIB", "pem-tail-ZZZZ-9999"),
-                ("eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig", "jwt-tail-qqqq-0000"),
+                (
+                    "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.sig",
+                    "jwt-tail-qqqq-0000",
+                ),
             ] {
-                let server = SavedServer::new(
-                    "192.0.2.10",
-                    22,
-                    "deploy",
-                    password,
-                    key,
-                    "remarks",
-                );
+                let server = SavedServer::new("192.0.2.10", 22, "deploy", password, key, "remarks");
                 let out = render_server_list(&[server], "csrf").into_string();
                 assert!(!out.contains(password), "password leaked: {out}");
                 assert!(!out.contains(key), "key leaked: {out}");

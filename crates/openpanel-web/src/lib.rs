@@ -92,10 +92,10 @@ pub mod status_page;
 /// Admin settings page for the status page (`/status-page`).
 pub mod status_page_admin;
 pub mod system_services;
-/// Terminal navigation + saved servers/commands web UI (`/terminal`).
-pub mod terminal;
 /// String-table stub used by every template.
 pub mod t;
+/// Terminal navigation + saved servers/commands web UI (`/terminal`).
+pub mod terminal;
 /// Themeable UI / white-label editor page.
 pub mod themeable_ui;
 pub mod two_factor;

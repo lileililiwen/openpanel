@@ -269,16 +269,40 @@ async fn db_row_actions_gated() {
 
     // Every row mutation with a bad token is refused before any work.
     for (method, url, form) in [
-        ("post", format!("{}/databases/{missing}/import", server.base_url()),
-         vec![("_csrf", "wrong"), ("filename", "dump.sql")]),
-        ("post", format!("{}/databases/{missing}/permission", server.base_url()),
-         vec![("_csrf", "wrong"), ("mode", "local"), ("cidrs", ""), ("tool", ""), ("quota_mb", ""), ("server", ""), ("name", ""), ("filename", "")]),
-        ("post", format!("{}/databases/{missing}/tools", server.base_url()),
-         vec![("_csrf", "wrong"), ("tool", "repair")]),
-        ("post", format!("{}/databases/{missing}/quota", server.base_url()),
-         vec![("_csrf", "wrong"), ("quota_mb", "1024")]),
-        ("post", format!("{}/databases/adopt", server.base_url()),
-         vec![("_csrf", "wrong"), ("server", "a"), ("name", "b")]),
+        (
+            "post",
+            format!("{}/databases/{missing}/import", server.base_url()),
+            vec![("_csrf", "wrong"), ("filename", "dump.sql")],
+        ),
+        (
+            "post",
+            format!("{}/databases/{missing}/permission", server.base_url()),
+            vec![
+                ("_csrf", "wrong"),
+                ("mode", "local"),
+                ("cidrs", ""),
+                ("tool", ""),
+                ("quota_mb", ""),
+                ("server", ""),
+                ("name", ""),
+                ("filename", ""),
+            ],
+        ),
+        (
+            "post",
+            format!("{}/databases/{missing}/tools", server.base_url()),
+            vec![("_csrf", "wrong"), ("tool", "repair")],
+        ),
+        (
+            "post",
+            format!("{}/databases/{missing}/quota", server.base_url()),
+            vec![("_csrf", "wrong"), ("quota_mb", "1024")],
+        ),
+        (
+            "post",
+            format!("{}/databases/adopt", server.base_url()),
+            vec![("_csrf", "wrong"), ("server", "a"), ("name", "b")],
+        ),
     ] {
         let _ = method;
         let denied = server

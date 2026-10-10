@@ -611,7 +611,11 @@ pub async fn build_dashboard(
     let quick_actions = quick_actions_for(is_owner);
     let panel_shortcuts = panel_shortcuts_for(is_owner);
     let security_risk = if is_owner {
-        match state.operator_security.attention_counts(caller, Utc::now()).await {
+        match state
+            .operator_security
+            .attention_counts(caller, Utc::now())
+            .await
+        {
             Ok(open) => security_risk_card(&open),
             Err(e) => SecurityRiskCard {
                 open: 0,
@@ -619,10 +623,17 @@ pub async fn build_dashboard(
             },
         }
     } else {
-        SecurityRiskCard { open: 0, error: None }
+        SecurityRiskCard {
+            open: 0,
+            error: None,
+        }
     };
     let (software, software_error) = if is_owner {
-        match state.software_center.search(caller.role(), CatalogQuery::default()).await {
+        match state
+            .software_center
+            .search(caller.role(), CatalogQuery::default())
+            .await
+        {
             Ok(page) => {
                 let entries: Vec<(String, String)> = page
                     .hits

@@ -6,10 +6,7 @@
 //! executable + scoped workdir + timeout) so `CronService` scope, quota,
 //! and allow-list checks stay the single enforcement point.
 
-use std::{
-    collections::HashSet,
-    path::{PathBuf},
-};
+use std::{collections::HashSet, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 use thiserror::Error;
@@ -140,10 +137,7 @@ impl CronPresetType {
 
     /// Whether this preset builds a `BackupService` plan.
     pub fn is_backup(self) -> bool {
-        matches!(
-            self,
-            Self::BackupSite | Self::BackupDb | Self::BackupDir
-        )
+        matches!(self, Self::BackupSite | Self::BackupDb | Self::BackupDir)
     }
 
     /// Whether this preset uses the HTTP job kind.
@@ -188,7 +182,9 @@ impl CyclePicker {
                 if (1..=31).contains(&n) {
                     Ok(Self::EveryNDays(n))
                 } else {
-                    Err(PresetError::InvalidCycle(format!("n-days {n} out of 1..=31")))
+                    Err(PresetError::InvalidCycle(format!(
+                        "n-days {n} out of 1..=31"
+                    )))
                 }
             }
             "hourly" => Ok(Self::Hourly),
@@ -196,7 +192,9 @@ impl CyclePicker {
                 if (1..=23).contains(&n) {
                     Ok(Self::EveryNHours(n))
                 } else {
-                    Err(PresetError::InvalidCycle(format!("n-hours {n} out of 1..=23")))
+                    Err(PresetError::InvalidCycle(format!(
+                        "n-hours {n} out of 1..=23"
+                    )))
                 }
             }
             "n-minutes" => {
@@ -242,8 +240,7 @@ impl CyclePicker {
             Self::EveryNSeconds(_) => "* * * * *".to_string(),
         };
         // Validate through the existing schedule parser (UTC).
-        super::CronSchedule::parse(expression.clone(), "UTC")
-            .map_err(PresetError::Cron)?;
+        super::CronSchedule::parse(expression.clone(), "UTC").map_err(PresetError::Cron)?;
         Ok(expression)
     }
 }
@@ -338,7 +335,9 @@ impl BackupBinding {
         exclusions: Vec<String>,
     ) -> Result<Self, PresetError> {
         if retain_latest == 0 {
-            return Err(PresetError::InvalidCycle("retain-latest must be >= 1".into()));
+            return Err(PresetError::InvalidCycle(
+                "retain-latest must be >= 1".into(),
+            ));
         }
         if !matches!(destination, BackupDestination::Local) && locator.is_empty() {
             return Err(PresetError::EmptyTarget);
@@ -427,7 +426,9 @@ impl ChainLink {
     /// Build a chain link; self-links are refused.
     pub fn new(from: Uuid, to: Uuid) -> Result<Self, PresetError> {
         if from == to {
-            return Err(PresetError::InvalidCycle("chain link must target another job".into()));
+            return Err(PresetError::InvalidCycle(
+                "chain link must target another job".into(),
+            ));
         }
         Ok(Self { from, to })
     }
@@ -499,9 +500,13 @@ mod tests {
 
     #[test]
     fn test_preset_compile_shell() {
-        let compiled =
-            preset_compile(CronPresetType::Shell, "/var/www/example.com", &roots(), &allow_list())
-                .expect("shell compiles");
+        let compiled = preset_compile(
+            CronPresetType::Shell,
+            "/var/www/example.com",
+            &roots(),
+            &allow_list(),
+        )
+        .expect("shell compiles");
         assert_eq!(compiled.executable, "/bin/sh");
         assert_eq!(compiled.workdir, PathBuf::from("/var/www/example.com"));
     }
@@ -570,19 +575,14 @@ mod tests {
 
     #[test]
     fn test_preset_compile_free_ram() {
-        let compiled = preset_compile(
-            CronPresetType::FreeRam,
-            "/var/www",
-            &roots(),
-            &allow_list(),
-        )
-        .expect("free-ram compiles");
+        let compiled = preset_compile(CronPresetType::FreeRam, "/var/www", &roots(), &allow_list())
+            .expect("free-ram compiles");
         assert_eq!(compiled.executable, "/usr/sbin/openpanel-free-ram");
     }
 
     #[test]
     fn test_preset_compile_access_url() {
-        let compiled = preset_compile(
+        preset_compile(
             CronPresetType::AccessUrl,
             "/var/www",
             &roots(),
@@ -594,8 +594,13 @@ mod tests {
 
     #[test]
     fn test_preset_compile_rejects_out_of_scope_workdir() {
-        let err = preset_compile(CronPresetType::Shell, "/etc/shadow", &roots(), &allow_list())
-            .expect_err("must reject");
+        let err = preset_compile(
+            CronPresetType::Shell,
+            "/etc/shadow",
+            &roots(),
+            &allow_list(),
+        )
+        .expect_err("must reject");
         assert!(matches!(err, PresetError::Cron(_)));
     }
 
@@ -618,7 +623,10 @@ mod tests {
 
     #[test]
     fn test_cycle_compile_daily() {
-        assert_eq!(CyclePicker::parse("daily", 0).unwrap().compile().unwrap(), "0 2 * * *");
+        assert_eq!(
+            CyclePicker::parse("daily", 0).unwrap().compile().unwrap(),
+            "0 2 * * *"
+        );
     }
 
     #[test]
@@ -631,7 +639,10 @@ mod tests {
 
     #[test]
     fn test_cycle_compile_hourly() {
-        assert_eq!(CyclePicker::parse("hourly", 0).unwrap().compile().unwrap(), "0 * * * *");
+        assert_eq!(
+            CyclePicker::parse("hourly", 0).unwrap().compile().unwrap(),
+            "0 * * * *"
+        );
     }
 
     #[test]
@@ -645,32 +656,50 @@ mod tests {
     #[test]
     fn test_cycle_compile_n_minutes() {
         assert_eq!(
-            CyclePicker::parse("n-minutes", 15).unwrap().compile().unwrap(),
+            CyclePicker::parse("n-minutes", 15)
+                .unwrap()
+                .compile()
+                .unwrap(),
             "*/15 * * * *"
         );
     }
 
     #[test]
     fn test_cycle_compile_weekly() {
-        assert_eq!(CyclePicker::parse("weekly", 0).unwrap().compile().unwrap(), "0 2 * * 1");
+        assert_eq!(
+            CyclePicker::parse("weekly", 0).unwrap().compile().unwrap(),
+            "0 2 * * 1"
+        );
     }
 
     #[test]
     fn test_cycle_compile_monthly() {
-        assert_eq!(CyclePicker::parse("monthly", 0).unwrap().compile().unwrap(), "0 2 1 * *");
+        assert_eq!(
+            CyclePicker::parse("monthly", 0).unwrap().compile().unwrap(),
+            "0 2 1 * *"
+        );
     }
 
     #[test]
     fn test_cycle_compile_n_seconds() {
         assert_eq!(
-            CyclePicker::parse("n-seconds", 30).unwrap().compile().unwrap(),
+            CyclePicker::parse("n-seconds", 30)
+                .unwrap()
+                .compile()
+                .unwrap(),
             "* * * * *"
         );
     }
 
     #[test]
     fn test_cycle_compile_rejects_invalid_n() {
-        for (kind, n) in [("n-days", 0), ("n-hours", 0), ("n-minutes", 0), ("n-seconds", 0), ("n-days", 99)] {
+        for (kind, n) in [
+            ("n-days", 0),
+            ("n-hours", 0),
+            ("n-minutes", 0),
+            ("n-seconds", 0),
+            ("n-days", 99),
+        ] {
             assert!(CyclePicker::parse(kind, n).is_err(), "{kind} {n} must fail");
         }
         assert!(CyclePicker::parse("fortnightly", 1).is_err());
@@ -678,9 +707,13 @@ mod tests {
 
     #[test]
     fn test_backup_binding_local() {
-        let binding =
-            BackupBinding::new(BackupDestination::Local, String::new(), 5, vec!["*.tmp".into()])
-                .expect("local binding");
+        let binding = BackupBinding::new(
+            BackupDestination::Local,
+            String::new(),
+            5,
+            vec!["*.tmp".into()],
+        )
+        .expect("local binding");
         assert_eq!(binding.clone().retention_copies(), 5);
         assert_eq!(binding.filters(), vec!["*.tmp".to_string()]);
         assert_eq!(binding.target_kind(), BackupTargetKind::Local);

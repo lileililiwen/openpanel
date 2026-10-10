@@ -20,8 +20,8 @@ use serde::{Deserialize, Serialize};
 use thiserror::Error;
 use uuid::Uuid;
 
-mod scope;
 pub mod preset;
+mod scope;
 pub use preset::{
     BackupBinding, BackupDestination, ChainLedger, ChainLink, CompiledPreset, CronPresetType,
     CyclePicker, FailureReminder, PresetError, preset_compile,

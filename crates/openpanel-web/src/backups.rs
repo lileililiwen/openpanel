@@ -119,7 +119,12 @@ pub async fn create(
     }
     // Exclusion rules are stored as plan filters; traversal
     // segments are refused before any mutation.
-    for line in form.exclusions.lines().map(str::trim).filter(|l| !l.is_empty()) {
+    for line in form
+        .exclusions
+        .lines()
+        .map(str::trim)
+        .filter(|l| !l.is_empty())
+    {
         if line.contains("..") {
             return (
                 StatusCode::UNPROCESSABLE_ENTITY,

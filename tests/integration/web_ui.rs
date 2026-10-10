@@ -2534,11 +2534,7 @@ async fn files_parity_renders() {
     // Unauthenticated access redirects to /login.
     let anon = server
         .client()
-        .get(format!(
-            "{}/sites/{}/files",
-            server.base_url(),
-            site.id()
-        ))
+        .get(format!("{}/sites/{}/files", server.base_url(), site.id()))
         .send()
         .await
         .expect("anon GET files");
@@ -2551,10 +2547,22 @@ async fn files_parity_renders() {
     );
 
     let body = authed_get(&server, &cookie, &format!("/sites/{}/files", site.id())).await;
-    assert!(body.contains("free") || body.contains("fits"), "header: {body}");
-    assert!(body.contains("breadcrumbs") || body.contains("root"), "breadcrumb: {body}");
-    assert!(body.contains("Copy") && body.contains("Cut") && body.contains("Paste"), "toolbar: {body}");
-    assert!(body.contains("Remarks") || body.contains("remark"), "remarks: {body}");
+    assert!(
+        body.contains("free") || body.contains("fits"),
+        "header: {body}"
+    );
+    assert!(
+        body.contains("breadcrumbs") || body.contains("root"),
+        "breadcrumb: {body}"
+    );
+    assert!(
+        body.contains("Copy") && body.contains("Cut") && body.contains("Paste"),
+        "toolbar: {body}"
+    );
+    assert!(
+        body.contains("Remarks") || body.contains("remark"),
+        "remarks: {body}"
+    );
     assert!(body.contains("name=\"_csrf\""), "csrf: {body}");
     assert!(body.contains("/terminal"), "terminal hint: {body}");
 }
@@ -2603,10 +2611,7 @@ async fn files_parity_gated() {
         ("compress", vec![("path", ""), ("name", "a.zip")]),
         ("extract", vec![("path", "a.zip")]),
         ("remarks", vec![("path", "a.txt"), ("remark", "note")]),
-        (
-            "permission",
-            vec![("path", "a.txt"), ("mode", "644")],
-        ),
+        ("permission", vec![("path", "a.txt"), ("mode", "644")]),
     ] {
         let mut form: Vec<(&str, &str)> = vec![("_csrf", "not-the-token")];
         form.extend(fields.iter().copied());
@@ -2645,10 +2650,7 @@ async fn files_parity_gated() {
         .expect("traversal POST");
     assert_eq!(traversal.status(), 400, "traversal status");
     let text = traversal.text().await.expect("traversal body");
-    assert!(
-        text.contains("PathOutsideChroot"),
-        "chroot verdict: {text}"
-    );
+    assert!(text.contains("PathOutsideChroot"), "chroot verdict: {text}");
     let listing = authed_get(&server, &cookie, &format!("/sites/{}/files", site.id())).await;
     assert!(!listing.contains("escape.txt"), "no effect: {listing}");
 }

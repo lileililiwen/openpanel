@@ -10,8 +10,8 @@ use crate::dashboard::{
     alerts_section, attention_section, cards_section, count_ftp_accounts, dashboard_content,
     dashboard_links, disk_section, gauges_from_snapshot, gauges_region, header_section, is_stale,
     network_section, panel_shortcuts_for, quick_actions_for, quota_section, quota_summary_from,
-    security_risk_card, security_risk_section, software_section, software_shortcuts, status_for_percent,
-    traffic_summary,
+    security_risk_card, security_risk_section, software_section, software_shortcuts,
+    status_for_percent, traffic_summary,
 };
 
 fn snapshot() -> SystemSnapshot {
@@ -60,7 +60,10 @@ fn model_with(error: Option<String>, stale: bool) -> DashboardModel {
         monitoring_error: error,
         cpu_trend: vec![],
         is_owner: true,
-        security_risk: SecurityRiskCard { open: 0, error: None },
+        security_risk: SecurityRiskCard {
+            open: 0,
+            error: None,
+        },
         software: vec![],
         software_error: None,
         traffic: TrafficSummary {
@@ -324,7 +327,10 @@ fn ftp_count_failure_yields_zero_with_error_state() {
     };
     let out = cards_section(&counts).into_string();
     assert!(out.contains("href=\"/ftp\""), "ftp deep-link: {out}");
-    assert!(out.contains("Unavailable"), "error state, never zero: {out}");
+    assert!(
+        out.contains("Unavailable"),
+        "error state, never zero: {out}"
+    );
 }
 
 #[test]
@@ -335,7 +341,10 @@ fn security_risk_card_links_open_findings() {
     assert_eq!(card.open, 3);
     assert!(card.error.is_none());
     let out = security_risk_section(&card, true).into_string();
-    assert!(out.contains("href=\"/security/findings\""), "fix link: {out}");
+    assert!(
+        out.contains("href=\"/security/findings\""),
+        "fix link: {out}"
+    );
     assert!(out.contains('3'), "open count: {out}");
 }
 
@@ -379,9 +388,15 @@ fn software_shortcuts_filter_by_display_toggle() {
     let all = software_shortcuts(&entries, &unpinned);
     assert_eq!(all.len(), 2, "empty toggle shows catalog order");
     let out = software_section(&[], None).into_string();
-    assert!(out.contains("op-empty-state"), "empty toggle renders empty state: {out}");
+    assert!(
+        out.contains("op-empty-state"),
+        "empty toggle renders empty state: {out}"
+    );
     let err = software_section(&[], Some("catalog down".to_string())).into_string();
-    assert!(err.contains("op-error-state"), "failure renders error: {err}");
+    assert!(
+        err.contains("op-error-state"),
+        "failure renders error: {err}"
+    );
 }
 
 #[test]
@@ -403,7 +418,10 @@ fn traffic_summary_aggregates_network_rows() {
     assert_eq!(summary.total_tx, 2500);
     assert_eq!(summary.interfaces, 2);
     let empty = traffic_summary(&[]);
-    assert_eq!((empty.total_rx, empty.total_tx, empty.interfaces), (0, 0, 0));
+    assert_eq!(
+        (empty.total_rx, empty.total_tx, empty.interfaces),
+        (0, 0, 0)
+    );
     let out = network_section(&net).into_string();
     assert!(out.contains("eth0"), "rows preserved: {out}");
     assert!(out.contains("Total"), "summary row: {out}");
@@ -411,15 +429,17 @@ fn traffic_summary_aggregates_network_rows() {
 
 #[test]
 fn quota_summary_projects_axes_with_clamp() {
-    let quota =
-        openpanel_domain::ContainerQuota::default_for(uuid::Uuid::new_v4());
+    let quota = openpanel_domain::ContainerQuota::default_for(uuid::Uuid::new_v4());
     let summary = quota_summary_from(&quota);
     assert_eq!(summary.max_concurrent, quota.max_concurrent, "QPS axis");
     assert_eq!(
         summary.egress_bytes_per_month, quota.egress_bytes_per_month,
         "bandwidth/traffic axis"
     );
-    assert_eq!(summary.memory_bytes_max, quota.memory_bytes_max, "disk axis");
+    assert_eq!(
+        summary.memory_bytes_max, quota.memory_bytes_max,
+        "disk axis"
+    );
     assert!(summary.error.is_none());
     let mut over = quota.clone();
     over.cpu_pct_max = 200;
@@ -441,14 +461,20 @@ fn panel_shortcuts_resolve_and_gate_by_role() {
             action.href
         );
     }
-    assert!(panel_shortcuts_for(false).is_empty(), "owner-only for users");
+    assert!(
+        panel_shortcuts_for(false).is_empty(),
+        "owner-only for users"
+    );
 }
 
 #[test]
 fn dashboard_content_renders_discoverability_widgets() {
     let mut model = model_with(None, false);
     model.counts.ftp = 2;
-    model.security_risk = SecurityRiskCard { open: 1, error: None };
+    model.security_risk = SecurityRiskCard {
+        open: 1,
+        error: None,
+    };
     let out = dashboard_content(&model).into_string();
     assert_eq!(out.matches("<h1>").count(), 1, "single h1: {out}");
     assert!(out.contains("href=\"/ftp\""), "ftp card: {out}");
@@ -487,7 +513,10 @@ mod prop {
             "ftp failure is unavailable, never healthy zero: {cards}"
         );
         let gauges = gauges_region(&[], 0.0, Some("down".into())).into_string();
-        assert!(gauges.contains("op-error-state"), "monitoring failure: {gauges}");
+        assert!(
+            gauges.contains("op-error-state"),
+            "monitoring failure: {gauges}"
+        );
         let risk = security_risk_section(
             &SecurityRiskCard {
                 open: 0,

@@ -33,7 +33,8 @@ use crate::{
     csrf::{CsrfStore, ValidateCsrf},
     dashboard, databases, feedback, files, forms, layer,
     layout::CapabilitySet,
-    login, logs, migrate, monitoring, monitoring_fleet, operator_security, previews, security, settings,
+    login, logs, migrate, monitoring, monitoring_fleet, operator_security, previews, security,
+    settings,
     settings::{InstallationInfo, PanelPreferences, SettingsStore},
     sites, ssl, terminal, users,
 };
@@ -667,13 +668,19 @@ pub fn router(
         .route("/sites/{site_id}/files/upload", post(files::upload))
         .route("/sites/{site_id}/files/recycle", get(files::recycle_page))
         .route("/sites/{site_id}/files/history", get(files::history_page))
-        .route("/sites/{site_id}/files/favorites", get(files::favorites_page))
+        .route(
+            "/sites/{site_id}/files/favorites",
+            get(files::favorites_page),
+        )
         .route("/sites/{site_id}/files/shares", get(files::shares_page))
         .route("/sites/{site_id}/files/copy", post(files::copy))
         .route("/sites/{site_id}/files/compress", post(files::compress))
         .route("/sites/{site_id}/files/extract", post(files::extract))
         .route("/sites/{site_id}/files/remarks", post(files::save_remark))
-        .route("/sites/{site_id}/files/permission", post(files::permission_save))
+        .route(
+            "/sites/{site_id}/files/permission",
+            post(files::permission_save),
+        )
         .route("/databases", get(databases::list).post(databases::create))
         .route("/databases/new", get(databases::new_form))
         .route("/databases/sync", get(databases::sync_page))
