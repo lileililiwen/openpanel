@@ -775,6 +775,7 @@ Overall: `[██████████] 7/7 UI/UX implemented & archived; 6/6
 | 9 | `expand-monitoring-and-fleet-operations` | `[x] implemented; archived & committed (b4e111e)` | 1, 2, 6 |
 | — | `add-migration-wizard-ui` | `[ ] proposed (proposal-only; design.md AWAITS human principal approval; commit a3761f1)` | P7 follow-on |
 | — | `add-terminal-nav-and-saved-commands` | `[ ] proposed (proposal-only; design.md AWAITS human principal approval)` | P7 follow-on, sibling of migration-wizard |
+| — | `add-ftp-global-and-phpmyadmin-link` | `[ ] proposed (proposal-only; design.md AWAITS human principal approval)` | P7 follow-on, sibling of migration-wizard/terminal |
 
 ## Required execution protocol
 
