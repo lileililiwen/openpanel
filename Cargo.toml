@@ -191,6 +191,18 @@ proptest = "1"
 name = "integration"
 path = "tests/integration/main.rs"
 
+# Dev build memory profile.
+# 9 workspace members, 832 files, 220k lines and no [profile.dev] meant cargo's
+# default full debuginfo; a single rustc here peaks in the multi-GB range and
+# was enough to exhaust this 16 GB box. Line numbers are preserved, so panic
+# backtraces and debugger breakpoints behave as before.
+[profile.dev]
+debug = "line-tables-only"
+split-debuginfo = "unpacked"
+
+[profile.dev.package."*"]
+debug = false
+
 [profile.release]
 lto = "thin"
 codegen-units = 1
