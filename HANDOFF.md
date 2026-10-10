@@ -930,6 +930,8 @@ commit 1's hash.
 - `openspec/changes/complete-production-acme-lifecycle/`
 - `openspec/changes/complete-backup-dr-and-migration-operations/`
 - `openspec/changes/expand-monitoring-and-fleet-operations/`
+- `openspec/changes/repair-home-discoverability/` — proposed 2026-10-10,
+  Baota home parity (proposal-only, AWAITS approval, commit `3aa8846`).
 
 The existing `docs/TODOS.md` ACME entry is covered by sequence item 3. The
 competitive backlog items for object storage, CalDAV/CardDAV/WebDAV, and
