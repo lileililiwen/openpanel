@@ -777,6 +777,7 @@ Overall: `[██████████] 7/7 UI/UX implemented & archived; 6/6
 | — | `add-terminal-nav-and-saved-commands` | `[ ] proposed (proposal-only; design.md AWAITS human principal approval)` | P7 follow-on, sibling of migration-wizard |
 | — | `add-ftp-global-and-phpmyadmin-link` | `[ ] proposed (proposal-only; design.md AWAITS human principal approval)` | P7 follow-on, sibling of migration-wizard/terminal |
 | — | `refine-files-with-baota-affordances` | `[ ] proposed (proposal-only; design.md AWAITS human principal approval)` | P7 follow-on, sibling of migration-wizard/terminal/ftp |
+| — | `refine-cron-with-preset-types` | `[ ] proposed (proposal-only; design.md AWAITS human principal approval)` | P7 follow-on, sibling of migration-wizard/terminal/ftp/files |
 
 ## Required execution protocol
 
