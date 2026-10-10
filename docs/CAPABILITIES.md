@@ -123,8 +123,8 @@ reference, not a second source of truth.
 
 ## Navigation registry reconciliation
 
-The shipped navigation registry exposes 44 entries
-across 26 capability identifiers. Identifiers without a
+The shipped navigation registry exposes 47 entries
+across 28 capability identifiers. Identifiers without a
 live capability folder of the same name are expected: the registry
 names runtime capabilities and routes, while the catalog names spec
 folders.
@@ -145,6 +145,7 @@ folders.
 | `logs` | [spec](../openspec/specs/logs/spec.md) |
 | `mail` | [spec](../openspec/specs/mail/spec.md) |
 | `marketplace` | — (no spec folder of this name) |
+| `migration` | — (no spec folder of this name) |
 | `monitoring` | [spec](../openspec/specs/monitoring/spec.md) |
 | `plugins` | — (no spec folder of this name) |
 | `previews` | — (no spec folder of this name) |
@@ -154,6 +155,7 @@ folders.
 | `ssl` | [spec](../openspec/specs/ssl/spec.md) |
 | `status-page` | — (no spec folder of this name) |
 | `system-services` | [spec](../openspec/specs/system-services/spec.md) |
+| `terminal` | — (no spec folder of this name) |
 | `themeable-ui` | [spec](../openspec/specs/themeable-ui/spec.md) |
 | `users` | — (no spec folder of this name) |
 | `webmail` | — (no spec folder of this name) |
