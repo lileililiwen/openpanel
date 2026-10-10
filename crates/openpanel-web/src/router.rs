@@ -33,7 +33,7 @@ use crate::{
     csrf::{CsrfStore, ValidateCsrf},
     dashboard, databases, feedback, files, forms, layer,
     layout::CapabilitySet,
-    login, logs, monitoring, monitoring_fleet, operator_security, previews, security, settings,
+    login, logs, migrate, monitoring, monitoring_fleet, operator_security, previews, security, settings,
     settings::{InstallationInfo, PanelPreferences, SettingsStore},
     sites, ssl, users,
 };
@@ -531,6 +531,12 @@ pub fn router(
         .route("/dns/zones/{id}/check", post(crate::dns::check_zone))
         .route("/mail", get(crate::mail::page))
         .route("/mail/domains", post(crate::mail::create_domain))
+        .route("/migrate", get(migrate::page))
+        .route("/migrate/upload", post(migrate::upload))
+        .route("/migrate/preview", post(migrate::preview))
+        .route("/migrate/confirm", post(migrate::confirm))
+        .route("/migrate/run", post(migrate::run))
+        .route("/migrate/cutover/{kind}", post(migrate::cutover))
         .route("/software", get(crate::software_center::page))
         .route("/software/refresh", post(crate::software_center::refresh))
         .route("/software/entries/{id}", get(crate::software_center::entry))

@@ -47,6 +47,7 @@ pub mod loading;
 pub mod login;
 pub mod logs;
 pub mod mail;
+pub mod migrate;
 pub mod monitoring;
 /// Monitoring-fleet operator views: configurable dashboard views and
 /// safe scoped fleet health.

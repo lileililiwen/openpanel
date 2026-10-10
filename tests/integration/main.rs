@@ -62,6 +62,8 @@ mod mail_surfaces;
 mod malware_scanner;
 /// Migration importers preview / run / rollback integration tests.
 mod migration_importers;
+/// Migration wizard web UI (`/migrate`) integration tests.
+mod migrate_wizard;
 mod monitoring;
 /// Monitoring-fleet operations integration tests.
 mod monitoring_fleet;

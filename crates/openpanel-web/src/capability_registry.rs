@@ -137,6 +137,16 @@ pub const REGISTRY: &[RouteMeta] = &[
         site_tab: None,
     },
     RouteMeta {
+        key: "migrate",
+        route: "/migrate",
+        label: "Migrate",
+        icon: "package",
+        capability: "migration",
+        min_role: Role::Owner,
+        scope: RouteScope::Global,
+        site_tab: None,
+    },
+    RouteMeta {
         key: "security",
         route: "/security",
         label: "Security",

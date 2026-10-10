@@ -166,6 +166,13 @@ const OPERATIONS: &[NavItem] = &[
         icon: "archive",
     },
     NavItem {
+        href: "/migrate",
+        label: "Migrate",
+        capability: "migration",
+        role: RequiredRole::Owner,
+        icon: "package",
+    },
+    NavItem {
         href: "/previews",
         label: "Previews",
         capability: "previews",
