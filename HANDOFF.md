@@ -774,6 +774,7 @@ Overall: `[██████████] 7/7 UI/UX implemented & archived; 6/6
 | 8 | `add-operator-security-control-plane` | `[x] implemented; archived & committed (e84ca33)` | 1, 6 |
 | 9 | `expand-monitoring-and-fleet-operations` | `[x] implemented; archived & committed (b4e111e)` | 1, 2, 6 |
 | — | `add-migration-wizard-ui` | `[ ] proposed (proposal-only; design.md AWAITS human principal approval; commit a3761f1)` | P7 follow-on |
+| — | `add-terminal-nav-and-saved-commands` | `[ ] proposed (proposal-only; design.md AWAITS human principal approval)` | P7 follow-on, sibling of migration-wizard |
 
 ## Required execution protocol
 
