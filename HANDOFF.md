@@ -774,7 +774,7 @@ Overall: `[██████████] 7/7 UI/UX implemented & archived; 6/6
 | 8 | `add-operator-security-control-plane` | `[x] implemented; archived & committed (e84ca33)` | 1, 6 |
 | 9 | `expand-monitoring-and-fleet-operations` | `[x] implemented; archived & committed (b4e111e)` | 1, 2, 6 |
 | — | `add-migration-wizard-ui` | `[x] implemented & committed (9715652; design.md approved via the "implement" directive 2026-10-10; validate --strict green; NOT archived — coordinator archives)` | P7 follow-on |
-| — | `add-terminal-nav-and-saved-commands` | `[ ] proposed (proposal-only; design.md AWAITS human principal approval)` | P7 follow-on, sibling of migration-wizard |
+| — | `add-terminal-nav-and-saved-commands` | `[x] implemented & committed (beafd46; design.md approved via the "implement" directive 2026-10-10; validate --strict green; NOT archived — coordinator archives)` | P7 follow-on, sibling of migration-wizard |
 | — | `add-ftp-global-and-phpmyadmin-link` | `[ ] proposed (proposal-only; design.md AWAITS human principal approval)` | P7 follow-on, sibling of migration-wizard/terminal |
 | — | `refine-files-with-baota-affordances` | `[ ] proposed (proposal-only; design.md AWAITS human principal approval)` | P7 follow-on, sibling of migration-wizard/terminal/ftp |
 | — | `refine-cron-with-preset-types` | `[ ] proposed (proposal-only; design.md AWAITS human principal approval)` | P7 follow-on, sibling of migration-wizard/terminal/ftp/files |
