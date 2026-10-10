@@ -18,10 +18,16 @@ completed:
   - forge-publish-provider-stdio
   - post-mvp-readiness
   - application-delivery-docker-adapters
+  - add-migration-wizard-ui
+  - add-terminal-nav-and-saved-commands
+  - add-ftp-global-and-phpmyadmin-link
+  - refine-files-with-baota-affordances
+  - refine-cron-with-preset-types
+  - repair-home-discoverability
 unresolved: []
 next_action: propose application-delivery-sqlite-state
 next_spec: none (no active change folder; propose the next change first)
-updated_at: '2026-10-02T13:35:00+08:00'
+updated_at: '2026-10-10T23:50:37+08:00'
 ---
 # OpenPanel Roadmap Handoff
 
