@@ -8,9 +8,12 @@
 //! Every auto-refreshed region carries an `aria-live` / busy state and renders
 //! an explicit error (never a silent zero) when collection fails.
 
-use axum::extract::State;
+use std::collections::HashSet;
+
+use axum::extract::{Query, State};
 use chrono::{Duration, Utc};
 use maud::{Markup, html};
+use openpanel_app::software_center::CatalogQuery;
 use openpanel_core::{AuditAction, AuditEvent};
 use openpanel_domain::{
     User,
@@ -19,10 +22,19 @@ use openpanel_domain::{
     identity::Role,
     monitoring::{MetricKind, MetricSample, SystemSnapshot},
 };
+use serde::Deserialize;
 
 use crate::monitoring::sparkline;
 use crate::router::{WebState, WebUser};
 use crate::ui_states::{EmptyState, ErrorState};
+
+mod widgets;
+pub use widgets::{
+    QuotaSummary, SecurityRiskCard, SoftwareShortcut, TrafficSummary, count_ftp_accounts,
+    dashboard_links, panel_shortcuts_for, panel_shortcuts_section, quota_section,
+    quota_summary_from, security_risk_card, security_risk_section, software_section,
+    software_shortcuts, traffic_summary,
+};
 
 /// How long before a collected snapshot is considered stale.
 const STALE_THRESHOLD: Duration = Duration::minutes(5);
@@ -142,10 +154,14 @@ pub struct QuickAction {
 }
 
 /// Counts backing the resource quick-count cards.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResourceCounts {
     /// Number of sites visible to the caller.
     pub sites: usize,
+    /// Number of FTP accounts across caller-visible sites.
+    pub ftp: usize,
+    /// Set when FTP collection failed; the card shows it, never zero.
+    pub ftp_error: Option<String>,
     /// Number of databases visible to the caller.
     pub databases: usize,
     /// Number of files across all visible site document roots.
@@ -202,12 +218,47 @@ pub struct DashboardModel {
     pub monitoring_error: Option<String>,
     /// Recent CPU samples for the trend panel.
     pub cpu_trend: Vec<MetricSample>,
+    /// Whether the caller is an owner (gates owner-only cards).
+    pub is_owner: bool,
+    /// Security-risk card state.
+    pub security_risk: SecurityRiskCard,
+    /// Pinned software shortcuts (Display-on-dashboard subset).
+    pub software: Vec<SoftwareShortcut>,
+    /// Set when the software catalog could not be searched.
+    pub software_error: Option<String>,
+    /// Traffic totals over the network rows.
+    pub traffic: TrafficSummary,
+    /// Panel Update/Fix/Restart deep-links (owner-only).
+    pub panel_shortcuts: Vec<QuickAction>,
+    /// Caller-scoped quota summary.
+    pub quota: QuotaSummary,
+}
+
+/// Dashboard query: `?pin=<entry-id>` repeats select Display-on-dashboard
+/// entries. The toggle filters the rendered shortcuts; it never mutates
+/// the catalog.
+#[derive(Debug, Deserialize, Default)]
+pub struct DashboardQuery {
+    /// Display-on-dashboard entry ids (comma-separated `?pin=a,b`).
+    #[serde(default)]
+    pub pin: Option<String>,
 }
 
 /// GET / and GET /dashboard — the dashboard page inside the shell.
-pub async fn home(State(state): State<WebState>, WebUser(user, session): WebUser) -> Markup {
+pub async fn home(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Query(query): Query<DashboardQuery>,
+) -> Markup {
     let csrf = state.csrf.token_for(session.id());
-    let model = build_dashboard(&state, &user).await;
+    let pinned: HashSet<String> = query
+        .pin
+        .unwrap_or_default()
+        .split(',')
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect();
+    let model = build_dashboard(&state, &user, &pinned).await;
     state
         .render_shell(&user, &csrf, "/", dashboard_content(&model))
         .await
@@ -234,6 +285,12 @@ pub fn dashboard_content(model: &DashboardModel) -> Markup {
         (resource_grid_section(model))
         (trend_section(&model.cpu_trend))
         (cards_section(&model.counts))
+        (security_risk_section(&model.security_risk, model.is_owner))
+        @if model.is_owner {
+            (software_section(&model.software, model.software_error.clone()))
+        }
+        (panel_shortcuts_section(&model.panel_shortcuts))
+        (quota_section(&model.quota))
         (alerts_section(&model.alerts))
         (quick_actions_section(&model.quick_actions))
     }
@@ -379,8 +436,10 @@ pub fn disk_section(mounts: &[DiskMountWidget]) -> Markup {
     }
 }
 
-/// Per-interface network throughput rows.
+/// Per-interface network throughput rows plus a totals summary row.
+/// Totals come from [`traffic_summary`] over the same rows.
 pub fn network_section(interfaces: &[NetworkWidget]) -> Markup {
+    let total = traffic_summary(interfaces);
     html! {
         section id="network-throughput" class="network-throughput" {
             h2 { "Network" }
@@ -401,6 +460,12 @@ pub fn network_section(interfaces: &[NetworkWidget]) -> Markup {
                         }
                     }
                 }
+                p {
+                    "Total " (total.interfaces) " interface(s): in "
+                    (format_bytes_per_sec(total.total_rx)) " · out "
+                    (format_bytes_per_sec(total.total_tx)) " · "
+                    a href="/monitoring" { "Monitoring" }
+                }
             }
         }
     }
@@ -420,10 +485,12 @@ pub fn trend_section(samples: &[MetricSample]) -> Markup {
     }
 }
 
-/// Render the five quick-count cards, each linking to its resource page.
+/// Render the six quick-count cards, each linking to its resource page.
+/// The FTP card shows an explicit unavailable state on collection failure.
 pub fn cards_section(counts: &ResourceCounts) -> Markup {
     let cards = [
         ("/sites", "Sites", counts.sites),
+        ("/ftp", "FTP", counts.ftp),
         ("/databases", "Databases", counts.databases),
         ("/files", "Files", counts.files),
         ("/ssl", "SSL", counts.ssl),
@@ -435,10 +502,23 @@ pub fn cards_section(counts: &ResourceCounts) -> Markup {
             div class="card-grid" {
                 @for (href, label, count) in cards {
                     a class="card" href=(href) {
-                        span class="card-count" { (count) }
-                        span class="card-label" { (label) }
+                        @if href == "/ftp" {
+                            @if let Some(_) = &counts.ftp_error {
+                                span class="card-count" { "—" }
+                                span class="card-label" { (label) " (Unavailable)" }
+                            } @else {
+                                span class="card-count" { (count) }
+                                span class="card-label" { (label) }
+                            }
+                        } @else {
+                            span class="card-count" { (count) }
+                            span class="card-label" { (label) }
+                        }
                     }
                 }
+            }
+            @if let Some(msg) = &counts.ftp_error {
+                p { "FTP accounts unavailable: " (msg) " " a href="/ftp" { "Retry" } }
             }
         }
     }
@@ -482,8 +562,14 @@ pub fn quick_actions_section(actions: &[QuickAction]) -> Markup {
 }
 
 /// Build the dashboard model from existing services, isolating each region's
-/// failure to its own error/empty state.
-pub async fn build_dashboard(state: &WebState, caller: &User) -> DashboardModel {
+/// failure to its own error/empty state. `pinned` carries the
+/// Display-on-dashboard toggle selection (entry ids); it only filters the
+/// rendered shortcuts.
+pub async fn build_dashboard(
+    state: &WebState,
+    caller: &User,
+    pinned: &HashSet<String>,
+) -> DashboardModel {
     let is_owner = caller.role() == Role::Owner;
     let (gauges, load, disk_mounts, monitoring_error, last_updated) =
         match state.monitoring.snapshot_now().await {
@@ -523,12 +609,50 @@ pub async fn build_dashboard(state: &WebState, caller: &User) -> DashboardModel 
     let alerts = collect_alerts(state).await;
     let attention = build_attention(state, caller, is_owner).await;
     let quick_actions = quick_actions_for(is_owner);
+    let panel_shortcuts = panel_shortcuts_for(is_owner);
+    let security_risk = if is_owner {
+        match state.operator_security.attention_counts(caller, Utc::now()).await {
+            Ok(open) => security_risk_card(&open),
+            Err(e) => SecurityRiskCard {
+                open: 0,
+                error: Some(format!("Security findings unavailable: {e}")),
+            },
+        }
+    } else {
+        SecurityRiskCard { open: 0, error: None }
+    };
+    let (software, software_error) = if is_owner {
+        match state.software_center.search(caller.role(), CatalogQuery::default()).await {
+            Ok(page) => {
+                let entries: Vec<(String, String)> = page
+                    .hits
+                    .iter()
+                    .map(|hit| (hit.id.clone(), hit.name.clone()))
+                    .collect();
+                (software_shortcuts(&entries, pinned), None)
+            }
+            Err(e) => (vec![], Some(format!("Software catalog unavailable: {e}"))),
+        }
+    } else {
+        (vec![], None)
+    };
+    let quota = match state.container_runtime.get_quota(caller, caller.id()).await {
+        Ok(effective) => quota_summary_from(&effective.quota),
+        Err(e) => QuotaSummary {
+            max_concurrent: 0,
+            cpu_pct_max: 0,
+            memory_bytes_max: 0,
+            egress_bytes_per_month: 0,
+            error: Some(format!("Quota unavailable: {e}")),
+        },
+    };
     let cpu_trend = state
         .monitoring
         .history(MetricKind::Cpu, Utc::now() - Duration::hours(1))
         .await
         .unwrap_or_default();
 
+    let traffic = traffic_summary(&network);
     DashboardModel {
         server_name: server_name(state),
         os: std::env::consts::OS.to_string(),
@@ -545,6 +669,13 @@ pub async fn build_dashboard(state: &WebState, caller: &User) -> DashboardModel 
         quick_actions,
         monitoring_error,
         cpu_trend,
+        is_owner,
+        security_risk,
+        software,
+        software_error,
+        traffic,
+        panel_shortcuts,
+        quota,
     }
 }
 
@@ -652,8 +783,9 @@ fn server_name(state: &WebState) -> String {
     format!("OpenPanel {}", state.installation.version)
 }
 
-/// Count sites, databases, files (top-level entries across site roots),
-/// SSL certs, and users for the caller.
+/// Count sites, FTP accounts (across caller-visible sites), databases,
+/// files (top-level entries across site roots), SSL certs, and users.
+/// FTP failures yield zero with an error state, never a silent zero.
 async fn collect_counts(state: &WebState, caller: &User) -> ResourceCounts {
     let sites = state
         .sites
@@ -673,6 +805,23 @@ async fn collect_counts(state: &WebState, caller: &User) -> ResourceCounts {
             }
         }
     }
+    let (ftp, ftp_error) = match state.sites.list_sites(caller).await {
+        Err(e) => (0, Some(format!("FTP unavailable: {e}"))),
+        Ok(site_list) => {
+            let mut per_site = Vec::with_capacity(site_list.len());
+            for site in &site_list {
+                per_site.push(
+                    state
+                        .ftp
+                        .list(caller, site.id())
+                        .await
+                        .map(|v| v.len())
+                        .map_err(|e| e.to_string()),
+                );
+            }
+            count_ftp_accounts(&per_site)
+        }
+    };
     let databases = state
         .databases
         .list_databases(caller)
@@ -688,6 +837,8 @@ async fn collect_counts(state: &WebState, caller: &User) -> ResourceCounts {
         .unwrap_or(0);
     ResourceCounts {
         sites,
+        ftp,
+        ftp_error,
         databases,
         files,
         ssl,

@@ -80,3 +80,36 @@ siblings; this change adds no route those siblings own.
 ---
 
 *This design AWAITS human principal approval per Agents.md §8 item 10 — do NOT implement until approved.*
+
+## Implementation record (2026-10-10, approved design — user "implement")
+
+Reuse confirmed during apply; no new service, route, scanner, collector,
+or self-update engine:
+
+- `DashboardModel` / `build_dashboard` (`dashboard/mod.rs`) extended with
+  per-region isolation preserved; new widget structs + pure projections +
+  section renders live in `dashboard/widgets.rs` (re-exported via
+  `crate::dashboard`, paths unchanged) because the widgets do not fit in
+  `mod.rs` under the `file-length` hard limit (1000). Composition
+  (`dashboard_content`) stays in `mod.rs`; tests stay in
+  `dashboard/tests.rs`.
+- FTP count via `FtpService::list` per caller-visible site;
+  `count_ftp_accounts` folds per-site results (any error → 0 + error).
+- Security card via `OperatorSecurityService::attention_counts` (count
+  only, evidence redacted); fix link `/security/findings`.
+- Software shortcuts via `SoftwareCenterService::search`
+  (`CatalogQuery::default`); `?pin=` toggle filters the rendered subset,
+  never mutates the catalog; owner-only (`search` enforces Owner).
+- Traffic via `traffic_summary` saturating sums over existing
+  `NetworkWidget` rows; totals rendered in `network_section`.
+- Panel Update/Fix/Restart via `panel_shortcuts_for` → `/software`,
+  `/settings`, `/services` (all `find_by_route`-registered, owner-only).
+- Quota via `container_runtime.get_quota(caller, caller.id())`
+  (self-read only, role-scoped) projected by `quota_summary_from` with
+  rate clamp; drill-down `/container/quota`.
+- All links in `dashboard_links()` resolve via `find_by_route`
+  (`prop_dashboard_links_resolve`); failures render `op-error-state` /
+  `op-empty-state`, never silent zeros (`prop_dashboard_never_silent_zero`).
+- Styling reuses `cards` / `card-grid` / `card` / `btn` / `table` /
+  `quick-actions` / `action-grid` + `ui_states` tokens only; single `<h1>`;
+  no new palette, no `px`, no `max-width` queries.

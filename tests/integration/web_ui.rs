@@ -480,6 +480,99 @@ async fn web_unauthenticated_dashboard_redirects_to_login() {
     );
 }
 
+/// `dashboard_clickable_counts`: `GET /` renders clickable Site/FTP/DB
+/// cards with correct hrefs; unauthenticated `GET /` 302s to `/login`.
+#[tokio::test]
+async fn dashboard_clickable_counts() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+
+    let body = authed_get(&server, &cookie, "/").await;
+    for href in ["/sites", "/ftp", "/databases"] {
+        assert!(
+            body.contains(&format!("href=\"{href}\"")),
+            "clickable count card {href}"
+        );
+    }
+
+    let unauth = server
+        .client()
+        .get(format!("{}/", server.base_url()))
+        .send()
+        .await
+        .expect("GET /");
+    assert_eq!(unauth.status(), 302);
+    assert_eq!(
+        unauth
+            .headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok()),
+        Some("/login")
+    );
+}
+
+/// `dashboard_discoverability_gated`: the security fix link, software
+/// toggle round-trip, and panel shortcuts render for owners and resolve
+/// via the registry; owner-only cards are absent for the User role.
+#[tokio::test]
+async fn dashboard_discoverability_gated() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    server
+        .identity()
+        .create_user(
+            "alice",
+            "alice@example.com",
+            "alice-password-1",
+            openpanel_domain::Role::User,
+            "test",
+        )
+        .await
+        .expect("create alice");
+    let owner_cookie = login(&server, "admin", "correct horse battery staple").await;
+    let user_cookie = login(&server, "alice", "alice-password-1").await;
+
+    let owner_body = authed_get(&server, &owner_cookie, "/").await;
+    for href in ["/security/findings", "/software", "/settings", "/services"] {
+        assert!(
+            owner_body.contains(&format!("href=\"{href}\"")),
+            "owner discoverability link {href}"
+        );
+    }
+    // Software toggle round-trips without mutating the catalog.
+    let toggled = authed_get(&server, &owner_cookie, "/?pin=no-such-entry").await;
+    assert!(
+        toggled.contains("Software"),
+        "toggle round-trip renders software section"
+    );
+
+    let user_body = authed_get(&server, &user_cookie, "/").await;
+    for href in ["/security/findings", "/software", "/settings"] {
+        assert!(
+            !user_body.contains(&format!("href=\"{href}\"")),
+            "owner-only card {href} absent for User role"
+        );
+    }
+    assert!(
+        !user_body.contains("id=\"panel-shortcuts\""),
+        "panel shortcuts section absent for User role"
+    );
+    assert!(
+        !user_body.contains("id=\"software-shortcuts\""),
+        "software section absent for User role"
+    );
+    // Sub-user quota summary stays visible but scoped to the caller.
+    assert!(
+        user_body.contains("/container/quota"),
+        "user sees own quota summary"
+    );
+}
+
 /// Fetch an authenticated page and return `(cookie, body)`.
 async fn authed_get(server: &TestServer, cookie: &str, path: &str) -> String {
     let resp = server
