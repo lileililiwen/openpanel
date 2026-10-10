@@ -35,7 +35,7 @@ use crate::{
     layout::CapabilitySet,
     login, logs, migrate, monitoring, monitoring_fleet, operator_security, previews, security, settings,
     settings::{InstallationInfo, PanelPreferences, SettingsStore},
-    sites, ssl, users,
+    sites, ssl, terminal, users,
 };
 
 /// Runtime-only dependencies and installation paths used by the web adapter.
@@ -537,6 +537,17 @@ pub fn router(
         .route("/migrate/confirm", post(migrate::confirm))
         .route("/migrate/run", post(migrate::run))
         .route("/migrate/cutover/{kind}", post(migrate::cutover))
+        .route("/terminal", get(terminal::page))
+        .route("/terminal/servers", post(terminal::create_server))
+        .route(
+            "/terminal/servers/{id}/delete",
+            post(terminal::delete_server),
+        )
+        .route("/terminal/commands", post(terminal::create_command))
+        .route(
+            "/terminal/commands/{id}/delete",
+            post(terminal::delete_command),
+        )
         .route("/software", get(crate::software_center::page))
         .route("/software/refresh", post(crate::software_center::refresh))
         .route("/software/entries/{id}", get(crate::software_center::entry))

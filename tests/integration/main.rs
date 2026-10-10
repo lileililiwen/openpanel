@@ -103,6 +103,8 @@ mod sso;
 mod system_services;
 /// Themeable UI / white-label integration tests.
 mod themeable_ui;
+/// Terminal navigation + saved servers/commands integration tests.
+mod terminal_nav;
 /// Verified-service-catalog integration tests: signed manifests,
 /// reviewable plans, bounded-retry lifecycle jobs, and trust
 /// revocation (capability `verified-service-catalog`).

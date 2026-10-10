@@ -152,6 +152,13 @@ const OPERATIONS: &[NavItem] = &[
         icon: "server",
     },
     NavItem {
+        href: "/terminal",
+        label: "Terminal",
+        capability: "terminal",
+        role: RequiredRole::Owner,
+        icon: "server",
+    },
+    NavItem {
         href: "/logs",
         label: "Logs",
         capability: "logs",

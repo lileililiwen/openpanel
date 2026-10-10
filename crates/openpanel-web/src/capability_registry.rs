@@ -147,6 +147,16 @@ pub const REGISTRY: &[RouteMeta] = &[
         site_tab: None,
     },
     RouteMeta {
+        key: "terminal",
+        route: "/terminal",
+        label: "Terminal",
+        icon: "server",
+        capability: "terminal",
+        min_role: Role::Owner,
+        scope: RouteScope::Global,
+        site_tab: None,
+    },
+    RouteMeta {
         key: "security",
         route: "/security",
         label: "Security",

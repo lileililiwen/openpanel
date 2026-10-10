@@ -144,7 +144,7 @@ pub fn render_host_list(hosts: &[HostView]) -> Markup {
                                     }
                                 }
                                 td class="actions" {
-                                    a class="btn" href=(format!("/hosts/{}/terminal", host.id)) {
+                                    a class="btn" href="/terminal" {
                                         "Terminal"
                                     }
                                 }
