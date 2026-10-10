@@ -60,12 +60,25 @@ pub enum FileAction {
     Move,
     /// Archive (tar) for download.
     Archive,
+    /// Clipboard copy (non-destructive).
+    Copy,
+    /// Clipboard cut (destructive: source removed on paste).
+    Cut,
+    /// Clipboard paste (destructive: may overwrite at destination).
+    Paste,
+    /// Compress a selection into an archive.
+    Compress,
+    /// Extract an archive inside the chroot.
+    Extract,
 }
 
 impl FileAction {
     /// Whether the action is destructive and requires explicit confirmation.
     pub fn is_destructive(self) -> bool {
-        matches!(self, FileAction::Delete)
+        matches!(
+            self,
+            FileAction::Delete | FileAction::Cut | FileAction::Paste
+        )
     }
 
     /// Whether the action is recoverable where the backend supports a recycle
@@ -82,6 +95,11 @@ impl FileAction {
             FileAction::Chmod => "Change permissions",
             FileAction::Move => "Move",
             FileAction::Archive => "Archive",
+            FileAction::Copy => "Copy",
+            FileAction::Cut => "Cut",
+            FileAction::Paste => "Paste",
+            FileAction::Compress => "Compress",
+            FileAction::Extract => "Extract",
         }
     }
 }
@@ -132,6 +150,84 @@ pub fn validate_file_action(
         recoverable: action.is_recoverable(),
         requires_confirmation: action.is_destructive(),
     })
+}
+
+/// Validate a clipboard paste/copy/cut against the clipboard size.
+///
+/// An empty clipboard is rejected with the same safe reason as an empty
+/// selection; destructive clipboard actions (cut/paste) without
+/// confirmation are rejected so the UI shows the confirmation layer.
+pub fn clipboard_preview(
+    clipboard_count: usize,
+    action: FileAction,
+    confirmed: bool,
+) -> Result<ActionPreview, ActionRejection> {
+    if clipboard_count == 0 {
+        return Err(ActionRejection {
+            reason: "No files selected",
+        });
+    }
+    validate_file_action(
+        FileSelection {
+            count: clipboard_count,
+            any_directory: false,
+        },
+        action,
+        confirmed,
+    )
+}
+
+/// Validate a compress/extract archive action: the capacity verdict gates
+/// execution before any mutation, then the selection preview applies.
+///
+/// Over-capacity requests are rejected with the actionable capacity
+/// reason instead of failing mid-flight.
+pub fn archive_preview(
+    selection: FileSelection,
+    action: FileAction,
+    estimated_bytes: u64,
+    free_bytes: u64,
+    confirmed: bool,
+) -> Result<ActionPreview, ActionRejection> {
+    if let CapacityVerdict::Blocked { reason, .. } =
+        evaluate_backup_capacity(estimated_bytes, free_bytes)
+    {
+        return Err(ActionRejection { reason });
+    }
+    validate_file_action(selection, action, confirmed)
+}
+
+/// Validate a recycle-bin delete: destructive and recoverable, so
+/// confirmation is required and the preview carries recoverability.
+pub fn recycle_preview(
+    count: usize,
+    confirmed: bool,
+) -> Result<ActionPreview, ActionRejection> {
+    validate_file_action(
+        FileSelection {
+            count,
+            any_directory: false,
+        },
+        FileAction::Delete,
+        confirmed,
+    )
+}
+
+/// Validate a history-version restore. Restores reuse the rename
+/// preview shape (scoped, non-recoverable) so the confirmation and
+/// audit expectations stay consistent.
+pub fn history_restore_preview(
+    count: usize,
+    confirmed: bool,
+) -> Result<ActionPreview, ActionRejection> {
+    validate_file_action(
+        FileSelection {
+            count,
+            any_directory: false,
+        },
+        FileAction::Rename,
+        confirmed,
+    )
 }
 
 /// Outcome of a backup capacity check.
@@ -857,5 +953,84 @@ mod row_action_tests {
                 }
             }
         }
+    }
+}
+
+/// Baota-parity file affordances: clipboard (copy/cut/paste), compress/
+/// extract, recycle/restore, history-restore, and the capacity-gated
+/// archive header. All previews validate through `validate_file_action`
+/// so scope, recoverability, and confirmation stay consistent.
+#[cfg(test)]
+mod parity_tests {
+    use super::*;
+
+    #[test]
+    fn archive_preview_returns_scope_and_progress_banner() {
+        let selection = FileSelection {
+            count: 2,
+            any_directory: false,
+        };
+        let preview =
+            archive_preview(selection, FileAction::Compress, 500, 1_000, false)
+                .expect("compress fits");
+        assert_eq!(preview.scope_count, 2, "scope: {preview:?}");
+        let running = TaskState::Running(42).banner().into_string();
+        assert!(running.contains("42%"), "percent: {running}");
+        assert!(running.contains("role=\"status\""), "status role: {running}");
+        let extract = archive_preview(selection, FileAction::Extract, 500, 1_000, false)
+            .expect("extract fits");
+        assert_eq!(extract.scope_count, 2, "extract scope: {extract:?}");
+    }
+
+    #[test]
+    fn archive_preview_blocks_over_capacity_with_message() {
+        let selection = FileSelection {
+            count: 2,
+            any_directory: false,
+        };
+        let err =
+            archive_preview(selection, FileAction::Compress, 2_000, 1_000, false)
+                .expect_err("over capacity blocked");
+        assert!(
+            err.reason.contains("capacity") || err.reason.contains("exceeds"),
+            "capacity reason: {}",
+            err.reason
+        );
+        let verdict = evaluate_backup_capacity(2_000, 1_000);
+        let banner = capacity_banner(&verdict).into_string();
+        assert!(banner.contains("Not enough space"), "blocked: {banner}");
+        assert!(banner.contains("need"), "need vs have: {banner}");
+    }
+
+    #[test]
+    fn clipboard_preview_empty_rejected_and_paste_needs_confirm() {
+        let empty =
+            clipboard_preview(0, FileAction::Paste, false).expect_err("empty rejected");
+        assert_eq!(empty.reason, "No files selected", "reason: {}", empty.reason);
+        let unconfirmed =
+            clipboard_preview(2, FileAction::Paste, false).expect_err("paste needs confirm");
+        assert!(
+            unconfirmed.reason.contains("Confirmation"),
+            "confirm reason: {}",
+            unconfirmed.reason
+        );
+        let ok = clipboard_preview(2, FileAction::Copy, false).expect("copy allowed");
+        assert_eq!(ok.scope_count, 2, "scope: {ok:?}");
+        assert!(!ok.requires_confirmation, "copy needs no confirm: {ok:?}");
+    }
+
+    #[test]
+    fn recycle_preview_requires_confirm_and_is_recoverable() {
+        let unconfirmed = recycle_preview(1, false).expect_err("confirm required");
+        assert!(
+            unconfirmed.reason.contains("Confirmation"),
+            "reason: {}",
+            unconfirmed.reason
+        );
+        let ok = recycle_preview(1, true).expect("confirmed");
+        assert!(ok.recoverable, "delete recoverable: {ok:?}");
+        assert!(ok.requires_confirmation, "delete needs confirm: {ok:?}");
+        let history = history_restore_preview(1, true).expect("history restore");
+        assert_eq!(history.scope_count, 1, "scope: {history:?}");
     }
 }

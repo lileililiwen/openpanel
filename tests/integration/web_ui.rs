@@ -2401,3 +2401,211 @@ async fn web_settings_security_page_lists_enrolls_and_revokes_factors() {
     let body = page.text().await.unwrap();
     assert!(body.contains("revoked"), "factor should show as revoked");
 }
+
+// =====================================================================
+// File-manager Baota parity (`refine-files-with-baota-affordances`)
+// =====================================================================
+
+/// Parity surface renders header, breadcrumb, toolbar, and remarks
+/// column with a CSRF token; unauthenticated access redirects to login.
+#[tokio::test]
+async fn files_parity_renders() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let admin = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list")
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .expect("admin");
+    let doc_root = server.sandbox_path("web-files-parity");
+    let site = server
+        .sites()
+        .create_site(
+            &admin,
+            admin.id(),
+            "parity-files.example",
+            vec![],
+            false,
+            None,
+            Some(doc_root),
+        )
+        .await
+        .expect("create site");
+
+    // Unauthenticated access redirects to /login.
+    let anon = server
+        .client()
+        .get(format!(
+            "{}/sites/{}/files",
+            server.base_url(),
+            site.id()
+        ))
+        .send()
+        .await
+        .expect("anon GET files");
+    assert_eq!(anon.status(), 302);
+    assert_eq!(
+        anon.headers()
+            .get(reqwest::header::LOCATION)
+            .and_then(|v| v.to_str().ok()),
+        Some("/login")
+    );
+
+    let body = authed_get(&server, &cookie, &format!("/sites/{}/files", site.id())).await;
+    assert!(body.contains("free") || body.contains("fits"), "header: {body}");
+    assert!(body.contains("breadcrumbs") || body.contains("root"), "breadcrumb: {body}");
+    assert!(body.contains("Copy") && body.contains("Cut") && body.contains("Paste"), "toolbar: {body}");
+    assert!(body.contains("Remarks") || body.contains("remark"), "remarks: {body}");
+    assert!(body.contains("name=\"_csrf\""), "csrf: {body}");
+    assert!(body.contains("/terminal"), "terminal hint: {body}");
+}
+
+/// Parity mutations require CSRF + permission; traversal is rejected
+/// with `PathOutsideChroot` and no syscall effect.
+#[tokio::test]
+async fn files_parity_gated() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let admin = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list")
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .expect("admin");
+    let doc_root = server.sandbox_path("web-files-parity-gated");
+    let site = server
+        .sites()
+        .create_site(
+            &admin,
+            admin.id(),
+            "parity-gated.example",
+            vec![],
+            false,
+            None,
+            Some(doc_root),
+        )
+        .await
+        .expect("create site");
+    let csrf = csrf_token_from_html(
+        &authed_get(&server, &cookie, &format!("/sites/{}/files", site.id())).await,
+    );
+
+    // Bad CSRF is 403 on every parity mutation.
+    for (route, fields) in [
+        (
+            "copy",
+            vec![("from", "a.txt"), ("to", "b.txt"), ("confirmed", "true")],
+        ),
+        ("compress", vec![("path", ""), ("name", "a.zip")]),
+        ("extract", vec![("path", "a.zip")]),
+        ("remarks", vec![("path", "a.txt"), ("remark", "note")]),
+        (
+            "permission",
+            vec![("path", "a.txt"), ("mode", "644")],
+        ),
+    ] {
+        let mut form: Vec<(&str, &str)> = vec![("_csrf", "not-the-token")];
+        form.extend(fields.iter().copied());
+        let resp = server
+            .client()
+            .post(format!(
+                "{}/sites/{}/files/{route}",
+                server.base_url(),
+                site.id()
+            ))
+            .header(reqwest::header::COOKIE, &cookie)
+            .form(&form)
+            .send()
+            .await
+            .expect("bad csrf POST");
+        assert_eq!(resp.status(), 403, "bad csrf on {route}");
+    }
+
+    // Traversal attempts surface PathOutsideChroot with no effect.
+    let traversal = server
+        .client()
+        .post(format!(
+            "{}/sites/{}/files/copy",
+            server.base_url(),
+            site.id()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .form(&[
+            ("_csrf", csrf.as_str()),
+            ("from", "../escape.txt"),
+            ("to", "b.txt"),
+            ("confirmed", "true"),
+        ])
+        .send()
+        .await
+        .expect("traversal POST");
+    assert_eq!(traversal.status(), 400, "traversal status");
+    let text = traversal.text().await.expect("traversal body");
+    assert!(
+        text.contains("PathOutsideChroot"),
+        "chroot verdict: {text}"
+    );
+    let listing = authed_get(&server, &cookie, &format!("/sites/{}/files", site.id())).await;
+    assert!(!listing.contains("escape.txt"), "no effect: {listing}");
+}
+
+/// Terminal-here anchors at the sibling `/terminal` route with a
+/// site-cwd hint; this change mounts no new transport endpoint.
+#[tokio::test]
+async fn files_terminal_hint_link() {
+    let server = TestServer::new().await;
+    server
+        .bootstrap_owner("admin", "correct horse battery staple")
+        .await;
+    let cookie = login(&server, "admin", "correct horse battery staple").await;
+    let admin = server
+        .identity()
+        .list_users()
+        .await
+        .expect("list")
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .expect("admin");
+    let doc_root = server.sandbox_path("web-files-terminal-hint");
+    let site = server
+        .sites()
+        .create_site(
+            &admin,
+            admin.id(),
+            "terminal-hint.example",
+            vec![],
+            false,
+            None,
+            Some(doc_root),
+        )
+        .await
+        .expect("create site");
+    let body = authed_get(&server, &cookie, &format!("/sites/{}/files", site.id())).await;
+    let site_marker = site.id().to_string();
+    assert!(body.contains("/terminal"), "terminal route: {body}");
+    assert!(body.contains(&site_marker), "site hint: {body}");
+    // No transport endpoint is mounted by the files change.
+    let missing = server
+        .client()
+        .get(format!(
+            "{}/sites/{}/files/terminal-transport",
+            server.base_url(),
+            site.id()
+        ))
+        .header(reqwest::header::COOKIE, &cookie)
+        .send()
+        .await
+        .expect("missing transport");
+    assert_eq!(missing.status(), 404, "no transport endpoint");
+}
