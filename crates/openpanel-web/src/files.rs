@@ -518,7 +518,7 @@ pub fn validate_octal_mode(mode: &str) -> Result<u32, String> {
     if trimmed.is_empty() || trimmed.len() > 4 {
         return Err("mode must be octal".into());
     }
-    if !trimmed.bytes().all(|b| b >= b'0' && b <= b'7') {
+    if !trimmed.bytes().all(|b| (b'0'..=b'7').contains(&b)) {
         return Err("mode must be octal".into());
     }
     let digits = trimmed.trim_start_matches('0');
@@ -544,9 +544,10 @@ pub struct HistoryVersion {
 /// destination free space, with blocked-capacity rendering the
 /// actionable message.
 pub fn listing_header(estimated_bytes: u64, free_bytes: u64) -> Markup {
-    crate::ops_workflows::capacity_banner(
-        &crate::ops_workflows::evaluate_backup_capacity(estimated_bytes, free_bytes),
-    )
+    crate::ops_workflows::capacity_banner(&crate::ops_workflows::evaluate_backup_capacity(
+        estimated_bytes,
+        free_bytes,
+    ))
 }
 
 /// Render the full segmented breadcrumb (site root through every
@@ -561,12 +562,7 @@ pub fn breadcrumb_full(site_id: Uuid, current: &str) -> Markup {
 /// selection with keyboard shortcuts (Ctrl/Cmd+C, X, V). An empty
 /// clipboard renders the safe rejection reason; a filled clipboard
 /// renders the scoped entries plus the confirmation-gated paste form.
-pub fn clipboard_view(
-    site_id: Uuid,
-    current: &str,
-    clipboard: &[String],
-    csrf: &str,
-) -> Markup {
+pub fn clipboard_view(site_id: Uuid, current: &str, clipboard: &[String], csrf: &str) -> Markup {
     html! {
         section id="files-clipboard" {
             h2 { "Clipboard" }
@@ -737,12 +733,7 @@ pub fn permission_view(
 
 /// Render the per-file history panel: versions (mtime/size/author)
 /// with a restore action. List views never leak file contents.
-pub fn history_view(
-    site_id: Uuid,
-    path: &str,
-    versions: &[HistoryVersion],
-    csrf: &str,
-) -> Markup {
+pub fn history_view(site_id: Uuid, path: &str, versions: &[HistoryVersion], csrf: &str) -> Markup {
     html! {
         section id="files-history" {
             h2 { "History" }
@@ -974,13 +965,22 @@ pub async fn copy(
         )
         .await;
     }
-    let from = FsPath::new(&form.from).expect("invariant: from checked above");
-    let to = FsPath::new(&form.to).expect("invariant: to checked above");
+    let (from, to) = match (FsPath::new(&form.from), FsPath::new(&form.to)) {
+        (Ok(from), Ok(to)) => (from, to),
+        _ => return (StatusCode::BAD_REQUEST, "PathOutsideChroot").into_response(),
+    };
     let bytes = match state.files.read_file(&user, site_id, &from).await {
         Ok((bytes, _)) => bytes,
         Err(e) => {
-            return action_response(&state, &user, site_id, "", &csrf, Err::<(), String>(e.to_string()))
-                .await;
+            return action_response(
+                &state,
+                &user,
+                site_id,
+                "",
+                &csrf,
+                Err::<(), String>(e.to_string()),
+            )
+            .await;
         }
     };
     let result = state
@@ -993,7 +993,7 @@ pub async fn copy(
 
 /// `POST /sites/{site_id}/files/compress` — capacity-gated archive
 /// action rendering the `TaskState` lifecycle banner.
-pub async fn compress(
+pub async fn compress_archive(
     State(state): State<WebState>,
     WebUser(_user, session): WebUser,
     AxPath(site_id): AxPath<Uuid>,
@@ -1002,7 +1002,8 @@ pub async fn compress(
     if !state.csrf.verify(session.id(), &form._csrf) {
         return StatusCode::FORBIDDEN.into_response();
     }
-    if FsPath::new(&form.path).is_err() || (!form.name.is_empty() && FsPath::new(&form.name).is_err())
+    if FsPath::new(&form.path).is_err()
+        || (!form.name.is_empty() && FsPath::new(&form.name).is_err())
     {
         return (StatusCode::BAD_REQUEST, "PathOutsideChroot").into_response();
     }
@@ -1020,7 +1021,10 @@ pub async fn compress(
     match preview {
         Ok(_) => {
             let banner = crate::ops_workflows::TaskState::Success.banner();
-            (StatusCode::OK, html! { (banner) (clipboard_view(site_id, &form.path, &[], &csrf)) })
+            (
+                StatusCode::OK,
+                html! { (banner) (clipboard_view(site_id, &form.path, &[], &csrf)) },
+            )
                 .into_response()
         }
         Err(rejection) => (StatusCode::OK, error_region(rejection.reason)).into_response(),
@@ -1055,7 +1059,10 @@ pub async fn extract(
     match preview {
         Ok(_) => {
             let banner = crate::ops_workflows::TaskState::Success.banner();
-            (StatusCode::OK, html! { (banner) (clipboard_view(site_id, "", &[], &csrf)) })
+            (
+                StatusCode::OK,
+                html! { (banner) (clipboard_view(site_id, "", &[], &csrf)) },
+            )
                 .into_response()
         }
         Err(rejection) => (StatusCode::OK, error_region(rejection.reason)).into_response(),
@@ -1111,7 +1118,10 @@ pub async fn permission_save(
                 .into_response();
         }
     };
-    let path = FsPath::new(&form.path).expect("invariant: path checked above");
+    let path = match FsPath::new(&form.path) {
+        Ok(path) => path,
+        Err(_) => return (StatusCode::BAD_REQUEST, "PathOutsideChroot").into_response(),
+    };
     let result = state
         .files
         .chmod(&user, site_id, &path, mode)
@@ -1746,8 +1756,7 @@ mod parity_tests {
         assert!(validate_octal_mode("644").is_ok(), "644 ok");
         assert!(validate_octal_mode("999").is_err(), "999 rejected");
         let err_out =
-            permission_view(site, "a.txt", "999", Some("mode must be octal"), "tok")
-                .into_string();
+            permission_view(site, "a.txt", "999", Some("mode must be octal"), "tok").into_string();
         assert!(err_out.contains("form-error"), "inline error: {err_out}");
         assert!(err_out.contains("role=\"alert\""), "alert: {err_out}");
     }

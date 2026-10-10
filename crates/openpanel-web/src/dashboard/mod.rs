@@ -30,10 +30,10 @@ use crate::ui_states::{EmptyState, ErrorState};
 
 mod widgets;
 pub use widgets::{
-    QuotaSummary, SecurityRiskCard, SoftwareShortcut, TrafficSummary, count_ftp_accounts,
-    dashboard_links, panel_shortcuts_for, panel_shortcuts_section, quota_section,
+    NetworkTotals, QuotaSummary, SecurityRiskCard, SoftwareShortcut, count_ftp_accounts,
+    dashboard_links, network_totals, panel_shortcuts_for, panel_shortcuts_section, quota_section,
     quota_summary_from, security_risk_card, security_risk_section, software_section,
-    software_shortcuts, traffic_summary,
+    software_shortcuts,
 };
 
 /// How long before a collected snapshot is considered stale.
@@ -226,8 +226,8 @@ pub struct DashboardModel {
     pub software: Vec<SoftwareShortcut>,
     /// Set when the software catalog could not be searched.
     pub software_error: Option<String>,
-    /// Traffic totals over the network rows.
-    pub traffic: TrafficSummary,
+    /// Network totals over the interface rows.
+    pub traffic: NetworkTotals,
     /// Panel Update/Fix/Restart deep-links (owner-only).
     pub panel_shortcuts: Vec<QuickAction>,
     /// Caller-scoped quota summary.
@@ -437,9 +437,9 @@ pub fn disk_section(mounts: &[DiskMountWidget]) -> Markup {
 }
 
 /// Per-interface network throughput rows plus a totals summary row.
-/// Totals come from [`traffic_summary`] over the same rows.
+/// Totals come from [`network_totals`] over the same rows.
 pub fn network_section(interfaces: &[NetworkWidget]) -> Markup {
-    let total = traffic_summary(interfaces);
+    let total = network_totals(interfaces);
     html! {
         section id="network-throughput" class="network-throughput" {
             h2 { "Network" }
@@ -663,7 +663,7 @@ pub async fn build_dashboard(
         .await
         .unwrap_or_default();
 
-    let traffic = traffic_summary(&network);
+    let traffic = network_totals(&network);
     DashboardModel {
         server_name: server_name(state),
         os: std::env::consts::OS.to_string(),

@@ -58,7 +58,7 @@ pub fn preset_to_cron_input(
 ) -> Result<CronInput, PresetError> {
     let preset = CronPresetType::parse(&request.preset)?;
     let cycle = CyclePicker::parse(&request.cycle, request.cycle_n)?;
-    let schedule = cycle.compile()?;
+    let schedule = cycle.compile_expression()?;
     if preset.is_http() {
         if request.url.is_empty()
             || !(request.url.starts_with("http://") || request.url.starts_with("https://"))

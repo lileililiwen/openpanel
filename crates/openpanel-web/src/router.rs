@@ -674,7 +674,10 @@ pub fn router(
         )
         .route("/sites/{site_id}/files/shares", get(files::shares_page))
         .route("/sites/{site_id}/files/copy", post(files::copy))
-        .route("/sites/{site_id}/files/compress", post(files::compress))
+        .route(
+            "/sites/{site_id}/files/compress",
+            post(files::compress_archive),
+        )
         .route("/sites/{site_id}/files/extract", post(files::extract))
         .route("/sites/{site_id}/files/remarks", post(files::save_remark))
         .route(

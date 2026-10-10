@@ -222,7 +222,7 @@ impl CyclePicker {
     }
 
     /// Compile to the stored five-field cron expression.
-    pub fn compile(self) -> Result<String, PresetError> {
+    pub fn compile_expression(self) -> Result<String, PresetError> {
         let expression = match self {
             Self::Daily => "0 2 * * *".to_string(),
             Self::EveryNDays(n) => format!("0 2 */{n} * *"),
@@ -624,7 +624,10 @@ mod tests {
     #[test]
     fn test_cycle_compile_daily() {
         assert_eq!(
-            CyclePicker::parse("daily", 0).unwrap().compile().unwrap(),
+            CyclePicker::parse("daily", 0)
+                .unwrap()
+                .compile_expression()
+                .unwrap(),
             "0 2 * * *"
         );
     }
@@ -632,7 +635,10 @@ mod tests {
     #[test]
     fn test_cycle_compile_n_days() {
         assert_eq!(
-            CyclePicker::parse("n-days", 3).unwrap().compile().unwrap(),
+            CyclePicker::parse("n-days", 3)
+                .unwrap()
+                .compile_expression()
+                .unwrap(),
             "0 2 */3 * *"
         );
     }
@@ -640,7 +646,10 @@ mod tests {
     #[test]
     fn test_cycle_compile_hourly() {
         assert_eq!(
-            CyclePicker::parse("hourly", 0).unwrap().compile().unwrap(),
+            CyclePicker::parse("hourly", 0)
+                .unwrap()
+                .compile_expression()
+                .unwrap(),
             "0 * * * *"
         );
     }
@@ -648,7 +657,10 @@ mod tests {
     #[test]
     fn test_cycle_compile_n_hours() {
         assert_eq!(
-            CyclePicker::parse("n-hours", 6).unwrap().compile().unwrap(),
+            CyclePicker::parse("n-hours", 6)
+                .unwrap()
+                .compile_expression()
+                .unwrap(),
             "0 */6 * * *"
         );
     }
@@ -658,7 +670,7 @@ mod tests {
         assert_eq!(
             CyclePicker::parse("n-minutes", 15)
                 .unwrap()
-                .compile()
+                .compile_expression()
                 .unwrap(),
             "*/15 * * * *"
         );
@@ -667,7 +679,10 @@ mod tests {
     #[test]
     fn test_cycle_compile_weekly() {
         assert_eq!(
-            CyclePicker::parse("weekly", 0).unwrap().compile().unwrap(),
+            CyclePicker::parse("weekly", 0)
+                .unwrap()
+                .compile_expression()
+                .unwrap(),
             "0 2 * * 1"
         );
     }
@@ -675,7 +690,10 @@ mod tests {
     #[test]
     fn test_cycle_compile_monthly() {
         assert_eq!(
-            CyclePicker::parse("monthly", 0).unwrap().compile().unwrap(),
+            CyclePicker::parse("monthly", 0)
+                .unwrap()
+                .compile_expression()
+                .unwrap(),
             "0 2 1 * *"
         );
     }
@@ -685,7 +703,7 @@ mod tests {
         assert_eq!(
             CyclePicker::parse("n-seconds", 30)
                 .unwrap()
-                .compile()
+                .compile_expression()
                 .unwrap(),
             "* * * * *"
         );
@@ -824,7 +842,7 @@ mod tests {
                 6 => CyclePicker::Monthly,
                 _ => CyclePicker::EveryNSeconds((n % 59) + 1),
             };
-            let expression = picker.compile().unwrap();
+            let expression = picker.compile_expression().unwrap();
             prop_assert!(super::super::CronSchedule::parse(expression, "UTC").is_ok());
         }
     }

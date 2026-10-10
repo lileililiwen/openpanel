@@ -5,13 +5,13 @@ use openpanel_core::{AuditAction, AuditEvent, AuditOutcome};
 use openpanel_domain::{DiskReading, SystemSnapshot};
 
 use crate::dashboard::{
-    AlertView, AttentionItem, DashboardModel, DiskMountWidget, NetworkWidget, QuotaSummary,
-    ResourceCounts, ResourceStatus, SecurityRiskCard, Severity, TrafficSummary, alert_from_event,
+    AlertView, AttentionItem, DashboardModel, DiskMountWidget, NetworkTotals, NetworkWidget,
+    QuotaSummary, ResourceCounts, ResourceStatus, SecurityRiskCard, Severity, alert_from_event,
     alerts_section, attention_section, cards_section, count_ftp_accounts, dashboard_content,
     dashboard_links, disk_section, gauges_from_snapshot, gauges_region, header_section, is_stale,
-    network_section, panel_shortcuts_for, quick_actions_for, quota_section, quota_summary_from,
-    security_risk_card, security_risk_section, software_section, software_shortcuts,
-    status_for_percent, traffic_summary,
+    network_section, network_totals, panel_shortcuts_for, quick_actions_for, quota_section,
+    quota_summary_from, security_risk_card, security_risk_section, software_section,
+    software_shortcuts, status_for_percent,
 };
 
 fn snapshot() -> SystemSnapshot {
@@ -66,7 +66,7 @@ fn model_with(error: Option<String>, stale: bool) -> DashboardModel {
         },
         software: vec![],
         software_error: None,
-        traffic: TrafficSummary {
+        traffic: NetworkTotals {
             total_rx: 0,
             total_tx: 0,
             interfaces: 0,
@@ -400,7 +400,7 @@ fn software_shortcuts_filter_by_display_toggle() {
 }
 
 #[test]
-fn traffic_summary_aggregates_network_rows() {
+fn network_totals_aggregate_interface_rows() {
     let net = vec![
         NetworkWidget {
             interface: "eth0".into(),
@@ -413,11 +413,11 @@ fn traffic_summary_aggregates_network_rows() {
             tx: 500,
         },
     ];
-    let summary = traffic_summary(&net);
+    let summary = network_totals(&net);
     assert_eq!(summary.total_rx, 1500);
     assert_eq!(summary.total_tx, 2500);
     assert_eq!(summary.interfaces, 2);
-    let empty = traffic_summary(&[]);
+    let empty = network_totals(&[]);
     assert_eq!(
         (empty.total_rx, empty.total_tx, empty.interfaces),
         (0, 0, 0)

@@ -31,9 +31,9 @@ pub struct SoftwareShortcut {
     pub name: String,
 }
 
-/// Traffic totals aggregating the per-interface network rows.
+/// Network totals aggregating the per-interface rows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct TrafficSummary {
+pub struct NetworkTotals {
     /// Sum of inbound bytes/sec.
     pub total_rx: u64,
     /// Sum of outbound bytes/sec.
@@ -145,10 +145,10 @@ pub fn software_shortcuts(
         .collect()
 }
 
-/// Aggregate per-interface network rows into traffic totals (no new
+/// Aggregate per-interface network rows into totals (no new
 /// monitoring collection; saturating sums over existing rows).
-pub fn traffic_summary(network: &[NetworkWidget]) -> TrafficSummary {
-    TrafficSummary {
+pub fn network_totals(network: &[NetworkWidget]) -> NetworkTotals {
+    NetworkTotals {
         total_rx: network.iter().map(|n| n.rx).fold(0u64, u64::saturating_add),
         total_tx: network.iter().map(|n| n.tx).fold(0u64, u64::saturating_add),
         interfaces: network.len(),
