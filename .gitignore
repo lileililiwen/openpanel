@@ -43,3 +43,7 @@ crates/openpanel-app/target/
 package-lock.json
 .zvec-grep/
 .ariadex/
+
+# Local tooling artifacts (machine-generated, never committed)
+*.bak-profile
+forge.yaml
