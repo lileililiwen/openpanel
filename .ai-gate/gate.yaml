@@ -34,6 +34,7 @@ checks:
   test_gates: true
   driftwatch_gate: true
   declared-verification: true
+  governance-quality: true
 blocking:
   # FAIL = the command exited non-zero within its 60 s budget: a
   # machine-decided violation that blocks archive. Timeout / signal /
@@ -78,7 +79,12 @@ commands:
   maturity: "scripts/check-maturity.sh"
   test_gates: "scripts/test-gates.sh"
   driftwatch_gate: "scripts/check-driftwatch-gate.sh"
-  # Generated from .project.json verification.command by workspace-governance/scripts/bind_verification_command.py.
-  # A verifier that no gate runs does not gate (ruling D18). Re-run the
-  # generator to update it; do not hand-edit.
-  declared-verification: 'cargo test --workspace'
+  # Bound via the repo-owned script (workspace-governance binder rule:
+  # a repository's own scripts/check-<concern>.* wins over the default).
+  # The script asserts .project.json's declared verifier stays covered by
+  # `make test`; driftwatchdog runs the raw `cargo test --workspace`.
+  declared-verification: 'scripts/check-declared-verification.sh'
+  # Bound via the repo-owned script (binder rule as above). The script runs
+  # the workspace checker when a workspace-governance checkout is present
+  # and skips audibly otherwise; driftwatchdog runs this same script.
+  governance-quality: 'scripts/check-governance-quality.sh'

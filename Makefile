@@ -41,14 +41,15 @@
 #   → spec-test-drift --strict → spec-drift → agent-governance
 #   → governance-contract → coverage-floor → maturity
 #   → test-gates → driftwatch-gate
+#   → declared-verification → governance-quality
 #   → test
 #
 # Every per-check script prints `step: <name> status: ok | failed` and
 # exits non-zero on failure; `make` short-circuits on the first one.
 
-.PHONY: check fmt clippy docs audit file-length test coverage coverage-floor maturity install-lint-tools ensure-lint-tools split a11y scan-literal class-coverage browser-ui-quality release-governance release-evidence portable-runtime deployment-adapters application-delivery host-migration-interoperability tasks-testing-first reuse layering spec-test-drift spec-drift repo-map test-gates agent-governance governance-contract gate driftwatch-gate
+.PHONY: check fmt clippy docs audit file-length test coverage coverage-floor maturity install-lint-tools ensure-lint-tools split a11y scan-literal class-coverage browser-ui-quality release-governance release-evidence portable-runtime deployment-adapters application-delivery host-migration-interoperability tasks-testing-first reuse layering spec-test-drift spec-drift repo-map test-gates agent-governance governance-contract gate driftwatch-gate declared-verification governance-quality
 
-check: ensure-lint-tools fmt clippy docs audit file-length scan-literal class-coverage browser-ui-quality release-governance release-evidence portable-runtime deployment-adapters application-delivery host-migration-interoperability tasks-testing-first reuse-strict layering spec-test-drift-strict spec-drift agent-governance governance-contract coverage-floor maturity test-gates driftwatch-gate test
+check: ensure-lint-tools fmt clippy docs audit file-length scan-literal class-coverage browser-ui-quality release-governance release-evidence portable-runtime deployment-adapters application-delivery host-migration-interoperability tasks-testing-first reuse-strict layering spec-test-drift-strict spec-drift agent-governance governance-contract coverage-floor maturity test-gates driftwatch-gate declared-verification governance-quality test
 	@echo ""
 	@echo "=== All quality checks passed ==="
 
@@ -145,6 +146,12 @@ test-gates:
 
 driftwatch-gate:
 	@scripts/check-driftwatch-gate.sh
+
+declared-verification:
+	@scripts/check-declared-verification.sh
+
+governance-quality:
+	@scripts/check-governance-quality.sh
 
 agent-governance:
 	@scripts/check-agent-governance.sh

@@ -83,7 +83,15 @@ if not m:
     sys.exit(1)
 steps = [s for s in m.group(1).split() if s not in ("ensure-lint-tools",)]
 
-ALIASES = {"fmt": "format", "clippy": "lint", "test": "tests"}
+ALIASES = {"fmt": "format", "clippy": "lint", "test": "tests",
+           # Hyphenated checks whose `commands:` keys MUST stay hyphenated:
+           # driftwatchdog matches commands to checks by exact name, so
+           # renaming them to underscores would silently unschedule the
+           # checks in the canonical gate (verified: `governance-quality`
+           # lands in "explicitly not scheduled"). The make targets use
+           # the same hyphenated names, hence these identity mappings.
+           "declared-verification": "declared-verification",
+           "governance-quality": "governance-quality"}
 def key(step: str) -> str:
     return ALIASES.get(step, step.replace("-", "_"))
 
