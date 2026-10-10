@@ -107,6 +107,16 @@ pub const REGISTRY: &[RouteMeta] = &[
         site_tab: None,
     },
     RouteMeta {
+        key: "ftp-global",
+        route: "/ftp",
+        label: "FTP",
+        icon: "folder",
+        capability: "ftp",
+        min_role: Role::User,
+        scope: RouteScope::Global,
+        site_tab: None,
+    },
+    RouteMeta {
         key: "mail",
         route: "/mail",
         label: "Mail",

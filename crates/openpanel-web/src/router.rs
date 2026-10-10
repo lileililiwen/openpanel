@@ -400,6 +400,7 @@ pub fn router(
             "/sites/{id}/ftp",
             get(crate::ftp::page).post(crate::ftp::create),
         )
+        .route("/ftp", get(crate::ftp::global_page))
         .route(
             "/sites/{site_id}/ftp/{account_id}/{action}",
             post(crate::ftp::action),
@@ -664,12 +665,28 @@ pub fn router(
         .route("/sites/{site_id}/files/upload", post(files::upload))
         .route("/databases", get(databases::list).post(databases::create))
         .route("/databases/new", get(databases::new_form))
+        .route("/databases/sync", get(databases::sync_page))
+        .route("/databases/adopt", post(databases::adopt))
         .route(
             "/databases/{id}",
             get(databases::detail).delete(databases::delete),
         )
         .route("/databases/{id}/password", post(databases::change_password))
         .route("/databases/{id}/reveal", post(databases::reveal))
+        .route(
+            "/databases/{id}/import",
+            get(databases::import_form).post(databases::import_upload),
+        )
+        .route(
+            "/databases/{id}/permission",
+            get(databases::permission_form).post(databases::permission_update),
+        )
+        .route(
+            "/databases/{id}/tools",
+            get(databases::tools_panel).post(databases::tools_run),
+        )
+        .route("/databases/{id}/quota", post(databases::quota_update))
+        .route("/databases/{id}/admin", get(databases::admin_panel))
         .route("/databases/{id}/pitr", get(crate::db_pitr::page))
         .route("/sites/{id}/staging", get(crate::site_staging::page))
         .route("/sites/{id}/previews", get(previews::site_previews))

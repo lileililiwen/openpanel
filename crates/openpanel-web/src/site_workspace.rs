@@ -351,12 +351,14 @@ mod tests {
                 TabId::Staging,
                 TabId::Previews,
                 TabId::Cache,
+                TabId::Ftp,
                 TabId::Collaborators,
             ],
             "tab order: {ids:?}"
         );
-        // FTP capability is not shipped, so the tab is omitted.
-        assert!(!ids.contains(&TabId::Ftp), "ftp omitted without capability");
+        // FTP ships globally (`ftp-global` registry entry), so the tab
+        // is present in the shipped set.
+        assert!(ids.contains(&TabId::Ftp), "ftp shipped with capability");
     }
 
     #[test]

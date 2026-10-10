@@ -89,6 +89,13 @@ const WEBSITES: &[NavItem] = &[
         role: RequiredRole::Authenticated,
         icon: "database",
     },
+    NavItem {
+        href: "/ftp",
+        label: "FTP",
+        capability: "ftp",
+        role: RequiredRole::Authenticated,
+        icon: "folder",
+    },
 ];
 
 const MAIL_NETWORK: &[NavItem] = &[

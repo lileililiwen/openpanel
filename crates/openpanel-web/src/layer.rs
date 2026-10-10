@@ -175,6 +175,20 @@ fn confirm_spec(action: &str) -> Option<ConfirmSpec> {
             "This permanently deletes the FTP account.",
             &[],
         ),
+        "run-database-tool" => post(
+            "/databases/{id}/tools",
+            "#db-tools",
+            "Run database tool",
+            "This runs the selected maintenance action on the database.",
+            &["tool"],
+        ),
+        "adopt-database" => post(
+            "/databases/adopt",
+            "#db-adopt",
+            "Adopt database",
+            "This registers panel metadata for the server database. Credentials are never imported.",
+            &["name", "server"],
+        ),
         "delete-record" => navigate(
             "/dns/zones/{zone}/records/{record}/delete",
             "Delete DNS record",
@@ -392,6 +406,8 @@ mod tests {
             "delete-job",
             "delete-ftp-user",
             "delete-record",
+            "run-database-tool",
+            "adopt-database",
         ] {
             assert!(confirm_spec(action).is_some(), "missing spec for {action}");
         }
@@ -409,6 +425,8 @@ mod tests {
             "delete-job",
             "delete-ftp-user",
             "delete-record",
+            "run-database-tool",
+            "adopt-database",
         ] {
             let spec = confirm_spec(action).expect("spec");
             assert!(

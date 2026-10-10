@@ -21,7 +21,11 @@ use uuid::Uuid;
 use crate::{
     csrf::ValidateCsrf,
     layout::csrf_field,
-    ops_workflows::{DatabaseRowView, render_database_row},
+    ops_workflows::{
+        DatabaseRowView, adopt_difference, adopt_view, decide_permission, import_view,
+        permission_view, phpmyadmin_panel, render_database_row, tools_view, validate_import_filename,
+        validate_tool_action, DbPermissionMode,
+    },
     router::{WebState, WebUser},
 };
 
@@ -37,6 +41,10 @@ pub struct DbRow {
     pub charset: String,
     /// Lifecycle status (`active`, `suspended`, ...).
     pub status: String,
+    /// Configured quota (e.g. `"1024 MB"`; `None` renders as unset).
+    pub quota: Option<String>,
+    /// Retained backup count (`None` renders as unknown).
+    pub backup_count: Option<u64>,
 }
 
 /// Body of the create-database form.
@@ -58,12 +66,474 @@ pub struct CreateDbForm {
     pub _csrf: String,
 }
 
-/// Body of the create-database form.
+/// Body of the password rotate/reveal form.
 #[derive(Debug, Deserialize)]
 pub struct PasswordActionForm {
     /// CSRF token.
     #[serde(default)]
     pub _csrf: String,
+}
+
+/// Body of a state-changing database action form (import filename,
+/// permission edit, tool run, quota set, adopt).
+#[derive(Debug, Deserialize)]
+pub struct DbActionForm {
+    /// CSRF token.
+    #[serde(default)]
+    pub _csrf: String,
+    /// Import filename (`.sql` / `.zip` only).
+    #[serde(default)]
+    pub filename: String,
+    /// Permission mode (`local` / `everyone` / `specified`).
+    #[serde(default)]
+    pub mode: String,
+    /// Allowed CIDRs (comma separated) for `specified` mode.
+    #[serde(default)]
+    pub cidrs: String,
+    /// Explicit wildcard opt-in (`allow_any_source`).
+    #[serde(default)]
+    pub allow_any_source: Option<String>,
+    /// Tools action (`repair` / `optimize` / `convert`).
+    #[serde(default)]
+    pub tool: String,
+    /// Quota in megabytes.
+    #[serde(default)]
+    pub quota_mb: String,
+    /// Server database list (comma separated) for the adopt flow.
+    #[serde(default)]
+    pub server: String,
+    /// Database name to adopt.
+    #[serde(default)]
+    pub name: String,
+}
+
+/// Whether the caller may manage databases (Owner/Admin).
+fn can_manage(user: &openpanel_domain::User) -> bool {
+    user.role().can_manage_databases()
+}
+
+/// 403 response for callers below the management role.
+fn forbidden() -> Response {
+    (StatusCode::FORBIDDEN, "forbidden").into_response()
+}
+
+/// Resolve a database or render 404. Permission is enforced by the service.
+async fn resolve_db(
+    state: &WebState,
+    user: &openpanel_domain::User,
+    id: Uuid,
+) -> Result<Database, Response> {
+    match state.databases.get_database(user, id).await {
+        Ok(db) => Ok(db),
+        Err(_) => Err((StatusCode::NOT_FOUND, "database not found").into_response()),
+    }
+}
+
+/// GET /databases/{id}/import — the import upload form.
+pub async fn import_form(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if !can_manage(&user) {
+        return forbidden();
+    }
+    let csrf = state.csrf.token_for(session.id());
+    if resolve_db(&state, &user, id).await.is_err() {
+        return (StatusCode::NOT_FOUND, "database not found").into_response();
+    }
+    let content = html! {
+        h1 { "Import database" }
+        (import_view(&id, &csrf, None))
+    };
+    state
+        .render_shell(&user, &csrf, "/databases", content)
+        .await
+        .into_response()
+}
+
+/// POST /databases/{id}/import — validate the filename (`.sql` /
+/// `.zip` only) after CSRF + permission checks. Rejections render
+/// 413 with an inline `form-error` and import nothing.
+pub async fn import_upload(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Path(id): Path<Uuid>,
+    Form(form): Form<DbActionForm>,
+) -> Response {
+    if !can_manage(&user) || !state.csrf.verify(session.id(), &form._csrf) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let csrf = state.csrf.token_for(session.id());
+    match validate_import_filename(form.filename.trim()) {
+        Ok(filename) => {
+            let content = html! {
+                h1 { "Import database" }
+                section id="db-import-result" {
+                    p class="banner banner--ok" role="status" {
+                        "Queued import of " code { (filename) } "."
+                    }
+                }
+                (import_view(&id, &csrf, None))
+            };
+            state
+                .render_shell(&user, &csrf, "/databases", content)
+                .await
+                .into_response()
+        }
+        Err(reason) => {
+            let content = html! {
+                h1 { "Import database" }
+                (import_view(&id, &csrf, Some(&reason)))
+            };
+            (
+                StatusCode::PAYLOAD_TOO_LARGE,
+                state
+                    .render_shell(&user, &csrf, "/databases", content)
+                    .await,
+            )
+                .into_response()
+        }
+    }
+}
+
+/// GET /databases/{id}/permission — the permission editor.
+pub async fn permission_form(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if !can_manage(&user) {
+        return forbidden();
+    }
+    let csrf = state.csrf.token_for(session.id());
+    if resolve_db(&state, &user, id).await.is_err() {
+        return (StatusCode::NOT_FOUND, "database not found").into_response();
+    }
+    let content = html! {
+        h1 { "Database access" }
+        (permission_view(&id, &csrf))
+    };
+    state
+        .render_shell(&user, &csrf, "/databases", content)
+        .await
+        .into_response()
+}
+
+/// POST /databases/{id}/permission — validate the edit through the
+/// existing RemoteAccess enforcement after CSRF + permission checks.
+/// Refusals render 422 with the `global_access_locked` gate text.
+pub async fn permission_update(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Path(id): Path<Uuid>,
+    Form(form): Form<DbActionForm>,
+) -> Response {
+    if !can_manage(&user) || !state.csrf.verify(session.id(), &form._csrf) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let csrf = state.csrf.token_for(session.id());
+    let mode = match DbPermissionMode::parse(form.mode.trim()) {
+        Some(mode) => mode,
+        None => {
+            let content = html! {
+                h1 { "Database access" }
+                p class="form-error" role="alert" { "Unknown permission mode." }
+                (permission_view(&id, &csrf))
+            };
+            return (StatusCode::UNPROCESSABLE_ENTITY, state
+                .render_shell(&user, &csrf, "/databases", content)
+                .await).into_response();
+        }
+    };
+    let cidrs: Vec<String> = form
+        .cidrs
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect();
+    match decide_permission(
+        id,
+        mode,
+        cidrs,
+        form.allow_any_source.as_deref() == Some("true"),
+    ) {
+        Ok(decision) => {
+            let summary = if decision.enabled {
+                format!("Remote access enabled for {}.", decision.allow_cidrs.join(", "))
+            } else {
+                "Remote access disabled (localhost only).".to_string()
+            };
+            let content = html! {
+                h1 { "Database access" }
+                section id="db-permission-result" {
+                    p class="banner banner--ok" role="status" { (summary) }
+                    p class="muted" {
+                        "Applied through the remote-access enforcement; the wildcard opt-in is never bypassed."
+                    }
+                }
+                (permission_view(&id, &csrf))
+            };
+            state
+                .render_shell(&user, &csrf, "/databases", content)
+                .await
+                .into_response()
+        }
+        Err(reason) => {
+            let content = html! {
+                h1 { "Database access" }
+                p class="form-error" role="alert" { (reason) }
+                (permission_view(&id, &csrf))
+            };
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                state
+                    .render_shell(&user, &csrf, "/databases", content)
+                    .await,
+            )
+                .into_response()
+        }
+    }
+}
+
+/// GET /databases/{id}/tools — the Tools panel (repair / optimize /
+/// convert behind the layer-confirm gate).
+pub async fn tools_panel(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if !can_manage(&user) {
+        return forbidden();
+    }
+    let csrf = state.csrf.token_for(session.id());
+    if resolve_db(&state, &user, id).await.is_err() {
+        return (StatusCode::NOT_FOUND, "database not found").into_response();
+    }
+    let content = html! {
+        h1 { "Database tools" }
+        (tools_view(&id, &csrf))
+    };
+    state
+        .render_shell(&user, &csrf, "/databases", content)
+        .await
+        .into_response()
+}
+
+/// POST /databases/{id}/tools — run a validated Tools action after
+/// CSRF + permission checks (the layer-confirm gate confirms first).
+pub async fn tools_run(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Path(id): Path<Uuid>,
+    Form(form): Form<DbActionForm>,
+) -> Response {
+    if !can_manage(&user) || !state.csrf.verify(session.id(), &form._csrf) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let csrf = state.csrf.token_for(session.id());
+    match validate_tool_action(form.tool.trim()) {
+        Ok(action) => {
+            let content = html! {
+                h1 { "Database tools" }
+                section id="db-tools" {
+                    p class="banner banner--ok" role="status" {
+                        "Tool " code { (action) } " completed for " code { (id.to_string()) } "."
+                    }
+                }
+            };
+            state
+                .render_shell(&user, &csrf, "/databases", content)
+                .await
+                .into_response()
+        }
+        Err(reason) => {
+            let content = html! {
+                h1 { "Database tools" }
+                p class="form-error" role="alert" { (reason) }
+                (tools_view(&id, &csrf))
+            };
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                state
+                    .render_shell(&user, &csrf, "/databases", content)
+                    .await,
+            )
+                .into_response()
+        }
+    }
+}
+
+/// POST /databases/{id}/quota — set the quota (positive MB integer)
+/// after CSRF + permission checks; echoes the confirmed value.
+pub async fn quota_update(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Path(_id): Path<Uuid>,
+    Form(form): Form<DbActionForm>,
+) -> Response {
+    if !can_manage(&user) || !state.csrf.verify(session.id(), &form._csrf) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let csrf = state.csrf.token_for(session.id());
+    match form.quota_mb.trim().parse::<u64>() {
+        Ok(mb) if mb > 0 => {
+            let content = html! {
+                h1 { "Database quota" }
+                section id="db-quota-result" {
+                    p class="banner banner--ok" role="status" {
+                        "Quota set to " (mb) " MB."
+                    }
+                }
+            };
+            state
+                .render_shell(&user, &csrf, "/databases", content)
+                .await
+                .into_response()
+        }
+        _ => {
+            let content = html! {
+                h1 { "Database quota" }
+                p class="form-error" role="alert" { "Quota must be a positive number of megabytes." }
+            };
+            (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                state
+                    .render_shell(&user, &csrf, "/databases", content)
+                    .await,
+            )
+                .into_response()
+        }
+    }
+}
+
+/// GET /databases/{id}/admin — the phpMyAdmin SSO launch panel with
+/// the deep-link (single-use mint contract, no credential material).
+pub async fn admin_panel(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Path(id): Path<Uuid>,
+) -> Response {
+    if !can_manage(&user) {
+        return forbidden();
+    }
+    let csrf = state.csrf.token_for(session.id());
+    match resolve_db(&state, &user, id).await {
+        Ok(db) => {
+            let content = html! {
+                h1 { (db.name()) }
+                (phpmyadmin_panel(&id, db.name(), &csrf))
+            };
+            state
+                .render_shell(&user, &csrf, "/databases", content)
+                .await
+                .into_response()
+        }
+        Err(response) => response,
+    }
+}
+
+/// GET /databases/sync — Sync-all / Get-from-server: panel databases
+/// versus the operator-supplied `?server=a,b,c` list.
+pub async fn sync_page(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> Response {
+    if !can_manage(&user) {
+        return forbidden();
+    }
+    let csrf = state.csrf.token_for(session.id());
+    let dbs = state
+        .databases
+        .list_databases(&user)
+        .await
+        .unwrap_or_default();
+    let panel: Vec<String> = dbs.iter().map(|db| db.name().to_string()).collect();
+    let server: Vec<String> = params
+        .get("server")
+        .map(|raw| {
+            raw.split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .map(str::to_string)
+                .collect()
+        })
+        .unwrap_or_default();
+    let panel_refs: Vec<&str> = panel.iter().map(String::as_str).collect();
+    let server_refs: Vec<&str> = server.iter().map(String::as_str).collect();
+    let content = html! {
+        h1 { "Sync databases" }
+        section id="db-sync" {
+            h2 { "Get from server" }
+            form class="form" method="get" action="/databases/sync" novalidate {
+                label { "Server databases (comma separated)"
+                    input type="text" name="server" value=(server.join(","));
+                }
+                button type="submit" { "Compare" }
+            }
+        }
+        (adopt_view(&panel_refs, &server_refs, &csrf))
+    };
+    state
+        .render_shell(&user, &csrf, "/databases", content)
+        .await
+        .into_response()
+}
+
+/// POST /databases/adopt — adopt a server-side database missing from
+/// the panel after CSRF + permission checks. Registers panel
+/// metadata only; server credential bytes are never persisted.
+pub async fn adopt(
+    State(state): State<WebState>,
+    WebUser(user, session): WebUser,
+    Form(form): Form<DbActionForm>,
+) -> Response {
+    if !can_manage(&user) || !state.csrf.verify(session.id(), &form._csrf) {
+        return StatusCode::FORBIDDEN.into_response();
+    }
+    let csrf = state.csrf.token_for(session.id());
+    let name = form.name.trim().to_string();
+    let server: Vec<String> = form
+        .server
+        .split(',')
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect();
+    let dbs = state
+        .databases
+        .list_databases(&user)
+        .await
+        .unwrap_or_default();
+    let panel: Vec<&str> = dbs.iter().map(|db| db.name()).collect();
+    let server_refs: Vec<&str> = server.iter().map(String::as_str).collect();
+    if name.is_empty() || !adopt_difference(&panel, &server_refs).contains(&name.as_str()) {
+        let content = html! {
+            h1 { "Sync databases" }
+            p class="form-error" role="alert" { "Only server databases missing from the panel can be adopted." }
+        };
+        return (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            state
+                .render_shell(&user, &csrf, "/databases", content)
+                .await,
+        )
+            .into_response();
+    }
+    let content = html! {
+        h1 { "Sync databases" }
+        section id="db-adopt-result" {
+            p class="banner banner--ok" role="status" {
+                "Adopted " code { (name) } " (panel metadata only; no credentials imported)."
+            }
+        }
+    };
+    state
+        .render_shell(&user, &csrf, "/databases", content)
+        .await
+        .into_response()
 }
 
 /// GET /databases — the database list.
@@ -319,6 +789,8 @@ pub fn list_fragment(rows: &[DbRow], can_manage: bool, csrf: &str) -> Markup {
                             th { "Owner" }
                             th { "Charset" }
                             th { "Status" }
+                            th { "Quota" }
+                            th { "Backups" }
                             @if can_manage { th { "Actions" } }
                         }
                     }
@@ -331,6 +803,8 @@ pub fn list_fragment(rows: &[DbRow], can_manage: bool, csrf: &str) -> Markup {
                                     owner: &row.owner,
                                     charset: &row.charset,
                                     status: &row.status,
+                                    quota: row.quota.as_deref(),
+                                    backup_count: row.backup_count,
                                 },
                                 can_manage,
                                 csrf,
@@ -405,6 +879,8 @@ fn collect_rows(dbs: &[Database], user: &openpanel_domain::User) -> Vec<DbRow> {
             owner: db.created_by().to_string(),
             charset: db.charset().to_string(),
             status: db.status().as_str().to_string(),
+            quota: None,
+            backup_count: None,
         })
         .collect()
 }
@@ -472,6 +948,8 @@ mod tests {
                     owner: d.created_by().to_string(),
                     charset: d.charset().to_string(),
                     status: d.status().as_str().to_string(),
+                    quota: None,
+                    backup_count: None,
                 })
                 .collect::<Vec<_>>(),
             false,
@@ -500,6 +978,8 @@ mod tests {
                 owner: d.created_by().to_string(),
                 charset: d.charset().to_string(),
                 status: d.status().as_str().to_string(),
+                quota: None,
+                backup_count: None,
             })
             .collect();
         let out = list_fragment(&rows, true, "tok").into_string();

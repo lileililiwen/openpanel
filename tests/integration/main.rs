@@ -43,6 +43,8 @@ mod files;
 /// and independent lifecycle.
 mod forge_publish_provider;
 mod ftp;
+/// Global FTP aggregate + database row-action integration tests.
+mod ftp_global;
 /// Host operations and migration interoperability integration
 /// tests: host capability contract, capability mismatch blocks
 /// operation with remediation.
