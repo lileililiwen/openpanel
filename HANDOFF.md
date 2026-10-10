@@ -773,6 +773,7 @@ Overall: `[██████████] 7/7 UI/UX implemented & archived; 6/6
 | 7 | `enforce-browser-ui-quality-and-localization` | `[x] implemented; archived & committed (3eed191)` | 1, 6 |
 | 8 | `add-operator-security-control-plane` | `[x] implemented; archived & committed (e84ca33)` | 1, 6 |
 | 9 | `expand-monitoring-and-fleet-operations` | `[x] implemented; archived & committed (b4e111e)` | 1, 2, 6 |
+| — | `add-migration-wizard-ui` | `[ ] proposed (proposal-only; design.md AWAITS human principal approval; commit a3761f1)` | P7 follow-on |
 
 ## Required execution protocol
 
