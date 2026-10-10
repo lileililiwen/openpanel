@@ -473,6 +473,8 @@ pub fn router(
         .route("/cron/jobs/{id}/disable", post(cron::disable))
         .route("/cron/jobs/{id}/delete", post(cron::delete))
         .route("/cron/jobs/{id}/run", post(cron::run))
+        .route("/cron/jobs/{id}/log", get(cron::job_log))
+        .route("/cron/jobs/{id}/chain", post(cron::chain))
         .route("/cron/runs", get(cron::runs))
         .route("/cron/runs/{id}", get(cron::run_detail))
         .route("/backups", get(backups::page))

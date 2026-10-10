@@ -21,6 +21,11 @@ use thiserror::Error;
 use uuid::Uuid;
 
 mod scope;
+pub mod preset;
+pub use preset::{
+    BackupBinding, BackupDestination, ChainLedger, ChainLink, CompiledPreset, CronPresetType,
+    CyclePicker, FailureReminder, PresetError, preset_compile,
+};
 
 /// Errors caused by invalid cron data or state transitions.
 #[derive(Debug, Error, Clone, PartialEq, Eq)]

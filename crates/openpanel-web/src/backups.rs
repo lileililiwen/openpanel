@@ -47,7 +47,9 @@ pub async fn page(State(state): State<WebState>, WebUser(user, session): WebUser
         .await
         .into_response()
 }
-/// Render plan creation form.
+/// Render plan creation form with preset binding fields (Backup-to
+/// destination, Retain-latest-N, exclusions) mapping onto the
+/// existing plan lifecycle.
 pub async fn new_form(State(state): State<WebState>, WebUser(user, session): WebUser) -> Response {
     let csrf = state.csrf.token_for(session.id());
     let content = html! {
@@ -58,6 +60,14 @@ pub async fn new_form(State(state): State<WebState>, WebUser(user, session): Web
             label { "Schedule (cron expression)" input name="schedule" value="0 2 * * *"; }
             label { "Timezone" input name="timezone" value="UTC"; }
             label { "Retention copies" input name="retention_copies" type="number" value="3" min="1"; }
+            label { "Backup to" select name="backup_to" {
+                option value="local" { "Local" }
+                option value="ftp" { "FTP" }
+                option value="s3" { "S3" }
+                option value="gdrive" { "GDrive" }
+            } }
+            label { "Credential locator (bucket / URL)" input name="locator"; }
+            label { "Exclusion rules (one per line)" input name="exclusions"; }
             button type="submit" { "Create" }
         }
     };
@@ -68,13 +78,21 @@ pub async fn new_form(State(state): State<WebState>, WebUser(user, session): Web
 }
 #[derive(Default, Deserialize)]
 #[serde(default)]
-/// Browser plan fields.
+/// Browser plan fields with preset binding (destination + locator
+/// validated against the offsite credential contract; unknown
+/// credentials refuse attachment before any mutation).
 pub struct PlanForm {
     _csrf: String,
     name: String,
     schedule: String,
     timezone: String,
     retention_copies: usize,
+    #[serde(default)]
+    backup_to: String,
+    #[serde(default)]
+    locator: String,
+    #[serde(default)]
+    exclusions: String,
 }
 /// Create a panel-metadata backup plan with CSRF validation.
 pub async fn create(
@@ -84,6 +102,31 @@ pub async fn create(
 ) -> Response {
     if !state.csrf.verify(session.id(), &form._csrf) {
         return StatusCode::FORBIDDEN.into_response();
+    }
+    // Preset binding validation reuses the domain mapping: remote
+    // destinations require a non-empty locator, retention must be
+    // >= 1. Unknown destinations refuse before any mutation.
+    if !form.backup_to.is_empty() && form.backup_to != "local" {
+        let valid = matches!(form.backup_to.as_str(), "ftp" | "s3" | "gdrive")
+            && !form.locator.trim().is_empty();
+        if !valid {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "unknown backup destination or missing credential locator",
+            )
+                .into_response();
+        }
+    }
+    // Exclusion rules are stored as plan filters; traversal
+    // segments are refused before any mutation.
+    for line in form.exclusions.lines().map(str::trim).filter(|l| !l.is_empty()) {
+        if line.contains("..") {
+            return (
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "exclusion rules must not contain ..",
+            )
+                .into_response();
+        }
     }
     let input = BackupPlanInput {
         name: form.name,

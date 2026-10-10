@@ -48,6 +48,21 @@ New code is limited to a `CronPreset` mapping module (type + cycle-picker
 → `CronInput`/`BackupPlanInput`), `cron.rs`/`backups.rs` template/handler
 extensions, and a chain-link record (next-job id on terminal event).
 
+## Reuse record (implementation evidence, 2026-10-10)
+
+- Reused unchanged: `CronSchedule::parse` (cycle validation), `CronService::create/get/runs/get_run`
+  (all web handlers delegate), `is_under_owned_site` + `is_executable_allowed`
+  (preset_compile guards), `BackupTargetKind`/`BackupTargetPolicy` (destination mapping),
+  `BackupPlanInput` + `BackupResource::PanelMetadata` (plan shape), `NotificationService`
+  channels (failure reminder = `FailureReminder::subscribe` record only, no transport),
+  `LogService` rotation (untouched; Cut-Log is an allow-listed command), `tokens.css`
+  `form` vocabulary + `layout::csrf_field` + `WebUser` extractor + `/cron*` router pattern,
+  `AuditAction::CronChanged` (denial/chain-link audit; no `CronScopeDenied` variant exists
+  in `action.rs`, so denials record `operation: scope-denied` metadata on the existing action).
+- New code only: `openpanel-domain::cron::preset` (pure VOs), `openpanel-app::cron::preset_mapping`
+  (pure `CronInput`/`BackupPlanInput` compilers), web form/handler extensions + 2 routes.
+  No new scheduler engine, no scheduler/quota/storage change, no new transport or backend.
+
 ## DDD layering
 
 - **Domain** (`openpanel-domain`): preset type + cycle value objects and
