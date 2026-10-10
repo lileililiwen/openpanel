@@ -778,6 +778,7 @@ Overall: `[██████████] 7/7 UI/UX implemented & archived; 6/6
 | — | `add-ftp-global-and-phpmyadmin-link` | `[x] implemented & committed (e962ece; design.md approved via the "implement" directive 2026-10-10; validate --strict green; NOT archived — coordinator archives)` | P7 follow-on, sibling of migration-wizard/terminal |
 | — | `refine-files-with-baota-affordances` | `[x] implemented & committed (3072066; design.md approved via the "implement" directive 2026-10-10; validate --strict green; NOT archived — coordinator archives)` | P7 follow-on, sibling of migration-wizard/terminal/ftp |
 | — | `refine-cron-with-preset-types` | `[x] implemented & committed (de90dec; design.md approved via the "implement" directive 2026-10-10; validate --strict green; NOT archived — coordinator archives)` | P7 follow-on, sibling of migration-wizard/terminal/ftp/files |
+| — | `repair-home-discoverability` | `[x] implemented & committed (ed251cf; design.md approved via the "implement" directive 2026-10-10; validate --strict green; NOT archived — coordinator archives)` | P7 follow-on, sibling of migration-wizard/terminal/ftp/files/cron |
 
 ## Required execution protocol
 
