@@ -787,6 +787,7 @@ Overall: `[██████████] 7/7 UI/UX implemented & archived; 6/6
 | — | `repair-home-discoverability` | `[x] implemented, archived & committed (impl ed251cf; archived 2026-10-10 as a4ec06e; +6 spec requirements)` | P7 follow-on, sibling of migration-wizard/terminal/ftp/files/cron |
 | — | `fix Baota-parity gate fallout (coordinator)` | `[x] committed (7446fa5 clippy/file-length incl. databases+ops_workflows test split; 5f427e4 reuse-strict renames compile_expression/compress_archive/NetworkTotals; cc60b5e module sync; a5d3835 CAPABILITIES regen 44→47 entries)` | 6 Baota changes above |
 | — | `fix driftwatch lockstep + clean tree (coordinator)` | `[x] .ai-gate/gate.yaml commands now bind repo scripts per binder rule (dry-run: 0 unresolved, 0 conflict); Makefile gains declared-verification + governance-quality steps; test-gates 131/131; .gitignore covers forge.yaml + *.bak-profile` | gate wiring; portfolio debt below stays open |
+| — | `adopt-openserverpanel-batch` | `[x] implemented, archived & committed (c604be6; archived 2026-10-15 as 2026-10-15-adopt-openserverpanel-batch; +12/~1 spec requirements: versioned software installs, live ACME HTTP-01, webdav-file-access, staging-mail-capture; make gate green incl. repaired governance-quality step)` | none (OpenServerPanel capability batch) |
 
 ## Required execution protocol
 
@@ -922,12 +923,18 @@ commit 1's hash.
     (a) `lifecycle_unreachable_port_blocks_issuance` fails only
     because this sandbox answers on 127.0.0.1:80 (test assumes the
     port is closed; file untouched by the batch);
-    (b) the newly-wired `governance-quality` step reports 3 real
-    portfolio findings (`mnemora` unregistered,
-    openpanel discoverability metadata missing, publication
-    evidence unverified) — owned by workspace governance, not
-    fixable from this repo. Drift lockstep, test-gates 131/131,
-    validate 105/105, and lib 276/276 are green.
+    (b) the newly-wired `governance-quality` step reported 3 real
+    portfolio findings (`mnemora` unregistered, openpanel
+    discoverability metadata missing, publication evidence
+    unverified). RESOLVED for openpanel in
+    `adopt-openserverpanel-batch` (c604be6): `.project.json` now
+    declares discoverability + publication metadata cross-checked
+    against the live public GitHub repo, and
+    `scripts/check-governance-quality.sh` emits the report as pure
+    JSON on stdout (step markers on stderr) so driftwatchdog parses
+    it; the step is PASS under `make gate`. The `mnemora` finding
+    stays owned by workspace governance. Drift lockstep, test-gates
+    131/131, validate 105/105, and lib 276/276 are green.
 
 ## New remediation sequence (2026-09-09)
 
