@@ -691,7 +691,7 @@ post-mvp-readiness implementation result (2026-09-30, commit `848b113`):
   `host-migration-interoperability`, `governance-contract`,
   `coverage-floor`, `maturity`, and `driftwatch-gate`).
 - `scripts/capabilities.sh` (new) generates `docs/CAPABILITIES.md`
-  from `openspec/specs/` (99 live capabilities), with a "Shipped nav"
+  from `openspec/specs/` (101 live capabilities), with a "Shipped nav"
   cross-check column derived from
   `crates/openpanel-web/src/capability_registry.rs` and an explicit
   registry reconciliation section. Output is deterministic

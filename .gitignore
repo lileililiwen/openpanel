@@ -16,6 +16,7 @@ dist/
 .vscode/
 .idea/
 .qoder/sessions/
+.qoder/settings.local.json
 .commandcode/
 *.swp
 *.swo

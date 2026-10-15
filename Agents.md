@@ -17,8 +17,8 @@ single static binary with no script engine at runtime. MIT licensed.
 databases, files, SSL, mail, DNS, monitoring, cron, software center,
 owner-only audit activity center, an mTLS agent fleet, a pure-Rust
 HTMX web UI, and the portable runtime / deployment / application
-delivery / host-migration capabilities ship. OpenSpec has 99 live
-capabilities and 147 archived changes, with no active change folder.
+delivery / host-migration capabilities ship. OpenSpec has 101 live
+capabilities and 156 archived changes, with no active change folder.
 The `make gate` / `make check` quality gate is green end-to-end on
 `main`. See `HANDOFF.md` for the current roadmap.
 

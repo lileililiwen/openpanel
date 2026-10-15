@@ -70,6 +70,16 @@ The page degrades gracefully without JavaScript: search, filter, sort,
 and tab controls work as form GETs. HTMX is used for the install
 wizard and job progress panel for a snappier feel when available.
 
+### Versioned installs
+
+Installs are tracked per `(component, version)`, so several versions
+of one component (for example PHP 8.2 and 8.3) can be installed at
+the same time. The install wizard offers a version selector; omitting
+it installs the latest catalog version. Unknown versions are rejected
+with an explicit error, the `Update available` badge is evaluated per
+installed version, and uninstalling one version leaves the others
+untouched.
+
 ## CLI
 
 ```text
@@ -80,6 +90,7 @@ openpanel software search --category database --tag mysql
 openpanel software show --id wordpress
 openpanel software preview --id redis
 openpanel software install --id redis
+openpanel software install --id redis --version 7.2.4
 openpanel software adopt --id nginx
 openpanel software update --id redis
 openpanel software uninstall --id redis

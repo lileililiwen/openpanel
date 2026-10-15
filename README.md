@@ -8,7 +8,7 @@ runtime. MIT licensed.
 > files, SSL, mail, DNS, monitoring, cron, software center, an
 > owner-only audit activity center, an mTLS agent fleet, and a pure-Rust
 > HTMX web UI ship as bounded contexts against this architectural
-> baseline. OpenSpec has 99 live capabilities — enumerated in the
+> baseline. OpenSpec has 101 live capabilities — enumerated in the
 > generated [capability catalog](docs/CAPABILITIES.md) — and a frozen
 > archive of every shipped change.
 > The `make check` quality gate is green end-to-end on `main`.
@@ -555,7 +555,7 @@ crates/
 ├── openpanel-agent/         standalone mTLS agent binary
 ├── openpanel-web/           server-rendered HTMX web UI (maud templates)
 └── openpanel-test-support/  TestDb, TestServer, mocks (dev-only)
-openspec/                    OpenSpec specs (99 capabilities; see docs/CAPABILITIES.md) and change proposals
+openspec/                    OpenSpec specs (101 capabilities; see docs/CAPABILITIES.md) and change proposals
 docs/                        operator guides, the generated capability catalog, and UI screenshots
 scripts/                     check-fmt/clippy/docs/audit/file-length/test-gates.sh, repo-map.sh, coverage.sh
 tests/                       integration + CLI E2E + web-ui styling tests
