@@ -79,6 +79,37 @@ impl TestDb {
             .execute(&self.pool)
             .await
             .expect("site_staging migration");
+        sqlx::query(include_str!(
+            "migrations/site_staging/V002__mail_capture.sql"
+        ))
+        .execute(&self.pool)
+        .await
+        .expect("site_staging mail_capture migration");
+        // Record the staging migrations in the runner ledger so the
+        // non-idempotent V002 ALTER is never replayed when the test
+        // server composes modules through `apply_module`.
+        sqlx::query(
+            "CREATE TABLE IF NOT EXISTS _migrations (
+                 module TEXT NOT NULL,
+                 version TEXT NOT NULL,
+                 applied_at TEXT NOT NULL,
+                 PRIMARY KEY (module, version)
+             )",
+        )
+        .execute(&self.pool)
+        .await
+        .expect("migration ledger");
+        for version in ["001", "002"] {
+            sqlx::query(
+                "INSERT OR IGNORE INTO _migrations (module, version, applied_at) VALUES (?, ?, ?)",
+            )
+            .bind("site-staging")
+            .bind(version)
+            .bind(chrono::Utc::now().to_rfc3339())
+            .execute(&self.pool)
+            .await
+            .expect("record staging migration");
+        }
         sqlx::query(include_str!("migrations/plugin/V001__init.sql"))
             .execute(&self.pool)
             .await

@@ -15,5 +15,54 @@
     "deployable": false,
     "jenkins_job": null,
     "compose_file": "compose.yaml"
+  },
+  "discoverability": {
+    "description": "A memory-safe open-source server management panel written in Rust",
+    "keywords": [
+      "server management panel",
+      "rust",
+      "self-hosted",
+      "web hosting",
+      "sysadmin",
+      "cpanel alternative",
+      "baota alternative"
+    ],
+    "topics": [
+      "rust",
+      "server-management",
+      "hosting-panel",
+      "self-hosted",
+      "sysadmin",
+      "web-panel",
+      "cpanel-alternative",
+      "baota-alternative"
+    ],
+    "audience": [
+      "self-hosters",
+      "system administrators",
+      "web hosting operators",
+      "open-source contributors"
+    ],
+    "use_cases": [
+      "manage websites, databases, mail, DNS and SSL from one panel",
+      "replace PHP-based hosting control panels with a memory-safe Rust binary",
+      "operate a single-node or mTLS agent fleet without a runtime script engine"
+    ],
+    "search_phrases": [
+      "rust server management panel",
+      "memory-safe cpanel alternative",
+      "self-hosted hosting control panel in rust"
+    ],
+    "homepage": "https://github.com/lileililiwen/openpanel",
+    "license_spdx": "MIT",
+    "visibility": "public"
+  },
+  "publication": {
+    "provider": "github",
+    "owner": "lileililiwen",
+    "repository": "openpanel",
+    "default_branch": "main",
+    "state": "metadata_verified",
+    "evidence_ref": "HANDOFF.md"
   }
 }

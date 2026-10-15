@@ -73,8 +73,8 @@ impl StagingSlotRepository for SqliteStagingSlotRepository {
             r#"INSERT INTO staging_slots
                 (id, site_id, subdomain, document_root, db_name, php_version,
                  sync_policy, schedule, current_snapshot, last_promoted_snapshot,
-                 created_at, updated_at)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
+                 mail_capture, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"#,
         )
         .bind(slot.id().to_string())
         .bind(slot.site_id().to_string())
@@ -86,6 +86,7 @@ impl StagingSlotRepository for SqliteStagingSlotRepository {
         .bind(slot.schedule())
         .bind(slot.current_snapshot().map(|s| s.as_i64()))
         .bind(slot.last_promoted_snapshot().map(|s| s.as_i64()))
+        .bind(i64::from(slot.mail_capture()))
         .bind(slot.created_at().to_rfc3339())
         .bind(slot.updated_at().to_rfc3339())
         .execute(&self.pool)
@@ -98,7 +99,7 @@ impl StagingSlotRepository for SqliteStagingSlotRepository {
         let row: Option<SlotRow> = sqlx::query_as::<_, SlotRow>(
             r#"SELECT id, site_id, subdomain, document_root, db_name, php_version,
                       sync_policy, schedule, current_snapshot, last_promoted_snapshot,
-                      created_at, updated_at
+                      mail_capture, created_at, updated_at
                  FROM staging_slots WHERE id = ?"#,
         )
         .bind(id.to_string())
@@ -112,7 +113,7 @@ impl StagingSlotRepository for SqliteStagingSlotRepository {
         let row: Option<SlotRow> = sqlx::query_as::<_, SlotRow>(
             r#"SELECT id, site_id, subdomain, document_root, db_name, php_version,
                       sync_policy, schedule, current_snapshot, last_promoted_snapshot,
-                      created_at, updated_at
+                      mail_capture, created_at, updated_at
                  FROM staging_slots WHERE site_id = ?"#,
         )
         .bind(site_id.to_string())
@@ -126,7 +127,7 @@ impl StagingSlotRepository for SqliteStagingSlotRepository {
         let rows: Vec<SlotRow> = sqlx::query_as::<_, SlotRow>(
             r#"SELECT id, site_id, subdomain, document_root, db_name, php_version,
                       sync_policy, schedule, current_snapshot, last_promoted_snapshot,
-                      created_at, updated_at
+                      mail_capture, created_at, updated_at
                  FROM staging_slots ORDER BY created_at DESC"#,
         )
         .fetch_all(&self.pool)
@@ -141,7 +142,7 @@ impl StagingSlotRepository for SqliteStagingSlotRepository {
                   SET subdomain = ?, document_root = ?, db_name = ?,
                       php_version = ?, sync_policy = ?, schedule = ?,
                       current_snapshot = ?, last_promoted_snapshot = ?,
-                      updated_at = ?
+                      mail_capture = ?, updated_at = ?
                   WHERE id = ?"#,
         )
         .bind(slot.subdomain())
@@ -152,6 +153,7 @@ impl StagingSlotRepository for SqliteStagingSlotRepository {
         .bind(slot.schedule())
         .bind(slot.current_snapshot().map(|s| s.as_i64()))
         .bind(slot.last_promoted_snapshot().map(|s| s.as_i64()))
+        .bind(i64::from(slot.mail_capture()))
         .bind(slot.updated_at().to_rfc3339())
         .bind(slot.id().to_string())
         .execute(&self.pool)
@@ -182,6 +184,7 @@ struct SlotRow {
     schedule: Option<String>,
     current_snapshot: Option<i64>,
     last_promoted_snapshot: Option<i64>,
+    mail_capture: i64,
     created_at: String,
     updated_at: String,
 }
@@ -208,6 +211,7 @@ impl SlotRow {
             self.schedule,
             current_snapshot,
             last_promoted_snapshot,
+            self.mail_capture != 0,
             created_at,
             updated_at,
         ))

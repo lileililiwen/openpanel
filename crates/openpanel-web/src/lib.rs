@@ -47,6 +47,8 @@ pub mod loading;
 pub mod login;
 pub mod logs;
 pub mod mail;
+/// Staging mail-capture inbox pages.
+pub mod mail_capture;
 pub mod migrate;
 pub mod monitoring;
 /// Monitoring-fleet operator views: configurable dashboard views and
@@ -107,6 +109,8 @@ pub mod waf;
 /// OpenSpec change (token-only styling, mobile-first layout,
 /// focus ring, etc.).
 pub mod web_ui_styling;
+/// Per-site WebDAV account web page.
+pub mod webdav;
 /// Webmail client web pages.
 pub mod webmail;
 

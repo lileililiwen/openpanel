@@ -21,6 +21,8 @@ pub async fn page(
     WebUser(user, session): WebUser,
     Path(site_id): Path<Uuid>,
 ) -> Response {
+    let csrf = state.csrf.token_for(session.id());
+    let slot = state.staging.slot_for(&user, site_id).await.ok().flatten();
     let body: Markup = html! {
         (crate::site_workspace::site_bar(&state, &user, site_id, TabId::Staging).await)
         section class="card" {
@@ -38,8 +40,27 @@ pub async fn page(
                 button type="submit" { "Promote" }
             }
         }
+        @if let Some(slot)=slot {
+            section class="card" {
+                h2 { "Mail capture" }
+                @if slot.mail_capture() {
+                    p { "Outgoing mail from the staging site is captured instead of delivered." }
+                } @else {
+                    p { "Capture is off: staging mail is delivered normally." }
+                }
+                form method="post" action=(format!("/sites/{site_id}/staging/mail-capture")) class="form form-inline" {
+                    (crate::layout::csrf_field(&csrf))
+                    @if slot.mail_capture() {
+                        button type="submit" { "Disable capture" }
+                    } @else {
+                        input type="hidden" name="enabled" value="true";
+                        button type="submit" { "Enable capture" }
+                    }
+                }
+                p { a href=(format!("/mail/capture/{site_id}")) { "Open captured inbox" } }
+            }
+        }
     };
-    let csrf = state.csrf.token_for(session.id());
     let path = format!("/sites/{site_id}/staging");
     state
         .render_shell(&user, &csrf, &path, body)

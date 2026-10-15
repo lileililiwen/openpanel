@@ -171,6 +171,10 @@ pub struct StorefrontEntry {
     pub conflicts: Vec<String>,
     pub install_state: String,
     pub installed_version: Option<String>,
+    /// Every installed version of this component, ordered by catalog
+    /// recency (latest first). Empty on the seed path and for
+    /// pre-versioned installs.
+    pub installed_versions: Vec<String>,
     pub size_bytes: u64,
     pub provenance: Provenance,
 }
@@ -647,7 +651,7 @@ impl SoftwareCatalogStore {
         }
         if query.update_available_only {
             qb.push(
-                " AND id IN (SELECT id FROM software_components WHERE managed=1 AND version IS NOT NULL AND version != latest_version)",
+                " AND id IN (SELECT id FROM software_components WHERE managed=1 AND version <> '' AND version != latest_version)",
             );
         }
     }
@@ -687,7 +691,13 @@ impl SoftwareCatalogStore {
         let dependencies = self.deps_for(id).await?;
         let conflicts = self.conflicts_for(id).await?;
         let install_state = self.install_state_for(id).await?;
-        let installed_version = self.installed_version_for(id).await?;
+        let installed_rows = self.installed_versions_for(id).await?;
+        let installed_versions: Vec<String> = versions
+            .iter()
+            .filter(|candidate| installed_rows.contains(&candidate.version))
+            .map(|candidate| candidate.version.clone())
+            .collect();
+        let installed_version = installed_versions.first().cloned();
         Ok(Some(StorefrontEntry {
             id: id.to_owned(),
             name: row
@@ -730,6 +740,7 @@ impl SoftwareCatalogStore {
             conflicts,
             install_state,
             installed_version,
+            installed_versions,
             size_bytes: row
                 .try_get::<i64, _>("size_bytes")
                 .map_err(|_| SoftwareCenterError::Repository)? as u64,
@@ -790,6 +801,7 @@ impl SoftwareCatalogStore {
             conflicts: recipe.conflicts.clone(),
             install_state: "available".to_owned(),
             installed_version: None,
+            installed_versions: Vec::new(),
             size_bytes: latest.size_bytes,
             provenance: Provenance {
                 source_url: manifest.source_url.clone(),
@@ -1192,15 +1204,17 @@ impl SoftwareCatalogStore {
 
     async fn install_state_for(&self, id: &str) -> Result<String, SoftwareCenterError> {
         let pool = self.pool.as_ref().ok_or(SoftwareCenterError::Repository)?;
-        let row = sqlx::query("SELECT managed FROM software_components WHERE id = ?")
-            .bind(id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|_| SoftwareCenterError::Repository)?;
-        if let Some(row) = row {
-            let managed: i64 = row
-                .try_get("managed")
-                .map_err(|_| SoftwareCenterError::Repository)?;
+        // `ORDER BY ... LIMIT 1` keeps the result row-set empty when the
+        // component has no rows; aggregates like `MAX` return a NULL row
+        // that SQLite silently decodes as zero.
+        let managed: Option<i64> = sqlx::query_scalar(
+            "SELECT managed FROM software_components WHERE id = ? ORDER BY managed DESC LIMIT 1",
+        )
+        .bind(id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|_| SoftwareCenterError::Repository)?;
+        if let Some(managed) = managed {
             return Ok(if managed != 0 {
                 "panel_managed".to_owned()
             } else {
@@ -1219,19 +1233,18 @@ impl SoftwareCatalogStore {
         })
     }
 
-    async fn installed_version_for(&self, id: &str) -> Result<Option<String>, SoftwareCenterError> {
+    /// Every concrete managed version row for a component. The legacy
+    /// empty-string head row is excluded.
+    async fn installed_versions_for(&self, id: &str) -> Result<Vec<String>, SoftwareCenterError> {
         let pool = self.pool.as_ref().ok_or(SoftwareCenterError::Repository)?;
-        let row = sqlx::query("SELECT version FROM software_components WHERE id = ?")
-            .bind(id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|_| SoftwareCenterError::Repository)?;
-        if let Some(row) = row {
-            return row
-                .try_get::<Option<String>, _>("version")
-                .map_err(|_| SoftwareCenterError::Repository);
-        }
-        Ok(None)
+        let rows = sqlx::query_scalar::<_, String>(
+            "SELECT version FROM software_components WHERE id = ? AND managed = 1 AND version <> ''",
+        )
+        .bind(id)
+        .fetch_all(pool)
+        .await
+        .map_err(|_| SoftwareCenterError::Repository)?;
+        Ok(rows)
     }
 
     async fn count_entries(&self) -> Result<usize, SoftwareCenterError> {

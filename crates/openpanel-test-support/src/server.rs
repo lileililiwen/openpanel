@@ -30,7 +30,8 @@ use openpanel_app::{
     SiteCloneService, SiteCloneTemplateModule, SiteHttpControlsModule, SiteHttpService,
     SiteStagingModule, SitesModule, SitesService, SoftwareCenterModule, SoftwareCenterService,
     SslModule, SslPaths, SslService, StagingService, SystemServicesModule, ThemeableUiService,
-    WafModule, WafService, WebApplicationInstallerService, WebmailService,
+    WafModule, WafService, WebApplicationInstallerService, WebDavModule, WebDavService,
+    WebmailService,
     identity::two_factor::TwoFactorCrypto,
     security::MemoryFirewall,
     sites::{nginx::NginxPaths, repo::SqliteSiteRepository},
@@ -250,6 +251,7 @@ pub struct TestServer {
     docker: Arc<DockerService>,
     container_runtime: Arc<ContainerRuntimeService>,
     ftp: Arc<FtpService>,
+    webdav: Arc<WebDavService>,
     api_tokens: Arc<ApiTokenService>,
     notifications: Arc<NotificationService>,
     audit: Arc<dyn AuditService>,
@@ -275,6 +277,8 @@ pub struct TestServer {
     pitr: Arc<PitrService>,
     /// Per-site staging service.
     staging: Arc<StagingService>,
+    /// Staging mail-capture inbox service.
+    mail_capture: Arc<openpanel_app::MailCaptureService>,
     /// Plugin extension framework service.
     plugins: Arc<PluginService>,
     /// Plugin marketplace service.
@@ -485,6 +489,7 @@ impl TestServer {
         let hosting_plans_module = HostingPlansModule::new(&ctx).await;
         let account_hierarchy_module = AccountHierarchyModule::new(&ctx).await;
         let ftp_module = FtpModule::new(&ctx).await.expect("ftp module");
+        let webdav_module = WebDavModule::new(&ctx).await.expect("webdav module");
 
         let databases_module = DatabasesModule::new(&ctx, master_key).await;
         let files_module = FilesModule::new(&ctx).await;
@@ -612,6 +617,10 @@ impl TestServer {
             .apply_module(ftp_module.name(), &ftp_module.migrations())
             .await
             .expect("ftp migrations");
+        runner
+            .apply_module(webdav_module.name(), &webdav_module.migrations())
+            .await
+            .expect("webdav migrations");
         runner
             .apply_module(databases_module.name(), &databases_module.migrations())
             .await
@@ -845,6 +854,7 @@ impl TestServer {
         let site_clone_template_repo = site_clone_template_module.repo();
         docker_svc.attach_quota_gate(container_runtime_svc.clone());
         let ftp_svc = ftp_module.service();
+        let webdav_svc = webdav_module.service();
         let databases_svc = databases_module.service();
         let files_svc = files_module.service();
         let ssl_svc = ssl_module.service();
@@ -879,6 +889,20 @@ impl TestServer {
             .await
             .expect("staging migrations");
         let staging_svc = staging_module.service();
+
+        // Staging mail-capture inbox: diverts webmail sends to a
+        // site's capturing slot instead of the bridge. Must apply
+        // after site-staging (FK onto staging_slots).
+        let mail_capture_module = openpanel_app::MailCaptureModule::new(&ctx, master_key).await;
+        runner
+            .apply_module(
+                mail_capture_module.name(),
+                &mail_capture_module.migrations(),
+            )
+            .await
+            .expect("mail capture migrations");
+        let mail_capture_svc = mail_capture_module.service();
+        webmail_svc.attach_capture(mail_capture_svc.clone());
 
         // PITR module: in-memory sink, no engine tailer wired in tests.
         // The PITR service takes a `DatabaseLookup`; we pass the
@@ -1014,11 +1038,13 @@ impl TestServer {
             sso_svc.clone(),
             docker_svc.clone(),
             ftp_svc.clone(),
+            webdav_svc.clone(),
             api_token_svc.clone(),
             notification_svc.clone(),
             pitr_svc.clone(),
             server_snapshots_svc.clone(),
             staging_svc.clone(),
+            mail_capture_svc.clone(),
             plugin_svc.clone(),
             mp_svc.clone(),
             collaborators_svc.clone(),
@@ -1071,10 +1097,12 @@ impl TestServer {
             site_http_controls_svc.clone(),
             docker_svc.clone(),
             ftp_svc.clone(),
+            webdav_svc.clone(),
             api_token_svc.clone(),
             notification_svc.clone(),
             pitr_svc.clone(),
             staging_svc.clone(),
+            mail_capture_svc.clone(),
             git_deployment_module.preview_service(),
             collaborators_svc.clone(),
             registry_svc.clone(),
@@ -1175,6 +1203,7 @@ impl TestServer {
             malware_scanner: malware_scanner_svc,
             webmail: webmail_svc,
             ftp: ftp_svc,
+            webdav: webdav_svc,
             api_tokens: api_token_svc,
             notifications: notification_svc,
             audit,
@@ -1189,6 +1218,7 @@ impl TestServer {
             fetched_urls,
             pitr: pitr_svc,
             staging: staging_svc,
+            mail_capture: mail_capture_svc,
             plugins: plugin_svc,
             marketplace: mp_svc,
             collaborators: collaborators_svc,
@@ -1241,6 +1271,11 @@ impl TestServer {
     /// The per-site staging service handle.
     pub fn staging(&self) -> Arc<openpanel_app::StagingService> {
         self.staging.clone()
+    }
+
+    /// The staging mail-capture inbox service handle.
+    pub fn mail_capture(&self) -> Arc<openpanel_app::MailCaptureService> {
+        self.mail_capture.clone()
     }
 
     /// The shared SQLite pool, exposed so integration tests can
@@ -1343,6 +1378,11 @@ impl TestServer {
     /// FTP account service handle.
     pub fn ftp(&self) -> Arc<FtpService> {
         self.ftp.clone()
+    }
+
+    /// WebDAV account service handle.
+    pub fn webdav(&self) -> Arc<WebDavService> {
+        self.webdav.clone()
     }
 
     /// Underlying isolated SQLite pool for persistence assertions.

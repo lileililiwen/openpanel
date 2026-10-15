@@ -297,6 +297,7 @@ mod tests {
             conflicts: vec![],
             install_state: "available".into(),
             installed_version: None,
+            installed_versions: vec![],
             size_bytes: 1024,
             provenance: Provenance {
                 source_url: "https://catalog.example/manifest.json".into(),

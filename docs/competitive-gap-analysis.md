@@ -43,10 +43,17 @@ only items 8–10 remain unspec'd.
 8. **Object storage hosting** — MinIO/S3-compatible server as a
    managed component (1Panel/aaPanel do it via app store). Could land
    as a software-center recipe instead of a native module.
-9. **CalDAV/CardDAV, WebDAV** — rare (cPanel-only among verified);
-   low priority, possible via recipes.
+9. **CalDAV/CardDAV** — rare (cPanel-only among verified); low
+   priority, possible via recipes. The WebDAV half shipped with
+   `adopt-openserverpanel-batch` (2026-10): jailed per-site DAV
+   server at `/dav`.
 10. **Mailing-list moderation depth** — table stores members only;
     moderation hold/release flows from the archived delta are absent.
+
+`adopt-openserverpanel-batch` (2026-10) also closed the
+OpenServerPanel-sourced gaps: multi-version Software Center installs,
+live ACME HTTP-01 issuance, the WebDAV file server, and a staging
+mail-capture inbox.
 
 ## Process finding (P0 hygiene)
 

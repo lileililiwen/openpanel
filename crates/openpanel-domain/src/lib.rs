@@ -48,6 +48,9 @@ pub mod identity;
 pub mod logs;
 /// Hosted mail domains, addresses, quotas, aliases, and relay policy.
 pub mod mail;
+/// Staging mail capture bounded context: diverted outbound messages,
+/// the capture port, and body-free inbox summaries.
+pub mod mail_capture;
 /// Web application malware scanner bounded context:
 /// `ScanProfile`, `ScanRun`, `ScanFinding`, `QuarantineRecord`.
 pub mod malware_scanner;
@@ -94,6 +97,9 @@ pub mod waf;
 /// `InstallArtifact` records.
 pub mod web_application_installer;
 pub mod web_terminal;
+/// Per-site WebDAV accounts jailed to the site root, mirroring the
+/// FTP bounded context.
+pub mod webdav;
 /// Webmail client bounded context: short-lived session tokens and
 /// the `MailBridge` contract.
 pub mod webmail_client;
@@ -389,6 +395,9 @@ pub use log_viewer::{
     LogAuthorization, LogDownloadRecord, LogDownloadRepository, LogLine, LogPage, LogQuery,
     LogRange, LogReader, LogSource, LogViewerError, RbacLogAuthorization,
 };
+pub use mail_capture::{
+    CapturedMessage, CapturedMessageSummary, MailCaptureError, MailCapturePort,
+};
 pub use mail_filtering::{
     AntiSpamPolicy, AutoResponder, AutoResponderMode, CatchAll, Forwarder, GreylistEntry,
     MailFilterError, MailFilterRepository, MailQueueSnapshot, MailingList, MtaQueuePort,
@@ -503,6 +512,7 @@ pub use web_application_installer::{
     InstallOverlay, InstallPlan, InstallRun, InstalledWebApp, MAX_PLAN_VALIDITY_SECONDS,
     WebApplicationInstallerError, WebApplicationInstallerRepository,
 };
+pub use webdav::{WebDavAccount, WebDavError, WebDavRepository};
 pub use webmail_client::{
     MailBridge, MessageBody, MessageHeader, SESSION_TOKEN_TTL_SECONDS, WebmailError,
     WebmailRepository, WebmailSessionToken,

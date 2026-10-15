@@ -6,6 +6,7 @@
 //! * `DELETE /sites/{id}/staging`     — destroy slot
 //! * `POST   /sites/{id}/staging/sync`— take a snapshot
 //! * `POST   /sites/{id}/staging/promote` — promote to live
+//! * `POST   /sites/{id}/staging/mail-capture` — toggle mail capture
 //! * `GET    /sites/{id}/staging`     — read slot + recent promotions
 
 use std::sync::Arc;
@@ -34,7 +35,26 @@ pub fn router(service: Arc<StagingService>) -> Router {
         )
         .route("/{id}/staging/sync", post(sync))
         .route("/{id}/staging/promote", post(promote))
+        .route("/{id}/staging/mail-capture", post(mail_capture_toggle))
         .with_state(service)
+}
+
+#[derive(Debug, Deserialize)]
+struct MailCaptureBody {
+    enabled: bool,
+}
+
+async fn mail_capture_toggle(
+    State(svc): State<Arc<StagingService>>,
+    AuthUser(user, _): AuthUser,
+    Path(site_id): Path<Uuid>,
+    Json(body): Json<MailCaptureBody>,
+) -> ApiResult<Json<StagingSlotView>> {
+    let slot = svc
+        .set_mail_capture(&user, site_id, body.enabled)
+        .await
+        .map_err(map)?;
+    Ok(Json(StagingSlotView::from(slot)))
 }
 
 async fn get_slot(
@@ -162,6 +182,7 @@ struct StagingSlotView {
     schedule: Option<String>,
     current_snapshot: Option<i64>,
     last_promoted_snapshot: Option<i64>,
+    mail_capture: bool,
     created_at: DateTime<Utc>,
     updated_at: DateTime<Utc>,
 }
@@ -179,6 +200,7 @@ impl From<StagingSlot> for StagingSlotView {
             schedule: s.schedule().map(str::to_owned),
             current_snapshot: s.current_snapshot().map(|s| s.as_i64()),
             last_promoted_snapshot: s.last_promoted_snapshot().map(|s| s.as_i64()),
+            mail_capture: s.mail_capture(),
             created_at: s.created_at(),
             updated_at: s.updated_at(),
         }

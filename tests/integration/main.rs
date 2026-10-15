@@ -58,6 +58,8 @@ mod identity;
 mod log_policies;
 mod logs;
 mod mail;
+/// Staging mail-capture inbox API and HTML surface tests.
+mod mail_capture;
 /// Malware scanner integration tests.
 /// Mail end-user surface integration tests.
 mod mail_surfaces;
@@ -122,4 +124,6 @@ mod web_ui;
 mod web_ui_audit;
 /// Web-UI styling + responsive layout integration tests.
 mod web_ui_styling;
+/// Per-site WebDAV account API, `/dav` mount, and HTML surface tests.
+mod webdav;
 mod webmail_client;

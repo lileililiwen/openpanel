@@ -20,10 +20,11 @@ use openpanel_app::{
     ApiTokenService, BackupService, CollaboratorService, ContainerRegistryService,
     ContainerRuntimeService, CronService, DatabasesService, DnsService, DockerService,
     ExistingServiceRemediationPort, FeedbackService, FilesService, FtpService, IdentityService,
-    LogService, MailService, MonitoringFleetService, MonitoringService, NotificationService,
-    OperatorSecurityService, PitrService, PreviewService, SecurityService, SitesService,
-    SoftwareCenterService, SslService, StagingService, StatusPageService, WafService,
-    identity::TwoFactorService, security::LoginThrottleService, system_services::ServiceManager,
+    LogService, MailCaptureService, MailService, MonitoringFleetService, MonitoringService,
+    NotificationService, OperatorSecurityService, PitrService, PreviewService, SecurityService,
+    SitesService, SoftwareCenterService, SslService, StagingService, StatusPageService, WafService,
+    WebDavService, identity::TwoFactorService, security::LoginThrottleService,
+    system_services::ServiceManager,
 };
 use openpanel_core::{AuditService, Config};
 use openpanel_domain::{Session, SessionToken, User};
@@ -160,6 +161,8 @@ pub struct WebState {
     pub docker: Arc<DockerService>,
     /// Per-site FTP account service.
     pub ftp: Arc<FtpService>,
+    /// Per-site WebDAV account service.
+    pub webdav: Arc<WebDavService>,
     /// Scoped personal API-token lifecycle.
     pub api_tokens: Arc<ApiTokenService>,
     /// Durable notification lifecycle.
@@ -168,6 +171,8 @@ pub struct WebState {
     pub pitr: Arc<PitrService>,
     /// Per-site staging service.
     pub staging: Arc<StagingService>,
+    /// Staging mail-capture inbox service.
+    pub mail_capture: Arc<MailCaptureService>,
     /// PR preview deployment service.
     pub previews: Arc<PreviewService>,
     /// Per-site collaborator service.
@@ -309,10 +314,12 @@ pub fn router(
     site_http_controls: Arc<openpanel_app::SiteHttpService>,
     docker: Arc<DockerService>,
     ftp: Arc<FtpService>,
+    webdav: Arc<WebDavService>,
     api_tokens: Arc<ApiTokenService>,
     notifications: Arc<NotificationService>,
     pitr: Arc<PitrService>,
     staging: Arc<StagingService>,
+    mail_capture: Arc<MailCaptureService>,
     previews: Arc<PreviewService>,
     collaborators: Arc<CollaboratorService>,
     registry: Arc<ContainerRegistryService>,
@@ -350,10 +357,12 @@ pub fn router(
         site_http_controls,
         docker,
         ftp,
+        webdav,
         api_tokens,
         notifications,
         pitr,
         staging,
+        mail_capture,
         previews,
         collaborators,
         registry,
@@ -405,6 +414,14 @@ pub fn router(
         .route(
             "/sites/{site_id}/ftp/{account_id}/{action}",
             post(crate::ftp::action),
+        )
+        .route(
+            "/sites/{id}/webdav",
+            get(crate::webdav::page).post(crate::webdav::create),
+        )
+        .route(
+            "/sites/{site_id}/webdav/{account_id}/{action}",
+            post(crate::webdav::action),
         )
         .route("/sites/{id}/domains", get(crate::site_scoped::domains))
         .route("/sites/{id}/runtime", get(crate::site_scoped::runtime_page))
@@ -710,6 +727,19 @@ pub fn router(
         .route("/databases/{id}/admin", get(databases::admin_panel))
         .route("/databases/{id}/pitr", get(crate::db_pitr::page))
         .route("/sites/{id}/staging", get(crate::site_staging::page))
+        .route(
+            "/sites/{site_id}/staging/mail-capture",
+            post(crate::mail_capture::toggle),
+        )
+        .route("/mail/capture/{site_id}", get(crate::mail_capture::list))
+        .route(
+            "/mail/capture/{site_id}/purge",
+            post(crate::mail_capture::purge),
+        )
+        .route(
+            "/mail/capture/{site_id}/{message_id}",
+            get(crate::mail_capture::detail),
+        )
         .route("/sites/{id}/previews", get(previews::site_previews))
         .route("/previews", get(previews::page))
         .route("/sites/{id}/cache", get(crate::site_cache_cdn::page))

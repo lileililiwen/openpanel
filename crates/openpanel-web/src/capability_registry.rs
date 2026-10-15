@@ -518,6 +518,16 @@ pub const REGISTRY: &[RouteMeta] = &[
         site_tab: Some("ftp"),
     },
     RouteMeta {
+        key: "site-webdav",
+        route: "/sites/{id}/webdav",
+        label: "WebDAV",
+        icon: "folder",
+        capability: "ftp",
+        min_role: Role::User,
+        scope: RouteScope::Site,
+        site_tab: Some("webdav"),
+    },
+    RouteMeta {
         key: "site-collaborators",
         route: "/sites/{id}/collaborators",
         label: "Collaborators",

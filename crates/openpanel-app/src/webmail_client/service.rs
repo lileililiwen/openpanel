@@ -24,6 +24,11 @@ pub struct WebmailService {
     bridge: Arc<dyn MailBridge>,
     audit: Arc<dyn AuditService>,
     master_key: [u8; KEK_LEN],
+    /// Optional staging mail-capture port. When attached, `send`
+    /// consults it before the bridge: a message whose mailbox domain
+    /// maps to a site with an active capture-enabled staging slot is
+    /// diverted into the capture inbox and never reaches SMTP.
+    capture: std::sync::Mutex<Option<Arc<dyn openpanel_domain::MailCapturePort>>>,
 }
 
 impl WebmailService {
@@ -39,6 +44,16 @@ impl WebmailService {
             bridge,
             audit,
             master_key,
+            capture: std::sync::Mutex::new(None),
+        }
+    }
+
+    /// Attach the staging mail-capture port (composition roots only;
+    /// never attaching it leaves the send path byte-identical to the
+    /// pre-capture flow).
+    pub fn attach_capture(&self, port: Arc<dyn openpanel_domain::MailCapturePort>) {
+        if let Ok(mut guard) = self.capture.lock() {
+            *guard = Some(port);
         }
     }
 
@@ -164,7 +179,10 @@ impl WebmailService {
 
     /// Compose + send. Enforces `MailboxQuota` and the
     /// `DomainSendingPolicy`; over-quota and policy-violating
-    /// messages are refused with typed errors.
+    /// messages are refused with typed errors. When a mail-capture
+    /// port is attached and the sender's site is capturing, the
+    /// message is diverted to the staging inbox and SMTP delivery is
+    /// skipped; the outcome is marked `captured`.
     #[allow(clippy::too_many_arguments)]
     pub async fn send(
         &self,
@@ -176,7 +194,7 @@ impl WebmailService {
         quota: MailboxQuota,
         used_bytes: u64,
         policy: DomainSendingPolicy,
-    ) -> Result<(), WebmailError> {
+    ) -> Result<WebmailSendOutcome, WebmailError> {
         let incoming = (html.len() + text.len() + subject.len()) as u64;
         if !quota.permits(used_bytes, incoming) {
             return Err(WebmailError::MailboxQuotaExceeded);
@@ -187,6 +205,17 @@ impl WebmailService {
                 "recipient_cap".to_string(),
             ));
         }
+        let port = self.capture.lock().ok().and_then(|guard| guard.clone());
+        if let Some(port) = port {
+            let body = format!("{html}\n\n{text}");
+            let captured = port
+                .capture_for_mailbox(session.mailbox(), to, subject, &body)
+                .await
+                .map_err(|e| WebmailError::Bridge(format!("capture: {e}")))?;
+            if captured {
+                return Ok(WebmailSendOutcome { captured: true });
+            }
+        }
         self.bridge
             .send(
                 session.mailbox(),
@@ -196,8 +225,17 @@ impl WebmailService {
                 text,
                 &policy,
             )
-            .await
+            .await?;
+        Ok(WebmailSendOutcome { captured: false })
     }
+}
+
+/// Result of a webmail send: whether the message was diverted into
+/// the staging capture inbox instead of the production transport.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WebmailSendOutcome {
+    /// True when staging mail capture took the message.
+    pub captured: bool,
 }
 
 /// In-memory reference `MailBridge`. Stores messages per mailbox in

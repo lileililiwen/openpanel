@@ -7,14 +7,15 @@ use openpanel_app::{
     ApiTokenService, BackupService, CollaboratorService, ContainerRegistryService,
     ContainerRuntimeService, CronService, DatabasesService, DnsService, DockerService,
     FilesService, FtpService, GrantResolver, HierarchyService, HostingPlansService,
-    IdentityService, LogService, MailFilterService, MailService, MailingListService,
-    MalwareScannerService, MarketplaceService, MonitoringFleetService, MonitoringService,
-    NotificationService, PitrService, PluginService, SecurityService, ServerSnapshotService,
-    SiteCacheService, SiteCloneService, SiteHttpService, SitesService, SoftwareCenterService,
-    SslService, SsoService, StagingService, StatusPageService, ThemeableUiService, WafService,
-    WebApplicationInstallerService, WebTerminalService, backups::DrillService,
-    identity::TwoFactorService, security::LoginThrottleService,
-    site_clone_template::SqliteSiteCloneTemplateRepository, system_services::ServiceManager,
+    IdentityService, LogService, MailCaptureService, MailFilterService, MailService,
+    MailingListService, MalwareScannerService, MarketplaceService, MonitoringFleetService,
+    MonitoringService, NotificationService, PitrService, PluginService, SecurityService,
+    ServerSnapshotService, SiteCacheService, SiteCloneService, SiteHttpService, SitesService,
+    SoftwareCenterService, SslService, SsoService, StagingService, StatusPageService,
+    ThemeableUiService, WafService, WebApplicationInstallerService, WebDavService,
+    WebTerminalService, backups::DrillService, identity::TwoFactorService,
+    security::LoginThrottleService, site_clone_template::SqliteSiteCloneTemplateRepository,
+    system_services::ServiceManager,
 };
 
 use crate::{
@@ -39,6 +40,7 @@ use crate::{
         identity::router as identity_router,
         logs::{policies_router as logs_policies_router, router as logs_router},
         mail::router as mail_router,
+        mail_capture::router as mail_capture_router,
         malware_scanner::router as malware_scanner_router,
         monitoring::router as monitoring_router,
         monitoring_fleet::router as monitoring_fleet_router,
@@ -63,6 +65,7 @@ use crate::{
         waf::router as waf_router,
         web_application_installer::router as web_application_installer_router,
         web_terminal::router as web_terminal_router,
+        webdav::router as webdav_router,
     },
 };
 
@@ -102,11 +105,13 @@ pub fn build_router(
     sso: Arc<SsoService>,
     docker: Arc<DockerService>,
     ftp: Arc<FtpService>,
+    webdav: Arc<WebDavService>,
     api_tokens: Arc<ApiTokenService>,
     notifications: Arc<NotificationService>,
     pitr: Arc<PitrService>,
     server_snapshots: Arc<ServerSnapshotService>,
     staging: Arc<StagingService>,
+    mail_capture: Arc<MailCaptureService>,
     plugins: Arc<PluginService>,
     marketplace: Arc<MarketplaceService>,
     collaborators: Arc<CollaboratorService>,
@@ -145,7 +150,9 @@ pub fn build_router(
         .merge(web_terminal_router(web_terminal))
         .merge(sso_router(sso.clone()))
         .nest("/sites", ftp_router(ftp))
+        .nest("/sites", webdav_router(webdav.clone()))
         .nest("/sites", site_staging_router(staging))
+        .nest("/sites", mail_capture_router(mail_capture))
         .nest("/databases", databases_router(databases))
         .nest("/databases", db_remote_access_router(db_remote_access))
         .nest("/runtimes", app_runtimes_router(runtime_env))
@@ -196,6 +203,7 @@ pub fn build_router(
 
     Router::new()
         .nest("/api/v1", api)
+        .nest("/dav", openpanel_app::dav_router(webdav))
         .merge(sso_public_router(sso))
         .route("/health", get(health))
 }

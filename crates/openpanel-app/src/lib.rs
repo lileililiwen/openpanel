@@ -102,6 +102,9 @@ pub mod load_balancing;
 pub mod log_viewer;
 pub mod logs;
 pub mod mail;
+/// Staging mail-capture bounded context: diverting send hook,
+/// body-encrypted inbox, FIFO retention, and purge lifecycle.
+pub mod mail_capture;
 /// Mail anti-spam and filtering bounded context: per-mailbox
 /// anti-spam policy, greylist, Sieve filter scripts, autoresponder
 /// windows, forwarders, catch-all, and mailing lists.
@@ -177,6 +180,9 @@ pub mod waf;
 /// plans, install runs, idempotency, and uninstall.
 pub mod web_application_installer;
 pub mod web_terminal;
+/// Per-site WebDAV accounts jailed to the site root: SQLite
+/// repository, Basic-auth service, and the `/dav` router.
+pub mod webdav;
 /// Webmail client bounded context: session tokens, bridge, and
 /// redaction.
 pub mod webmail_client;
@@ -318,6 +324,10 @@ pub use log_viewer::{
 };
 pub use logs::{LogRotationService, LogService, LogsModule};
 pub use mail::{MailModule, MailService};
+pub use mail_capture::{
+    MailCaptureModule, MailCaptureService, MailCaptureView, RETENTION_CAP_PER_SLOT,
+    ReadCapturedMessageView,
+};
 pub use mail_filtering::{
     MailFilterService, MailFilteringModule, MailingListService, SieveCompiler, SpamScorer,
     SqliteMailFilterRepository,
@@ -413,8 +423,13 @@ pub use web_application_installer::{
     SqliteWebApplicationInstallerRepository, WebApplicationInstallerService,
 };
 pub use web_terminal::{WebTerminalModule, WebTerminalService};
+pub use webdav::{
+    CreateWebDavAccount, CreatedWebDavAccount, SqliteWebDavRepository, UpdateWebDavAccount,
+    WebDavAccountView, WebDavModule, WebDavService, dav_router,
+};
 pub use webmail_client::{
-    InMemoryMailBridge, SqliteWebmailRepository, WebmailService, redact_html, sha256_hex,
+    InMemoryMailBridge, SqliteWebmailRepository, WebmailSendOutcome, WebmailService, redact_html,
+    sha256_hex,
 };
 pub use wildcard_ssl::{
     CertRenewalScheduler, Dns01ChallengeSolver, RecordingDnsProvider, SqliteWildcardRepository,

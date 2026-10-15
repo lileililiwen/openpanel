@@ -9,8 +9,6 @@
 # following the `release-governance` / `coverage-floor` skip idiom,
 # instead of blocking unrelated work.
 set -euo pipefail
-source "$(dirname "$0")/lib/step.sh"
-
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "${REPO_ROOT}"
 
@@ -21,4 +19,13 @@ if [ ! -f "${GOV_SCRIPT}" ]; then
     exit 0
 fi
 
-step "governance-quality" python3 "${GOV_SCRIPT}" --root "${REPO_ROOT}/.." --project openpanel --json
+# driftwatchdog's governance concern parses this script's stdout as one
+# JSON report, so the step markers go to stderr and only the report
+# reaches stdout.
+echo "step: governance-quality status: running" >&2
+if python3 "${GOV_SCRIPT}" --root "${REPO_ROOT}/.." --project openpanel --json; then
+    echo "step: governance-quality status: ok" >&2
+else
+    echo "step: governance-quality status: failed" >&2
+    exit 1
+fi

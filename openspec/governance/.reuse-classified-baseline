@@ -72,6 +72,7 @@ health	per-aggregate business method, not a shared utility
 history	per-aggregate business method, not a shared utility
 HistoryQuery	API request DTO vs web form alias
 home	per-aggregate business method, not a shared utility
+insert	per-aggregate business method, not a shared utility
 install_artifact	per-aggregate business method, not a shared utility
 is_expired	per-aggregate business method, not a shared utility
 # is fixed), adding entries requires a reviewed change.
@@ -86,6 +87,7 @@ list_users	per-aggregate business method, not a shared utility
 load	per-aggregate business method, not a shared utility
 login	per-aggregate business method, not a shared utility
 logs	per-aggregate business method, not a shared utility
+mail_capture	harness accessor mirrors the staging-slot getter name; no shared utility
 message	per-aggregate business method, not a shared utility
 messages	per-aggregate business method, not a shared utility
 metadata	per-aggregate business method, not a shared utility
@@ -102,6 +104,7 @@ preview	per-aggregate business method, not a shared utility
 public_router	per-aggregate business method, not a shared utility
 publishes	per-aggregate business method, not a shared utility
 publish	per-aggregate business method, not a shared utility
+purge	per-aggregate business method, not a shared utility
 push	per-aggregate business method, not a shared utility
 # rebuilds this file.
 record	per-aggregate business method, not a shared utility
@@ -129,6 +132,7 @@ search	per-aggregate business method, not a shared utility
 serve	per-aggregate business method, not a shared utility
 set_enabled	per-aggregate business method, not a shared utility
 set_force_https	per-aggregate business method, not a shared utility
+set_mail_capture	per-aggregate business method, not a shared utility
 set_role	per-aggregate business method, not a shared utility
 set_status	per-aggregate business method, not a shared utility
 Severity	per-module severity enum (notifications / malware / dashboard)
@@ -143,6 +147,7 @@ ssh_keys	per-aggregate business method, not a shared utility
 status	per-aggregate business method, not a shared utility
 stub	per-aggregate business method, not a shared utility
 submit	per-aggregate business method, not a shared utility
+summary	per-aggregate business method, not a shared utility
 supported	per-aggregate business method, not a shared utility
 supports_rollback	per-aggregate business method, not a shared utility
 target	per-aggregate business method, not a shared utility

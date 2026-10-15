@@ -182,7 +182,7 @@ async fn stale_host_state_rejects_execution_before_package_mutation() {
     let service = SoftwareCenterService::new(Arc::new(packages), Arc::new(MockAudit::stub()));
     let actor = Uuid::new_v4();
     let preview = service
-        .preview_install(actor, Role::Owner, "redis")
+        .preview_install(actor, Role::Owner, "redis", None)
         .await
         .unwrap();
     assert_eq!(preview.packages, ["redis-server"]);
@@ -254,7 +254,7 @@ async fn failed_post_install_validation_rolls_back_and_never_reports_success() {
     let service = SoftwareCenterService::new(Arc::new(packages), Arc::new(audit));
     let actor = Uuid::new_v4();
     let preview = service
-        .preview_install(actor, Role::Owner, "nginx")
+        .preview_install(actor, Role::Owner, "nginx", None)
         .await
         .unwrap();
     let job = service
@@ -278,7 +278,7 @@ async fn non_owner_is_rejected_before_discovery_or_commands() {
     let service = SoftwareCenterService::new(Arc::new(packages), Arc::new(MockAudit::stub()));
     assert!(matches!(
         service
-            .preview_install(Uuid::new_v4(), Role::Admin, "redis")
+            .preview_install(Uuid::new_v4(), Role::Admin, "redis", None)
             .await,
         Err(SoftwareCenterError::Forbidden)
     ));
@@ -454,12 +454,12 @@ async fn external_component_requires_explicit_adoption_before_removal() {
     let actor = Uuid::new_v4();
     assert!(matches!(
         service
-            .preview_component(actor, Role::Owner, "redis", ComponentAction::Remove)
+            .preview_component(actor, Role::Owner, "redis", ComponentAction::Remove, None)
             .await,
         Err(SoftwareCenterError::Conflict)
     ));
     let adoption = service
-        .preview_component(actor, Role::Owner, "redis", ComponentAction::Adopt)
+        .preview_component(actor, Role::Owner, "redis", ComponentAction::Adopt, None)
         .await
         .unwrap();
     service
@@ -472,7 +472,7 @@ async fn external_component_requires_explicit_adoption_before_removal() {
         .await
         .unwrap();
     let removal = service
-        .preview_component(actor, Role::Owner, "redis", ComponentAction::Remove)
+        .preview_component(actor, Role::Owner, "redis", ComponentAction::Remove, None)
         .await
         .unwrap();
     service
@@ -591,7 +591,7 @@ async fn cancellation_waits_for_package_checkpoint_then_rolls_back() {
     ));
     let actor = Uuid::new_v4();
     let preview = service
-        .preview_install(actor, Role::Owner, "redis")
+        .preview_install(actor, Role::Owner, "redis", None)
         .await
         .unwrap();
     let digest = preview.plan.digest().to_owned();
@@ -690,7 +690,7 @@ async fn start_execute_runs_in_background_and_reports_progress() {
     let service = Arc::new(SoftwareCenterService::new(packages.clone(), audit.clone()));
     let actor = Uuid::new_v4();
     let preview = service
-        .preview_install(actor, Role::Owner, "php-8.3")
+        .preview_install(actor, Role::Owner, "php-8.3", None)
         .await
         .unwrap();
     assert_eq!(preview.packages.len(), 9, "php-8.3 should plan 9 packages");
@@ -748,7 +748,7 @@ async fn start_execute_cancellation_lands_at_a_package_boundary() {
     ));
     let actor = Uuid::new_v4();
     let preview = service
-        .preview_install(actor, Role::Owner, "php-8.3")
+        .preview_install(actor, Role::Owner, "php-8.3", None)
         .await
         .unwrap();
     let digest = preview.plan.digest().to_owned();
@@ -803,7 +803,7 @@ use openpanel_test_support::TestDb;
 async fn build_store() -> (SoftwareCatalogStore, TestDb) {
     let db = TestDb::new().await;
     // TestDb only runs the core migrations; run the software-center
-    // V001 + V002 + V003 migrations so the aggregator store has its tables.
+    // V001 + V002 + V003 + V004 migrations so the aggregator store has its tables.
     let pool = db.pool();
     sqlx::query(openpanel_app::migrations::SOFTWARE_CENTER_V001)
         .execute(&pool)
@@ -817,6 +817,10 @@ async fn build_store() -> (SoftwareCatalogStore, TestDb) {
         .execute(&pool)
         .await
         .expect("software_center V003");
+    sqlx::query(openpanel_app::migrations::SOFTWARE_CENTER_V004)
+        .execute(&pool)
+        .await
+        .expect("software_center V004");
     let store = SoftwareCatalogStore::new(Some(pool));
     (store, db)
 }
@@ -1659,19 +1663,20 @@ fn install_artifact_records_audit_with_source_digest_and_platform() {
         let platform = metadata
             .get("platform")
             .expect("platform key must be present");
+        let expected = openpanel_app::software_center::current_platform();
         assert_eq!(
             platform.get("id").and_then(|value| value.as_str()),
-            Some("ubuntu"),
+            expected.get("id").and_then(|value| value.as_str()),
             "platform must record the host OS id, got {platform}"
         );
         assert_eq!(
             platform.get("version_id").and_then(|value| value.as_str()),
-            Some("24.04"),
+            expected.get("version_id").and_then(|value| value.as_str()),
             "platform must record the host OS version, got {platform}"
         );
         assert_eq!(
             platform.get("arch").and_then(|value| value.as_str()),
-            Some("x86_64"),
+            Some(std::env::consts::ARCH),
             "platform must record the host arch, got {platform}"
         );
     });
@@ -2026,7 +2031,7 @@ async fn managed_redis_service(
     .with_config_root(sandbox.path().to_path_buf());
     let actor = Uuid::new_v4();
     let preview = service
-        .preview_install(actor, Role::Owner, "redis")
+        .preview_install(actor, Role::Owner, "redis", None)
         .await
         .expect("preview redis");
     let job = service
@@ -2161,4 +2166,262 @@ async fn config_read_rejects_files_over_the_bound() {
         service.read_config(Role::Owner, "redis").await,
         Err(SoftwareCenterError::Invalid(_))
     ));
+}
+
+// =========================================================================
+// Versioned installs (adopt-openserverpanel-batch)
+// =========================================================================
+
+/// Package fake whose host snapshot tracks what `apply` installed, so
+/// multiple versions of a component can be probed as co-installed.
+#[derive(Default)]
+struct StatefulPackages {
+    installed: std::sync::Mutex<BTreeSet<String>>,
+}
+#[async_trait]
+impl PackageManager for StatefulPackages {
+    async fn discover(&self) -> Result<HostSnapshot, SoftwareCenterError> {
+        let mut snapshot = HostSnapshot::test("widget-state");
+        snapshot.installed_packages = self.installed.lock().expect("installed lock").clone();
+        Ok(snapshot)
+    }
+    async fn apply(&self, actions: &[PlanAction]) -> Result<(), SoftwareCenterError> {
+        let mut installed = self.installed.lock().expect("installed lock");
+        for action in actions {
+            match action {
+                PlanAction::Install(package) | PlanAction::Update(package) => {
+                    installed.insert(package.as_str().to_owned());
+                }
+                PlanAction::Remove(package) => {
+                    installed.remove(package.as_str());
+                }
+            }
+        }
+        Ok(())
+    }
+    async fn validate(&self, _component: &str) -> Result<(), SoftwareCenterError> {
+        Ok(())
+    }
+    async fn rollback(&self, actions: &[PlanAction]) -> Result<(), SoftwareCenterError> {
+        let mut installed = self.installed.lock().expect("installed lock");
+        for action in actions {
+            if let PlanAction::Install(package) = action {
+                installed.remove(package.as_str());
+            }
+        }
+        Ok(())
+    }
+}
+
+async fn seed_widget_rows(pool: &sqlx::SqlitePool) {
+    sqlx::query(
+        "INSERT INTO software_entries(id,name,description,long_description,category,kind,license,developer,homepage,icon,size_bytes,latest_version,search_text,activated_at,source_url,manifest_digest,embedded,platforms_json) VALUES('widget','Widget','test widget','long','database','system','MIT','Acme','https://acme.example',NULL,100,'2.0','widget','2026-01-01T00:00:00Z','https://catalog.test','digest',0,'[{\"distribution\":\"ubuntu\",\"release\":\"24.04\",\"architecture\":\"x86_64\"}]')",
+    )
+    .execute(pool)
+    .await
+    .expect("widget entry");
+    sqlx::query(
+        "INSERT INTO software_entry_versions(entry_id,version,size_bytes,changelog_url,artifact_json,packages_json,supports_php_json,released_at,is_latest) VALUES('widget','1.0',100,NULL,NULL,'[\"widget-1\"]','[]',NULL,0),('widget','2.0',100,NULL,NULL,'[\"widget-2\"]','[]',NULL,1)",
+    )
+    .execute(pool)
+    .await
+    .expect("widget versions");
+}
+
+async fn installed_version_rows(pool: &sqlx::SqlitePool, id: &str) -> Vec<String> {
+    sqlx::query_scalar::<_, String>(
+        "SELECT version FROM software_components WHERE id=? AND managed=1 AND version<>'' ORDER BY version DESC",
+    )
+    .bind(id)
+    .fetch_all(pool)
+    .await
+    .expect("installed rows")
+}
+
+#[tokio::test]
+async fn preview_install_rejects_unknown_version() {
+    let mut packages = MockPackages::new();
+    packages.expect_discover().never();
+    let service = SoftwareCenterService::new(Arc::new(packages), Arc::new(MockAudit::stub()));
+    let error = service
+        .preview_install(Uuid::new_v4(), Role::Owner, "redis", Some("9.9.9"))
+        .await
+        .expect_err("unknown version must be rejected");
+    assert!(matches!(error, SoftwareCenterError::UnknownVersion(_)));
+}
+
+#[tokio::test]
+async fn preview_install_default_and_explicit_version_agree() {
+    let mut packages = MockPackages::new();
+    packages
+        .expect_discover()
+        .times(2)
+        .returning(|| Ok(HostSnapshot::test("state-v")));
+    let service = SoftwareCenterService::new(Arc::new(packages), Arc::new(MockAudit::stub()));
+    let actor = Uuid::new_v4();
+    let default_preview = service
+        .preview_install(actor, Role::Owner, "mysql", None)
+        .await
+        .expect("default resolves latest");
+    let explicit = service
+        .preview_install(actor, Role::Owner, "mysql", Some("8.0.36"))
+        .await
+        .expect("explicit latest accepted");
+    assert_eq!(default_preview.packages, explicit.packages);
+    assert_eq!(
+        default_preview.plan.digest(),
+        explicit.plan.digest(),
+        "same resolved version must produce the same plan"
+    );
+}
+
+#[tokio::test]
+async fn two_versions_install_coexist_and_uninstall_independently() {
+    let (store, db) = build_store().await;
+    let pool = db.pool();
+    seed_widget_rows(&pool).await;
+    let sandbox = tempfile::tempdir().expect("tempdir");
+    let service = SoftwareCenterService::with_artifact_pipeline(
+        Arc::new(StatefulPackages::default()),
+        Arc::new(MockApplications::new()),
+        Arc::new(MockAudit::stub()),
+        Some(pool.clone()),
+        true,
+        Arc::new(MemoryArtifactFetcher {
+            bytes: Vec::new(),
+            requested: std::sync::Mutex::new(Vec::new()),
+        }),
+        sandbox.path().join("webapps"),
+        false,
+    );
+    let actor = Uuid::new_v4();
+
+    let preview = service
+        .preview_install(actor, Role::Owner, "widget", Some("1.0"))
+        .await
+        .expect("preview widget 1.0");
+    assert_eq!(preview.packages, ["widget-1"]);
+    service
+        .execute(
+            actor,
+            Role::Owner,
+            preview.plan.digest(),
+            &preview.confirmation_token,
+        )
+        .await
+        .expect("install widget 1.0");
+    assert_eq!(installed_version_rows(&pool, "widget").await, ["1.0"]);
+
+    let preview = service
+        .preview_install(actor, Role::Owner, "widget", Some("2.0"))
+        .await
+        .expect("second version installs alongside the first");
+    service
+        .execute(
+            actor,
+            Role::Owner,
+            preview.plan.digest(),
+            &preview.confirmation_token,
+        )
+        .await
+        .expect("install widget 2.0");
+    assert_eq!(
+        installed_version_rows(&pool, "widget").await,
+        ["2.0", "1.0"]
+    );
+
+    assert!(
+        matches!(
+            service
+                .preview_install(actor, Role::Owner, "widget", Some("1.0"))
+                .await,
+            Err(SoftwareCenterError::Conflict)
+        ),
+        "re-installing a present version is a conflict"
+    );
+
+    let entry = store
+        .get_entry("widget")
+        .await
+        .unwrap()
+        .expect("widget entry");
+    assert_eq!(entry.install_state, "panel_managed");
+    assert_eq!(entry.installed_version.as_deref(), Some("2.0"));
+    assert_eq!(entry.installed_versions, ["2.0", "1.0"]);
+
+    let page = store
+        .search(&CatalogQuery {
+            update_available_only: true,
+            ..CatalogQuery::default()
+        })
+        .await
+        .unwrap();
+    assert!(
+        page.hits.iter().any(|hit| hit.id == "widget"),
+        "stale 1.0 row keeps widget in the update-available set"
+    );
+
+    let preview = service
+        .preview_component(
+            actor,
+            Role::Owner,
+            "widget",
+            ComponentAction::Remove,
+            Some("1.0"),
+        )
+        .await
+        .expect("remove 1.0 previews");
+    assert_eq!(preview.packages, ["widget-1"]);
+    service
+        .execute(
+            actor,
+            Role::Owner,
+            preview.plan.digest(),
+            &preview.confirmation_token,
+        )
+        .await
+        .expect("remove widget 1.0");
+    assert_eq!(installed_version_rows(&pool, "widget").await, ["2.0"]);
+    let page = store
+        .search(&CatalogQuery {
+            update_available_only: true,
+            ..CatalogQuery::default()
+        })
+        .await
+        .unwrap();
+    assert!(
+        !page.hits.iter().any(|hit| hit.id == "widget"),
+        "latest-only installs leave nothing update-flagged"
+    );
+
+    let preview = service
+        .preview_component(
+            actor,
+            Role::Owner,
+            "widget",
+            ComponentAction::Remove,
+            Some("2.0"),
+        )
+        .await
+        .expect("remove 2.0 previews");
+    service
+        .execute(
+            actor,
+            Role::Owner,
+            preview.plan.digest(),
+            &preview.confirmation_token,
+        )
+        .await
+        .expect("remove widget 2.0");
+    assert!(installed_version_rows(&pool, "widget").await.is_empty());
+    let managed_rows: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM software_components WHERE id='widget' AND managed=1",
+    )
+    .fetch_one(&pool)
+    .await
+    .expect("managed count");
+    assert_eq!(
+        managed_rows, 0,
+        "no managed rows remain after final uninstall"
+    );
 }

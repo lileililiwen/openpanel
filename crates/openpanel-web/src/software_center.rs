@@ -650,6 +650,9 @@ fn config_error_message(error: &openpanel_app::software_center::SoftwareCenterEr
                 .to_owned()
         }
         SoftwareCenterError::Invalid(detail) => detail.clone(),
+        SoftwareCenterError::UnknownVersion(version) => {
+            format!("Version {version} is not offered by this entry.")
+        }
         SoftwareCenterError::Package(detail) => {
             format!("The config file could not be written. {detail}")
         }
@@ -898,6 +901,17 @@ fn detail_content(
         "available" => Some(html! {
             form method="post" action={"/software/components/" (entry.id) "/preview"} class="form form-inline" {
                 input type="hidden" name="_csrf" value=(csrf);
+                @if entry.versions.len() > 1 {
+                    label {
+                        "Version "
+                        select name="version" {
+                            option value="" { "Latest (" (entry.latest_version) ")" }
+                            @for version in &entry.versions {
+                                option value=(version.version) { (version.version) }
+                            }
+                        }
+                    }
+                }
                 button class="button" { "Install" }
             }
         }),
@@ -918,6 +932,16 @@ fn detail_content(
                 }
                 form method="post" action={"/software/components/" (entry.id) "/remove/preview"} class="form form-inline" {
                     input type="hidden" name="_csrf" value=(csrf);
+                    @if entry.installed_versions.len() > 1 {
+                        label {
+                            "Version "
+                            select name="version" {
+                                @for installed in &entry.installed_versions {
+                                    option value=(installed) { (installed) }
+                                }
+                            }
+                        }
+                    }
                     button class="button button--danger" { "Remove" }
                 }
             }
@@ -950,8 +974,8 @@ fn detail_content(
                         dt { "Developer" } dd { (entry.developer) }
                         dt { "Homepage" } dd { a href=(entry.homepage) { (entry.homepage) } }
                         dt { "Latest version" } dd { (entry.latest_version) }
-                        @if let Some(installed) = &entry.installed_version {
-                            dt { "Installed version" } dd { (installed) }
+                        @if !entry.installed_versions.is_empty() {
+                            dt { "Installed versions" } dd { (entry.installed_versions.join(", ")) }
                         }
                     }
                 }
@@ -1075,7 +1099,7 @@ pub async fn preview(
     }
     let preview = match state
         .software_center
-        .preview_install(user.id(), user.role(), &id)
+        .preview_install(user.id(), user.role(), &id, form.version.as_deref())
         .await
     {
         Ok(value) => value,
@@ -1110,7 +1134,7 @@ pub async fn preview_component_action(
     }
     let preview = match state
         .software_center
-        .preview_component(user.id(), user.role(), &id, action)
+        .preview_component(user.id(), user.role(), &id, action, form.version.as_deref())
         .await
     {
         Ok(value) => value,
@@ -1227,6 +1251,9 @@ pub async fn execute_deployment(
 #[derive(Deserialize)]
 pub struct PreviewForm {
     pub _csrf: String,
+    /// Optional version target for a versioned lifecycle action.
+    #[serde(default)]
+    pub version: Option<String>,
 }
 
 /// Confirmed execution form.
@@ -1292,6 +1319,9 @@ fn software_center_error_message(
         }
         SoftwareCenterError::Conflict => {
             "The host changed since the preview was generated. Open the entry to request a fresh plan before retrying.".to_owned()
+        }
+        SoftwareCenterError::UnknownVersion(version) => {
+            format!("Version {version} is not offered by this entry. Pick one of the listed versions.")
         }
         SoftwareCenterError::Dependencies(count) => format!(
             "{count} managed component{} still depend on this one. Remove or migrate them first.",

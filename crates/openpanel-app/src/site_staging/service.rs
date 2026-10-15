@@ -379,6 +379,37 @@ impl StagingService {
         }
     }
 
+    /// Enable or disable staging mail capture for the site's slot.
+    /// When capture is on, outbound mail from the site's domains is
+    /// diverted to the staging capture inbox (see the
+    /// `staging-mail-capture` capability) instead of the production
+    /// transport.
+    pub async fn set_mail_capture(
+        &self,
+        caller: &User,
+        site_id: Uuid,
+        enabled: bool,
+    ) -> Result<StagingSlot, PromotionServiceError> {
+        self.ensure_owner(caller)?;
+        self.load_site(caller, site_id).await?;
+        let mut slot = self
+            .slots
+            .find_by_site(site_id)
+            .await?
+            .ok_or_else(|| SiteStagingError::NotFound(format!("slot for site {site_id}")))?;
+        slot.set_mail_capture(enabled, Utc::now());
+        self.slots.update(&slot).await?;
+        self.record_audit(
+            caller.username().as_str(),
+            AuditAction::MailCaptureToggled,
+            site_id.to_string(),
+            serde_json::json!({"slot_id": slot.id(), "enabled": enabled}),
+            AuditOutcome::Success,
+        )
+        .await;
+        Ok(slot)
+    }
+
     /// Look up the slot for a site.
     pub async fn slot_for(
         &self,

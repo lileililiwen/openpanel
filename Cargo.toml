@@ -223,3 +223,7 @@ expect_used = "deny"
 panic = "deny"
 todo = "deny"
 unimplemented = "deny"
+# clippy 1.99 fires this on `#[async_trait]` desugar (the macro's hidden
+# boxed future is already must_use); every hit in the workspace is the
+# false positive, not a hand-written attribute.
+double_must_use = "allow"

@@ -175,6 +175,12 @@ fn confirm_spec(action: &str) -> Option<ConfirmSpec> {
             "This permanently deletes the FTP account.",
             &[],
         ),
+        "delete-webdav-account" => navigate(
+            "/sites/{site_id}/webdav/{account_id}/delete",
+            "Delete WebDAV account",
+            "This permanently deletes the WebDAV account.",
+            &[],
+        ),
         "run-database-tool" => post(
             "/databases/{id}/tools",
             "#db-tools",
@@ -405,6 +411,7 @@ mod tests {
             "delete-user",
             "delete-job",
             "delete-ftp-user",
+            "delete-webdav-account",
             "delete-record",
             "run-database-tool",
             "adopt-database",
@@ -424,6 +431,7 @@ mod tests {
             "delete-user",
             "delete-job",
             "delete-ftp-user",
+            "delete-webdav-account",
             "delete-record",
             "run-database-tool",
             "adopt-database",

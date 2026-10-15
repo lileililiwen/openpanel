@@ -169,7 +169,7 @@ impl UserWithPermissions for FtpUser {
 impl FtpUser {
     fn claim_transfer(&self, bytes: u64) -> bool {
         self.transferred
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |used| {
                 used.checked_add(bytes)
                     .filter(|next| *next <= self.transfer_limit_bytes)
             })

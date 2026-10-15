@@ -6,4 +6,6 @@ mod repo;
 mod service;
 
 pub use repo::SqliteWebmailRepository;
-pub use service::{InMemoryMailBridge, WebmailService, redact_html, sha256_hex};
+pub use service::{
+    InMemoryMailBridge, WebmailSendOutcome, WebmailService, redact_html, sha256_hex,
+};

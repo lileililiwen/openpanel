@@ -35,6 +35,8 @@ pub mod identity;
 pub mod logs;
 /// Hosted mail routes (`/mail`).
 pub mod mail;
+/// Staging mail-capture inbox routes (`/sites/{id}/mail-capture`).
+pub mod mail_capture;
 /// Malware scanner routes (`/sites/{id}/scan`, `/scans/{id}`).
 pub mod malware_scanner;
 /// Monitoring resource routes (`/monitoring`).
@@ -81,3 +83,5 @@ pub mod waf;
 /// (`/sites/{id}/web-apps`, `/web-apps/{id}`).
 pub mod web_application_installer;
 pub mod web_terminal;
+/// Per-site WebDAV account routes (`/sites/{id}/webdav/accounts`).
+pub mod webdav;

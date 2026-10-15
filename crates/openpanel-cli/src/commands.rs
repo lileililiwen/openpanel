@@ -189,6 +189,12 @@ pub enum Command {
         #[command(subcommand)]
         action: FtpCommand,
     },
+    /// Manage per-site WebDAV accounts.
+    WebDav {
+        /// WebDAV account operation.
+        #[command(subcommand)]
+        action: WebDavCommand,
+    },
     /// Manage scoped personal API tokens.
     Token {
         /// Token lifecycle operation.
@@ -325,6 +331,44 @@ pub enum TokenCommand {
 #[derive(Debug, Subcommand)]
 #[allow(missing_docs)]
 pub enum FtpCommand {
+    Create {
+        #[arg(long)]
+        site: String,
+        #[arg(long)]
+        username: String,
+        #[arg(long)]
+        password: String,
+        #[arg(long)]
+        read_only: bool,
+    },
+    List {
+        #[arg(long)]
+        site: String,
+    },
+    Disable {
+        #[arg(long)]
+        site: String,
+        #[arg(long)]
+        id: String,
+    },
+    Enable {
+        #[arg(long)]
+        site: String,
+        #[arg(long)]
+        id: String,
+    },
+    Delete {
+        #[arg(long)]
+        site: String,
+        #[arg(long)]
+        id: String,
+    },
+}
+
+/// Per-site WebDAV account operations.
+#[derive(Debug, Subcommand)]
+#[allow(missing_docs)]
+pub enum WebDavCommand {
     Create {
         #[arg(long)]
         site: String,
@@ -540,6 +584,8 @@ pub enum SoftwareCommand {
     Preview {
         #[arg(long)]
         id: String,
+        #[arg(long)]
+        version: Option<String>,
     },
     Execute {
         #[arg(long)]
@@ -556,14 +602,20 @@ pub enum SoftwareCommand {
     Adopt {
         #[arg(long)]
         id: String,
+        #[arg(long)]
+        version: Option<String>,
     },
     Update {
         #[arg(long)]
         id: String,
+        #[arg(long)]
+        version: Option<String>,
     },
     Uninstall {
         #[arg(long)]
         id: String,
+        #[arg(long)]
+        version: Option<String>,
     },
     Deploy {
         #[arg(long)]
@@ -1662,6 +1714,15 @@ pub enum StagingCommand {
         /// Site id.
         #[arg(long)]
         id: String,
+    },
+    /// Toggle capture of outgoing mail from the staging site.
+    MailCapture {
+        /// Site id.
+        #[arg(long)]
+        id: String,
+        /// `true` enables capture, `false` disables it.
+        #[arg(long)]
+        enabled: bool,
     },
 }
 

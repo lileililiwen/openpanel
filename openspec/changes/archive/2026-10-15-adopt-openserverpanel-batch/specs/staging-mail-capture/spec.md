@@ -1,0 +1,63 @@
+# staging-mail-capture Specification
+
+## Purpose
+
+A staging-scoped mail sandbox: when a staging slot enables capture,
+outbound messages from that site are diverted into a panel-visible
+inbox instead of the real mail path, so test sends never reach the
+public internet.
+
+## ADDED Requirements
+
+### Requirement: Capture Diverts Site Outbound Mail
+
+When mail capture is enabled for a site's active staging slot, the
+panel's user-facing send path SHALL store the message in the capture
+inbox instead of handing it to the production mail transport, and the
+sender receives a success result marked as captured.
+
+#### Scenario: Staging send captured
+
+- **WHEN** a webmail user on a site with capture enabled sends a
+  message
+- **THEN** no SMTP delivery is attempted and the message appears in
+  that site's capture inbox.
+
+#### Scenario: Production path untouched
+
+- **WHEN** capture is disabled for the slot
+- **THEN** the send behaves identically to the pre-change flow.
+
+### Requirement: Captured Message Contents
+
+A captured message SHALL record recipient(s), sender, subject,
+timestamp, and body; bodies MUST be encrypted at rest with the panel
+secret storage and MUST NEVER be returned in audit payloads or logs.
+
+#### Scenario: Read detail
+
+- **WHEN** an authorized owner/admin opens a captured message
+- **THEN** the decrypted body and metadata are displayed.
+
+### Requirement: Inbox Visibility and Purge
+
+Owners and admins SHALL list and read the capture inbox per site,
+and SHALL be able to purge all messages for a slot. Deletion follows
+slot destruction automatically (see `site-staging`).
+
+#### Scenario: Purge all
+
+- **WHEN** an operator purges the inbox of a slot
+- **THEN** zero messages remain for that slot.
+
+### Requirement: Bounded Retention
+
+The capture inbox SHALL enforce a per-slot retention cap (default
+1000 messages), evicting the oldest captured messages FIFO when
+exceeded.
+
+#### Scenario: Cap enforced
+
+- **WHEN** a message is stored into a full inbox
+- **THEN** the oldest message is evicted and the stored count stays at
+  the cap.

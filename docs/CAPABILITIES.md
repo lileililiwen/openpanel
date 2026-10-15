@@ -103,6 +103,7 @@ reference, not a second source of truth.
 | `software-center-trust` | [spec](../openspec/specs/software-center-trust/spec.md) |  |
 | `ssl` | [spec](../openspec/specs/ssl/spec.md) | yes |
 | `ssl-production-lifecycle` | [spec](../openspec/specs/ssl-production-lifecycle/spec.md) |  |
+| `staging-mail-capture` | [spec](../openspec/specs/staging-mail-capture/spec.md) |  |
 | `synthetic-monitoring` | [spec](../openspec/specs/synthetic-monitoring/spec.md) |  |
 | `system-services` | [spec](../openspec/specs/system-services/spec.md) | yes |
 | `terminal-host-fleet` | [spec](../openspec/specs/terminal-host-fleet/spec.md) |  |
@@ -116,14 +117,15 @@ reference, not a second source of truth.
 | `web-ui` | [spec](../openspec/specs/web-ui/spec.md) |  |
 | `web-ui-discoverability` | [spec](../openspec/specs/web-ui-discoverability/spec.md) |  |
 | `web-ui-styling` | [spec](../openspec/specs/web-ui-styling/spec.md) |  |
+| `webdav-file-access` | [spec](../openspec/specs/webdav-file-access/spec.md) |  |
 | `webmail-client` | [spec](../openspec/specs/webmail-client/spec.md) |  |
 | `wordpress-toolkit` | [spec](../openspec/specs/wordpress-toolkit/spec.md) |  |
 
-**Total live capabilities: 99.**
+**Total live capabilities: 101.**
 
 ## Navigation registry reconciliation
 
-The shipped navigation registry exposes 47 entries
+The shipped navigation registry exposes 48 entries
 across 28 capability identifiers. Identifiers without a
 live capability folder of the same name are expected: the registry
 names runtime capabilities and routes, while the catalog names spec

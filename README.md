@@ -188,7 +188,9 @@ the web UI, so there is a single auth system.
   redaction-aware event list, cursor pagination, and CSV export.
 - **Software Center** — production storefront at `/software` with
   category tabs, search, filters, detail page (Overview/Versions/
-  Changelog/Dependencies/Source), install wizard, and job progress.
+  Changelog/Dependencies/Source), install wizard with version
+  selection (co-installed versions tracked per component), and job
+  progress.
 
 ### Screenshots
 
@@ -278,7 +280,8 @@ capability surface is described in `openspec/specs/`:
   per-site HTTP controls (custom error pages, redirect rules,
   protected dirs, hotlink protection, MIME overrides,
   directory-index policy, IP allow/deny), per-site PHP runtime,
-  transport tuning, site staging, site clone + templates,
+  transport tuning, site staging (with a captured-mail inbox for
+  staging form submissions), site clone + templates,
   preview deployments, cache + CDN, WAF rules.
 - **Databases / MySQL provisioning** — `Database` aggregate with
   auto-prefixed names (`{owner}_{suffix}`), AES-256-GCM password
@@ -292,11 +295,15 @@ capability surface is described in `openspec/specs/`:
   RBAC mirroring the sites module.
 - **FTP / SFTP / jailed shells** — per-account FTP with the sites
   chroot, SFTP-only jailed shells.
-- **SSL / TLS** — Let's Encrypt HTTP-01 (staging default, production
-  opt-in), DNS-01 wildcard, manual PEM upload, self-signed
-  generation, auto-renewal, force-HTTPS 301, per-site toggle. Private
-  keys never leave the panel; ACME HTTP-01 challenge server is
-  local-only (`127.0.0.1:9080`).
+- **WebDAV** — per-site jailed DAV server mounted at `/dav`: Basic
+  auth, read-only accounts, PROPFIND/GET/HEAD/PUT/DELETE/MKCOL/MOVE/
+  COPY (LOCK returns 501), chroot path resolution with no traversal.
+- **SSL / TLS** — Let's Encrypt HTTP-01 with live issuance (staging
+  default, production opt-in), DNS-01 wildcard, manual PEM upload,
+  self-signed generation, auto-renewal, force-HTTPS 301, per-site
+  toggle. Private keys never leave the panel; ACME HTTP-01 challenge
+  server is local-only (`127.0.0.1:9080`) and is answered live during
+  order validation.
 - **Mail** — hosted mail domains, mailboxes, aliases, catch-alls,
   per-mailbox autoresponder + quota, mailing lists, DKIM auto-generation
   + rotation with grace, greylisting, spam scoring + spam-folder
@@ -318,7 +325,9 @@ capability surface is described in `openspec/specs/`:
 - **Cron** — scheduled jobs, due-job execution, execution history
   retention, per-user cron quotas, job scope and role permissions.
 - **Software Center** — Owner-only trusted catalog, host discovery,
-  reviewable Nginx/PHP/MySQL/MariaDB/Redis lifecycle plans, durable
+  version-targeted installs (multiple versions of a component can
+  coexist, tracked per version), reviewable Nginx/PHP/MySQL/MariaDB/Redis
+  lifecycle plans, durable
   jobs, safe cancellation/retry/rollback, pinned WordPress/Drupal
   deployment recipes, digest state (Verified/Placeholder/Missing/
   Invalid/NotApplicable), 30+ production-seed entries (Nginx, Apache,

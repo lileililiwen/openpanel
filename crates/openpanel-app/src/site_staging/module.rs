@@ -55,12 +55,20 @@ impl SiteStagingModule {
         ));
         Self {
             service,
-            migrations: vec![Migration {
-                module: MODULE_NAME,
-                version: "001".into(),
-                description: "site-staging initial schema".into(),
-                sql: crate::migrations::SITE_STAGING_V001.into(),
-            }],
+            migrations: vec![
+                Migration {
+                    module: MODULE_NAME,
+                    version: "001".into(),
+                    description: "site-staging initial schema".into(),
+                    sql: crate::migrations::SITE_STAGING_V001.into(),
+                },
+                Migration {
+                    module: MODULE_NAME,
+                    version: "002".into(),
+                    description: "staging mail-capture toggle".into(),
+                    sql: crate::migrations::SITE_STAGING_V002.into(),
+                },
+            ],
         }
     }
 

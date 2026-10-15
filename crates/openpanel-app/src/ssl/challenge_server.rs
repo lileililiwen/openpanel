@@ -41,16 +41,61 @@ struct ChallengeEntry {
     key_authorization: String,
 }
 
+/// Delegated token→key-authorization lookup, consulted by the router
+/// after the manual map misses. The production ACME adapter attaches
+/// one bound to the live `rustls_acme` resolver so the existing
+/// nginx-proxied topology serves HTTP-01 validations without a second
+/// server.
+pub type TokenLookup = Arc<dyn Fn(&str) -> Option<String> + Send + Sync>;
+
 /// Handle to the challenge server. Cheap to clone (Arc-internals).
 #[derive(Clone, Default)]
 pub struct AcmeHttpServer {
     inner: Arc<RwLock<ChallengeMap>>,
+    token_lookup: Arc<RwLock<Option<TokenLookup>>>,
 }
 
 impl AcmeHttpServer {
     /// Create a new server with an empty challenge map.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Attach a delegated token lookup consulted after the manual map
+    /// misses. Only one hook is active; the last attach wins.
+    pub fn attach_token_lookup(&self, lookup: TokenLookup) {
+        let mut slot = self
+            .token_lookup
+            .write()
+            .expect("token lookup slot poisoned");
+        *slot = Some(lookup);
+    }
+
+    /// Detach the delegated token lookup. Called once an issuance
+    /// reaches a terminal state so stale resolvers never answer GETs.
+    pub fn detach_token_lookup(&self) {
+        let mut slot = self
+            .token_lookup
+            .write()
+            .expect("token lookup slot poisoned");
+        *slot = None;
+    }
+
+    fn lookup_delegated(&self, token: &str) -> Option<String> {
+        let slot = self
+            .token_lookup
+            .read()
+            .expect("token lookup slot poisoned");
+        slot.as_ref().and_then(|lookup| lookup(token))
+    }
+
+    /// Whether a delegated token lookup is currently attached.
+    #[cfg(test)]
+    pub(crate) fn token_lookup_attached(&self) -> bool {
+        self.token_lookup
+            .read()
+            .expect("token lookup slot poisoned")
+            .is_some()
     }
 
     /// Register a challenge token for a domain. The token is opaque;
@@ -94,21 +139,29 @@ async fn serve_challenge(
     State(server): State<AcmeHttpServer>,
     Path(token): Path<String>,
 ) -> impl IntoResponse {
-    let map = server.inner.read().expect("challenge map poisoned");
-    for entry in map.by_domain.values() {
-        if entry.token == token {
-            return (
-                StatusCode::OK,
-                [("content-type", "text/plain")],
-                entry.key_authorization.clone(),
-            );
-        }
+    let key_auth = {
+        let map = server.inner.read().expect("challenge map poisoned");
+        map.by_domain
+            .values()
+            .find(|entry| entry.token == token)
+            .map(|entry| entry.key_authorization.clone())
+    };
+    let key_auth = match key_auth {
+        Some(value) => Some(value),
+        None => server.lookup_delegated(&token),
+    };
+    match key_auth {
+        Some(key_authorization) => (
+            StatusCode::OK,
+            [("content-type", "text/plain")],
+            key_authorization,
+        ),
+        None => (
+            StatusCode::NOT_FOUND,
+            [("content-type", "text/plain")],
+            String::new(),
+        ),
     }
-    (
-        StatusCode::NOT_FOUND,
-        [("content-type", "text/plain")],
-        String::new(),
-    )
 }
 
 /// Convenience: bind a [`tokio::net::TcpListener`] on
@@ -168,6 +221,58 @@ mod tests {
         ))
         .await
         .unwrap();
+        assert_eq!(resp.status(), 404);
+    }
+
+    #[tokio::test]
+    async fn attached_lookup_answers_after_manual_map_misses() {
+        let server = AcmeHttpServer::new();
+        server.register("example.com", "tok-manual", "key-manual");
+        let lookup: TokenLookup = Arc::new(|token| {
+            if token == "tok-hook" {
+                Some("key-hook".to_owned())
+            } else {
+                None
+            }
+        });
+        server.attach_token_lookup(lookup);
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, server.router()).await.unwrap();
+        });
+
+        let hook = reqwest::get(format!("http://{addr}/.well-known/acme-challenge/tok-hook"))
+            .await
+            .unwrap();
+        assert_eq!(hook.status(), 200);
+        assert_eq!(hook.text().await.unwrap(), "key-hook");
+
+        let manual = reqwest::get(format!(
+            "http://{addr}/.well-known/acme-challenge/tok-manual"
+        ))
+        .await
+        .unwrap();
+        assert_eq!(manual.text().await.unwrap(), "key-manual");
+    }
+
+    #[tokio::test]
+    async fn detached_lookup_no_longer_answers() {
+        let server = AcmeHttpServer::new();
+        let lookup: TokenLookup = Arc::new(|_| Some("gone".to_owned()));
+        server.attach_token_lookup(lookup);
+        server.detach_token_lookup();
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            axum::serve(listener, server.router()).await.unwrap();
+        });
+
+        let resp = reqwest::get(format!("http://{addr}/.well-known/acme-challenge/any"))
+            .await
+            .unwrap();
         assert_eq!(resp.status(), 404);
     }
 }

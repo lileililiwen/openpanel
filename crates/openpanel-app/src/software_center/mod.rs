@@ -81,6 +81,9 @@ pub enum SoftwareCenterError {
     /// Component validation failed.
     #[error("software validation failed")]
     Validation,
+    /// Requested version is not offered by the catalog entry.
+    #[error("software version {0} is not available for this component")]
+    UnknownVersion(String),
     /// Package adapter failed with a redacted, bounded diagnostic.
     #[error("software package operation failed: {0}")]
     Package(String),
@@ -437,7 +440,14 @@ impl Drop for DurableTransactionLock {
 
 #[derive(Clone, Serialize, Deserialize)]
 enum PreviewKind {
-    Component { id: String, action: ComponentAction },
+    Component {
+        id: String,
+        action: ComponentAction,
+        /// Resolved catalog version; absent on previews persisted before
+        /// versioned installs, which fall back to the head row.
+        #[serde(default)]
+        version: Option<String>,
+    },
     Application(ApplicationDeploymentInput),
 }
 
@@ -939,23 +949,29 @@ impl SoftwareCenterService {
     }
 
     /// Preview installation against a discovered host snapshot.
+    ///
+    /// `version` selects a specific catalog `VersionSpec`; `None`
+    /// resolves to the entry's latest version.
     pub async fn preview_install(
         &self,
         actor: Uuid,
         role: Role,
         component: &str,
+        version: Option<&str>,
     ) -> Result<InstallPreview, SoftwareCenterError> {
-        self.preview_component(actor, role, component, ComponentAction::Install)
+        self.preview_component(actor, role, component, ComponentAction::Install, version)
             .await
     }
 
     /// Preview one typed component lifecycle action.
+    #[allow(clippy::too_many_arguments)]
     pub async fn preview_component(
         &self,
         actor: Uuid,
         role: Role,
         component: &str,
         action: ComponentAction,
+        version: Option<&str>,
     ) -> Result<InstallPreview, SoftwareCenterError> {
         owner(role)?;
         self.ensure_reconciled().await?;
@@ -981,17 +997,25 @@ impl SoftwareCenterService {
                 "invalid software request".into(),
             ));
         }
-        let latest = entry
-            .versions
-            .iter()
-            .find(|version| version.is_latest)
-            .cloned()
-            .or_else(|| entry.versions.first().cloned())
-            .ok_or(SoftwareCenterError::Invalid("plan is no longer in the queue; it may have been consumed, expired, or never created".into()))?;
-        if !latest.packages.is_empty() {
+        let selected = match version {
+            Some(requested) => entry
+                .versions
+                .iter()
+                .find(|candidate| candidate.version == requested)
+                .cloned()
+                .ok_or_else(|| SoftwareCenterError::UnknownVersion(requested.to_owned()))?,
+            None => entry
+                .versions
+                .iter()
+                .find(|candidate| candidate.is_latest)
+                .cloned()
+                .or_else(|| entry.versions.first().cloned())
+                .ok_or(SoftwareCenterError::Invalid("plan is no longer in the queue; it may have been consumed, expired, or never created".into()))?,
+        };
+        if !selected.packages.is_empty() {
             // system entries have packages, not artifacts
         }
-        let entry_packages: Vec<PackageId> = latest
+        let entry_packages: Vec<PackageId> = selected
             .packages
             .iter()
             .map(|name| {
@@ -1079,6 +1103,7 @@ impl SoftwareCenterService {
             kind: PreviewKind::Component {
                 id: entry.id.clone(),
                 action,
+                version: Some(selected.version.clone()),
             },
             actions: actions.clone(),
             host_state_digest: snapshot.state_digest,
@@ -1707,8 +1732,12 @@ impl SoftwareCenterService {
         on_progress(99, "Validating".to_owned());
         self.push_job(job_id, plan_digest, aggregate.state())
             .await?;
-        let (component, action) = match preview.kind {
-            PreviewKind::Component { id, action } => (id, action),
+        let (component, action, component_version) = match preview.kind {
+            PreviewKind::Component {
+                id,
+                action,
+                version,
+            } => (id, action, version),
             PreviewKind::Application(_) => {
                 return Err(SoftwareCenterError::Invalid(
                     "invalid software request".into(),
@@ -1737,6 +1766,7 @@ impl SoftwareCenterService {
         }
         self.set_managed(
             &component,
+            component_version.as_deref().unwrap_or(""),
             action != ComponentAction::Remove,
             &host_state_digest,
         )
@@ -1760,6 +1790,7 @@ impl SoftwareCenterService {
                 .metadata(serde_json::json!({
                     "operation": "installed",
                     "plan_digest": plan_digest,
+                    "version": component_version,
                     "platform": current_platform(),
                 })),
             )
@@ -2498,9 +2529,15 @@ impl SoftwareCenterService {
             .map(|_| ())
     }
 
+    /// Record the panel-managed state for one (component, version)
+    /// pair. Installing adopts the concrete version row; removing that
+    /// version deletes its row and only clears panel ownership once no
+    /// managed version of the component remains. `version` is empty for
+    /// legacy head-row writes (pre-versioned previews).
     async fn set_managed(
         &self,
         component: &str,
+        version: &str,
         managed: bool,
         state_digest: &str,
     ) -> Result<(), SoftwareCenterError> {
@@ -2516,15 +2553,45 @@ impl SoftwareCenterService {
             }
         }
         if let Some(pool) = &self.pool {
-            sqlx::query("INSERT INTO software_components(id,version,status,managed,state_digest,updated_at) VALUES(?,NULL,?,?,?,?) ON CONFLICT(id) DO UPDATE SET status=excluded.status,managed=excluded.managed,state_digest=excluded.state_digest,updated_at=excluded.updated_at")
+            let now = chrono::Utc::now().to_rfc3339();
+            if managed {
+                sqlx::query("DELETE FROM software_components WHERE id=? AND version=''")
+                    .bind(component)
+                    .execute(pool)
+                    .await
+                    .map_err(|_| SoftwareCenterError::Repository)?;
+                sqlx::query("INSERT INTO software_components(id,version,status,managed,state_digest,updated_at) VALUES(?,?,'installed',1,?,?) ON CONFLICT(id,version) DO UPDATE SET status='installed',managed=1,state_digest=excluded.state_digest,updated_at=excluded.updated_at")
+                    .bind(component)
+                    .bind(version)
+                    .bind(state_digest)
+                    .bind(&now)
+                    .execute(pool)
+                    .await
+                    .map_err(|_| SoftwareCenterError::Repository)?;
+            } else {
+                sqlx::query("DELETE FROM software_components WHERE id=? AND version=?")
+                    .bind(component)
+                    .bind(version)
+                    .execute(pool)
+                    .await
+                    .map_err(|_| SoftwareCenterError::Repository)?;
+                let remaining: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM software_components WHERE id=? AND managed=1",
+                )
                 .bind(component)
-                .bind(if managed { "installed" } else { "available" })
-                .bind(if managed { 1_i64 } else { 0_i64 })
-                .bind(state_digest)
-                .bind(chrono::Utc::now().to_rfc3339())
-                .execute(pool)
+                .fetch_one(pool)
                 .await
                 .map_err(|_| SoftwareCenterError::Repository)?;
+                if remaining == 0 {
+                    sqlx::query("INSERT INTO software_components(id,version,status,managed,state_digest,updated_at) VALUES(?,'','available',0,?,?) ON CONFLICT(id,version) DO UPDATE SET status='available',managed=0,state_digest=excluded.state_digest,updated_at=excluded.updated_at")
+                        .bind(component)
+                        .bind(state_digest)
+                        .bind(&now)
+                        .execute(pool)
+                        .await
+                        .map_err(|_| SoftwareCenterError::Repository)?;
+                }
+            }
         }
         Ok(())
     }

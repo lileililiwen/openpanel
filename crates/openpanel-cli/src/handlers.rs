@@ -64,6 +64,9 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let ftp_module = FtpModule::new(&ctx)
         .await
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let webdav_module = openpanel_app::WebDavModule::new(&ctx)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let databases_module = DatabasesModule::new(&ctx, master_key).await;
     let files_module = FilesModule::new(&ctx).await;
     let ssl_module = SslModule::new(&ctx, master_key, ssl_contact_email(&config)).await;
@@ -181,6 +184,10 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         .await
         .context("apply FTP migrations")?;
     runner
+        .apply_module(webdav_module.name(), &webdav_module.migrations())
+        .await
+        .context("apply WebDAV migrations")?;
+    runner
         .apply_module(databases_module.name(), &databases_module.migrations())
         .await
         .context("apply databases migrations")?;
@@ -279,6 +286,7 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let sso_svc = sso_module.service();
     let docker_svc = docker_module.service();
     let ftp_svc = ftp_module.service();
+    let webdav_svc = webdav_module.service();
 
     // PITR module: in-memory sink for now (no offsite targets yet).
     // Future `add-offsite-backup-targets` change will swap the sink
@@ -465,6 +473,20 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
     let staging_svc: Arc<StagingService> = staging_module.service();
     let _ = staging_svc;
 
+    // Staging mail-capture inbox: diverts webmail sends to a site's
+    // capturing slot. Applies after site-staging (FK onto
+    // staging_slots).
+    let mail_capture_module = openpanel_app::MailCaptureModule::new(&ctx, master_key).await;
+    runner
+        .apply_module(
+            mail_capture_module.name(),
+            &mail_capture_module.migrations(),
+        )
+        .await
+        .context("apply mail-capture migrations")?;
+    let mail_capture_svc = mail_capture_module.service();
+    webmail_svc.attach_capture(mail_capture_svc.clone());
+
     // Deliverability module: DNSBL lookups + DMARC stats.
     let deliverability_resolver: Arc<dyn openpanel_domain::deliverability::ResolverPort> =
         Arc::new(FakeDeliverabilityResolver);
@@ -565,11 +587,13 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         sso_svc.clone(),
         docker_svc.clone(),
         ftp_svc.clone(),
+        webdav_svc.clone(),
         api_token_svc.clone(),
         notification_svc.clone(),
         pitr_svc.clone(),
         server_snapshots_svc.clone(),
         staging_svc.clone(),
+        mail_capture_svc.clone(),
         plugin_svc.clone(),
         marketplace_svc.clone(),
         collaborators_svc.clone(),
@@ -644,10 +668,12 @@ pub async fn serve(config: Arc<Config>) -> anyhow::Result<()> {
         site_http_controls_svc.clone(),
         docker_svc,
         ftp_svc,
+        webdav_svc.clone(),
         api_token_svc,
         notification_svc,
         pitr_svc,
         staging_svc,
+        mail_capture_svc,
         previews_svc.clone(),
         collaborators_svc,
         registry_svc,
@@ -1396,10 +1422,14 @@ pub async fn software_inventory(config: Arc<Config>) -> anyhow::Result<()> {
 }
 
 /// Print an immutable installation preview as secret-free JSON.
-pub async fn software_preview(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+pub async fn software_preview(
+    config: Arc<Config>,
+    id: String,
+    version: Option<String>,
+) -> anyhow::Result<()> {
     let preview = build_software_center(config)
         .await?
-        .preview_install(uuid::Uuid::nil(), Role::Owner, &id)
+        .preview_install(uuid::Uuid::nil(), Role::Owner, &id, version.as_deref())
         .await
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     println!("{}", serde_json::to_string_pretty(&preview)?);
@@ -1422,10 +1452,14 @@ pub async fn software_execute(
 }
 
 /// Preview and execute one catalog installation.
-pub async fn software_install(config: Arc<Config>, id: String) -> anyhow::Result<()> {
+pub async fn software_install(
+    config: Arc<Config>,
+    id: String,
+    version: Option<String>,
+) -> anyhow::Result<()> {
     let service = build_software_center(config).await?;
     let preview = service
-        .preview_install(uuid::Uuid::nil(), Role::Owner, &id)
+        .preview_install(uuid::Uuid::nil(), Role::Owner, &id, version.as_deref())
         .await
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let job = service
@@ -1446,10 +1480,17 @@ pub async fn software_component_action(
     config: Arc<Config>,
     id: String,
     action: openpanel_app::software_center::ComponentAction,
+    version: Option<String>,
 ) -> anyhow::Result<()> {
     let service = build_software_center(config).await?;
     let preview = service
-        .preview_component(uuid::Uuid::nil(), Role::Owner, &id, action)
+        .preview_component(
+            uuid::Uuid::nil(),
+            Role::Owner,
+            &id,
+            action,
+            version.as_deref(),
+        )
         .await
         .map_err(|error| anyhow::anyhow!(error.to_string()))?;
     let job = service
@@ -2862,6 +2903,36 @@ pub async fn staging_delete(config: Arc<Config>, id: String) -> anyhow::Result<(
     Ok(())
 }
 
+/// `openpanel site staging mail-capture`.
+pub async fn staging_mail_capture(
+    config: Arc<Config>,
+    id: String,
+    enabled: bool,
+) -> anyhow::Result<()> {
+    let (svc, identity_svc) = build_staging(config).await?;
+    let caller = identity_svc
+        .list_users()
+        .await?
+        .into_iter()
+        .find(|u| u.username().as_str() == "admin")
+        .ok_or_else(|| anyhow::anyhow!("caller not found"))?;
+    let site_id = uuid::Uuid::parse_str(&id).context("invalid site id")?;
+    let slot = svc
+        .set_mail_capture(&caller, site_id, enabled)
+        .await
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    println!(
+        "mail capture {} for site {id} (slot {})",
+        if slot.mail_capture() {
+            "enabled"
+        } else {
+            "disabled"
+        },
+        slot.id(),
+    );
+    Ok(())
+}
+
 async fn bootstrap_persistence(
     config: &Arc<Config>,
 ) -> anyhow::Result<(
@@ -3598,6 +3669,113 @@ pub async fn ftp_delete(config: Arc<Config>, site: String, id: String) -> anyhow
     let owner = waf_owner(&identity).await?;
     let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
     let id = uuid::Uuid::parse_str(&id).context("invalid FTP account id")?;
+    service.delete(&owner, site_id, id).await?;
+    println!("deleted {id}");
+    Ok(())
+}
+
+async fn build_webdav(
+    config: Arc<Config>,
+) -> anyhow::Result<(
+    Arc<openpanel_app::WebDavService>,
+    Arc<openpanel_app::IdentityService>,
+)> {
+    let (pool, audit, db) = bootstrap_persistence(&config).await?;
+    let ctx = AppContext::new(config, db, audit);
+    let master_key = load_master_key(&ctx.config)?;
+    let identity = IdentityModule::new(&ctx, master_key).await;
+    let sites = SitesModule::new(&ctx).await;
+    let webdav = openpanel_app::WebDavModule::new(&ctx)
+        .await
+        .map_err(|error| anyhow::anyhow!(error.to_string()))?;
+    let runner = MigrationRunner::for_sqlite(pool);
+    runner
+        .apply_module(identity.name(), &identity.migrations())
+        .await
+        .context("apply identity migrations")?;
+    runner
+        .apply_module(sites.name(), &sites.migrations())
+        .await
+        .context("apply site migrations")?;
+    runner
+        .apply_module(webdav.name(), &webdav.migrations())
+        .await
+        .context("apply WebDAV migrations")?;
+    Ok((webdav.service(), identity.service()))
+}
+
+/// Create a site WebDAV account; the plaintext password is never stored
+/// or echoed by the service.
+pub async fn webdav_create(
+    config: Arc<Config>,
+    site: String,
+    username: String,
+    password: String,
+    read_only: bool,
+) -> anyhow::Result<()> {
+    let (service, identity) = build_webdav(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let created = service
+        .create(
+            &owner,
+            site_id,
+            openpanel_app::CreateWebDavAccount {
+                username,
+                password,
+                read_only,
+            },
+        )
+        .await?;
+    println!("{}", serde_json::to_string_pretty(&created)?);
+    Ok(())
+}
+
+/// List a site's WebDAV accounts without credential hashes.
+pub async fn webdav_list(config: Arc<Config>, site: String) -> anyhow::Result<()> {
+    let (service, identity) = build_webdav(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    println!(
+        "{}",
+        serde_json::to_string_pretty(&service.list(&owner, site_id).await?)?
+    );
+    Ok(())
+}
+
+/// Enable or disable a site WebDAV account.
+pub async fn webdav_enabled(
+    config: Arc<Config>,
+    site: String,
+    id: String,
+    enabled: bool,
+) -> anyhow::Result<()> {
+    let (service, identity) = build_webdav(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let id = uuid::Uuid::parse_str(&id).context("invalid WebDAV account id")?;
+    let value = service
+        .update(
+            &owner,
+            site_id,
+            id,
+            openpanel_app::UpdateWebDavAccount {
+                enabled: Some(enabled),
+                password: None,
+                read_only: None,
+            },
+        )
+        .await?;
+    println!("{}", serde_json::to_string_pretty(&value)?);
+    Ok(())
+}
+
+/// Delete a site WebDAV account.
+pub async fn webdav_delete(config: Arc<Config>, site: String, id: String) -> anyhow::Result<()> {
+    let (service, identity) = build_webdav(config).await?;
+    let owner = waf_owner(&identity).await?;
+    let site_id = uuid::Uuid::parse_str(&site).context("invalid site id")?;
+    let id = uuid::Uuid::parse_str(&id).context("invalid WebDAV account id")?;
     service.delete(&owner, site_id, id).await?;
     println!("deleted {id}");
     Ok(())

@@ -290,11 +290,14 @@ pub async fn compose_send(
         )
         .await
     {
-        Ok(()) => (
-            StatusCode::SEE_OTHER,
-            [("Location", format!("/webmail?ws={}", body.ws))],
-        )
-            .into_response(),
+        Ok(outcome) => {
+            let suffix = if outcome.captured { "&captured=1" } else { "" };
+            (
+                StatusCode::SEE_OTHER,
+                [("Location", format!("/webmail?ws={}{}", body.ws, suffix))],
+            )
+                .into_response()
+        }
         Err(_) => (
             StatusCode::UNPROCESSABLE_ENTITY,
             "send refused; check recipients and quota",

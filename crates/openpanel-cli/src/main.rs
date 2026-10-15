@@ -11,8 +11,8 @@ use openpanel_cli::{
     SecurityFindingsCommand, SecurityRuleCommand, ServerSnapshotCommand, ServicesCommand,
     SiteCacheCommand, SiteCloneCommand, SiteCommand, SiteHttpCommand, SitePreviewCommand,
     SiteTemplateCommand, SoftwareCommand, SslCommand, StagingCommand, StatusPageCommand,
-    TerminalCommand, TokenCommand, TwoFactorCommand, UserCommand, WafCommand, WebappCommand,
-    handlers,
+    TerminalCommand, TokenCommand, TwoFactorCommand, UserCommand, WafCommand, WebDavCommand,
+    WebappCommand, handlers,
 };
 use openpanel_core::{Config, init_tracing};
 
@@ -89,6 +89,9 @@ async fn main() -> anyhow::Result<()> {
                     confirmed_at,
                 } => handlers::staging_promote(config, id, snapshot, confirmed_at).await,
                 StagingCommand::Delete { id } => handlers::staging_delete(config, id).await,
+                StagingCommand::MailCapture { id, enabled } => {
+                    handlers::staging_mail_capture(config, id, enabled).await
+                }
             },
             SiteCommand::Collaborator { action } => match action {
                 CollaboratorCommand::Invite {
@@ -252,6 +255,22 @@ async fn main() -> anyhow::Result<()> {
             }
             FtpCommand::Enable { site, id } => handlers::ftp_enabled(config, site, id, true).await,
             FtpCommand::Delete { site, id } => handlers::ftp_delete(config, site, id).await,
+        },
+        Command::WebDav { action } => match action {
+            WebDavCommand::Create {
+                site,
+                username,
+                password,
+                read_only,
+            } => handlers::webdav_create(config, site, username, password, read_only).await,
+            WebDavCommand::List { site } => handlers::webdav_list(config, site).await,
+            WebDavCommand::Disable { site, id } => {
+                handlers::webdav_enabled(config, site, id, false).await
+            }
+            WebDavCommand::Enable { site, id } => {
+                handlers::webdav_enabled(config, site, id, true).await
+            }
+            WebDavCommand::Delete { site, id } => handlers::webdav_delete(config, site, id).await,
         },
         Command::Token { action } => match action {
             TokenCommand::Create {
@@ -724,35 +743,40 @@ async fn main() -> anyhow::Result<()> {
                 .await
             }
             SoftwareCommand::Show { id } => handlers::software_show(config, id).await,
-            SoftwareCommand::Preview { id } => handlers::software_preview(config, id).await,
+            SoftwareCommand::Preview { id, version } => {
+                handlers::software_preview(config, id, version).await
+            }
             SoftwareCommand::Execute {
                 digest,
                 confirmation_token,
             } => handlers::software_execute(config, digest, confirmation_token).await,
-            SoftwareCommand::Install { id, version: _ } => {
-                handlers::software_install(config, id).await
+            SoftwareCommand::Install { id, version } => {
+                handlers::software_install(config, id, version).await
             }
-            SoftwareCommand::Adopt { id } => {
+            SoftwareCommand::Adopt { id, version } => {
                 handlers::software_component_action(
                     config,
                     id,
                     openpanel_app::software_center::ComponentAction::Adopt,
+                    version,
                 )
                 .await
             }
-            SoftwareCommand::Update { id } => {
+            SoftwareCommand::Update { id, version } => {
                 handlers::software_component_action(
                     config,
                     id,
                     openpanel_app::software_center::ComponentAction::Update,
+                    version,
                 )
                 .await
             }
-            SoftwareCommand::Uninstall { id } => {
+            SoftwareCommand::Uninstall { id, version } => {
                 handlers::software_component_action(
                     config,
                     id,
                     openpanel_app::software_center::ComponentAction::Remove,
+                    version,
                 )
                 .await
             }

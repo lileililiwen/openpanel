@@ -42,6 +42,8 @@ pub enum TabId {
     Cache,
     /// FTP accounts.
     Ftp,
+    /// WebDAV accounts.
+    WebDav,
     /// Collaborators.
     Collaborators,
 }
@@ -63,6 +65,7 @@ impl TabId {
             TabId::Previews => "previews",
             TabId::Cache => "cache",
             TabId::Ftp => "ftp",
+            TabId::WebDav => "webdav",
             TabId::Collaborators => "collaborators",
         }
     }
@@ -169,6 +172,13 @@ const TAB_DEFS: &[TabDef] = &[
         capability: Some("ftp"),
         min_role: Role::User,
         href: Some(|s| format!("/sites/{}/ftp", s.id())),
+    },
+    TabDef {
+        id: TabId::WebDav,
+        label: "WebDAV",
+        capability: Some("ftp"),
+        min_role: Role::User,
+        href: Some(|s| format!("/sites/{}/webdav", s.id())),
     },
     TabDef {
         id: TabId::Collaborators,
@@ -352,6 +362,7 @@ mod tests {
                 TabId::Previews,
                 TabId::Cache,
                 TabId::Ftp,
+                TabId::WebDav,
                 TabId::Collaborators,
             ],
             "tab order: {ids:?}"
@@ -408,6 +419,7 @@ mod tests {
                 TabId::Previews => "/sites/{id}/previews",
                 TabId::Cache => "/sites/{id}/cache",
                 TabId::Ftp => "/sites/{id}/ftp",
+                TabId::WebDav => "/sites/{id}/webdav",
                 TabId::Collaborators => "/sites/{id}/collaborators",
             };
             let needle = format!("\"{template}\"");

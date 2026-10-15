@@ -28,8 +28,9 @@ adapter/conformance environment, but no product requirement may depend on it.
 - Mac/Jenkins-specific behavior is an adapter test target, not product scope.
 - Public DNS, Cloudflare, mail-provider credentials, and host firewalls stay
   operator-owned integrations.
-- Kubernetes, object storage, CalDAV/CardDAV/WebDAV, and mailing-list
-  moderation require separate proposals if later justified.
+- Kubernetes, object storage, CalDAV/CardDAV, and mailing-list
+  moderation require separate proposals if later justified (WebDAV
+  shipped with `adopt-openserverpanel-batch`).
 
 ### Evidence boundary
 

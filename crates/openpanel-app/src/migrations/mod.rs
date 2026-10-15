@@ -60,6 +60,9 @@ pub const SOFTWARE_CENTER_V002: &str = include_str!("software_center/V002__norma
 /// Adds `platforms_json` to `software_entries` for databases seeded
 /// before the column existed (idempotent on newer installs).
 pub const SOFTWARE_CENTER_V003: &str = include_str!("software_center/V003__platforms_backfill.sql");
+/// Rebuilds `software_components` with a `(id, version)` primary key so
+/// multiple versions of a component can be installed side by side.
+pub const SOFTWARE_CENTER_V004: &str = include_str!("software_center/V004__versioned_installs.sql");
 /// Per-site WAF rule sets and aggregated hit rows.
 /// Terminal tickets and session records.
 pub const WEB_TERMINAL_V001: &str = include_str!("web_terminal/V001__init.sql");
@@ -84,6 +87,10 @@ pub const I18N_V001: &str = include_str!("i18n/V001__init.sql");
 pub const DB_PITR_V001: &str = include_str!("db_pitr/V001__init.sql");
 /// Per-site staging slots, snapshots, and promotion runs.
 pub const SITE_STAGING_V001: &str = include_str!("site_staging/V001__init.sql");
+/// Staging mail-capture toggle on the slot row.
+pub const SITE_STAGING_V002: &str = include_str!("site_staging/V002__mail_capture.sql");
+/// Staging mail-capture inbox: body-encrypted messages per slot.
+pub const MAIL_CAPTURE_V001: &str = include_str!("mail_capture/V001__init.sql");
 /// Plugin extension framework: installed_plugins table.
 pub const PLUGIN_V001: &str = include_str!("plugin/V001__init.sql");
 /// Plugin marketplace: cached verified catalogs.
@@ -186,3 +193,5 @@ pub const WEB_APPLICATION_INSTALLER_V001: &str =
 /// Site cache and CDN integration v001: `site_cache_policies`,
 /// `cdn_integrations`, and `cdn_purge_log` tables.
 pub const SITE_CACHE_CDN_V001: &str = include_str!("site_cache_cdn/V001__init.sql");
+/// WebDAV v001: `webdav_accounts` table.
+pub const WEBDAV_V001: &str = include_str!("webdav/V001__init.sql");

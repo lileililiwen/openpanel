@@ -30,14 +30,27 @@ struct SearchParams {
     sort: Option<String>,
 }
 
+#[derive(Deserialize, Default)]
+#[serde(default)]
+struct PreviewParams {
+    version: Option<String>,
+}
+
 async fn preview_component(
     State(service): State<Arc<SoftwareCenterService>>,
     AuthUser(user, _): AuthUser,
     Path((id, action)): Path<(String, ComponentAction)>,
+    Query(params): Query<PreviewParams>,
 ) -> ApiResult<Json<InstallPreview>> {
     Ok(Json(
         service
-            .preview_component(user.id(), user.role(), &id, action)
+            .preview_component(
+                user.id(),
+                user.role(),
+                &id,
+                action,
+                params.version.as_deref(),
+            )
             .await
             .map_err(map)?,
     ))
@@ -88,10 +101,11 @@ async fn preview(
     State(service): State<Arc<SoftwareCenterService>>,
     AuthUser(user, _): AuthUser,
     Path(id): Path<String>,
+    Query(params): Query<PreviewParams>,
 ) -> ApiResult<Json<InstallPreview>> {
     Ok(Json(
         service
-            .preview_install(user.id(), user.role(), &id)
+            .preview_install(user.id(), user.role(), &id, params.version.as_deref())
             .await
             .map_err(map)?,
     ))
@@ -218,7 +232,9 @@ async fn set_config(
 fn map(error: SoftwareCenterError) -> ApiError {
     match error {
         SoftwareCenterError::Forbidden => ApiError::Forbidden,
-        SoftwareCenterError::Invalid(_) => ApiError::Unprocessable(error.to_string()),
+        SoftwareCenterError::Invalid(_) | SoftwareCenterError::UnknownVersion(_) => {
+            ApiError::Unprocessable(error.to_string())
+        }
         SoftwareCenterError::Conflict | SoftwareCenterError::Dependencies(_) => {
             ApiError::Conflict(error.to_string())
         }

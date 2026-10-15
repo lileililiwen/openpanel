@@ -237,6 +237,18 @@ pub enum AuditAction {
     FtpBindFailed,
     /// The supervised FTP listener restarted after a panic.
     FtpListenerRestart,
+    /// A WebDAV account or its enabled state changed.
+    WebDavChanged,
+    /// A staging mail-capture inbox message was diverted from delivery.
+    MailCaptureStored,
+    /// A staging mail-capture inbox was purged.
+    MailCapturePurged,
+    /// The staging mail-capture toggle changed.
+    MailCaptureToggled,
+    /// A WebDAV Basic authentication succeeded.
+    WebDavLogin,
+    /// A WebDAV login was denied without exposing credentials.
+    WebDavLoginDenied,
     /// A personal API token was created.
     TokenCreated,
     /// A personal API token was rotated.
@@ -565,6 +577,12 @@ impl AuditAction {
             AuditAction::FtpTransferLimit => "ftp_transfer_limit",
             AuditAction::FtpBindFailed => "ftp_bind_failed",
             AuditAction::FtpListenerRestart => "ftp_listener_restart",
+            AuditAction::WebDavChanged => "webdav_changed",
+            AuditAction::MailCaptureStored => "mail_capture_stored",
+            AuditAction::MailCapturePurged => "mail_capture_purged",
+            AuditAction::MailCaptureToggled => "mail_capture_toggled",
+            AuditAction::WebDavLogin => "webdav_login",
+            AuditAction::WebDavLoginDenied => "webdav_login_denied",
             AuditAction::TokenCreated => "token_created",
             AuditAction::TokenRotated => "token_rotated",
             AuditAction::TokenRevoked => "token_revoked",

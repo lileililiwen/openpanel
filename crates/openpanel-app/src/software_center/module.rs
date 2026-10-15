@@ -290,6 +290,12 @@ impl SoftwareCenterModule {
                     description: "add platforms_json to software_entries".into(),
                     sql: crate::migrations::SOFTWARE_CENTER_V003.into(),
                 },
+                Migration {
+                    module: "software-center",
+                    version: "004".into(),
+                    description: "version-keyed software_components for co-installs".into(),
+                    sql: crate::migrations::SOFTWARE_CENTER_V004.into(),
+                },
             ],
         }
     }

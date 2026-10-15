@@ -116,6 +116,9 @@ pub struct StagingSlot {
     current_snapshot: Option<SnapshotId>,
     /// Most-recently promoted snapshot, if any.
     last_promoted_snapshot: Option<SnapshotId>,
+    /// When enabled, outbound mail from the site is diverted to the
+    /// staging mail-capture inbox instead of the production transport.
+    mail_capture: bool,
     /// When the slot was created.
     created_at: DateTime<Utc>,
     /// When the slot was last updated.
@@ -178,6 +181,7 @@ impl StagingSlot {
             schedule: None,
             current_snapshot: None,
             last_promoted_snapshot: None,
+            mail_capture: false,
             created_at: now,
             updated_at: now,
         })
@@ -196,6 +200,7 @@ impl StagingSlot {
         schedule: Option<String>,
         current_snapshot: Option<SnapshotId>,
         last_promoted_snapshot: Option<SnapshotId>,
+        mail_capture: bool,
         created_at: DateTime<Utc>,
         updated_at: DateTime<Utc>,
     ) -> Self {
@@ -210,6 +215,7 @@ impl StagingSlot {
             schedule,
             current_snapshot,
             last_promoted_snapshot,
+            mail_capture,
             created_at,
             updated_at,
         }
@@ -235,6 +241,17 @@ impl StagingSlot {
         self.schedule = schedule;
         self.updated_at = now;
         Ok(())
+    }
+
+    /// Whether outbound mail for this slot is captured.
+    pub fn mail_capture(&self) -> bool {
+        self.mail_capture
+    }
+
+    /// Enable or disable the staging mail-capture toggle.
+    pub fn set_mail_capture(&mut self, enabled: bool, now: DateTime<Utc>) {
+        self.mail_capture = enabled;
+        self.updated_at = now;
     }
 
     /// Record that a new snapshot has been taken.
